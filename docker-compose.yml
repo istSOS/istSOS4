@@ -1,0 +1,58 @@
+version: "3.6"
+services:
+  # POSTGRESQL
+  database:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    restart: on-failure
+    ports:
+      - "45432:5432"
+    environment:
+      POSTGRES_DB: istsos3
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      DATADIR: /var/lib/postgresql/data
+      POSTGRES_MULTIPLE_EXTENSIONS: postgis,hstore,postgis_topology,postgis_raster,pgrouting,ltree,pg_cron,uuid-ossp
+    volumes:
+      - v-istsos3-postgis-sql:/docker-entrypoint-initdb.d
+      - v-istsos3-postgis-data:/var/lib/postgresql/data
+
+  # POSTGRESQL
+  database_test:
+    build:
+      context: ./database_test
+      dockerfile: Dockerfile
+    restart: on-failure
+    ports:
+      - "55432:5432"
+    environment:
+      POSTGRES_DB: istsos3_test
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      DATADIR: /var/lib/postgresql/data
+      POSTGRES_MULTIPLE_EXTENSIONS: postgis,hstore,postgis_topology,postgis_raster,pgrouting,ltree,pg_cron,uuid-ossp
+    volumes:
+      - v-istsos3-postgis-sql-test:/docker-entrypoint-initdb.d
+      - v-istsos3-postgis-data-test:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ./fastapi
+      dockerfile: Dockerfile
+    volumes:
+      - ./fastapi/app:/code/app
+    working_dir: /code
+    ports:
+      - 8018:5000
+    command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app
+
+volumes:
+  v-istsos3-postgis-sql:
+    name: v-istsos3-postgis-sql
+  v-istsos3-postgis-data:
+    name: v-istsos3-postgis-data
+  v-istsos3-postgis-sql-test:
+    name: v-istsos3-postgis-sql-test
+  v-istsos3-postgis-data-test:
+    name: v-istsos3-postgis-data-test
