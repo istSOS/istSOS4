@@ -1,9 +1,8 @@
 from fastapi import FastAPI, Depends, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Extra
 from enum import Enum
 import asyncpg
 import json
-from uuid import UUID
 import uuid
 from fastapi.responses import UJSONResponse
 from datetime import timedelta
@@ -42,6 +41,9 @@ class Sensor(BaseModel):
     acquisition_time_resolution: timedelta | None = None
     sensor_type: SensorType | int | None = None
     contact: Contact | int | None = None
+
+    class Config:
+        extra = Extra.allow
 
 
 app = FastAPI()
@@ -361,6 +363,7 @@ async def create_sensor(sensor: Sensor, pgpool=Depends(get_pool)):
         async with pgpool.acquire() as conn:
             contact_id = None
             sensorType_id = None
+            ID = None
             if (type(sensor.contact)) is Contact:
                 result = await create_contact(sensor.contact, pgpool)
                 contact_id = json.loads(result.body.decode("utf-8"))["id"]
@@ -371,15 +374,18 @@ async def create_sensor(sensor: Sensor, pgpool=Depends(get_pool)):
                 sensorType_id = json.loads(result.body.decode("utf-8"))["id"]
             if (type(sensor.sensor_type)) is int:
                 sensorType_id = sensor.sensor_type
-            if (type(sensor.sensor_type)) is None:
-                sensorType_id = None
 
+            ID = str(uuid.uuid4())
+            for key in dict(sensor):
+                if key == "id":
+                    ID = sensor.id
             result = await conn.fetchrow(
                 f"""INSERT INTO public.sensor
-            (name, description, encoding_type, sampling_time_resolution,
+            (id, name, description, encoding_type, sampling_time_resolution,
             acquisition_time_resolution, sensor_type_id)
-            VALUES($1, $2, $3, $4, $5, $6)
+            VALUES($1, $2, $3, $4, $5, $6, $7)
             RETURNING *""",
+                ID,
                 sensor.name,
                 sensor.description,
                 sensor.encoding_type,
@@ -427,7 +433,6 @@ async def get_sensor(sensor_id: str, pgpool=Depends(get_pool)):
                 WHERE id::text = $1""",
                 sensor_id,
             )
-
             if result:
                 tmp_result = dict(result)
                 for key in tmp_result:
@@ -489,9 +494,6 @@ async def update_sensor(sensor_id: str, sensor: Sensor, pgpool=Depends(get_pool)
                 sensorType_id = json.loads(result.body.decode("utf-8"))["id"]
             if (type(sensor.sensor_type)) is int:
                 sensorType_id = sensor.sensor_type
-            if (type(sensor.sensor_type)) is None:
-                sensorType_id = None
-
             result = await conn.fetchrow(
                 """ UPDATE public.sensor
                 SET name = $1, description = $2, encoding_type = $3, sampling_time_resolution = $4, acquisition_time_resolution = $5, sensor_type_id = $6
@@ -534,18 +536,18 @@ async def update_sensor(sensor_id: str, sensor: Sensor, pgpool=Depends(get_pool)
 
 
 @ app.delete("/sensors/{sensor_id}")
-async def delete_sensor(sensor_id: UUID, pgpool=Depends(get_pool)):
+async def delete_sensor(sensor_id: str, pgpool=Depends(get_pool)):
     try:
         async with pgpool.acquire() as conn:
             result = await conn.fetchrow(
                 """DELETE FROM public.sensor_contact
-                WHERE sensor_id = $1
+                WHERE sensor_id::text = $1
                 RETURNING *""",
                 sensor_id,
             )
             result = await conn.fetchrow(
                 f"""DELETE FROM public.sensor
-                WHERE id = $1
+                WHERE id::text = $1
                 RETURNING *""",
                 sensor_id,
             )

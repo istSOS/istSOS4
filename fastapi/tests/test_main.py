@@ -1,8 +1,11 @@
+import json
 from app.main import app, get_pool
 from fastapi import status
 from async_asgi_testclient import TestClient
 import asyncpg
 import asyncio
+from unittest import mock
+import uuid
 
 pgpool: asyncpg.Pool | None = None
 
@@ -10,7 +13,7 @@ pgpool: asyncpg.Pool | None = None
 async def override_get_pool():
     global pgpool
     if not pgpool:
-        pgpool = await asyncpg.create_pool(dsn='postgresql://admin:admin@10.14.13.145:55432/istsos3_test')
+        pgpool = await asyncpg.create_pool(dsn='postgresql://admin:admin@172.17.0.1:55432/istsos3_test')
     return pgpool
 
 app.dependency_overrides[get_pool] = override_get_pool
@@ -189,12 +192,21 @@ def test_delete_sensor_type():
     asyncio.get_event_loop().run_until_complete(inner())
 
 
+global ID
+
+
+def generateID():
+    return str(uuid.uuid4())
+
+
 def test_create_sensor():
     async def inner():
+        with mock.patch('uuid.uuid4', return_value='6f35d187-eb31-4a5f-9df8-2cf2111ddbee'):
+            ID = generateID()
         async with TestClient(app) as client:
             sensor = {
-                "ID": "6f35d187-eb31-4a5f-9df8-2cf2111ddbee",
-                "name": "striqngq5",
+                "id": ID,
+                "name": "string",
                 "description": "string",
                 "encoding_type": "string",
                 "sampling_time_resolution": 0,
@@ -220,110 +232,79 @@ def test_create_sensor():
             resp = await client.post("/sensors/", json=sensor)
         assert resp.status_code == status.HTTP_201_CREATED
         assert resp.json() == {
-            "id": "6f35d187-eb31-4a5f-9df8-2cf2111ddbee"
+            "id": ID
         }
     asyncio.get_event_loop().run_until_complete(inner())
 
 
 def test_get_sensor():
+    with mock.patch('uuid.uuid4', return_value='6f35d187-eb31-4a5f-9df8-2cf2111ddbee'):
+        ID = generateID()
+
     async def inner():
         async with TestClient(app) as client:
-            resp = await client.get("/sensors/1")
+            resp = await client.get(f"/sensors/{ID}")
         assert resp.status_code == status.HTTP_200_OK
         assert resp.json() == {
+            "id": ID,
             "name": "string",
             "description": "string",
             "encoding_type": "string",
-            "sampling_time_resolution": 0,
-            "acquisition_time_resolution": 0,
-            "sensor_type": {
-                "description": "string",
-                "metadata": "string"
-            },
-            "contact": {
-                "type": "owner",
-                "person": "string",
-                "telephone": "string",
-                "fax": "string",
-                "email": "string",
-                "web": "string",
-                "address": "string",
-                "city": "string",
-                "admin_area": "string",
-                "postal_code": "string",
-                "country": "string"
-            }
+            "sampling_time_resolution": "0:00:00",
+            "acquisition_time_resolution": "0:00:00",
+            "sensor_type_id": 2
         }
     asyncio.get_event_loop().run_until_complete(inner())
 
 
 def test_get_sensors():
+    ID = None
+    with mock.patch('uuid.uuid4', return_value='6f35d187-eb31-4a5f-9df8-2cf2111ddbee'):
+        ID = generateID()
+
     async def inner():
         async with TestClient(app) as client:
             resp = await client.get("/sensors/")
         assert resp.status_code == status.HTTP_200_OK
         assert resp.json() == [{
+            "id": ID,
             "name": "string",
             "description": "string",
             "encoding_type": "string",
-            "sampling_time_resolution": 0,
-            "acquisition_time_resolution": 0,
-            "sensor_type": {
-                "description": "string",
-                "metadata": "string"
-            },
-            "contact": {
-                "type": "owner",
-                "person": "string",
-                "telephone": "string",
-                "fax": "string",
-                "email": "string",
-                "web": "string",
-                "address": "string",
-                "city": "string",
-                "admin_area": "string",
-                "postal_code": "string",
-                "country": "string"
-            }
+            "sampling_time_resolution": "0:00:00",
+            "acquisition_time_resolution": "0:00:00",
+            "sensor_type_id": 2
         }]
     asyncio.get_event_loop().run_until_complete(inner())
 
 
 def test_update_sensor():
+    ID = None
+    with mock.patch('uuid.uuid4', return_value='6f35d187-eb31-4a5f-9df8-2cf2111ddbee'):
+        ID = generateID()
+
     async def inner():
         async with TestClient(app) as client:
             sensor = {
-                "name": "string",
+                "name": "string2",
                 "description": "string",
                 "encoding_type": "string",
                 "sampling_time_resolution": 0,
                 "acquisition_time_resolution": 0,
-                "sensor_type": {
-                    "description": "string",
-                    "metadata": "string"
-                },
-                "contact": {
-                    "type": "owner",
-                    "person": "string",
-                    "telephone": "string",
-                    "fax": "string",
-                    "email": "string",
-                    "web": "string",
-                    "address": "string",
-                    "city": "string",
-                    "admin_area": "string",
-                    "postal_code": "string",
-                    "country": "string"
-                }
+                "sensor_type": 2
             }
-            resp = await client.put("/sensor/1", json=sensor)
+            resp = await client.put(f"/sensors/{ID}", json=sensor)
         assert resp.status_code == status.HTTP_204_NO_CONTENT
     asyncio.get_event_loop().run_until_complete(inner())
 
 
 def test_delete_sensor():
+    ID = None
+    with mock.patch('uuid.uuid4', return_value='6f35d187-eb31-4a5f-9df8-2cf2111ddbee'):
+        ID = generateID()
+
     async def inner():
         async with TestClient(app) as client:
-            resp = await client.delete("/sensor/1")
+            resp = await client.delete(f"/sensors/{ID}")
         assert resp.status_code == status.HTTP_204_NO_CONTENT
     asyncio.get_event_loop().run_until_complete(inner())
