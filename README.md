@@ -18,7 +18,7 @@ pip install httpx
 
 Inside app/test_main.py file insert yours IP address at line 13:
 
-pgpool = await asyncpg.create_pool(dsn='postgresql://admin:admin@<IP_ADDRESS>:55432/istsos3_test')
+pgpool = await asyncpg.create_pool(dsn='postgresql://admin:admin@<IP_ADDRESS>:55432/istsos_test')
 
 ## Run test
 
