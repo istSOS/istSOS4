@@ -1,60 +1,21 @@
-from fastapi import FastAPI, Depends, Response, status
-from pydantic import BaseModel, Extra
-from enum import Enum
 import asyncpg
 import json
 import uuid
+from fastapi import FastAPI, Depends, Response, status
 from fastapi.responses import UJSONResponse
-from datetime import timedelta
-
-
-class ContactType(str, Enum):
-    owner = "owner"
-    manufacturer = "manufacturer"
-    operator = "operator"
-
-
-class Contact(BaseModel):
-    type: ContactType
-    person: str | None = None
-    telephone: str | None = None
-    fax: str | None = None
-    email: str | None = None
-    web: str | None = None
-    address: str | None = None
-    city: str | None = None
-    admin_area: str | None = None
-    postal_code: str | None = None
-    country: str | None = None
-
-
-class SensorType(BaseModel):
-    description: str | None = None
-    metadata: str | None = None
-
-
-class Sensor(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    encoding_type: str | None = None
-    sampling_time_resolution: timedelta | None = None
-    acquisition_time_resolution: timedelta | None = None
-    sensor_type: SensorType | int | None = None
-    contact: Contact | int | None = None
-
-    class Config:
-        extra = Extra.allow
+# models
+from .models.contact import Contact
+from .models.sensor import Sensor, SensorType
 
 
 app = FastAPI()
 
 pgpool: asyncpg.Pool | None = None
 
-
 async def get_pool():
     global pgpool
     if not pgpool:
-        pgpool = await asyncpg.create_pool(dsn='postgresql://admin:admin@database:5432/istsos3')
+        pgpool = await asyncpg.create_pool(dsn='postgresql://admin:admin@database:5432/istsos')
     return pgpool
 
 
@@ -66,7 +27,6 @@ async def get_contact_types(pgpool=Depends(get_pool)):
                 "SELECT enum_range(NULL:: public.contact_type) AS contact_types"
             )
             return UJSONResponse(status_code=status.HTTP_200_OK, content=dict(result))
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -105,7 +65,6 @@ async def create_contact(contact: Contact, pgpool=Depends(get_pool)):
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -131,7 +90,6 @@ async def get_contact(contact_id: int, pgpool=Depends(get_pool)):
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -153,7 +111,6 @@ async def get_contacts(pgpool=Depends(get_pool)):
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -190,7 +147,6 @@ async def update_contact(contact_id: int, contact: Contact,  pgpool=Depends(get_
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -221,7 +177,6 @@ async def delete_contact(contact_id: int, pgpool=Depends(get_pool)):
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -248,7 +203,6 @@ async def create_sensor_type(sensorType: SensorType, pgpool=Depends(get_pool)):
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -272,7 +226,6 @@ async def get_sensor_type(sensor_type_id: int, pgpool=Depends(get_pool)):
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -292,7 +245,6 @@ async def get_sensor_types(pgpool=Depends(get_pool)):
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -320,7 +272,6 @@ async def update_sensor_type(sensor_type_id: int, sensor_type: SensorType, pgpoo
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -352,7 +303,6 @@ async def delete_sensor_type(sensor_type_id: int, pgpool=Depends(get_pool)):
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -419,7 +369,6 @@ async def create_sensor(sensor: Sensor, pgpool=Depends(get_pool)):
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -447,7 +396,6 @@ async def get_sensor(sensor_id: str, pgpool=Depends(get_pool)):
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -473,7 +421,6 @@ async def get_sensors(pgpool=Depends(get_pool)):
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -530,7 +477,6 @@ async def update_sensor(sensor_id: str, sensor: Sensor, pgpool=Depends(get_pool)
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)
 
@@ -561,6 +507,5 @@ async def delete_sensor(sensor_id: str, pgpool=Depends(get_pool)):
                     }
                 }
                 return UJSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=result)
-        pgpool.close()
     except Exception as e:
         return str(e)

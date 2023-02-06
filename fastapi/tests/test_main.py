@@ -13,7 +13,7 @@ pgpool: asyncpg.Pool | None = None
 async def override_get_pool():
     global pgpool
     if not pgpool:
-        pgpool = await asyncpg.create_pool(dsn='postgresql://admin:admin@172.17.0.1:55432/istsos3_test')
+        pgpool = await asyncpg.create_pool(dsn='postgresql://admin:admin@172.17.0.1:55432/istsos_test')
     return pgpool
 
 app.dependency_overrides[get_pool] = override_get_pool
