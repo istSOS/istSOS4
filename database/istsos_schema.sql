@@ -122,6 +122,21 @@ CREATE TABLE IF NOT EXISTS public.thing_location (
     CONSTRAINT fk_thing FOREIGN KEY("thing_id") REFERENCES public.thing("id"),
     CONSTRAINT fk_location FOREIGN KEY("location_id") REFERENCES public.location("id")
 );
+-- HISTORICAL LOCATION
+CREATE TABLE IF NOT EXISTS public.historical_location (
+    "id" BIGSERIAL NOT NULL PRIMARY KEY,
+    "time" timestamp with time zone NOT NULL
+);
+
+-- HISTORICAL LOCATION
+CREATE TABLE IF NOT EXISTS public.historical_location (
+    "thing_id" BIGINT,
+    "location_id" BIGINT,
+    "historical_location_id" BIGINT,
+    CONSTRAINT fk_thing FOREIGN KEY("thing_id") REFERENCES public.thing("id"),
+    CONSTRAINT fk_location FOREIGN KEY("location_id") REFERENCES public.location("id"),
+    CONSTRAINT fk_historical_location FOREIGN KEY("historical_location_id") REFERENCES public.historical_location("id")
+);
 -- UNIT OF MEASURE
 -- CREATE TABLE IF NOT EXISTS public.unit_measure (
 --     "id" BIGSERIAL NOT NULL PRIMARY KEY,
