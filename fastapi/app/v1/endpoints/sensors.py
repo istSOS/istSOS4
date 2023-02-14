@@ -2,6 +2,7 @@ import json, uuid
 from app.db.db import get_pool
 from app.models.sensor import SensorType, Sensor
 from app.models.contact import Contact
+from app.models.query_parameters import QueryParameters
 from app.v1.endpoints.contacts import *
 from app.v1.endpoints.sensor_types import *
 from fastapi import APIRouter, Depends, Response, status
@@ -108,8 +109,13 @@ async def get_sensor(sensor_id: str, pgpool=Depends(get_pool)):
 
 
 @v1.get("/Sensors/")
-async def get_sensors(pgpool=Depends(get_pool)):
+async def get_sensors(pgpool=Depends(get_pool), query_options: QueryParameters=Depends()):
     try:
+        sql = "SELECT * FROM public.sensor"
+
+        # return UJSONResponse(status_code=status.HTTP_200_OK, content=query_options.expand)
+        return UJSONResponse(status_code=status.HTTP_200_OK, content= query_options.to_sql(element='sensor'))
+
         async with pgpool.acquire() as conn:
             result = await conn.fetch("SELECT * FROM public.sensor")
             tmp_result = [dict(r) for r in result]

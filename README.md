@@ -6,7 +6,7 @@ docker-compose up -d
 
 ## See the automatic interactive API documentation
 
-http://127.0.0.1:8018/docs
+http://127.0.0.1:8018/v1.1/docs
 
 ## Install httpx for test
 
