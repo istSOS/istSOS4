@@ -17,24 +17,39 @@ services:
     volumes:
       # - v-istsos-miu-postgis-sql:/docker-entrypoint-initdb.d
       - v-istsos-miu-database-data:/var/lib/postgresql/data
+  postgrest:
+    image: postgrest/postgrest
+    ports:
+      - "3000:3000"
+    links:
+      - database:db
+    environment:
+      PGRST_DB_URI: postgres://admin:admin@database:5432/istsos
+      # PGRST_DB_SCHEMA: istsos
+      PGRST_DB_ANON_ROLE: admin #In production this role should not be the same as the one used for the connection
+      PGRST_OPENAPI_SERVER_PROXY_URI: http://127.0.0.1:3000
+    depends_on:
+      - database
+
+
 
   # POSTGRESQL
-  database_test:
-    build:
-      context: ./database_test
-      dockerfile: Dockerfile
-    restart: on-failure
-    ports:
-      - "55432:5432"
-    environment:
-      POSTGRES_DB: istsos_test
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-      DATADIR: /var/lib/postgresql/data
-      POSTGRES_MULTIPLE_EXTENSIONS: postgis,hstore,postgis_topology,postgis_raster,pgrouting,ltree,pg_cron,uuid-ossp
-    volumes:
-      # - v-istsos-miu-postgis-sql-test:/docker-entrypoint-initdb.d
-      - v-istsos-miu-database-data-test:/var/lib/postgresql/data
+  # database_test:
+  #   build:
+  #     context: ./database_test
+  #     dockerfile: Dockerfile
+  #   restart: on-failure
+  #   ports:
+  #     - "55432:5432"
+  #   environment:
+  #     POSTGRES_DB: istsos_test
+  #     POSTGRES_USER: admin
+  #     POSTGRES_PASSWORD: admin
+  #     DATADIR: /var/lib/postgresql/data
+  #     POSTGRES_MULTIPLE_EXTENSIONS: postgis,hstore,postgis_topology,postgis_raster,pgrouting,ltree,pg_cron,uuid-ossp
+  #   volumes:
+  #     # - v-istsos-miu-postgis-sql-test:/docker-entrypoint-initdb.d
+  #     - v-istsos-miu-database-data-test:/var/lib/postgresql/data
 
   api:
     build:

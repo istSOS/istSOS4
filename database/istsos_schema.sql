@@ -182,19 +182,18 @@ CREATE TABLE IF NOT EXISTS public.quality_index (
 -- OBSERVATION UNIT
 CREATE TABLE IF NOT EXISTS public.observation_unit (
     "id" BIGSERIAL NOT NULL,
+    "iot_id" BIGSERIAL NOT NULL,
     "phenomenon_time" timestamp with time zone NOT NULL,
     "phenomenon_interval" interval DEFAULT NULL,
-    "result_time" timestamp with time zone,
-    "result_interval" interval DEFAULT NULL,
+    "result_time" timestamp with time zone DEFAULT NULL,
     "result" unit,
-    "valid_time" timestamp with time zone NOT NULL DEFAULT now(),
-    "valid_interval"  interval DEFAULT NULL,
+    "result_quality_id" integer DEFAULT NULL,
+    "valid_time" tstzrange DEFAULT NULL,
     "parameters" jsonb,
-    "result_type" text,
-    "expiratione_time" timestamp with time zone,
+    "result_validity" tstzrange DEFAULT tstzrange(current_timestamp, TIMESTAMPTZ 'infinity'),
     "motivation" text,
     "user_id" uuid REFERENCES public.user ("id"),
-    "quality_id" BIGINT,
+    EXCLUDE USING gist (iot_id WITH =, result_validity WITH &&)
     CONSTRAINT fk_quality_index FOREIGN KEY("quality_id") REFERENCES public.quality_index("id"),
     "datastream_id" BIGINT,
     CONSTRAINT fk_datastream FOREIGN KEY("datastream_id") REFERENCES public.datastream("id"),
@@ -244,6 +243,7 @@ CREATE INDEX ON public.observation_json (feature_id, phenomenon_time DESC);
 -- OBSERVATION BOOLEAN
 CREATE TABLE IF NOT EXISTS public.observation_bool (
     "id" BIGSERIAL NOT NULL,
+    "iot_id" BIGSERIAL NOT NULL,
     "phenomenon_time" timestamp with time zone NOT NULL,
     "phenomenon_interval" interval DEFAULT NULL,
     "result_time" timestamp with time zone,
@@ -365,3 +365,83 @@ CREATE UNIQUE INDEX idx_observation_array
 CREATE INDEX ON public.observation_array (quality_id, phenomenon_time DESC);
 CREATE INDEX ON public.observation_array (datastream_id, phenomenon_time DESC);
 CREATE INDEX ON public.observation_array (feature_id, phenomenon_time DESC);
+
+
+--- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+CREATE FUNCTION observation_version_trigger(_tbl regclass) RETURNS trigger AS
+$$
+BEGIN
+    IF TG_OP = 'UPDATE'
+    THEN
+        IF NEW.iot_id <> OLD.iot_id
+        THEN
+            RAISE EXCEPTION 'the iot_id must not be changed';
+        END IF;
+ 
+        UPDATE  _tbl
+        SET     valid = tstzrange(lower(result_validity), current_timestamp)
+        WHERE   id = NEW.id
+            AND current_timestamp <@ result_validity;
+ 
+        IF NOT FOUND THEN
+            RETURN NULL;
+        END IF;
+    END IF;
+ 
+ -- TODO: all values must be checked !!!!
+
+    IF TG_OP IN ('INSERT', 'UPDATE')
+    THEN
+        INSERT INTO _tbl (
+                id,
+                iot_id,
+                phenomenon_time,
+                phenomenon_interval,
+                result_time,
+                result,
+                result_quality_id,
+                valid_time,
+                parameters,
+                result_validity,
+                motivation,
+                user_id)
+            VALUES (
+                NEW.id,
+                NEW.iot_id,
+                NEW.phenomenon_time,
+                NEW.phenomenon_interval,
+                NEW.result_time,
+                NEW.result,
+                NEW.result_quality_id,
+                NEW.valid_time,
+                NEW.parameters,
+                tstzrange(current_timestamp, TIMESTAMPTZ 'infinity'),
+                NEW.motivation,
+                NEW.user_id);
+ 
+        RETURN NEW;
+    END IF;
+ 
+    IF TG_OP = 'DELETE'
+    THEN
+        UPDATE  _tbl
+        SET     result_validity = tstzrange(lower(result_validity), current_timestamp)
+        WHERE iot_id = OLD.iot_id
+            AND current_timestamp <@ result_validity;
+ 
+        IF FOUND THEN
+            RETURN OLD;
+        ELSE
+            RETURN NULL;
+        END IF;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+ 
+CREATE TRIGGER observation_unit_trigger
+    INSTEAD OF INSERT OR UPDATE OR DELETE
+    ON observation_unit
+    FOR EACH ROW
+    EXECUTE PROCEDURE observation_version_trigger(observation_unit);
