@@ -63,8 +63,8 @@ services:
     command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app
 
 volumes:
-  # v-istsos-miu-postgis-sql:
-  #   name: v-istsos-miu-postgis-sql
+  v-istsos-miu-postgis-sql:
+    name: v-istsos-miu-postgis-sql
   v-istsos-miu-database-data:
     name: v-istsos-miu-database-data
   # v-istsos-miu-postgis-sql-test:
