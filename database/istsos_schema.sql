@@ -101,7 +101,7 @@ BEGIN
         -- Set the END system_time_validity to the 'current_timestamp'
         OLD.system_time_validity := tstzrange(lower(OLD.system_time_validity), current_timestamp);
         -- Copy the original row to the history table
-        EXECUTE format('INSERT INTO %I SELECT ($1).*', TG_TABLE_NAME || '_history') USING OLD;
+        EXECUTE format('INSERT INTO %I.%I SELECT ($1).*', TG_TABLE_SCHEMA, TG_TABLE_NAME || '_history') USING OLD;
         -- Return the NEW record modified to run the table UPDATE
         RETURN NEW;
     END IF;
@@ -119,7 +119,7 @@ BEGIN
         -- Set the END system_time_validity to the 'current_timestamp'
         OLD.system_time_validity := tstzrange(lower(OLD.system_time_validity), current_timestamp);
         -- Copy the original row to the history table
-        EXECUTE format('INSERT INTO %I SELECT ($1).*', TG_TABLE_NAME || '_history') USING OLD;
+        EXECUTE format('INSERT INTO %I.%I SELECT ($1).*', TG_TABLE_SCHEMA, TG_TABLE_NAME || '_history') USING OLD;
         RETURN OLD;
     END IF;    
 END;
@@ -127,14 +127,14 @@ $body$;
 
 
 CREATE OR REPLACE FUNCTION istsos_prevent_table_update()
-RETURNS trigger AS
-$$
+RETURNS trigger 
+LANGUAGE plpgsql
+AS $body$
 BEGIN
-    RAISE EXCEPTION 'Updates on this table are not allowed';
+    RAISE EXCEPTION 'Updates or Deletes on this table are not allowed';
     RETURN NULL;
 END;
-$$
-LANGUAGE plpgsql;
+$body$;
 
 -- function to add a table to system_time versioning system
 CREATE OR REPLACE FUNCTION sensorthings.add_table_to_versioning(tablename text, schemaname text DEFAULT 'public')
