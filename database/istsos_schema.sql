@@ -161,6 +161,12 @@ BEGIN
     -- Add triggers to rise error if history table is updated or deleted
     EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE OR DELETE ON %I.%I FOR EACH ROW EXECUTE FUNCTION istsos_prevent_table_update();', tablename || '_history_no_mutate', schemaname, tablename || '_history', schemaname);
 
+    -- Create the travelitime view to query data modification history
+    EXECUTE format('CREATE VIEW %I.%I AS SELECT * FROM %I.%I UNION SELECT * FROM %I.%I;',
+        schemaname, tablename || '_traveltime',
+        schemaname, tablename,
+        schemaname, tablename || '_history');
+
     RAISE NOTICE '%s.%s is now added to versioning', schemaname, tablename;
 END;
 $body$;

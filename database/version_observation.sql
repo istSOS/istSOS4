@@ -22,16 +22,46 @@ null,
 update
 	sensorthings."Observation"
 set
-	"phenomenonTime" = NOW(),
-	"resultTime" = NOW(),
+	--"phenomenonTime" = NOW(),
+	--"resultTime" = NOW(),
 	"result" = 100,
-	"resultQuality" = null,
-	"validTime" = null,
-	parameters = null,
-	datastream_id = 1,
+	"resultQuality" = '{"quality": 100}',
+	--"validTime" = null,
+	--parameters = null,
+	--datastream_id = 1,
 	feature_of_interest_id = 1
 	--system_time_validity = '["2023-03-25 14:35:11.272722+01",infinity)'::tstzrange
 where
-	id = 14;
+	id = 2;
 
-delete from sensorthings."Observation" where id = 14;
+update
+	sensorthings."Observation"
+set
+	--"phenomenonTime" = NOW(),
+	--"resultTime" = NOW(),
+	"result" = 200,
+	"resultQuality" = '{"quality": 200}',
+	--"validTime" = null,
+	--parameters = null,
+	--datastream_id = 1,
+	feature_of_interest_id = 1
+	--system_time_validity = '["2023-03-25 14:35:11.272722+01",infinity)'::tstzrange
+where
+	id = 2;
+
+update
+	sensorthings."Observation"
+set
+	--"phenomenonTime" = NOW(),
+	--"resultTime" = NOW(),
+	"result" = 300,
+	"resultQuality" = '{"quality": 300}',
+	--"validTime" = null,
+	--parameters = null,
+	--datastream_id = 1,
+	feature_of_interest_id = 1
+	--system_time_validity = '["2023-03-25 14:35:11.272722+01",infinity)'::tstzrange
+where
+	id = 2;
+
+--delete from sensorthings."Observation" where id = 2;
