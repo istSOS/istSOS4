@@ -28,6 +28,7 @@ services:
       PGRST_DB_SCHEMA: sensorthings
       PGRST_DB_ANON_ROLE: admin #In production this role should not be the same as the one used for the connection
       PGRST_OPENAPI_SERVER_PROXY_URI: http://127.0.0.1:3000
+      PGRST_LOG_LEVEL: info
     depends_on:
       - database
 

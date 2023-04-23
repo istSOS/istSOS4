@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Extra
 from fastapi import Query as fQuery
 from pypika import Query, Table, Field, Order, Schema, Tables
-
+from datetime import timedelta, datetime
 
 class QueryParameters():
     def __init__(
@@ -45,7 +45,12 @@ class QueryParameters():
             default=None,
             title='result format',
             description='return Observations in a data array format'
-        )
+        ),
+        as_of_system_time: datetime | None = fQuery(
+            default=None,
+            title='as of system time',
+            description='return Observations as they were stored in a specific time instant'
+        ),
     ):
         self.expand = expand,
         self.select = select,
@@ -55,6 +60,7 @@ class QueryParameters():
         self.count = count,
         self.filter = filter,
         self.resultFormat = resultFormat
+        self.asofsystime = as_of_system_time
     
     # https://github.com/kayak/pypika
     # https://stackoverflow.com/questions/13227142/using-row-to-json-with-nested-joins

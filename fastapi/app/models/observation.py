@@ -15,3 +15,14 @@ class Observation(BaseModel):
     parameters: Json | None = None
     datastream_id: int
     feature_of_interest_id: int
+
+class put_Observation(BaseModel):
+    id: int | None = None
+    phenomenonTime: datetime | None = None
+    resultTime: datetime | None = None
+    result: float | None = None
+    resultQuality: str | None = None
+    validTime: str | None = None
+    parameters: Json | None = None
+    datastream_id: int | None = None
+    feature_of_interest_id: int | None = None

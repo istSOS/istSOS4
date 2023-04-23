@@ -2,22 +2,26 @@ select sensorthings.add_table_to_versioning('Observation','sensorthings')
 
 insert
 	into
-	sensorthings."Observation" ("phenomenonTime",
-	"resultTime",
-	"result",
-	"resultQuality",
-	"validTime",
-	"parameters",
-	"datastream_id",
-	"feature_of_interest_id")
-values (now(),
-now(),
-99,
-null,
-null,
-null,
-1,
-1);
+	sensorthings."Observation" (
+		"phenomenonTime",
+		"resultTime",
+		"result",
+		"resultQuality",
+		"validTime",
+		"parameters",
+		"datastream_id",
+		"feature_of_interest_id"
+	)
+values (
+	now(),
+	now(),
+	99,
+	null,
+	null,
+	null,
+	1,
+	1
+) returning current_timestamp;
 
 update
 	sensorthings."Observation"

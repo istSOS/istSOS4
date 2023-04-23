@@ -7,6 +7,6 @@ from fastapi import FastAPI
 v1 = FastAPI()
 
 v1.include_router(op.v1)
-v1.include_router(sensors.v1)
-v1.include_router(contacts.v1)
+# v1.include_router(sensors.v1)
+# v1.include_router(contacts.v1)
 v1.include_router(observations.v1)

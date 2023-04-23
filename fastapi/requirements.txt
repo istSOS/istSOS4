@@ -6,3 +6,4 @@ ujson
 pypika
 httpx
 asyncio
+postgrest
