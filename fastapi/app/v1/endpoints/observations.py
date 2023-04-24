@@ -35,7 +35,8 @@ async def get_observations(as_of_system_time: datetime | None = None):
                     'http://postgrest:3000/Observation',
                     params={
                         'limit':100,
-                        'select':'id, phenomenonTime, resultTime, result, resultQuality, validTime, parameters, datastream_id, feature_of_interest_id'
+                        'select':'id, phenomenonTime, resultTime, result, resultQuality, validTime, parameters, datastream_id, feature_of_interest_id',
+                        'order': 'id.asc'
                     }
                 )
             else:
@@ -44,7 +45,8 @@ async def get_observations(as_of_system_time: datetime | None = None):
                     'http://postgrest:3000/Observation_traveltime' + 
                     '?limit=100&system_time_validity=' + 
                     f'cs.[{as_of_system_time.isoformat()}, {as_of_system_time.isoformat()}}}]'.replace('+','%2B')+
-                    '&select=id,phenomenonTime,resultTime,result,resultQuality,validTime,parameters,datastream_id,feature_of_interest_id'
+                    '&select=id,phenomenonTime,resultTime,result,resultQuality,validTime,parameters,datastream_id,feature_of_interest_id' +
+                    '&order=id.asc'
                 )
             print('result', ujson.loads(result.text))
             
