@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, Response, status
 from fastapi.responses import UJSONResponse
 from fastapi.encoders import jsonable_encoder
 
-
 v1 = APIRouter()
 
 from starlette.requests import Request
@@ -59,20 +58,32 @@ async def get_observations(as_of_system_time: datetime | None = None):
         return str(e)
 
  
-@v1.get("/Observation({id})")
-async def get_observation(observation: Observation, query_options: QueryParameters=Depends()):
+@v1.get("/Observations({id})")
+async def get_observation(id: int, query_options: QueryParameters=Depends()):
     try:
         url = "http://postgrest:3000/Observation"
         print("GO IT!!!")
+        print(id)
         async with httpx.AsyncClient() as client:
-            print(observation.dict(exclude_none=True))
-            print(dict(observation))
+            # print(observation.dict(exclude_none=True))
+            # print(dict(observation))
             # result = await client.post(url, data=json.dumps(dict(observation),default=str ))
-            result = await client.post(url, data=observation.dict(exclude_none=True))
+            result = await client.get(
+                'http://postgrest:3000/Observation',
+                params={
+                    'id': f'eq.{id}',
+                    'limit':100,
+                    'select':'id, phenomenonTime, resultTime, result, resultQuality, validTime, parameters, datastream_id, feature_of_interest_id',
+                    'order': 'id.asc'                    
+                },
+                headers={'Accept': 'application/vnd.pgrst.object+json'}
+            )
             print('result', result)
-        if result and result.status_code == 201:
+        if result and result.status_code == 200:
             print('CREATED!')
-            return UJSONResponse(status_code=status.HTTP_201_CREATED, content='result')
+            # return UJSONResponse(status_code=status.HTTP_201_CREATED, content=result.text)
+            return UJSONResponse(status_code=status.HTTP_200_OK, content=ujson.loads(result.text))
+            # return ujson.loads(result.text)
     except Exception as e:
         print('except', e)
         return str(e)

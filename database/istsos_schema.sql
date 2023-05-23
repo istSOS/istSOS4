@@ -81,6 +81,10 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     UNIQUE ("datastream_id", "phenomenonTime")
 );
 
+--- =======================
+--- SYSTEM_TIME extension
+--- =======================
+
 -- triggers to handle table versioning with system_time
 CREATE OR REPLACE FUNCTION istsos_mutate_history()
 RETURNS trigger 
@@ -173,5 +177,16 @@ BEGIN
 END;
 $body$;
 
+-- ==================
+-- STA functions
+-- ==================
+
+-- return reference to the entity id
+CREATE OR REPLACE FUNTION sensorthings.refid(uri text, elemntname text)
 
 
+elemntname || "@iot.navigationLink" : "Things(1)/Locations",
+"HistoricalLocations@iot.navigationLink" : "Things(1)/HistoricalLocations",
+"Datastreams@iot.navigationLink" : "Things(1)/Datastreams",
+"@iot.id" : 1,
+"@iot.selfLink" : "/SensorThingsService/v1.0/Things(1)"
