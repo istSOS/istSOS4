@@ -11,14 +11,14 @@ from sta2rest import STA2REST
 class STA2RESTTestCase(unittest.TestCase):
     def test_convert_entity(self):
         entity_mappings = {
-            "Things": 'sensorthings."Thing"',
-            "Locations": 'sensorthings."Location"',
-            "Sensors": 'sensorthings."Sensor"',
-            "ObservedProperties": 'sensorthings."ObservedProperty"',
-            "Datastreams": 'sensorthings."Datastream"',
-            "Observations": 'sensorthings."Observation"',
-            "FeaturesOfInterest": 'sensorthings."FeatureOfInterest"',
-            "HistoricalLocations": 'sensorthings."HistoricalLocation"'
+            "Things": 'Thing',
+            "Locations": 'Location',
+            "Sensors": 'Sensor',
+            "ObservedProperties": 'ObservedProperty',
+            "Datastreams": 'Datastream',
+            "Observations": 'Observation',
+            "FeaturesOfInterest": 'FeatureOfInterest',
+            "HistoricalLocations": 'HistoricalLocation'
             # Add more entity mappings as needed
         }
 
@@ -27,10 +27,10 @@ class STA2RESTTestCase(unittest.TestCase):
 
     def test_convert_property(self):
         property_mappings = {
-            "name": '"name"',
-            "description": '"description"',
-            "encodingType": '"encodingType"',
-            "metadata": '"metadata"'
+            "name": 'name',
+            "description": 'description',
+            "encodingType": 'encodingType',
+            "metadata": 'metadata'
             # Add more property mappings as needed
         }
 
@@ -39,10 +39,10 @@ class STA2RESTTestCase(unittest.TestCase):
 
     def test_convert_query_param(self):
         query_param_mappings = {
-            "filter": "filter",
-            "orderby": "order",
-            "top": "limit",
-            "skip": "offset"
+            "$filter": "filter",
+            "$orderby": "order",
+            "$top": "limit",
+            "$skip": "offset"
             # Add more query parameter mappings as needed
         }
 
@@ -56,7 +56,9 @@ class STA2RESTTestCase(unittest.TestCase):
             "$filter=type eq 'humidity'&$top=5":
                 "filter=type eq 'humidity'&limit=5",
             "$orderby=timestamp asc&$skip=2":
-                "order=timestamp asc&offset=2"
+                "order=timestamp asc&offset=2",
+            "$select=id,name,description,properties&$top=1000&$filter=properties/type eq 'station'&$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))":
+            "select=id,name,description,properties,Location(*),ObservedProperty(name),Observation(result,phenomenonTime),Datastream(id,name,unitOfMeasurement)&limit=1000&filter=properties/type eq 'station'&Datastream.Observation.order=phenomenonTime.desc&Datastream.Observation.limit=1"
             # Add more query mappings as needed
         }
 
