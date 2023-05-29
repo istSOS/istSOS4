@@ -1,0 +1,52 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: istSOSTAμ
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Massimiliano
+    family-names: Cannata
+    email: massimiliano.cannata@supsi.ch
+    affiliation: SUPSI
+    orcid: 'https://orcid.org/0000-0003-2527-1416'
+  - given-names: Milan P.
+    family-names: Antonovic
+    orcid: 'https://orcid.org/0000-0003-2300-9051'
+    email: milan.antonovic@gmail.com
+    affiliation: TDM sa
+  - given-names: Daniele
+    family-names: Strigaro
+    email: daniele.strigaro@supsi.ch
+    affiliation: SUPSI
+    orcid: 'https://orcid.org/0000-0002-7040-4364'
+  - given-names: Mirko
+    family-names: Cardoso
+    email: mirko.cardoso@ias.ti.ch
+    affiliation: IAS
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.5888498
+    description: The URL of version 2.4.2 of the software
+repository-code: 'https://github.com/istSOS'
+url: 'http://www.istsos.org/'
+abstract: >-
+  istSOS is sensor data management tool that allows
+  collection, maintenance and publishing of monitoring
+  observations using the Open Geospatial Consortium (OGC)
+  Sensor Observation Service (SOS) standard.
+
+
+  istSOS strictly implements the SOS 1.0.0 standard, and has
+  passed the OGC CITE (Compliance + Interopability Testing +
+  Evaluation) units tests.
+keywords:
+  - OGC
+  - Sensor Observation Service
+  - data management
+license: GPL-2.0-or-later
+version: μ0.0.1
+date-released: '2020-05-29'
