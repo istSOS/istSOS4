@@ -19,30 +19,30 @@ ENV build_deps ca-certificates \
 
 RUN apt-get install -y --no-install-recommends $build_deps pkg-config cmake
 
-WORKDIR /home/pg_graphql
+# WORKDIR /home/pg_graphql
 
-ENV HOME=/home/pg_graphql \
-  PATH=/home/pg_graphql/.cargo/bin:$PATH
-ENV RUSTFLAGS="-C target-feature=-crt-static"
-RUN chown postgres:postgres /home/pg_graphql
+# ENV HOME=/home/pg_graphql \
+#   PATH=/home/pg_graphql/.cargo/bin:$PATH
+# ENV RUSTFLAGS="-C target-feature=-crt-static"
+# RUN chown postgres:postgres /home/pg_graphql
 
-USER postgres
+# USER postgres
 
-RUN \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain nightly &&\
-    # source "$HOME/.cargo/env" &&\
-    rustup --version && \
-    rustc --version && \
-    cargo --version &&\
-    cargo install cargo-pgx --version 0.6.1 --locked &&\
-    cargo pgx init --pg14 $(which pg_config) &&\
-    git clone https://github.com/supabase/pg_graphql.git &&\
-    mv pg_graphql/* ./
-    # chmod a+rwx pg_graphql &&\
-    # cd pg_graphql
+# RUN \
+#     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain nightly &&\
+#     # source "$HOME/.cargo/env" &&\
+#     rustup --version && \
+#     rustc --version && \
+#     cargo --version &&\
+#     cargo install cargo-pgx --version 0.6.1 --locked &&\
+#     cargo pgx init --pg14 $(which pg_config) &&\
+#     git clone https://github.com/supabase/pg_graphql.git &&\
+#     mv pg_graphql/* ./
+#     # chmod a+rwx pg_graphql &&\
+#     # cd pg_graphql
 
-USER root
-RUN cargo pgx install
+# USER root
+# RUN cargo pgx install
 
 USER postgres
 
