@@ -6,6 +6,8 @@ Author: Filippo Finke
 This module provides utility functions to convert various elements used in SensorThings queries to their corresponding
 representations in a REST API.
 """
+import re 
+
 class STA2REST:
     ENTITY_MAPPING = {
         "Things": "Thing",
@@ -80,7 +82,11 @@ class STA2REST:
 
     @staticmethod
     def convert_order_by_value(value: str) -> str:
-        return value.replace(" ", ".")
+        # strip all the spaces after commas ",   " -> ","
+        value = re.sub(r",\s+", ",", value)
+        # replace space and slash with dot
+        value = value.replace(" ", ".").replace("/", ".")
+        return value
 
     @staticmethod
     def convert_expand(expand_query: str, previous_entity: str = None) -> str:
@@ -136,6 +142,8 @@ class STA2REST:
             if key == "$expand":
                 converted_value = STA2REST.convert_expand(value)
             else:
+                if key == "$orderby":
+                    value = STA2REST.convert_order_by_value(value)
                 converted_value = value
             converted_key = STA2REST.convert_query_param(key)
             converted_query_params[converted_key] = converted_value
