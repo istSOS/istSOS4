@@ -7,6 +7,7 @@ This module provides utility functions to convert various elements used in Senso
 representations in a REST API.
 """
 import re 
+import urllib.parse
 
 class STA2REST:
     ENTITY_MAPPING = {
@@ -135,6 +136,9 @@ class STA2REST:
 
     @staticmethod
     def convert_query(sta_query: str) -> str:
+        # url decode the query
+        sta_query = urllib.parse.unquote(sta_query)
+
         sta_query = sta_query.split("&")
         converted_query_params = {}
         for query_param in sta_query:

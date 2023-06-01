@@ -67,6 +67,8 @@ class STA2RESTTestCase(unittest.TestCase):
             "$select=result,resultTime": "select=result,resultTime",
             "$orderby=result": "order=result",
             "$expand=Datastream&$orderby=Datastreams/id desc,phenomenonTime": "order=Datastreams.id.desc,phenomenonTime&select=Datastream(*)",
+            "$top=5": "limit=5",
+            "$top=5&$orderby=phenomenonTime%20desc": "limit=5&order=phenomenonTime.desc",
         }
 
         for query, expected in query_mappings.items():
