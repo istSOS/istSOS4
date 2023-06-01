@@ -109,7 +109,9 @@ class STA2REST:
                         # Adjust values
                         if param == "$orderby":
                             value = STA2REST.convert_order_by_value(value)
-                        additionals.append(f"{previous_entity}.{c_entity}.{converted_param}={value}")
+
+                        p_entity = previous_entity + "." if previous_entity != None else ""
+                        additionals.append(f"{p_entity}{c_entity}.{converted_param}={value}")
             else:
                 converted_entity = STA2REST.convert_entity(entity) + "(*"
             
