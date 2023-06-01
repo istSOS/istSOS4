@@ -60,7 +60,9 @@ class STA2RESTTestCase(unittest.TestCase):
             "$select=id,name,description,properties&$top=1000&$filter=properties/type eq 'station'&$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))":
             "select=id,name,description,properties,Location(*),ObservedProperty(name),Observation(result,phenomenonTime),Datastream(id,name,unitOfMeasurement)&limit=1000&filter=properties/type eq 'station'&Datastream.Observation.order=phenomenonTime.desc&Datastream.Observation.limit=1",
             "$select=@iot.id,description&$expand=Datastreams($select=@iot.id,description)": "select=@iot.id,description,Datastream(@iot.id,description)",
-            "$expand=Datastreams": "select=Datastream(*)"
+            "$expand=Datastreams": "select=Datastream(*)",
+            "$expand=Observations,ObservedProperty": "select=Observation(*),ObservedProperty(*)",
+            "$expand=Observations($filter=result eq 1)": "select=Observation(*)&Observation.filter=result eq 1",
         }
 
         for query, expected in query_mappings.items():

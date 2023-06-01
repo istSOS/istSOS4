@@ -90,6 +90,7 @@ class STA2REST:
         additionals = []
         for entity in result:
             converted_entity = ""
+            has_select = False
             if "(" in entity:
                 entity, subquery = entity.split("(",1)
                 c_entity = STA2REST.convert_entity(entity)
@@ -104,6 +105,7 @@ class STA2REST:
                         entities.extend(result["select"].split(","))
                         additionals += result["additionals"]
                     elif param == "$select":
+                        has_select = True
                         converted_entity += value
                     else:
                         # Adjust values
@@ -112,7 +114,8 @@ class STA2REST:
 
                         p_entity = previous_entity + "." if previous_entity != None else ""
                         additionals.append(f"{p_entity}{c_entity}.{converted_param}={value}")
-            else:
+            
+            if not has_select:
                 converted_entity = STA2REST.convert_entity(entity) + "(*"
             
             converted_entity += ")"
