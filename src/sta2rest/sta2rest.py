@@ -137,7 +137,10 @@ class STA2REST:
 
         # Check for expand and if present merge the select
         if "expand" in converted_query_params and "select" in converted_query_params["expand"]:
-            converted_query_params["select"] += "," + converted_query_params["expand"]["select"]
+            if "select" in converted_query_params:
+                converted_query_params["select"] += "," + converted_query_params["expand"]["select"]
+            else:
+                converted_query_params["select"] = converted_query_params["expand"]["select"]
         
         # Get additionals and remove them from the query
         additionals = []
