@@ -90,6 +90,15 @@ class STA2REST:
         return value
 
     @staticmethod
+    def convert_filter_by_value(value: str) -> str:
+        print("Convert $filter=" +  value)
+        # see https://docs.ogc.org/is/18-088/18-088.html#_built_in_filter_operations
+        # see https://postgrest.org/en/stable/references/api/tables_views.html#logical-operators
+        [column, operator, value] = value.split(" ", 2)
+        print(column, operator, value)
+        return value
+
+    @staticmethod
     def convert_expand(expand_query: str, previous_entity: str = None) -> str:
         result = STA2REST.split_but_not_between(expand_query, ",", "(", ")")
     
@@ -118,6 +127,8 @@ class STA2REST:
                         # Adjust values
                         if param == "$orderby":
                             value = STA2REST.convert_order_by_value(value)
+                        elif param == "$filter":
+                            value = STA2REST.convert_filter_by_value(value)
 
                         p_entity = previous_entity + "." if previous_entity != None else ""
                         additionals.append(f"{p_entity}{c_entity}.{converted_param}={value}")
@@ -148,6 +159,8 @@ class STA2REST:
             else:
                 if key == "$orderby":
                     value = STA2REST.convert_order_by_value(value)
+                elif key == "$filter":
+                    value = STA2REST.convert_filter_by_value(value)
                 converted_value = value
             converted_key = STA2REST.convert_query_param(key)
             converted_query_params[converted_key] = converted_value
