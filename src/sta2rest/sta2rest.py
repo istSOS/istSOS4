@@ -8,6 +8,11 @@ representations in a REST API.
 """
 import re 
 import urllib.parse
+from odata_query.grammar import ODataLexer
+from odata_query.grammar import ODataParser
+
+odata_filter_lexer = ODataLexer()
+odata_filter_parser = ODataParser()
 
 class STA2REST:
     ENTITY_MAPPING = {
@@ -94,8 +99,11 @@ class STA2REST:
         print("Convert $filter=" +  value)
         # see https://docs.ogc.org/is/18-088/18-088.html#_built_in_filter_operations
         # see https://postgrest.org/en/stable/references/api/tables_views.html#logical-operators
-        [column, operator, value] = value.split(" ", 2)
-        print(column, operator, value)
+        
+        ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(value))
+
+        print(ast)
+
         return value
 
     @staticmethod
