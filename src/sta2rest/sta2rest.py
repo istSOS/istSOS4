@@ -10,6 +10,7 @@ import re
 import urllib.parse
 from odata_query.grammar import ODataLexer
 from odata_query.grammar import ODataParser
+from filter_visitor import FilterVisitor
 
 odata_filter_lexer = ODataLexer()
 odata_filter_parser = ODataParser()
@@ -101,9 +102,8 @@ class STA2REST:
         # see https://postgrest.org/en/stable/references/api/tables_views.html#logical-operators
         
         ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(value))
-
-        print(ast)
-
+        res = FilterVisitor().visit(ast)
+        print(res)
         return value
 
     @staticmethod
