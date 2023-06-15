@@ -97,13 +97,11 @@ class STA2REST:
 
     @staticmethod
     def convert_filter_by_value(value: str) -> str:
-        print("Convert $filter=" +  value)
         # see https://docs.ogc.org/is/18-088/18-088.html#_built_in_filter_operations
         # see https://postgrest.org/en/stable/references/api/tables_views.html#logical-operators
         
         ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(value))
         res = FilterVisitor().visit(ast)
-        print(res)
         return value
 
     @staticmethod
@@ -193,3 +191,9 @@ class STA2REST:
             converted_query += "&" + additional
         
         return converted_query
+    
+
+
+if __name__ == "__main__":
+    query = "$expand=Datastreams($expand=Observations($filter=phenomenonTime gt 2020-01-01T00:00:00Z))&$filter=Datastreams/phenomenonTime gt 2020-01-01T00:00:00Z"
+    print(STA2REST.convert_query(query))
