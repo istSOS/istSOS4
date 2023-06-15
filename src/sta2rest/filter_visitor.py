@@ -29,9 +29,10 @@ class FilterVisitor(visitor.NodeVisitor):
         return node
      
      def visit_BoolOp(self, node: ast.BoolOp) -> str:
-        print("BoolOp")
-        print(node)
-        return node
+        operator = self.visit(node.op)
+        left = self.visit(node.left).replace("=", ".")
+        right = self.visit(node.right).replace("=", ".")
+        return f"{operator}=({right},{left})"
      
      def visit_Boolean(self, node: ast.Boolean) -> str:
         print("Boolean")
@@ -49,11 +50,14 @@ class FilterVisitor(visitor.NodeVisitor):
         return node
      
      def visit_Compare(self, node: ast.Compare) -> str:
+        
+        print(node.left, node.comparator, node.right)
+
         left = super().visit(node.left)
         comparator = super().visit(node.comparator)
         right = super().visit(node.right)
 
-        return f"{left} {comparator} {right}"
+        return f"{left.name}={comparator}.{right}"
      
      def visit_Date(self, node: ast.Date) -> str:
         print("Date")
@@ -61,9 +65,7 @@ class FilterVisitor(visitor.NodeVisitor):
         return node
      
      def visit_DateTime(self, node: ast.DateTime) -> str:
-        print("DateTime")
-        print(node)
-        return node
+        return node.val
      
      def visit_Div(self, node: ast.Div) -> str:
         print("Div")
@@ -79,9 +81,7 @@ class FilterVisitor(visitor.NodeVisitor):
         return "eq"
      
      def visit_Float(self, node: ast.Float) -> str:
-        print("Float")
-        print(node)
-        return node
+        return node.val
      
      def visit_GUID(self, node: ast.GUID) -> str:
         print("GUID")
@@ -98,9 +98,7 @@ class FilterVisitor(visitor.NodeVisitor):
         return "in"
      
      def visit_Integer(self, node: ast.Integer) -> str:
-        print("Integer")
-        print(node)
-        return node
+        return node.val
      
      def visit_Lambda(self, node: ast.Lambda) -> str:
         print("Lambda")
@@ -130,14 +128,10 @@ class FilterVisitor(visitor.NodeVisitor):
         return node
      
      def visit_Or(self, node: ast.Or) -> str:
-        print("Or")
-        print(node)
-        return node
+        return "or"
      
      def visit_String(self, node: ast.String) -> str:
-        print("String")
-        print(node)
-        return node
+        return node.val
      
      def visit_Sub(self, node: ast.Sub) -> str:
         print("Sub")
@@ -160,6 +154,4 @@ class FilterVisitor(visitor.NodeVisitor):
         return node
 
      def visit_Identifier(self, node: ast.Identifier) -> str:
-        print("Identifier")
-        print(node)
         return node

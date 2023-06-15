@@ -102,8 +102,7 @@ class STA2REST:
         
         ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(value))
         res = FilterVisitor().visit(ast)
-        print("RES", res)
-        return value
+        return res
 
     @staticmethod
     def convert_expand(expand_query: str, previous_entity: str = None) -> str:
@@ -185,6 +184,10 @@ class STA2REST:
             additionals = converted_query_params["expand"]["additionals"]
             del converted_query_params["expand"]
 
+        if "filter" in converted_query_params:
+            additionals.append(converted_query_params["filter"])
+            del converted_query_params["filter"]
+
         # merge in format key=value&key=value 
         converted_query = "&".join([f"{key}={value}" for key, value in converted_query_params.items()])
         
@@ -192,9 +195,8 @@ class STA2REST:
             converted_query += "&" + additional
         
         return converted_query
-    
-
 
 if __name__ == "__main__":
-    query = "$filter=Datastreams/phenomenonTime gt 2020-01-01T00:00:00Z"
-    print(STA2REST.convert_query(query))
+    query = "$filter=result gt 20 or result le 3.5"
+    print("QUERY", query)
+    print("CONVERTED", STA2REST.convert_query(query))

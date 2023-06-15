@@ -51,9 +51,9 @@ class STA2RESTTestCase(unittest.TestCase):
     def test_convert_sensor_things_query(self):
         query_mappings = {
             "$filter=type eq 'temperature'&$orderby=timestamp desc&$top=10&$skip=5":
-                "type=eq.'temperature'&order=timestamp.desc&limit=10&offset=5",
+                "order=timestamp.desc&limit=10&offset=5&type=eq.temperature",
             "$filter=type eq 'humidity'&$top=5":
-                "type=eq.'humidity'&limit=5",
+                "limit=5&type=eq.humidity",
             "$orderby=timestamp asc&$skip=2":
                 "order=timestamp.asc&offset=2",
             "$select=id,name,description,properties&$top=1000&$filter=properties/type eq 'station'&$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))":
