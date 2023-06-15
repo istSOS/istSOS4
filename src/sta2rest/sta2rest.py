@@ -102,6 +102,7 @@ class STA2REST:
         
         ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(value))
         res = FilterVisitor().visit(ast)
+        print("RES", res)
         return value
 
     @staticmethod
@@ -195,5 +196,5 @@ class STA2REST:
 
 
 if __name__ == "__main__":
-    query = "$expand=Datastreams($expand=Observations($filter=phenomenonTime gt 2020-01-01T00:00:00Z))&$filter=Datastreams/phenomenonTime gt 2020-01-01T00:00:00Z"
+    query = "$filter=Datastreams/phenomenonTime gt 2020-01-01T00:00:00Z"
     print(STA2REST.convert_query(query))

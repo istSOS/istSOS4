@@ -8,9 +8,7 @@ class FilterVisitor(visitor.NodeVisitor):
         return node
      
      def visit_All(self, node: ast.All) -> str:
-        print("All")
-        print(node)
-        return node
+        return "all"
      
      def visit_And(self, node: ast.And) -> str:
         print("And")
@@ -18,9 +16,7 @@ class FilterVisitor(visitor.NodeVisitor):
         return node
      
      def visit_Any(self, node: ast.Any) -> str:
-        print("Any")
-        print(node)
-        return node
+        return "any"
      
      def visit_Attribute(self, node: ast.Attribute) -> str:
         print("Attribute")
@@ -53,9 +49,11 @@ class FilterVisitor(visitor.NodeVisitor):
         return node
      
      def visit_Compare(self, node: ast.Compare) -> str:
-        print("Compare")
-        print(node)
-        return node
+        left = super().visit(node.left)
+        comparator = super().visit(node.comparator)
+        right = super().visit(node.right)
+
+        return f"{left} {comparator} {right}"
      
      def visit_Date(self, node: ast.Date) -> str:
         print("Date")
@@ -78,9 +76,7 @@ class FilterVisitor(visitor.NodeVisitor):
         return node
      
      def visit_Eq(self, node: ast.Eq) -> str:
-        print("Eq")
-        print(node)
-        return node
+        return "eq"
      
      def visit_Float(self, node: ast.Float) -> str:
         print("Float")
@@ -93,19 +89,13 @@ class FilterVisitor(visitor.NodeVisitor):
         return node
      
      def visit_Gt(self, node: ast.Gt) -> str:
-        print("Gt")
-        print(node)
-        return node
+        return "gt"
      
      def visit_GtE(self, node: ast.GtE) -> str:
-        print("GtE")
-        print(node)
-        return node
+        return "gte"
      
      def visit_In(self, node: ast.In) -> str:
-        print("In")
-        print(node)
-        return node
+        return "in"
      
      def visit_Integer(self, node: ast.Integer) -> str:
         print("Integer")
@@ -123,34 +113,16 @@ class FilterVisitor(visitor.NodeVisitor):
         return node
      
      def visit_Lt(self, node: ast.Lt) -> str:
-        print("Lt")
-        print(node)
-        return node
+        return "lt"
      
      def visit_LtE(self, node: ast.LtE) -> str:
-        print("LtE")
-        print(node)
-        return node
-     
-     def visit_Mod(self, node: ast.Mod) -> str:
-        print("Mod")
-        print(node)
-        return node
-     
-     def visit_Mult(self, node: ast.Mult) -> str:
-        print("Mult")
-        print(node)
-        return node
+        return "lte"
      
      def visit_Not(self, node: ast.Not) -> str:
-        print("Not")
-        print(node)
-        return node
+        return "not"
      
      def visit_NotEq(self, node: ast.NotEq) -> str:
-        print("NotEq")
-        print(node)
-        return node
+        return "neq"
      
      def visit_Null(self, node: ast.Null) -> str:
         print("Null")
