@@ -1,9 +1,9 @@
-CREATE EXTENSION IF NOT exists pg_graphql;
+--CREATE EXTENSION IF NOT exists pg_graphql;
 CREATE EXTENSION IF NOT exists postgis;
 CREATE EXTENSION IF NOT exists unit;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS btree_gist;
---CREATE EXTENSION IF NOT exists uri;
+CREATE EXTENSION IF NOT exists uri;
 
 CREATE SCHEMA sensorthings;
 
@@ -12,13 +12,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "name" VARCHAR(255) UNIQUE NOT NULL,
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "location" geometry(geometry, 4326) NOT NULL,
-    "properties" jsonb,
-
-    "thing_id" BIGINT REFERENCES sensorthings."Thing" (id),
-    "historical_location_id" BIGINT REFERENCES sensorthings."HistoricalLocation" (id),
-
-
+    "location" geometry(geometry, 4326) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
@@ -26,17 +20,13 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
     "name" VARCHAR(255) UNIQUE NOT NULL,
     "description" TEXT NOT NULL,
     "properties" jsonb,
-
-    "location_id" BIGINT REFERENCES sensorthings."Location" (id),
-    "historical_location_id" BIGINT REFERENCES sensorthings."HistoricalLocation" (id),
-    "datastream_id" BIGINT REFERENCES sensorthings."Datastream" (id)
+    "location_id" BIGINT REFERENCES sensorthings."Location" (id)
 );
 
 
 CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
     id BIGSERIAL NOT NULL PRIMARY KEY,
     time TIMESTAMPTZ NOT NULL,
-
     thing_id BIGINT REFERENCES sensorthings."Thing"(id),
     location_id BIGINT REFERENCES sensorthings."Location"(id)
 );
@@ -46,21 +36,14 @@ CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
     "name" VARCHAR(255) UNIQUE NOT NULL,
     --"definition" URI NOT NULL,
     "definition" VARCHAR(255) NOT NULL,
-    "description" VARCHAR(255) NOT NULL,
-    "properties" jsonb,
-
-    "datastream_id" BIGINT REFERENCES sensorthings."Datastream" (id)
+    "description" VARCHAR(255) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) UNIQUE NOT NULL,
-    "description" VARCHAR(255) NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "metadata" jsonb NOT NULL,
-    "properties" jsonb,
-
-    "datastream_id" BIGINT REFERENCES sensorthings."Datastream" (id)
+    "metadata" jsonb NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
@@ -69,15 +52,12 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "description" TEXT NOT NULL,
     "unitOfMeasurement" jsonb NOT NULL,
     "observationType" VARCHAR(100) NOT NULL,
-    "properties" jsonb,
     "observedArea" geometry(Polygon, 4326),
     "phenomenonTime" tstzrange,
     "resultTime" tstzrange,
-
     "thing_id" BIGINT REFERENCES sensorthings."Thing"(id) NOT NULL,
     "sensor_id" BIGINT REFERENCES sensorthings."Sensor"(id) NOT NULL,
-    "observedproperty_id" BIGINT REFERENCES sensorthings."ObservedProperty"(id),
-    "observation" BIGINT REFERENCES sensorthings."Observation"(id)
+    "observedproperty_id" BIGINT REFERENCES sensorthings."ObservedProperty"(id)
 );
 
 
@@ -85,21 +65,17 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "feature" geometry(geometry, 4326) NOT NULL,
-    "properties" jsonb,
-
-    "observation" BIGINT REFERENCES sensorthings."Observation"(id)
+    "feature" geometry(geometry, 4326) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "id" BIGSERIAL PRIMARY KEY,
     "phenomenonTime" TIMESTAMPTZ NOT NULL,
     "resultTime" TIMESTAMPTZ NOT NULL,
-    "result" FLOAT NOT NULL,  --any datatype
+    "result" FLOAT NOT NULL,
     "resultQuality" TEXT,
     "validTime" tstzrange DEFAULT NULL,
     "parameters" jsonb,
-
     "datastream_id" BIGINT REFERENCES sensorthings."Datastream"(id),
     "feature_of_interest_id" BIGINT REFERENCES sensorthings."FeaturesOfInterest"(id),
     UNIQUE ("datastream_id", "phenomenonTime")
@@ -206,11 +182,11 @@ $body$;
 -- ==================
 
 -- return reference to the entity id
-CREATE OR REPLACE FUNTION sensorthings.refid(uri text, elemntname text)
+--CREATE OR REPLACE FUNTION sensorthings.refid(uri text, elemntname text)
 
 
-elemntname || "@iot.navigationLink" : "Things(1)/Locations",
-"HistoricalLocations@iot.navigationLink" : "Things(1)/HistoricalLocations",
-"Datastreams@iot.navigationLink" : "Things(1)/Datastreams",
-"@iot.id" : 1,
-"@iot.selfLink" : "/SensorThingsService/v1.0/Things(1)"
+--elemntname || "@iot.navigationLink" : "Things(1)/Locations",
+--"HistoricalLocations@iot.navigationLink" : "Things(1)/HistoricalLocations",
+--"Datastreams@iot.navigationLink" : "Things(1)/Datastreams",
+--"@iot.id" : 1,
+--"@iot.selfLink" : "/SensorThingsService/v1.0/Things(1)"

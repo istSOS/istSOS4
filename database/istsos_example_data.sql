@@ -69,7 +69,7 @@ insert
 	"description",
 	"properties",
 	"location_id")
-values ('Temperature Sensor',
+values ('Pressure Sensor',
 'A sensor that measures the humidity in a room',
 '{"manufacturer": "ACME Inc.", "model": "TS-100"}',
 3);

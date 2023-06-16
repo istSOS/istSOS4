@@ -11,8 +11,7 @@ class Datastream(BaseModel):
     unitOfMeasurement: dict
     observationType: str
     observedArea: str
-    phenomenonTime: str
-    resultTime: str
+    # phenomenonTime:str
     thing_id: int
     sensor_id: int
     observedproperty_id: int
@@ -22,13 +21,17 @@ app = FastAPI()
 
 # Endpoint to fetch Datastream data by ID from the database
 @app.get("/datastreams/{datastream_id}", response_model=Datastream)
-def get_datastream_by_id(datastream_id: int):
+async def get_datastream_by_id(datastream_id: int):
     # Connect to the PostgreSQL database
     conn = psycopg2.connect(
-        host="localhost",
-        database="your_database",
-        user="your_username",
-        password="your_password"
+        host="172.18.0.1",
+        port="45432",
+        database="istsos",
+        user="admin",
+
+        password="admin"
+
+
     )
     
     # Create a cursor object to execute SQL queries
@@ -37,9 +40,7 @@ def get_datastream_by_id(datastream_id: int):
     # Execute the SQL query to fetch the Datastream data by ID from the database
     cursor.execute("""
         SELECT 
-            id, name, description, unitOfMeasurement, observationType, 
-            ST_AsGeoJSON(observedArea), phenomenonTime, resultTime, 
-            thing_id, sensor_id, observedproperty_id 
+            id, name, description, "unitOfMeasurement","observationType","observedArea",thing_id,sensor_id,observedproperty_id
         FROM 
             sensorthings."Datastream"
         WHERE
@@ -65,11 +66,10 @@ def get_datastream_by_id(datastream_id: int):
         unitOfMeasurement=row[3],
         observationType=row[4],
         observedArea=row[5],
-        phenomenonTime=row[6],
-        resultTime=row[7],
-        thing_id=row[8],
-        sensor_id=row[9],
-        observedproperty_id=row[10]
+        thing_id= row[6],
+        sensor_id= row[7],
+        observedproperty_id=row[8]
+
     )
     
     return datastream
