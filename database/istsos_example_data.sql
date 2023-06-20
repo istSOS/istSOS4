@@ -102,7 +102,7 @@ insert
 	"thing_id",
 	"location_id")
 values ('2023-03-25 10:00:00-04',
-1,
+3,
 3);
 
 
@@ -127,6 +127,15 @@ values ('Humidity',
 'http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Humidity',
 'The percentage of humidity present in a substance or object');
 
+insert
+	into
+	sensorthings."ObservedProperty" ("name",
+	"definition",
+	"description")
+values ('Pressure',
+'http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Humidity',
+'The percentage of humidity present in a substance or object');
+
 
 
 -- sensor
@@ -145,10 +154,18 @@ insert
 	sensorthings."Sensor" ("name",
 	"encodingType",
 	"metadata")
-values ('HUmidity Sensor',
+values ('Humidity Sensor',
 'application/pdf',
 '{"specification": "https://example.com/humidity-sensor-specs.pdf"}');
 
+insert
+	into
+	sensorthings."Sensor" ("name",
+	"encodingType",
+	"metadata")
+values ('Pressure Sensor',
+'application/pdf',
+'{"specification": "https://example.com/humidity-sensor-specs.pdf"}');
 
 
 -- datastream
@@ -191,7 +208,7 @@ insert
 	"thing_id",
 	"sensor_id",
 	"observedproperty_id")
-values ('Temperature Datastream',
+values ('Humidity Datastream',
 'A datastream that provides the temperature measurements from a temperature sensor',
 '{"name": "degree Celsius", "symbol": "degC", "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html#DegreeCelsius"}',
 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement',
@@ -203,6 +220,31 @@ tstzrange('2023-03-25 10:00:00-04',
 2,
 2,
 2);
+
+insert
+	into
+	sensorthings."Datastream" ("name",
+	"description",
+	"unitOfMeasurement",
+	"observationType",
+	"observedArea",
+	"phenomenonTime",
+	"resultTime",
+	"thing_id",
+	"sensor_id",
+	"observedproperty_id")
+values ('Pressure Datastream',
+'A datastream that provides the temperature measurements from a temperature sensor',
+'{"name": "degree Celsius", "symbol": "degC", "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html#DegreeCelsius"}',
+'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement',
+ST_MakePolygon(ST_GeomFromText('LINESTRING(-73.987 40.766, -73.987 40.768, -73.983 40.768, -73.983 40.766, -73.987 40.766)')),
+tstzrange('2023-03-25 10:00:00-04',
+'2023-03-25 11:00:00-04'),
+tstzrange('2023-03-25 10:00:00-04',
+'2023-03-25 11:00:00-04'),
+3,
+3,
+3);
 
 -- features of interest
 insert
@@ -276,7 +318,7 @@ null,
 null,
 null,
 2,
-1);
+2);
 
 insert
 	into
@@ -294,5 +336,5 @@ values ('2023-03-25 10:30:00-04',
 null,
 null,
 null,
-2,
-2);
+3,
+3);

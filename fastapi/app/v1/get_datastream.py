@@ -24,7 +24,7 @@ app = FastAPI()
 async def get_datastream_by_id(datastream_id: int):
     # Connect to the PostgreSQL database
     conn = psycopg2.connect(
-        host="172.18.0.1",
+        host="172.17.0.1",
         port="45432",
         database="istsos",
         user="admin",
