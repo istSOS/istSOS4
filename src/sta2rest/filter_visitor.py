@@ -57,7 +57,17 @@ class FilterVisitor(visitor.NodeVisitor):
         comparator = super().visit(node.comparator)
         right = super().visit(node.right)
 
-        return f"{left.name}={comparator}.{right}"
+        if isinstance(left, (ast.Attribute)):
+           owner = left.owner.name
+           attr = left.attr
+           left = f"{owner}->>{attr}"
+        elif isinstance(left, (ast.Identifier)):
+            left = left.name
+         
+        if isinstance(right, (ast.Identifier)):
+            right = right.name
+
+        return f"{left}={comparator}.{right}"
      
      def visit_Date(self, node: ast.Date) -> str:
         print("Date")
