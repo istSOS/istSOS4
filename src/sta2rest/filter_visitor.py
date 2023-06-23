@@ -11,9 +11,7 @@ class FilterVisitor(visitor.NodeVisitor):
         return "all"
      
      def visit_And(self, node: ast.And) -> str:
-        print("And")
-        print(node)
-        return node
+        return "&"
      
      def visit_Any(self, node: ast.Any) -> str:
         return "any"
@@ -30,9 +28,15 @@ class FilterVisitor(visitor.NodeVisitor):
      
      def visit_BoolOp(self, node: ast.BoolOp) -> str:
         operator = self.visit(node.op)
-        left = self.visit(node.left).replace("=", ".")
-        right = self.visit(node.right).replace("=", ".")
-        return f"{operator}=({right},{left})"
+        left = self.visit(node.left)
+        right = self.visit(node.right)
+
+        if(isinstance(node.op, ast.And)):
+           return f"{left}&{right}"
+        else:
+         left = left.replace("=", ".")
+         right = right.replace("=", ".")
+         return f"{operator}=({left},{right})"
      
      def visit_Boolean(self, node: ast.Boolean) -> str:
         print("Boolean")
