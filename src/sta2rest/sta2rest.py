@@ -137,7 +137,11 @@ class STA2REST:
                             value = STA2REST.convert_filter_by_value(value)
 
                         p_entity = previous_entity + "." if previous_entity != None else ""
-                        additionals.append(f"{p_entity}{c_entity}.{converted_param}={value}")
+
+                        if param != "$filter":
+                            additionals.append(f"{p_entity}{c_entity}.{converted_param}={value}")
+                        else:
+                            additionals.append(f"{p_entity}{c_entity}.{value}")
             
             if not has_select:
                 converted_entity = STA2REST.convert_entity(entity) + "(*"
@@ -193,6 +197,10 @@ class STA2REST:
         
         for additional in additionals:
             converted_query += "&" + additional
+
+        # remove the first & if present
+        if converted_query.startswith("&"):
+            converted_query = converted_query[1:]
         
         return converted_query
 
