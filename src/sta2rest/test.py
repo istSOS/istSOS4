@@ -71,6 +71,14 @@ class STA2RESTTestCase(unittest.TestCase):
             "$skip=5": "offset=5",
             "$count=true": "count=true",
             "$filter=result lt 10.00": "result=lt.10.00",
+            "$filter=unitOfMeasurement/name eq 'degree Celsius'": "unitOfMeasurement->>name=eq.degree Celsius",
+            "$filter=unitOfMeasurement/name ne 'degree Celsius'": "unitOfMeasurement->>name=neq.degree Celsius",
+            "$filter=result gt 20.0": "result=gt.20.0",
+            "$filter=result ge 20.0": "result=gte.20.0",
+            "$filter=result lt 100": "result=lt.100",
+            "$filter=result le 100": "result=lte.100",
+            "$filter=result le 3.5 and FeatureOfInterest/id eq 1": "result=lte.3.5&FeatureOfInterest->>id=eq.1",
+            "$filter=result gt 20 or result le 3.5": "or=(result.gt.20,result.lte.3.5)",
         }
 
         for query, expected in query_mappings.items():
