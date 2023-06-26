@@ -51,13 +51,13 @@ class STA2RESTTestCase(unittest.TestCase):
     def test_convert_sensor_things_query(self):
         query_mappings = {
             "$filter=type eq 'temperature'&$orderby=timestamp desc&$top=10&$skip=5":
-                "type=eq.'temperature'&order=timestamp.desc&limit=10&offset=5",
+                "order=timestamp.desc&limit=10&offset=5&type=eq.temperature",
             "$filter=type eq 'humidity'&$top=5":
-                "type=eq.'humidity'&limit=5",
+                "limit=5&type=eq.humidity",
             "$orderby=timestamp asc&$skip=2":
                 "order=timestamp.asc&offset=2",
             "$select=id,name,description,properties&$top=1000&$filter=properties/type eq 'station'&$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))":
-            "select=id,name,description,properties,Location(*),ObservedProperty(name),Observation(result,phenomenonTime),Datastream(id,name,unitOfMeasurement)&limit=1000&properties->>type=eq.'station'&Datastream.Observation.order=phenomenonTime.desc&Datastream.Observation.limit=1",
+            "select=id,name,description,properties,Location(*),ObservedProperty(name),Observation(result,phenomenonTime),Datastream(id,name,unitOfMeasurement)&limit=1000&Datastream.Observation.order=phenomenonTime.desc&Datastream.Observation.limit=1&properties->>type=eq.station",
             "$select=@iot.id,description&$expand=Datastreams($select=@iot.id,description)": "select=@iot.id,description,Datastream(@iot.id,description)",
             "$expand=Datastreams": "select=Datastream(*)",
             "$expand=Observations,ObservedProperty": "select=Observation(*),ObservedProperty(*)",
@@ -71,6 +71,14 @@ class STA2RESTTestCase(unittest.TestCase):
             "$skip=5": "offset=5",
             "$count=true": "count=true",
             "$filter=result lt 10.00": "result=lt.10.00",
+            "$filter=unitOfMeasurement/name eq 'degree Celsius'": "unitOfMeasurement->>name=eq.degree Celsius",
+            "$filter=unitOfMeasurement/name ne 'degree Celsius'": "unitOfMeasurement->>name=neq.degree Celsius",
+            "$filter=result gt 20.0": "result=gt.20.0",
+            "$filter=result ge 20.0": "result=gte.20.0",
+            "$filter=result lt 100": "result=lt.100",
+            "$filter=result le 100": "result=lte.100",
+            "$filter=result le 3.5 and FeatureOfInterest/id eq 1": "result=lte.3.5&FeatureOfInterest->>id=eq.1",
+            "$filter=result gt 20 or result le 3.5": "or=(result.gt.20,result.lte.3.5)",
         }
 
         for query, expected in query_mappings.items():

@@ -10,6 +10,7 @@ import re
 import urllib.parse
 from odata_query.grammar import ODataLexer
 from odata_query.grammar import ODataParser
+from filter_visitor import FilterVisitor
 
 odata_filter_lexer = ODataLexer()
 odata_filter_parser = ODataParser()
@@ -96,15 +97,12 @@ class STA2REST:
 
     @staticmethod
     def convert_filter_by_value(value: str) -> str:
-        print("Convert $filter=" +  value)
         # see https://docs.ogc.org/is/18-088/18-088.html#_built_in_filter_operations
         # see https://postgrest.org/en/stable/references/api/tables_views.html#logical-operators
         
         ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(value))
-
-        print(ast)
-
-        return value
+        res = FilterVisitor().visit(ast)
+        return res
 
     @staticmethod
     def convert_expand(expand_query: str, previous_entity: str = None) -> str:
@@ -139,7 +137,11 @@ class STA2REST:
                             value = STA2REST.convert_filter_by_value(value)
 
                         p_entity = previous_entity + "." if previous_entity != None else ""
-                        additionals.append(f"{p_entity}{c_entity}.{converted_param}={value}")
+
+                        if param != "$filter":
+                            additionals.append(f"{p_entity}{c_entity}.{converted_param}={value}")
+                        else:
+                            additionals.append(f"{p_entity}{c_entity}.{value}")
             
             if not has_select:
                 converted_entity = STA2REST.convert_entity(entity) + "(*"
@@ -186,10 +188,23 @@ class STA2REST:
             additionals = converted_query_params["expand"]["additionals"]
             del converted_query_params["expand"]
 
+        if "filter" in converted_query_params:
+            additionals.append(converted_query_params["filter"])
+            del converted_query_params["filter"]
+
         # merge in format key=value&key=value 
         converted_query = "&".join([f"{key}={value}" for key, value in converted_query_params.items()])
         
         for additional in additionals:
             converted_query += "&" + additional
+
+        # remove the first & if present
+        if converted_query.startswith("&"):
+            converted_query = converted_query[1:]
         
         return converted_query
+
+if __name__ == "__main__":
+    query = "$filter=result gt 20 or result le 3.5"
+    print("QUERY", query)
+    print("CONVERTED", STA2REST.convert_query(query))
