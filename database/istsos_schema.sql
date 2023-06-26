@@ -1,4 +1,4 @@
-CREATE EXTENSION IF NOT exists pg_graphql;
+--CREATE EXTENSION IF NOT exists pg_graphql;
 CREATE EXTENSION IF NOT exists postgis;
 CREATE EXTENSION IF NOT exists unit;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -182,11 +182,11 @@ $body$;
 -- ==================
 
 -- return reference to the entity id
-CREATE OR REPLACE FUNTION sensorthings.refid(uri text, elemntname text)
+--CREATE OR REPLACE FUNTION sensorthings.refid(uri text, elemntname text)
 
 
-elemntname || "@iot.navigationLink" : "Things(1)/Locations",
-"HistoricalLocations@iot.navigationLink" : "Things(1)/HistoricalLocations",
-"Datastreams@iot.navigationLink" : "Things(1)/Datastreams",
-"@iot.id" : 1,
-"@iot.selfLink" : "/SensorThingsService/v1.0/Things(1)"
+--elemntname || "@iot.navigationLink" : "Things(1)/Locations",
+--"HistoricalLocations@iot.navigationLink" : "Things(1)/HistoricalLocations",
+--"Datastreams@iot.navigationLink" : "Things(1)/Datastreams",
+--"@iot.id" : 1,
+--"@iot.selfLink" : "/SensorThingsService/v1.0/Things(1)"

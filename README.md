@@ -3,6 +3,8 @@
 ```
 docker-compose up -d
 ```
+>For updating the docker image use the command: \
+```docker-compose up -d --build```
 
 ## See the automatic interactive API documentation
 
@@ -88,3 +90,18 @@ http://localhost:3000/Thing?
         ;$top=1
         )
     )
+
+## Fast API connection to data base
+
+Run the following commands:
+`cd fastapi/app/v1`
+`uvicorn get_datastream:app --reload`
+
+In the browser type "IP:port"//datastreams/1
+
+You can also check using : http://127.0.0.1:8000/docs
+
+> Change the host IP address in the script as per your docker IP in get_datastream.py file.
+    
+
+
