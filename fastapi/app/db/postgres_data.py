@@ -2,6 +2,9 @@
 import psycopg2
 from psycopg2 import sql
 import argparse
+import csv
+
+
 print("For help use: postgres_data.py -h")
 argParser = argparse.ArgumentParser(description='Adding data to sensorthings database table using csv file ')
 
@@ -26,32 +29,51 @@ print("path of csv file provided for thing table = %s" % file_name.featuresOfInt
 print("path of csv file provided for thing table = %s" % file_name.ObservationTable)
 print("__________________________________________________________________________________________")
 
-#adding data to table from csv
-def add_data(table_name,file_name):
-    conn = psycopg2.connect(
-        host="172.17.0.1",
-        port="45432",
-        database="istsos",
-        user="admin",
-        password="admin"
-    )
 
-    cur = conn.cursor()
-    with open(file_name, 'r') as f:
-        # Notice that we don't need the csv module.
-        next(f) # Skip the header row.
-        cur.copy_from(f, table_name, sep=',')
+conn = psycopg2.connect(
+    host="172.17.0.1",
+    port="45432",
+    database="istsos",
+    user="admin",
+    password="admin"
+)
+
+
+
+#adding data to table from csv
+def add_data(table_name,file_paths):
+
+   
+    table_name = "\""+table_name+"\""
+    schema_name = 'sensorthings'
+
+    cursor = conn.cursor()
+
+    with open(file_paths, 'r') as file:
+        csv_data = csv.reader(file)
+        next(csv_data)  # Skip the header row
+
+        for row in csv_data:
+            insert_query = f"INSERT INTO {schema_name}.{table_name} VALUES ({','.join(['%s'] * len(row))})"
+            cursor.execute(insert_query, row)
 
     conn.commit()
+    cursor.close()
+    conn.close()
+
 
 
 table_name=["Location","Thing","HistoricalLocation","ObservedProperty","Sensor","Datastream","FeaturesOfInterest","Observation"]
 file_paths = [file_name.locationTable,file_name.thingTable,file_name.historicalLocationTable,file_name.observedPropertyTable,file_name.sensorTable,file_name.dataStreamTable,file_name.featuresOfInterestTable,file_name.ObservationTable]
 
-for i in range(0,8):
-    if (file_paths[i]!= None):
-        #print(file_paths[i])
-        #add_data function call
-        add_data(table_name[i],file_name[i])
+try:
+    for i in range(0,8):
+        if (file_paths[i]!= None):
+            #print(file_paths[i])
+            #add_data function call
+            add_data(table_name[i],file_paths[i])
+    print("Table updated successfully")
+except:
+    print("Exception occured, Table not updated")
 
 
