@@ -9,7 +9,13 @@ import unittest
 from sta2rest import STA2REST
 
 class STA2RESTTestCase(unittest.TestCase):
+    """
+    Test case for STA2REST module.
+    """
     def test_convert_entity(self):
+        """
+        Test the conversion of entities.
+        """
         entity_mappings = {
             "Things": 'Thing',
             "Locations": 'Location',
@@ -26,6 +32,10 @@ class STA2RESTTestCase(unittest.TestCase):
             self.assertEqual(STA2REST.convert_entity(entity), expected)
 
     def test_convert_property(self):
+        """
+        Test the conversion of properties.
+        """
+
         property_mappings = {
             "name": 'name',
             "description": 'description',
@@ -38,6 +48,10 @@ class STA2RESTTestCase(unittest.TestCase):
             self.assertEqual(STA2REST.convert_property(prop), expected)
 
     def test_convert_query_param(self):
+        """
+        Test the conversion of query parameters.
+        """
+
         query_param_mappings = {
             "$orderby": "order",
             "$top": "limit",
@@ -49,6 +63,9 @@ class STA2RESTTestCase(unittest.TestCase):
             self.assertEqual(STA2REST.convert_query_param(param), expected)
 
     def test_convert_sensor_things_query(self):
+        """
+        Test the conversion of sensor things queries.
+        """
         query_mappings = {
             "$filter=type eq 'temperature'&$orderby=timestamp desc&$top=10&$skip=5":
                 "order=timestamp.desc&limit=10&offset=5&type=eq.temperature",
@@ -85,4 +102,5 @@ class STA2RESTTestCase(unittest.TestCase):
             self.assertEqual(STA2REST.convert_query(query), expected)
 
 if __name__ == '__main__':
+    # Run all tests
     unittest.main()
