@@ -32,28 +32,32 @@ class FilterVisitor(visitor.NodeVisitor):
         left = self.visit(node.left)
         right = self.visit(node.right)
 
+        # Check if the is AND, because it is the default operator
         if(isinstance(node.op, ast.And)):
            return f"{left}&{right}"
+        # Otherwise it will be OR
         else:
          left = left.replace("=", ".")
          right = right.replace("=", ".")
+         # Or syntax is different from the other operators
          return f"{operator}=({left},{right})"
      
      def visit_Compare(self, node: ast.Compare) -> str:
         
-        print(node.left, node.comparator, node.right)
-
         left = super().visit(node.left)
         comparator = super().visit(node.comparator)
         right = super().visit(node.right)
 
+         # Check if the left is an attribute
         if isinstance(left, (ast.Attribute)):
            owner = left.owner.name
            attr = left.attr
            left = f"{owner}->>{attr}"
+         # Otherwise it is an identifier
         elif isinstance(left, (ast.Identifier)):
             left = left.name
          
+         # Check if the right is an attribute
         if isinstance(right, (ast.Identifier)):
             right = right.name
 
