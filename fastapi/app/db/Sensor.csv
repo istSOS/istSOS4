@@ -1,0 +1,4 @@
+"id","name","encodingType","metadata"
+"1","Temperature Sensor","application/pdf","{""specification"": ""https://example.com/temperature-sensor-specs.pdf""}"
+"2","Humidity Sensor","application/pdf","{""specification"": ""https://example.com/humidity-sensor-specs.pdf""}"
+"3","Pressure Sensor","application/pdf","{""specification"": ""https://example.com/humidity-sensor-specs.pdf""}"

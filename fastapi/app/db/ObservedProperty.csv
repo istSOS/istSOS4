@@ -1,0 +1,4 @@
+"id","name","definition","description"
+"1","Temperature","http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Temperature","The degree or intensity of heat present in a substance or object"
+"2","Humidity","http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Humidity","The percentage of humidity present in a substance or object"
+"3","Pressure","http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Humidity","The percentage of humidity present in a substance or object"

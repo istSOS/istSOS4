@@ -1,0 +1,4 @@
+"id","name","description","properties","location_id"
+"1","Temperature Sensor","A sensor that measures the temperature in a room","{""model"": ""TS-100"", ""manufacturer"": ""ACME Inc.""}","1"
+"2","Humidity Sensor","A sensor that measures the humidity in a room","{""model"": ""TS-100"", ""manufacturer"": ""ACME Inc.""}","2"
+"3","Pressure Sensor","A sensor that measures the humidity in a room","{""model"": ""TS-100"", ""manufacturer"": ""ACME Inc.""}","3"
