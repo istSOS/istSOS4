@@ -37,7 +37,13 @@ class FilterVisitor(visitor.NodeVisitor):
            return f"{left}&{right}"
         # Otherwise it will be OR
         else:
-         left = left.replace("=", ".")
+         # check if another or is present by checking the first or=
+         if "or=" in left:
+            # remove the parenthesis
+            left = left[4:-1]
+         else: 
+            left = left.replace("=", ".")
+         
          right = right.replace("=", ".")
          # Or syntax is different from the other operators
          return f"{operator}=({left},{right})"
