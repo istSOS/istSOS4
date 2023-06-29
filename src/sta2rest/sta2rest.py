@@ -315,6 +315,6 @@ if __name__ == "__main__":
 
     This example converts a STA query to a REST query.
     """
-    query = "$filter=(id eq 1 or id eq 2 or id eq 3 or id eq 4) and location_id eq 2"
+    query = "$filter=location_id eq 2 and id eq 2"
     print("QUERY", query)
     print("CONVERTED", STA2REST.convert_query(query))
