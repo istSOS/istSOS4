@@ -73,7 +73,8 @@ try:
             #add_data function call
             add_data(table_name[i],file_paths[i])
     print("Table updated successfully")
-except:
+except Exception as error:
     print("Exception occured, Table not updated")
+    print(error)
 
 

@@ -104,4 +104,19 @@ You can also check using : http://127.0.0.1:8000/docs
 > Change the host IP address in the script as per your docker IP in get_datastream.py file.
     
 
+## adding dummy data to postgresql sta database tables
 
+Run `postgres_data.py` script inside db folder of fastapi with argument as a csv file to each table
+```
+cd fastapi/app/db
+```
+ #for checking the argument parameters to pass
+```
+python3 postgres_data.py -h
+```
+
+Example: For adding location entity data in table:
+
+```python3 postgres_data.py -l Location.csv```
+
+Similarly  u can update the csv files and pass the arguments to update all the tables.
