@@ -99,7 +99,7 @@ class STA2RESTTestCase(unittest.TestCase):
             "$filter=id eq 1 or id eq 2 or id eq 3": "or=(id.eq.1,id.eq.2,id.eq.3)",
             "$filter=id eq 1 or id eq 2 or id eq 3 or id eq 4": "or=(id.eq.1,id.eq.2,id.eq.3,id.eq.4)",
             "$filter=(id eq 1 or id eq 2 or id eq 3 or id eq 4) and location_id eq 2": "or=(id.eq.1,id.eq.2,id.eq.3,id.eq.4)&location_id=eq.2",
-            "$filter=liocation_id eq 2 and id eq 2": "location_id=eq.2&id=eq.2",
+            "$filter=location_id eq 2 and id eq 2": "location_id=eq.2&id=eq.2",
         }
 
         for query, expected in query_mappings.items():
