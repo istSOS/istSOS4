@@ -14,41 +14,134 @@ from sta_parser.visitor import Visitor
 from sta_parser.parser import Parser
 from sta_parser import ast
 
+# Create the OData lexer and parser
 odata_filter_lexer = ODataLexer()
 odata_filter_parser = ODataParser()
 
 class NodeVisitor(Visitor):
+    """
+    This class provides a visitor to convert a STA query to a PostgREST query.
+    """
+    
     def visit_IdentifierNode(self, node: ast.IdentifierNode):
+        """
+        Visit an identifier node.
+
+        Args:
+            node (ast.IdentifierNode): The identifier node to visit.
+
+        Returns:
+            str: The converted identifier.
+        """
         return node.name
 
     def visit_SelectNode(self, node: ast.SelectNode):
+        """
+        Visit a select node.
+
+        Args:
+            node (ast.SelectNode): The select node to visit.
+
+        Returns:
+            str: The converted select node.
+        """
+
         identifiers = ','.join([self.visit(identifier) for identifier in node.identifiers])
         return f'select={identifiers}'
 
     def visit_FilterNode(self, node: ast.FilterNode):
+        """
+        Visit a filter node.
+
+        Args:
+            node (ast.FilterNode): The filter node to visit.
+        
+        Returns:
+            str: The converted filter node.
+        """
+
+        # Parse the filter using the OData lexer and parser
         ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(node.filter))
         # Visit the tree to convert the filter
         res = FilterVisitor().visit(ast)
         return res
 
     def visit_OrderByNodeIdentifier(self, node: ast.OrderByNodeIdentifier):
+        """
+        Visit an orderby node identifier.
+
+        Args:
+            node (ast.OrderByNodeIdentifier): The orderby node identifier to visit.
+
+        Returns:
+            str: The converted orderby node identifier.
+        """
+
+        # Convert the identifier to the format name.order
         return f'{node.identifier}.{node.order}'
 
     def visit_OrderByNode(self, node: ast.OrderByNode):
+        """
+        Visit an orderby node.
+
+        Args:
+            node (ast.OrderByNode): The orderby node to visit.
+        
+        Returns:
+            str: The converted orderby node.
+        """
         identifiers = ','.join([self.visit(identifier) for identifier in node.identifiers])
         return f'order={identifiers}'
 
     def visit_SkipNode(self, node: ast.SkipNode):
+        """
+        Visit a skip node.
+
+        Args:
+            node (ast.SkipNode): The skip node to visit.
+        
+        Returns:
+            str: The converted skip node.
+        """
         return f'offset={node.count}'
 
     def visit_TopNode(self, node: ast.TopNode):
+        """
+        Visit a top node.
+
+        Args:
+            node (ast.TopNode): The top node to visit.
+        
+        Returns:
+            str: The converted top node.
+        """
         return f'limit={node.count}'
 
     def visit_CountNode(self, node: ast.CountNode):
+        """
+        Visit a count node.
+
+        Args:
+            node (ast.CountNode): The count node to visit.
+        
+        Returns:
+            str: The converted count node.
+        """
         return f'count={node.value}'
     
     def visit_ExpandNode(self, node: ast.ExpandNode, parent=None):
+        """
+        Visit an expand node.
+        
+        Args:
+            node (ast.ExpandNode): The expand node to visit.
+            parent (str): The parent entity name.
+        
+        Returns:
+            dict: The converted expand node.
+        """
 
+        # dict to store the converted parts of the expand node
         select = None
         filter = ""
         orderby = ""
@@ -56,14 +149,21 @@ class NodeVisitor(Visitor):
         top = ""
         count = ""
 
+        # Visit the identifiers in the expand node
         for expand_identifier in node.identifiers:
+                # Convert the table name
                 expand_identifier.identifier = STA2REST.convert_entity(expand_identifier.identifier)
+                
+                # Check if we had a parent entity
                 prefix = ""
                 if parent:
                     prefix = parent
                 prefix += expand_identifier.identifier + "."
         
+                # Check if we have a subquery
                 if expand_identifier.subquery:
+
+                    # check if we have a select, filter, orderby, skip, top or count in the subquery
                     if expand_identifier.subquery.select:
                         if not select:
                             select = ast.SelectNode([])
@@ -81,8 +181,11 @@ class NodeVisitor(Visitor):
                     if expand_identifier.subquery.count:
                         count = prefix + "count=" + str(expand_identifier.subquery.count.value).lower()
 
+                    # check if we have a subquery in the subquery
                     if expand_identifier.subquery.expand:
                         result = self.visit_ExpandNode(expand_identifier.subquery.expand, prefix)
+
+                        # merge the results
                         if result['select']:
                             if not select:
                                 select = ast.SelectNode([])
@@ -108,10 +211,13 @@ class NodeVisitor(Visitor):
                                 filter += "&"
                             filter += result['filter']
                 
+                # If we don't have a subquery, we add the identifier to the select node
                 if not expand_identifier.subquery or not expand_identifier.subquery.select:
                     if not select:
                         select = ast.SelectNode([])
                     select.identifiers.append(ast.IdentifierNode(f'{expand_identifier.identifier}(*)'))
+        
+        # Return the converted expand node
         return {
             'select': select,
             'filter': filter,
@@ -122,10 +228,25 @@ class NodeVisitor(Visitor):
         }
 
     def visit_QueryNode(self, node: ast.QueryNode):
+        """
+        Visit a query node.
+
+        Args:
+            node (ast.QueryNode): The query node to visit.
+        
+        Returns:
+            str: The converted query node.
+        """
+
+        # list to store the converted parts of the query node
         query_parts = []
 
+        # Check if we have an expand node before the other parts of the query
         if node.expand:
+            # Visit the expand node
             result = self.visit(node.expand)
+
+            # Merge the results with the other parts of the query
             if result['select']:
                 if not node.select:
                     node.select = ast.SelectNode([])
@@ -141,6 +262,7 @@ class NodeVisitor(Visitor):
             if result['filter']:
                 query_parts.append(result['filter'])
 
+        # Check if we have a select, filter, orderby, skip, top or count in the query
         if node.select:
             query_parts.append(self.visit(node.select))
         if node.filter:
@@ -153,10 +275,16 @@ class NodeVisitor(Visitor):
             query_parts.append(self.visit(node.top))
         if node.count:
             query_parts.append(self.visit(node.count).lower())
+
         
+        # Join the converted parts of the query
         return '&'.join(query_parts)
 
 class STA2REST:
+    """
+    This class provides utility functions to convert various elements used in SensorThings queries to their corresponding
+    representations in a REST API.
+    """
 
     # Mapping from SensorThings entities to their corresponding database table names
     ENTITY_MAPPING = {
@@ -169,6 +297,7 @@ class STA2REST:
         "FeaturesOfInterest": "FeatureOfInterest",
         "HistoricalLocations": "HistoricalLocation",
     }
+
     @staticmethod
     def convert_entity(entity: str) -> str:
         """
@@ -184,6 +313,15 @@ class STA2REST:
   
     @staticmethod
     def convert_query(sta_query: str) -> str:
+        """
+        Converts a STA query to a PostgREST query.
+
+        Args:
+            sta_query (str): The STA query.
+        
+        Returns:
+            str: The converted PostgREST query.
+        """
         lexer = Lexer(sta_query)
         tokens = lexer.tokenize()
         parser = Parser(tokens)
