@@ -31,6 +31,29 @@ class STA2RESTTestCase(unittest.TestCase):
         for entity, expected in entity_mappings.items():
             self.assertEqual(STA2REST.convert_entity(entity), expected)
 
+    def test_parse_uri(self):
+        """
+        Test the parsing of URIs.
+        """
+
+        # Test the parsing of URIs
+        tests = [
+            "/v1.1/ObservedProperties"
+            "/v1.1/Things(1)",
+            "/v1.1/Observations(1)/resultTime",
+            "/v1.1/Observations(1)/resultTime/$value",
+            "/v1.1/Datastreams(1)/Observations",
+            "/v1.1/Datastreams(1)/Observations/$ref",
+            "/v1.1/Datastreams(1)/Observations(1)",
+            "/v1.1/Datastreams(1)/Observations(1)/resultTime",
+            "/v1.1/Datastreams(1)/Observations(1)/FeatureOfInterest",
+        ]
+        
+        # Test the parsing of URIs with query
+        for test in tests:
+            print(test)
+            print(STA2REST.parse_uri(test))
+
     def test_convert_sensor_things_query(self):
         """
         Test the conversion of sensor things queries.

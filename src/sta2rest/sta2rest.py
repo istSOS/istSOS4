@@ -6,6 +6,7 @@ Author: Filippo Finke
 This module provides utility functions to convert various elements used in SensorThings queries to their corresponding
 representations in a REST API.
 """
+import re
 from odata_query.grammar import ODataLexer
 from odata_query.grammar import ODataParser
 from filter_visitor import FilterVisitor
@@ -296,6 +297,15 @@ class STA2REST:
         "Observations": "Observation",
         "FeaturesOfInterest": "FeatureOfInterest",
         "HistoricalLocations": "HistoricalLocation",
+
+        "Thing": "Thing",
+        "Location": "Location",
+        "Sensor": "Sensor",
+        "ObservedProperty": "ObservedProperty",
+        "Datastream": "Datastream",
+        "Observation": "Observation",  
+        "FeatureOfInterest": "FeatureOfInterest",
+        "HistoricalLocation": "HistoricalLocation",
     }
 
     @staticmethod
@@ -329,6 +339,68 @@ class STA2REST:
         visitor = NodeVisitor()
         return visitor.visit(ast)
 
+    @staticmethod
+    def parse_entity(entity: str):
+        # Check if we have an id in the entity and match only the number
+        match = re.search(r'\(\d+\)', entity)
+        id = None
+        if match:
+            # Get the id from the match without the brackets
+            id = match.group(0)[1:-1]
+            # Remove the id from the entity
+            entity = entity.replace(match.group(0), "")
+
+        # Check if the entity is in the ENTITY_MAPPING
+        if entity in STA2REST.ENTITY_MAPPING:
+            entity = STA2REST.ENTITY_MAPPING[entity]
+        else:
+            return None
+
+        return (entity, id)
+    
+    @staticmethod
+    def parse_uri(uri: str) -> str:
+        # Split the uri by the '/' character
+        parts = uri.split('/')
+        # Remove the first part
+        parts.pop(0)
+
+        # Check if we have a version number
+        version = parts.pop(0)
+
+        # Parse first entity
+        entity = STA2REST.parse_entity(parts.pop(0))
+        if not entity:
+            raise Exception("Error parsing uri: invalid entity")
+
+        # Check all the entities in the uri
+        entities = []
+        property_name = None
+        ref = False
+        value = False
+        for entity in parts:
+            # Parse the entity
+            result = STA2REST.parse_entity(entity)
+            if result:
+                entities.append(result)
+            elif entity == "$ref":
+                ref = True
+            elif entity == "$value":
+                if property_name:
+                    value = True
+                else:
+                    raise Exception("Error parsing uri: $value without property name")
+            else:
+                property_name = entity
+
+        return {
+            'version': version,
+            'entity': entity,
+            'entities': entities,
+            'property_name': property_name,
+            'ref': ref,
+            'value': value
+        }
 
 if __name__ == "__main__":
     """
