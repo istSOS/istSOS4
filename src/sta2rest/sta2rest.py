@@ -7,13 +7,13 @@ This module provides utility functions to convert various elements used in Senso
 representations in a REST API.
 """
 import re
+import sta_parser.ast as ast
 from odata_query.grammar import ODataLexer
 from odata_query.grammar import ODataParser
 from filter_visitor import FilterVisitor
 from sta_parser.lexer import Lexer
 from sta_parser.visitor import Visitor
 from sta_parser.parser import Parser
-from sta_parser import ast
 
 # Create the OData lexer and parser
 odata_filter_lexer = ODataLexer()
@@ -322,7 +322,7 @@ class STA2REST:
         return STA2REST.ENTITY_MAPPING.get(entity, entity)
   
     @staticmethod
-    def convert_query(sta_query: str) -> str:
+    def convert_query(full_path: str) -> str:
         """
         Converts a STA query to a PostgREST query.
 
@@ -332,12 +332,72 @@ class STA2REST:
         Returns:
             str: The converted PostgREST query.
         """
-        lexer = Lexer(sta_query)
-        tokens = lexer.tokenize()
-        parser = Parser(tokens)
-        ast = parser.parse()
+
+        # check if we have a query
+        path = full_path
+        query = None
+        if '?' in full_path:
+            # Split the query from the path
+            path, query = full_path.split('?')
+
+        # Parse the uri
+        uri = STA2REST.parse_uri(path)
+        
+        if not uri:
+            raise Exception("Error parsing uri")
+        
+        main_entity, main_entity_id = uri['entity']
+        url = f"/{main_entity}"
+
+        # Check if we have a query
+        query_ast = ast.QueryNode(None, None, None, None, None, None, None, False)
+        if query:
+            lexer = Lexer(query)
+            tokens = lexer.tokenize()
+            parser = Parser(tokens)
+            query_ast = parser.parse()
+
+        # Check if we have a filter
+        if main_entity_id:
+            query_ast.filter = ast.FilterNode(query_ast.filter.filter + f" and id eq {main_entity_id}" if query_ast.filter else f"id eq {main_entity_id}")
+
+        entities = uri['entities']
+        if entities:
+            if not query_ast.expand:
+                query_ast.expand = ast.ExpandNode([])
+            
+            index = 0
+
+            # Merge the entities with the query
+            for entity in entities:
+                entity_name = entity[0]
+                sub_query = ast.QueryNode(None, None, None, None, None, None, None, True)
+                if entity[1]:
+                    sub_query.filter = ast.FilterNode(f"id eq {entity[1]}")
+
+                # Check if we are the last entity
+                if index == len(entities) - 1:
+                    # Check if we have a property name
+                    if uri['property_name']:
+                        # Add the property name to the select node
+                        if not sub_query.select:
+                            sub_query.select = ast.SelectNode([])
+                        sub_query.select.identifiers.append(ast.IdentifierNode(uri['property_name']))
+
+                query_ast.expand.identifiers.append(ast.ExpandNodeIdentifier(entity_name, sub_query))
+                index += 1
+
+            
+
+        # Visit the query ast to convert it
         visitor = NodeVisitor()
-        return visitor.visit(ast)
+        query_converted = visitor.visit(query_ast)
+
+        return {
+            'url': url + "?" + query_converted if query_converted else url,
+            'ref': uri['ref'],
+            'value': uri['value'],
+        }
 
     @staticmethod
     def parse_entity(entity: str):
@@ -369,8 +429,8 @@ class STA2REST:
         version = parts.pop(0)
 
         # Parse first entity
-        entity = STA2REST.parse_entity(parts.pop(0))
-        if not entity:
+        main_entity = STA2REST.parse_entity(parts.pop(0))
+        if not main_entity:
             raise Exception("Error parsing uri: invalid entity")
 
         # Check all the entities in the uri
@@ -384,6 +444,8 @@ class STA2REST:
             if result:
                 entities.append(result)
             elif entity == "$ref":
+                if property_name:
+                    raise Exception("Error parsing uri: $ref after property name")
                 ref = True
             elif entity == "$value":
                 if property_name:
@@ -395,12 +457,13 @@ class STA2REST:
 
         return {
             'version': version,
-            'entity': entity,
+            'entity': main_entity,
             'entities': entities,
             'property_name': property_name,
             'ref': ref,
             'value': value
         }
+
 
 if __name__ == "__main__":
     """
@@ -408,6 +471,6 @@ if __name__ == "__main__":
 
     This example converts a STA query to a REST query.
     """
-    query = "$expand=Observations($filter=result eq 1)"
+    query = "/v1.1/Datastreams(1)/Observations(1)/resultTime"
     print("QUERY", query)
     print("CONVERTED", STA2REST.convert_query(query))

@@ -58,6 +58,9 @@ class STA2RESTTestCase(unittest.TestCase):
         """
         Test the conversion of sensor things queries.
         """
+
+        # TODO(@filippofinke): fix test cases
+
         query_mappings = {
             "$filter=type eq 'temperature'&$orderby=timestamp desc&$top=10&$skip=5":
                 "type=eq.temperature&order=timestamp.desc&offset=5&limit=10",
