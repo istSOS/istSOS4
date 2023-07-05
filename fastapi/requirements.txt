@@ -7,3 +7,5 @@ pypika
 httpx
 asyncio
 postgrest
+sta_parser @ git+https://github.com/filippofinke/sta-parser@main
+odata-query
