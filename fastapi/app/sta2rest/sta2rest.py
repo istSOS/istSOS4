@@ -10,7 +10,7 @@ import re
 import sta_parser.ast as ast
 from odata_query.grammar import ODataLexer
 from odata_query.grammar import ODataParser
-from filter_visitor import FilterVisitor
+from .filter_visitor import FilterVisitor
 from sta_parser.lexer import Lexer
 from sta_parser.visitor import Visitor
 from sta_parser.parser import Parser
@@ -361,6 +361,7 @@ class STA2REST:
         if main_entity_id:
             query_ast.filter = ast.FilterNode(query_ast.filter.filter + f" and id eq {main_entity_id}" if query_ast.filter else f"id eq {main_entity_id}")
 
+        # TODO(@filippofinke): Move the query to the last entitiy otherwise we can't expand the last entity
         entities = uri['entities']
         if entities:
             if not query_ast.expand:
