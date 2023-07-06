@@ -8,9 +8,9 @@ representations in a REST API.
 """
 import re
 import sta_parser.ast as ast
+from .filter_visitor import FilterVisitor
 from odata_query.grammar import ODataLexer
 from odata_query.grammar import ODataParser
-from .filter_visitor import FilterVisitor
 from sta_parser.lexer import Lexer
 from sta_parser.visitor import Visitor
 from sta_parser.parser import Parser
@@ -357,11 +357,6 @@ class STA2REST:
             parser = Parser(tokens)
             query_ast = parser.parse()
 
-        # Check if we have a filter
-        if main_entity_id:
-            query_ast.filter = ast.FilterNode(query_ast.filter.filter + f" and id eq {main_entity_id}" if query_ast.filter else f"id eq {main_entity_id}")
-
-        # TODO(@filippofinke): Move the query to the last entitiy otherwise we can't expand the last entity
         entities = uri['entities']
         if entities:
             if not query_ast.expand:
@@ -385,10 +380,37 @@ class STA2REST:
                             sub_query.select = ast.SelectNode([])
                         sub_query.select.identifiers.append(ast.IdentifierNode(uri['property_name']))
 
+                    # Merge the query with the subquery
+                    if query_ast.select:
+                        sub_query.select = query_ast.select
+                        query_ast.select = None
+
+                    if query_ast.filter:
+                        sub_query.filter = query_ast.filter
+                        query_ast.filter = None
+
+                    if query_ast.orderby:
+                        sub_query.orderby = query_ast.orderby
+                        query_ast.orderby = None
+
+                    if query_ast.skip:
+                        sub_query.skip = query_ast.skip
+                        query_ast.skip = None
+
+                    if query_ast.top:
+                        sub_query.top = query_ast.top
+                        query_ast.top = None
+
+                    if query_ast.count:
+                        sub_query.count = query_ast.count
+                        query_ast.count = None
+
                 query_ast.expand.identifiers.append(ast.ExpandNodeIdentifier(entity_name, sub_query))
                 index += 1
 
-            
+        # Check if we have a filter in the query
+        if main_entity_id:
+            query_ast.filter = ast.FilterNode(query_ast.filter.filter + f" and id eq {main_entity_id}" if query_ast.filter else f"id eq {main_entity_id}")
 
         # Visit the query ast to convert it
         visitor = NodeVisitor()
