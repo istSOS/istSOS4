@@ -336,6 +336,7 @@ class STA2REST:
         # check if we have a query
         path = full_path
         query = None
+        single_result = False
         if '?' in full_path:
             # Split the query from the path
             path, query = full_path.split('?')
@@ -369,6 +370,7 @@ class STA2REST:
                 entity_name = entity[0]
                 sub_query = ast.QueryNode(None, None, None, None, None, None, None, True)
                 if entity[1]:
+                    single_result = True
                     sub_query.filter = ast.FilterNode(f"id eq {entity[1]}")
 
                 # Check if we are the last entity
@@ -417,6 +419,9 @@ class STA2REST:
         if main_entity_id:
             query_ast.filter = ast.FilterNode(query_ast.filter.filter + f" and id eq {main_entity_id}" if query_ast.filter else f"id eq {main_entity_id}")
 
+            if not entities:
+                single_result = True
+
         # Visit the query ast to convert it
         visitor = NodeVisitor()
         query_converted = visitor.visit(query_ast)
@@ -425,6 +430,7 @@ class STA2REST:
             'url': url + "?" + query_converted if query_converted else url,
             'ref': uri['ref'],
             'value': uri['value'],
+            'single_result': single_result
         }
 
     @staticmethod

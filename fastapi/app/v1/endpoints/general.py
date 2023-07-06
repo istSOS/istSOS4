@@ -11,7 +11,7 @@ async def catch_all(request: Request, path_name: str):
         full_path = request.url.path
         if request.url.query:
             full_path += "?" + request.url.query
-            
+
         result = sta2rest.STA2REST.convert_query(full_path)
         
         path = result["url"]
@@ -23,8 +23,14 @@ async def catch_all(request: Request, path_name: str):
 
         async with httpx.AsyncClient() as client:
             r = await client.get(url)
-            return r.json()
-        
+            data = r.json()
 
+            if result['single_result']:
+                data = data[0]
+                if result['value']:
+                    # get the value of the first key
+                    data = data[list(data.keys())[0]]
+
+            return data
     except Exception as e:
         return {"error": str(e)}
