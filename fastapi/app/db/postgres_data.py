@@ -31,7 +31,7 @@ print("_________________________________________________________________________
 
 
 conn = psycopg2.connect(
-    host="172.17.0.1",
+    host="172.17.0.1", 
     port="45432",
     database="istsos",
     user="admin",
@@ -74,7 +74,7 @@ try:
             add_data(table_name[i],file_paths[i])
     print("Table updated successfully")
 except Exception as error:
-    print("Exception occured, Table not updated")
+    print("Exception occured, Table not updated \n Error:")
     print(error)
 
 
