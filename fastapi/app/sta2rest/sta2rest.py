@@ -407,6 +407,11 @@ class STA2REST:
 
                 query_ast.expand.identifiers.append(ast.ExpandNodeIdentifier(entity_name, sub_query))
                 index += 1
+        else:
+            if uri['property_name']:
+                if not query_ast.select:
+                    query_ast.select = ast.SelectNode([])
+                query_ast.select.identifiers.append(ast.IdentifierNode(uri['property_name']))
 
         # Check if we have a filter in the query
         if main_entity_id:
