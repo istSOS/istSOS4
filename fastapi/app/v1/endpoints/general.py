@@ -29,7 +29,24 @@ async def catch_all(request: Request, path_name: str):
                 data = data[0]
                 if result['value']:
                     # get the value of the first key
-                    data = data[list(data.keys())[0]]
+                    data = data[list(data.keys())[0]]  
+            elif result['ref']:
+                # Get the value of the first key
+                key_name = list(data[0].keys())[0]
+                rows = data[0][key_name]
+                
+                data = {
+                    "value": []
+                }
+
+                table_name = key_name + "s"
+
+                host = request.url.scheme + "://" + request.url.netloc
+
+                for row in rows:
+                    data["value"].append({
+                        "@iot.selfLink": f"{host}/v1.1/{table_name}({row['id']})"
+                    })
 
             return data
     except Exception as e:
