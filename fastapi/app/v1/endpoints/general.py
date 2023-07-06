@@ -8,7 +8,10 @@ v1 = APIRouter()
 async def catch_all(request: Request, path_name: str):
     try:
         # get full path from request
-        full_path = request.url.path + "?" + request.url.query
+        full_path = request.url.path
+        if request.url.query:
+            full_path += "?" + request.url.query
+            
         result = sta2rest.STA2REST.convert_query(full_path)
         
         path = result["url"]
