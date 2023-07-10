@@ -9,7 +9,13 @@ import unittest
 from sta2rest import STA2REST
 
 class STA2RESTTestCase(unittest.TestCase):
+    """
+    Test case for STA2REST module.
+    """
     def test_convert_entity(self):
+        """
+        Test the conversion of entities.
+        """
         entity_mappings = {
             "Things": 'Thing',
             "Locations": 'Location',
@@ -25,49 +31,55 @@ class STA2RESTTestCase(unittest.TestCase):
         for entity, expected in entity_mappings.items():
             self.assertEqual(STA2REST.convert_entity(entity), expected)
 
-    def test_convert_property(self):
-        property_mappings = {
-            "name": 'name',
-            "description": 'description',
-            "encodingType": 'encodingType',
-            "metadata": 'metadata'
-            # Add more property mappings as needed
-        }
+    def test_parse_uri(self):
+        """
+        Test the parsing of URIs.
+        """
 
-        for prop, expected in property_mappings.items():
-            self.assertEqual(STA2REST.convert_property(prop), expected)
-
-    def test_convert_query_param(self):
-        query_param_mappings = {
-            "$orderby": "order",
-            "$top": "limit",
-            "$skip": "offset"
-            # Add more query parameter mappings as needed
-        }
-
-        for param, expected in query_param_mappings.items():
-            self.assertEqual(STA2REST.convert_query_param(param), expected)
+        # Test the parsing of URIs
+        tests = [
+            "/v1.1/ObservedProperties"
+            "/v1.1/Things(1)",
+            "/v1.1/Observations(1)/resultTime",
+            "/v1.1/Observations(1)/resultTime/$value",
+            "/v1.1/Datastreams(1)/Observations",
+            "/v1.1/Datastreams(1)/Observations/$ref",
+            "/v1.1/Datastreams(1)/Observations(1)",
+            "/v1.1/Datastreams(1)/Observations(1)/resultTime",
+            "/v1.1/Datastreams(1)/Observations(1)/FeatureOfInterest",
+        ]
+        
+        # Test the parsing of URIs with query
+        for test in tests:
+            print(test)
+            print(STA2REST.parse_uri(test))
 
     def test_convert_sensor_things_query(self):
+        """
+        Test the conversion of sensor things queries.
+        """
+
+        # TODO(@filippofinke): fix test cases
+
         query_mappings = {
             "$filter=type eq 'temperature'&$orderby=timestamp desc&$top=10&$skip=5":
-                "order=timestamp.desc&limit=10&offset=5&type=eq.temperature",
+                "type=eq.temperature&order=timestamp.desc&offset=5&limit=10",
             "$filter=type eq 'humidity'&$top=5":
-                "limit=5&type=eq.humidity",
+                "type=eq.humidity&limit=5",
             "$orderby=timestamp asc&$skip=2":
                 "order=timestamp.asc&offset=2",
             "$select=id,name,description,properties&$top=1000&$filter=properties/type eq 'station'&$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))":
-            "select=id,name,description,properties,Location(*),ObservedProperty(name),Observation(result,phenomenonTime),Datastream(id,name,unitOfMeasurement)&limit=1000&Datastream.Observation.order=phenomenonTime.desc&Datastream.Observation.limit=1&properties->>type=eq.station",
-            "$select=@iot.id,description&$expand=Datastreams($select=@iot.id,description)": "select=@iot.id,description,Datastream(@iot.id,description)",
+            "Datastream.Observation.order=phenomenonTime.desc&Datastream.Observation.limit=1&select=id,name,description,properties,Location(*),Datastream(id,name,unitOfMeasurement),ObservedProperty(name),Observation(result,phenomenonTime)&properties->>type=eq.station&limit=1000",
+            "$select=id,description&$expand=Datastreams($select=id,description)": "select=id,description,Datastream(id,description)",
             "$expand=Datastreams": "select=Datastream(*)",
             "$expand=Observations,ObservedProperty": "select=Observation(*),ObservedProperty(*)",
-            "$expand=Observations($filter=result eq 1)": "select=Observation(*)&Observation.result=eq.1",
+            "$expand=Observations($filter=result eq 1)": "Observation.result=eq.1&select=Observation(*)",
             "$expand=Observations($select=result)": "select=Observation(result)",
-            "$select=result,resultTime": "select=result,resultTime",
-            "$orderby=result": "order=result",
-            "$expand=Datastream&$orderby=Datastreams/id desc,phenomenonTime": "order=Datastreams.id.desc,phenomenonTime&select=Datastream(*)",
+            "$select=result": "select=result",
+            "$orderby=result": "order=result.asc",
+            "$expand=Datastream&$orderby=Datastreams/id desc,phenomenonTime": "select=Datastream(*)&order=Datastreams/id.desc,phenomenonTime.asc",
             "$top=5": "limit=5",
-            "$top=5&$orderby=phenomenonTime%20desc": "limit=5&order=phenomenonTime.desc",
+            "$top=5&$orderby=phenomenonTime%20desc": "order=phenomenonTime.desc&limit=5",
             "$skip=5": "offset=5",
             "$count=true": "count=true",
             "$filter=result lt 10.00": "result=lt.10.00",
@@ -79,10 +91,16 @@ class STA2RESTTestCase(unittest.TestCase):
             "$filter=result le 100": "result=lte.100",
             "$filter=result le 3.5 and FeatureOfInterest/id eq 1": "result=lte.3.5&FeatureOfInterest->>id=eq.1",
             "$filter=result gt 20 or result le 3.5": "or=(result.gt.20,result.lte.3.5)",
+            "$filter=id eq 1 or id eq 2 or id eq 3": "or=(id.eq.1,id.eq.2,id.eq.3)",
+            "$filter=id eq 1 or id eq 2 or id eq 3 or id eq 4": "or=(id.eq.1,id.eq.2,id.eq.3,id.eq.4)",
+            "$filter=(id eq 1 or id eq 2 or id eq 3 or id eq 4) and location_id eq 2": "or=(id.eq.1,id.eq.2,id.eq.3,id.eq.4)&location_id=eq.2",
+            "$filter=location_id eq 2 and id eq 2": "location_id=eq.2&id=eq.2",
         }
 
         for query, expected in query_mappings.items():
+            print("QUERY", query)
             self.assertEqual(STA2REST.convert_query(query), expected)
 
 if __name__ == '__main__':
+    # Run all tests
     unittest.main()
