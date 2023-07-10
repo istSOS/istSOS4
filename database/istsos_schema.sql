@@ -81,6 +81,14 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     UNIQUE ("datastream_id", "phenomenonTime")
 );
 
+CREATE OR REPLACE FUNCTION "@iot.id"(anyelement) RETURNS text AS $$
+  SELECT $1.id;
+$$ LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.selfLink"(anyelement) RETURNS text AS $$
+  SELECT concat(current_setting('custom.hostname'), '/v1.1/',substring(pg_typeof($1)::text from 2 for length(pg_typeof($1)::text) - 2),'(' || $1.id || ')');
+$$ LANGUAGE SQL;
+
 --- =======================
 --- SYSTEM_TIME extension
 --- =======================
