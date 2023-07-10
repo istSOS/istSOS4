@@ -13,6 +13,11 @@ def __flatten_navigation_links(row):
 @v1.api_route("/{path_name:path}", methods=["GET"])
 async def catch_all(request: Request, path_name: str):
     try:
+        if not path_name:
+            # Handle the root path
+            # TODO(@filippofinke): handle the root path
+            return
+
         # get full path from request
         full_path = request.url.path
         if request.url.query:
