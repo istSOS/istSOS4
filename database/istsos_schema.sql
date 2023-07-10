@@ -89,6 +89,86 @@ CREATE OR REPLACE FUNCTION "@iot.selfLink"(anyelement) RETURNS text AS $$
   SELECT concat(current_setting('custom.hostname'), '/v1.1/',substring(pg_typeof($1)::text from 2 for length(pg_typeof($1)::text) - 2),'(' || $1.id || ')');
 $$ LANGUAGE SQL;
 
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Thing") RETURNS table(
+    "Locations@iot.navigationLink" text,
+    "Datastreams@iot.navigationLink" text,
+    "HistoricalLocations@iot.navigationLink" text
+) AS 
+$$
+  SELECT 'Things(' || $1.id || ')/Locations',
+         'Things(' || $1.id || ')/Datastreams',
+         'Things(' || $1.id || ')/HistoricalLocations';
+$$ 
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Location") RETURNS table(
+    "Things@iot.navigationLink" text,
+    "HistoricalLocations@iot.navigationLink" text
+) AS 
+$$
+  SELECT 'Locations(' || $1.id || ')/Things',
+         'Locations(' || $1.id || ')/HistoricalLocations';
+$$ 
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."HistoricalLocation") RETURNS table(
+    "Locations@iot.navigationLink" text,
+    "Thing@iot.navigationLink" text
+) AS
+$$
+  SELECT 'HistoricalLocations(' || $1.id || ')/Locations',
+         'HistoricalLocations(' || $1.id || ')/Thing';
+$$
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Datastream") RETURNS table(
+    "Thing@iot.navigationLink" text,
+    "Sensor@iot.navigationLink" text,
+    "ObservedProperty@iot.navigationLink" text,
+    "Observations@iot.navigationLink" text
+) AS
+$$
+  SELECT 'Datastreams(' || $1.id || ')/Thing',
+         'Datastreams(' || $1.id || ')/Sensor',
+         'Datastreams(' || $1.id || ')/ObservedProperty',
+         'Datastreams(' || $1.id || ')/Observations';
+$$
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Sensor") RETURNS table(
+    "Datastreams@iot.navigationLink" text
+) AS
+$$
+  SELECT 'Sensors(' || $1.id || ')/Datastreams';
+$$
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."ObservedProperty") RETURNS table(
+    "Datastreams@iot.navigationLink" text
+) AS
+$$
+  SELECT 'ObservedProperties(' || $1.id || ')/Datastreams';
+$$
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Observation") RETURNS table(
+    "FeatureOfInterest@iot.navigationLink" text,
+    "Datastream@iot.navigationLink" text
+) AS
+$$
+  SELECT 'Observations(' || $1.id || ')/FeatureOfInterest',
+         'Observations(' || $1.id || ')/Datastream';
+$$
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."FeaturesOfInterest") RETURNS table(
+    "Observations@iot.navigationLink" text
+) AS
+$$
+  SELECT 'FeaturesOfInterest(' || $1.id || ')/Observations';
+$$
+LANGUAGE SQL;
+
 --- =======================
 --- SYSTEM_TIME extension
 --- =======================
