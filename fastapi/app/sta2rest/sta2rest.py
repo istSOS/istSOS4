@@ -216,7 +216,7 @@ class NodeVisitor(Visitor):
                 if not expand_identifier.subquery or not expand_identifier.subquery.select:
                     if not select:
                         select = ast.SelectNode([])
-                    select.identifiers.append(ast.IdentifierNode(f'{expand_identifier.identifier}(*)'))
+                    select.identifiers.append(ast.IdentifierNode(f'{expand_identifier.identifier}("@iot.id", "@iot.selfLink", *)'))
         
         # Return the converted expand node
         return {
@@ -262,6 +262,16 @@ class NodeVisitor(Visitor):
                 query_parts.append(result['count'])
             if result['filter']:
                 query_parts.append(result['filter'])
+
+        if not node.select:
+            node.select = ast.SelectNode([])
+            # Add "@iot.id", "@iot.selfLink" and "*" to the select node
+            node.select.identifiers.extend((
+                ast.IdentifierNode('"@iot.id"'),
+                ast.IdentifierNode('"@iot.selfLink"'),
+                ast.IdentifierNode('"@iot.navigationLink"'),
+                ast.IdentifierNode('*')
+            ))
 
         # Check if we have a select, filter, orderby, skip, top or count in the query
         if node.select:
