@@ -63,6 +63,10 @@ async def catch_all(request: Request, path_name: str):
                 for row in data:
                     __flatten_navigation_links(row)
 
+                data = {
+                    "value": data
+                }
+
             return data
     except Exception as e:
         return {"error": str(e)}
