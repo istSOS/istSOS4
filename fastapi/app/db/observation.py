@@ -1,6 +1,6 @@
 import csv
 import random
-import string
+
 
 def generate_dummy_data():
     data = []
