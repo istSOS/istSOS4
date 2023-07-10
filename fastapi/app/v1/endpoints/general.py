@@ -31,8 +31,6 @@ async def catch_all(request: Request, path_name: str):
             r = await client.get(url)
             data = r.json()
 
-            print(result)
-
             if result['single_result']:
                 data = data[0]
                 if result['value']:
@@ -45,18 +43,12 @@ async def catch_all(request: Request, path_name: str):
                 # Get the value of the first key
                 key_name = list(data[0].keys())[0]
                 rows = data[0][key_name]
-                
                 data = {
                     "value": []
                 }
-
-                table_name = key_name + "s"
-
-                host = request.url.scheme + "://" + request.url.netloc
-
                 for row in rows:
                     data["value"].append({
-                        "@iot.selfLink": f"{host}/v1.1/{table_name}({row['id']})"
+                        "@iot.selfLink": row["@iot.selfLink"]
                     })
             else:
                 # Flatten the @iot.navigationLink for each row
