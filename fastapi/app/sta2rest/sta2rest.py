@@ -34,6 +34,11 @@ class NodeVisitor(Visitor):
         Returns:
             str: The converted identifier.
         """
+
+        # if the identifier starts with @ add a double quote
+        if node.name.startswith('@'):
+            return f'"{node.name}"'
+
         return node.name
 
     def visit_SelectNode(self, node: ast.SelectNode):
@@ -60,6 +65,9 @@ class NodeVisitor(Visitor):
         Returns:
             str: The converted filter node.
         """
+
+        # replace @iot.id with id
+        node.filter = node.filter.replace("@iot.id", "id")
 
         # Parse the filter using the OData lexer and parser
         ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(node.filter))
