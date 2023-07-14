@@ -1,6 +1,7 @@
+import httpx
+import traceback
 from fastapi import APIRouter, Request
 from app.sta2rest import sta2rest
-import httpx
 
 v1 = APIRouter()
 
@@ -19,6 +20,11 @@ def __flatten_navigation_links(row):
         del row["@iot.navigationLink"]
 
 def __flatten_expand_entity(data):
+    # Check if it is an array
+    if not isinstance(data, list):
+        # throw an error
+        raise Exception(data)
+
     # Check if there is only one key and it is in an ENTITY_MAPPING from the sta2rest module
     if len(data[0].keys()) == 1 and list(data[0].keys())[0] in sta2rest.STA2REST.ENTITY_MAPPING:
         # Get the value of the first key
@@ -98,4 +104,7 @@ async def catch_all(request: Request, path_name: str):
 
             return data
     except Exception as e:
+        # print stack trace
+        traceback.print_exc()
         return {"error": str(e)}
+
