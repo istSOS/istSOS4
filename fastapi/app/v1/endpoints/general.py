@@ -4,6 +4,14 @@ import httpx
 
 v1 = APIRouter()
 
+tables = ["Datastreams", "FeaturesOfInterest", "HistoricalLocations", "Locations", "Observations", "ObservedProperties", "Sensors", "Things"]
+serverSettings = {
+    "conformance": [
+        "http://www.opengis.net/spec/iot_sensing/1.1/req/request-data",
+    ],
+}
+
+
 def __flatten_navigation_links(row):
     if "@iot.navigationLink" in row:
         # merge all the keys from the navigationLink
@@ -15,8 +23,22 @@ async def catch_all(request: Request, path_name: str):
     try:
         if not path_name:
             # Handle the root path
-            # TODO(@filippofinke): handle the root path
-            return
+            value = []
+            # append the domain to the path for each table
+            for table in tables:
+                value.append(
+                    {
+                        "name": table,
+                        "url": 
+                        request.url._url + table,
+                    }
+                )
+
+            response = {
+                "value": value,
+                "serverSettings": serverSettings,
+            } 
+            return response
 
         # get full path from request
         full_path = request.url.path
