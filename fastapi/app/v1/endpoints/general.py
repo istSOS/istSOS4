@@ -14,7 +14,6 @@ serverSettings = {
 
 
 def __flatten_navigation_links(row):
-    print(row)
     if "@iot.navigationLink" in row:
         # merge all the keys from the navigationLink
         row.update(row["@iot.navigationLink"])
