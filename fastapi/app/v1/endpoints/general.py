@@ -14,10 +14,15 @@ serverSettings = {
 
 
 def __flatten_navigation_links(row):
+    print(row)
     if "@iot.navigationLink" in row:
         # merge all the keys from the navigationLink
         row.update(row["@iot.navigationLink"])
         del row["@iot.navigationLink"]
+
+        # check if skip@iot.navigationLink is present and remove it
+        if "skip@iot.navigationLink" in row:
+            del row["skip@iot.navigationLink"]
 
 def __flatten_expand_entity(data):
     # Check if it is an array

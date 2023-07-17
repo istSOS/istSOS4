@@ -135,22 +135,6 @@ $$
 $$
 LANGUAGE SQL;
 
-CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Sensor") RETURNS table(
-    "Datastreams@iot.navigationLink" text
-) AS
-$$
-  SELECT 'Sensors(' || $1.id || ')/Datastreams';
-$$
-LANGUAGE SQL;
-
-CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."ObservedProperty") RETURNS table(
-    "Datastreams@iot.navigationLink" text
-) AS
-$$
-  SELECT 'ObservedProperties(' || $1.id || ')/Datastreams';
-$$
-LANGUAGE SQL;
-
 CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Observation") RETURNS table(
     "FeatureOfInterest@iot.navigationLink" text,
     "Datastream@iot.navigationLink" text
@@ -162,10 +146,29 @@ $$
 LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."FeaturesOfInterest") RETURNS table(
-    "Observations@iot.navigationLink" text
+    "Observations@iot.navigationLink" text,
+    "skip@iot.navigationLink" text
 ) AS
 $$
-  SELECT 'FeaturesOfInterest(' || $1.id || ')/Observations';
+  SELECT 'FeaturesOfInterest(' || $1.id || ')/Observations', 'skip';
+$$
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Sensor") RETURNS table(
+    "Datastreams@iot.navigationLink" text,
+    "skip@iot.navigationLink" text
+) AS
+$$
+  SELECT 'Sensors(' || $1.id || ')/Datastreams', 'skip';
+$$
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."ObservedProperty") RETURNS table(
+    "Datastreams@iot.navigationLink" text,
+    "skip@iot.navigationLink" text
+) AS
+$$
+  SELECT 'ObservedProperties(' || $1.id || ')/Datastreams', 'skip';
 $$
 LANGUAGE SQL;
 
