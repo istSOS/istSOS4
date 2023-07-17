@@ -313,7 +313,7 @@ class STA2REST:
         "ObservedProperties": "ObservedProperty",
         "Datastreams": "Datastream",
         "Observations": "Observation",
-        "FeaturesOfInterest": "FeatureOfInterest",
+        "FeaturesOfInterest": "FeaturesOfInterest",
         "HistoricalLocations": "HistoricalLocation",
 
         "Thing": "Thing",
@@ -322,7 +322,7 @@ class STA2REST:
         "ObservedProperty": "ObservedProperty",
         "Datastream": "Datastream",
         "Observation": "Observation",  
-        "FeatureOfInterest": "FeatureOfInterest",
+        "FeatureOfInterest": "FeaturesOfInterest",
         "HistoricalLocation": "HistoricalLocation",
     }
 
