@@ -1,5 +1,5 @@
 id,name,description,properties,location_id
-1,Light Sensor_1,A sensor that measures the Light Sensor_1 in a room,"{""model"": ""Model-1"", ""manufacturer"": ""Manufacturer-1""}",101
+1,Light Sensor_1,A sensor that measures the Light Sensor_1 in a room,"{"model": "Model-1", "manufacturer": "Manufacturer-1"}",101
 2,CO2 Sensor_2,A sensor that measures the CO2 Sensor_2 in a room,"{""model"": ""Model-2"", ""manufacturer"": ""Manufacturer-2""}",140
 3,Light Sensor_3,A sensor that measures the Light Sensor_3 in a room,"{""model"": ""Model-3"", ""manufacturer"": ""Manufacturer-3""}",174
 4,Motion Sensor_4,A sensor that measures the Motion Sensor_4 in a room,"{""model"": ""Model-4"", ""manufacturer"": ""Manufacturer-4""}",27

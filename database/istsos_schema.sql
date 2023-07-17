@@ -3,6 +3,7 @@ CREATE EXTENSION IF NOT exists postgis;
 CREATE EXTENSION IF NOT exists unit;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS btree_gist;
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 --CREATE EXTENSION IF NOT exists uri;
 
 CREATE SCHEMA sensorthings;
@@ -25,11 +26,14 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
 
 
 CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
-    id BIGSERIAL NOT NULL PRIMARY KEY,
-    time TIMESTAMPTZ NOT NULL,
-    thing_id BIGINT REFERENCES sensorthings."Thing"(id),
-    location_id BIGINT REFERENCES sensorthings."Location"(id)
+    "id" BIGSERIAL NOT NULL PRIMARY KEY,
+    "time" TIMESTAMPTZ NOT NULL,
+    "thing_id" BIGINT REFERENCES sensorthings."Thing"(id),
+    "location_id" BIGINT REFERENCES sensorthings."Location"(id)
 );
+
+SELECT create_hypertable('HistoricalLocation', 'time');
+
 
 CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
     "id" BIGSERIAL PRIMARY KEY,
@@ -182,11 +186,19 @@ $body$;
 -- ==================
 
 -- return reference to the entity id
---CREATE OR REPLACE FUNTION sensorthings.refid(uri text, elemntname text)
+CREATE OR REPLACE FUNCTION sensorthings.refid(uri text, elemntname text) 
+RETURNS TABLE AS $$
+-- elemntname || "@iot.navigationLink" : "Things(1)/Locations"
+$$ LANGUAGE SQL;
+
+ 
+-- elemntname || "@iot.navigationLink" : "Things(1)/Locations",
+-- "HistoricalLocations@iot.navigationLink" : "Things(1)/HistoricalLocations",
+-- "Datastreams@iot.navigationLink" : "Things(1)/Datastreams",
+-- "@iot.id" : 1,
+-- "@iot.selfLink" : "/SensorThingsService/v1.0/Things(1)"
 
 
---elemntname || "@iot.navigationLink" : "Things(1)/Locations",
---"HistoricalLocations@iot.navigationLink" : "Things(1)/HistoricalLocations",
---"Datastreams@iot.navigationLink" : "Things(1)/Datastreams",
---"@iot.id" : 1,
---"@iot.selfLink" : "/SensorThingsService/v1.0/Things(1)"
+-- CREATE FUNCTION full_name(people) RETURNS text AS $$
+--   SELECT $1.fname || ' ' || $1.lname;
+-- $$ LANGUAGE SQL;
