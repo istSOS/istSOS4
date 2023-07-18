@@ -86,7 +86,7 @@ CREATE OR REPLACE FUNCTION "@iot.id"(anyelement) RETURNS text AS $$
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(anyelement) RETURNS text AS $$
-  SELECT concat(current_setting('custom.hostname'), '/v1.1/',substring(pg_typeof($1)::text from 2 for length(pg_typeof($1)::text) - 2),'(' || $1.id || ')');
+  SELECT concat(current_setting('custom.hostname'),substring(pg_typeof($1)::text from 2 for length(pg_typeof($1)::text) - 2),'(' || $1.id || ')');
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Thing") RETURNS table(
@@ -95,9 +95,9 @@ CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Thing") RETURNS t
     "HistoricalLocations@iot.navigationLink" text
 ) AS 
 $$
-  SELECT 'Things(' || $1.id || ')/Locations',
-         'Things(' || $1.id || ')/Datastreams',
-         'Things(' || $1.id || ')/HistoricalLocations';
+  SELECT concat(current_setting('custom.hostname'),'Things(' || $1.id || ')/Locations'),
+         concat(current_setting('custom.hostname'),'Things(' || $1.id || ')/Datastreams'),
+         concat(current_setting('custom.hostname'),'Things(' || $1.id || ')/HistoricalLocations');
 $$ 
 LANGUAGE SQL;
 
@@ -106,8 +106,8 @@ CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Location") RETURN
     "HistoricalLocations@iot.navigationLink" text
 ) AS 
 $$
-  SELECT 'Locations(' || $1.id || ')/Things',
-         'Locations(' || $1.id || ')/HistoricalLocations';
+  SELECT concat(current_setting('custom.hostname'),'Locations(' || $1.id || ')/Things'),
+         concat(current_setting('custom.hostname'),'Locations(' || $1.id || ')/HistoricalLocations');
 $$ 
 LANGUAGE SQL;
 
@@ -116,8 +116,8 @@ CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."HistoricalLocatio
     "Thing@iot.navigationLink" text
 ) AS
 $$
-  SELECT 'HistoricalLocations(' || $1.id || ')/Locations',
-         'HistoricalLocations(' || $1.id || ')/Thing';
+  SELECT concat(current_setting('custom.hostname'),'HistoricalLocations(' || $1.id || ')/Locations'),
+         concat(current_setting('custom.hostname'),'HistoricalLocations(' || $1.id || ')/Thing');
 $$
 LANGUAGE SQL;
 
@@ -128,10 +128,10 @@ CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Datastream") RETU
     "Observations@iot.navigationLink" text
 ) AS
 $$
-  SELECT 'Datastreams(' || $1.id || ')/Thing',
-         'Datastreams(' || $1.id || ')/Sensor',
-         'Datastreams(' || $1.id || ')/ObservedProperty',
-         'Datastreams(' || $1.id || ')/Observations';
+  SELECT concat(current_setting('custom.hostname'),'Datastreams(' || $1.id || ')/Thing'),
+         concat(current_setting('custom.hostname'),'Datastreams(' || $1.id || ')/Sensor'),
+         concat(current_setting('custom.hostname'),'Datastreams(' || $1.id || ')/ObservedProperty'),
+         concat(current_setting('custom.hostname'),'Datastreams(' || $1.id || ')/Observations');
 $$
 LANGUAGE SQL;
 
@@ -140,8 +140,8 @@ CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Observation") RET
     "Datastream@iot.navigationLink" text
 ) AS
 $$
-  SELECT 'Observations(' || $1.id || ')/FeatureOfInterest',
-         'Observations(' || $1.id || ')/Datastream';
+  SELECT concat(current_setting('custom.hostname'),'Observations(' || $1.id || ')/FeatureOfInterest'),
+         concat(current_setting('custom.hostname'),'Observations(' || $1.id || ')/Datastream');
 $$
 LANGUAGE SQL;
 
@@ -150,7 +150,7 @@ CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."FeaturesOfInteres
     "skip@iot.navigationLink" text
 ) AS
 $$
-  SELECT 'FeaturesOfInterest(' || $1.id || ')/Observations', 'skip';
+  SELECT concat(current_setting('custom.hostname'),'FeaturesOfInterest(' || $1.id || ')/Observations'), 'skip';
 $$
 LANGUAGE SQL;
 
@@ -159,7 +159,7 @@ CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Sensor") RETURNS 
     "skip@iot.navigationLink" text
 ) AS
 $$
-  SELECT 'Sensors(' || $1.id || ')/Datastreams', 'skip';
+  SELECT concat(current_setting('custom.hostname'),'Sensors(' || $1.id || ')/Datastreams'), 'skip';
 $$
 LANGUAGE SQL;
 
@@ -168,7 +168,7 @@ CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."ObservedProperty"
     "skip@iot.navigationLink" text
 ) AS
 $$
-  SELECT 'ObservedProperties(' || $1.id || ')/Datastreams', 'skip';
+  SELECT concat(current_setting('custom.hostname'),'ObservedProperties(' || $1.id || ')/Datastreams'), 'skip';
 $$
 LANGUAGE SQL;
 

@@ -14,7 +14,7 @@ services:
       POSTGRES_PASSWORD: admin
       DATADIR: /var/lib/postgresql/data
       POSTGRES_MULTIPLE_EXTENSIONS: postgis,hstore,postgis_topology,postgis_raster,pgrouting,ltree,pg_cron,uuid-ossp
-    command: postgres -c custom.hostname="http://localhost:8018"
+    command: postgres -c custom.hostname="http://localhost:8018/v1.1/"
     volumes:
       # - v-istsos-miu-postgis-sql:/docker-entrypoint-initdb.d
       - v-istsos-miu-database-data:/var/lib/postgresql/data
