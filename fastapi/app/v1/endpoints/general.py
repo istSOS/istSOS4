@@ -28,6 +28,10 @@ def __flatten_expand_entity(data):
     if not isinstance(data, list):
         # throw an error
         raise Exception(data)
+    
+    # check if data is empty
+    if not data:
+        return data
 
     # Check if there is only one key and it is in an ENTITY_MAPPING from the sta2rest module
     if len(data[0].keys()) == 1 and list(data[0].keys())[0] in sta2rest.STA2REST.ENTITY_MAPPING:
