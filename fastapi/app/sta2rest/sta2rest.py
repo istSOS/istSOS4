@@ -470,9 +470,7 @@ class STA2REST:
         
         if not uri:
             raise Exception("Error parsing uri")
-        
-        main_entity, main_entity_id = uri['entity']
-        url = f"/{main_entity}"
+    
 
         # Check if we have a query
         query_ast = ast.QueryNode(None, None, None, None, None, None, None, False)
@@ -482,7 +480,21 @@ class STA2REST:
             parser = Parser(tokens)
             query_ast = parser.parse()
 
+
+        main_entity, main_entity_id = uri['entity']
         entities = uri['entities']
+
+        # Check if size of entities is bigger than 2
+        if len(entities) > 1:
+            # Replace the main entity with the first entity
+            m = entities.pop(0)
+            main_entity = m[0]
+            main_entity_id = m[1]
+            single_result = True
+
+        url = f"/{main_entity}"
+
+
         if entities:
             if not query_ast.expand:
                 query_ast.expand = ast.ExpandNode([])
