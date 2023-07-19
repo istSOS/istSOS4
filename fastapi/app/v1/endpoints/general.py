@@ -106,10 +106,6 @@ async def catch_all(request: Request, path_name: str):
         async with httpx.AsyncClient() as client:
             r = await client.get(url)
             data = r.json()
-
-            print("data:\t\t", data)
-            print("result:\t\t", result)
-
             if result['single_result']:
                 data = __flatten_expand_entity(data)
 
