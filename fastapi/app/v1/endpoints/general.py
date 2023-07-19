@@ -41,6 +41,32 @@ def __flatten_expand_entity(data):
 
     return data
 
+def __create_ref_format(data):
+
+    rows = [data]
+
+    # Check if it is an array
+    if isinstance(data, list):
+        key_name = list(data[0].keys())[0]
+        # Check if the key is in an ENTITY_MAPPING from the sta2rest module
+        if key_name in sta2rest.STA2REST.ENTITY_MAPPING:
+            rows = data[0][key_name]
+            if not isinstance(rows, list):
+                rows = [rows]
+        else:
+            rows = data
+
+    data = {
+        "value": []
+    }
+
+    for row in rows:
+        data["value"].append({
+            "@iot.selfLink": row["@iot.selfLink"]
+        })
+    
+    return data
+
 @v1.api_route("/{path_name:path}", methods=["GET"])
 async def catch_all(request: Request, path_name: str):
     try:
@@ -81,6 +107,9 @@ async def catch_all(request: Request, path_name: str):
             r = await client.get(url)
             data = r.json()
 
+            print("data:\t\t", data)
+            print("result:\t\t", result)
+
             if result['single_result']:
                 data = __flatten_expand_entity(data)
 
@@ -91,22 +120,18 @@ async def catch_all(request: Request, path_name: str):
                 if result['value']:
                     # get the value of the first key
                     data = data[list(data.keys())[0]]  
+                elif result['ref']:
+                    data = __create_ref_format(data)
                 elif "@iot.navigationLink" in data:
                     __flatten_navigation_links(data)
 
             elif result['ref']:
-                # Get the value of the first key
-                key_name = list(data[0].keys())[0]
-                rows = data[0][key_name]
-                data = {
-                    "value": []
-                }
-                for row in rows:
-                    data["value"].append({
-                        "@iot.selfLink": row["@iot.selfLink"]
-                    })
+                data = __create_ref_format(data)
             else:
                 data = __flatten_expand_entity(data)
+                # check if the result is an array
+                if not isinstance(data, list):
+                    data = [data]
 
                 for row in data:
                     __flatten_navigation_links(row)
