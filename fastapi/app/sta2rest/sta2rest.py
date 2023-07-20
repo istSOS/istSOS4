@@ -48,6 +48,9 @@ class NodeVisitor(Visitor):
         # if the identifier starts with @ add a double quote
         if node.name.startswith('@'):
             return f'"{node.name}"'
+        
+        # Replace / with -> for json columns
+        node.name = node.name.replace('/', '->>')
 
         return node.name
 
