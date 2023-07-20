@@ -14,6 +14,9 @@ serverSettings = {
     ],
 }
 
+class PostgRESTError(Exception):
+    pass
+
 
 def __flatten_navigation_links(row):
     if "@iot.navigationLink" in row:
@@ -29,7 +32,7 @@ def __flatten_expand_entity(data):
     # Check if it is an array
     if not isinstance(data, list):
         # throw an error
-        raise Exception(data)
+        raise PostgRESTError(data)
 
     # check if data is empty
     if not data:
@@ -115,7 +118,7 @@ async def catch_all(request: Request, path_name: str):
 
             # print r status
             if r.status_code != 200:
-                raise Exception(data["message"])
+                raise PostgRESTError(data["message"])
 
             if result['single_result']:
                 data = __flatten_expand_entity(data)
@@ -148,13 +151,23 @@ async def catch_all(request: Request, path_name: str):
                 }
 
             return data
-    except Exception as e:
-        # print stack trace
+    except PostgRESTError as pge:
         traceback.print_exc()
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={
                 "code": 404,
+                "type": "error",
+                "message": str(pge)
+            }
+        )
+    except Exception as e:
+        # print stack trace
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "code": 400,
                 "type": "error",
                 "message": str(e)
             }
