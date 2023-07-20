@@ -67,28 +67,32 @@ def __create_ref_format(data):
     
     return data
 
+def __handle_root(request: Request):
+    # Handle the root path
+    value = []
+    # append the domain to the path for each table
+    for table in tables:
+        value.append(
+            {
+                "name": table,
+                "url": 
+                request.url._url + table,
+            }
+        )
+
+    response = {
+        "value": value,
+        "serverSettings": serverSettings,
+    } 
+    return response
+
 @v1.api_route("/{path_name:path}", methods=["GET"])
 async def catch_all(request: Request, path_name: str):
-    try:
-        if not path_name:
-            # Handle the root path
-            value = []
-            # append the domain to the path for each table
-            for table in tables:
-                value.append(
-                    {
-                        "name": table,
-                        "url": 
-                        request.url._url + table,
-                    }
-                )
+    if not path_name:
+        # Handle the root path
+        return __handle_root(request)
 
-            response = {
-                "value": value,
-                "serverSettings": serverSettings,
-            } 
-            return response
-
+    try:    
         # get full path from request
         full_path = request.url.path
         if request.url.query:
