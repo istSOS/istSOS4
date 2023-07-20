@@ -1,6 +1,8 @@
 import httpx
 import traceback
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from fastapi import status
 from app.sta2rest import sta2rest
 
 v1 = APIRouter()
@@ -149,9 +151,12 @@ async def catch_all(request: Request, path_name: str):
     except Exception as e:
         # print stack trace
         traceback.print_exc()
-        return {
-            "code": 404,
-            "type": "error",
-            "message": str(e)
-        }
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "code": 404,
+                "type": "error",
+                "message": str(e)
+            }
+        )
 
