@@ -149,5 +149,9 @@ async def catch_all(request: Request, path_name: str):
     except Exception as e:
         # print stack trace
         traceback.print_exc()
-        return {"error": str(e)}
+        return {
+            "code": 404,
+            "type": "error",
+            "message": str(e)
+        }
 
