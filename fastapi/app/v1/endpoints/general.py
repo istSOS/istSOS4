@@ -28,7 +28,7 @@ def __flatten_expand_entity(data):
     if not isinstance(data, list):
         # throw an error
         raise Exception(data)
-    
+
     # check if data is empty
     if not data:
         return data
@@ -110,6 +110,11 @@ async def catch_all(request: Request, path_name: str):
         async with httpx.AsyncClient() as client:
             r = await client.get(url)
             data = r.json()
+
+            # print r status
+            if r.status_code != 200:
+                raise Exception(data["message"])
+
             if result['single_result']:
                 data = __flatten_expand_entity(data)
 
