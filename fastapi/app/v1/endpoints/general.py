@@ -92,7 +92,7 @@ def __handle_root(request: Request):
     return response
 
 @v1.api_route("/{path_name:path}", methods=["GET"])
-async def catch_all(request: Request, path_name: str):
+async def catch_all_get(request: Request, path_name: str):
     if not path_name:
         # Handle the root path
         return __handle_root(request)
@@ -173,3 +173,36 @@ async def catch_all(request: Request, path_name: str):
             }
         )
 
+# Handle POST requests
+@v1.api_route("/{path_name:path}", methods=["POST"])
+async def catch_all_post(request: Request, path_name: str):
+    try:
+        full_path = request.url.path
+
+        # parse uri
+        result = sta2rest.STA2REST.parse_uri(full_path)
+
+
+        print("original:\t", full_path)
+        print("result:\t\t", result)
+
+        # Return okay
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "code": 200,
+                "type": "success",
+                "message": result
+            }
+        )
+    except Exception as e:
+        # print stack trace
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "code": 400,
+                "type": "error",
+                "message": str(e)
+            }
+        )
