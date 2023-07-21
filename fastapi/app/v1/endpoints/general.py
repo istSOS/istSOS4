@@ -176,25 +176,55 @@ async def catch_all_get(request: Request, path_name: str):
 # Handle POST requests
 @v1.api_route("/{path_name:path}", methods=["POST"])
 async def catch_all_post(request: Request, path_name: str):
+    # Accept only content-type application/json
+    if not "content-type" in request.headers or request.headers["content-type"] != "application/json":
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "code": 400,
+                "type": "error",
+                "message": "Only content-type application/json is supported."
+            }
+        )
+
     try:
         full_path = request.url.path
 
         # parse uri
         result = sta2rest.STA2REST.parse_uri(full_path)
 
+        # get json body
+        body = await request.json()
 
         print("original:\t", full_path)
-        print("result:\t\t", result)
+        print("parsed:\t", result)
+        print("body:\t", body)
 
-        # Return okay
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "code": 200,
-                "type": "success",
-                "message": result
-            }
-        )
+        main_table = result["entity"][0]
+
+        url = "http://postgrest:3000/" + main_table
+
+        async with httpx.AsyncClient() as client:
+            # post to postgrest
+            r = await client.post(url, json=body, headers={"Prefer": "return=representation"})
+
+            # get response
+            result = r.json()
+
+            # print r status
+            if r.status_code != 201:
+                raise PostgRESTError(result["message"])
+            
+            # Return okay
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "code": 200,
+                    "type": "success",
+                    "message": result
+                }
+            )
+        
     except Exception as e:
         # print stack trace
         traceback.print_exc()
