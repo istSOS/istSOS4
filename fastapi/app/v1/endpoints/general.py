@@ -19,7 +19,7 @@ class PostgRESTError(Exception):
 
 
 def __flatten_navigation_links(row):
-    if "@iot.navigationLink" in row:
+    if row and "@iot.navigationLink" in row:
         # merge all the keys from the navigationLink
         row.update(row["@iot.navigationLink"])
         del row["@iot.navigationLink"]
@@ -141,7 +141,7 @@ async def catch_all_get(request: Request, path_name: str):
                 data = __flatten_expand_entity(data)
                 # check if the result is an array
                 if not isinstance(data, list):
-                    data = [data]
+                    data = [data] if data else []
 
                 for row in data:
                     __flatten_navigation_links(row)
@@ -149,7 +149,6 @@ async def catch_all_get(request: Request, path_name: str):
                 data = {
                     "value": data
                 }
-
             return data
     except PostgRESTError as pge:
         traceback.print_exc()
