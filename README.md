@@ -104,19 +104,43 @@ You can also check using : http://127.0.0.1:8000/docs
 > Change the host IP address in the script as per your docker IP in get_datastream.py file.
     
 
-## adding dummy data to postgresql sta database tables
+## Adding dummy data to postgresql sta database tables
 
 Run `postgres_data.py` script inside db folder of fastapi with argument as a csv file to each table
 ```
 cd fastapi/app/db
 ```
- #for checking the argument parameters to pass
+for checking the argument parameters to pass
 ```
 python3 postgres_data.py -h
 ```
 
 Example: For adding location entity data in table:
 
-```python3 postgres_data.py -l Location.csv```
+```
+python3 postgres_data.py -l Location.csv
+```
 
 Similarly  u can update the csv files and pass the arguments to update all the tables.
+
+
+## Randomly populating data to data base
+Script to generate random data as needed to each table in csv format
+
+```fastapi/app/db```
+- There are 8 scripts for each entity data
+- Run "table-name".py file
+eg. ```python3 location.py``` will create 200 unique datasets..abd similarly u can run other files to generate datasets
+
+Script to upload datasets to table
+Once datasets are ready u can upload the csv using the following script
+
+- ```postgres_data.py``` script will take argument of the csv file and load in to the table.
+- for checking argument u can run
+```python3 postgres_data.py -t Thing.csv ```
+- This will load the datasets
+
+> Make sure ur table does have counter id of primary key not initialized
+
+
+

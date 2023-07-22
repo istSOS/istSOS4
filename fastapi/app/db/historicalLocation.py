@@ -25,8 +25,10 @@ def generate_dummy_data():
         time = start_datetime + timedelta(seconds=random_seconds)
 
      
-        thing_id=random.randint(1, 200)
-        location_id=random.randint(1, 200)
+        # thing_id=random.randint(1, 200)
+        # location_id=random.randint(1, 200)
+        thing_id=i
+        location_id=i
 
         # Append the row to the data list
         data.append([id, time, thing_id, location_id])
@@ -37,7 +39,7 @@ def generate_dummy_data():
 dummy_data = generate_dummy_data()
 print(dummy_data)
 # Write the data to a CSV file
-with open('Location.csv', 'w', newline='') as file:
+with open('HistoricalLocation.csv', 'w', newline='') as file:
     writer = csv.writer(file)
     writer.writerow(["id", "time", "thing_id", "location_id"])
     writer.writerows(dummy_data)

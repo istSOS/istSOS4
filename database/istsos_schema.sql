@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
     "time" TIMESTAMPTZ NOT NULL,
     "thing_id" BIGINT REFERENCES sensorthings."Thing"(id),
     "location_id" BIGINT REFERENCES sensorthings."Location"(id)
+   
 );
 
 SELECT create_hypertable('HistoricalLocation', 'time');

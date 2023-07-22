@@ -21,7 +21,7 @@ def generate_dummy_data():
         properties = f'{{"model": "Model-{i}", "manufacturer": "Manufacturer-{i}"}}'
 
         # Generate a random location ID
-        location_id = random.randint(1, 200)
+        location_id = i
 
         # Append the row to the data list
         data.append([str(id), name, description, properties, str(location_id)])
