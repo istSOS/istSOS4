@@ -21,12 +21,12 @@ argParser.add_argument("-o", "--ObservationTable", help="path of csv file contai
 file_name = argParser.parse_args()
 print("path of csv file provided for location table = %s" % file_name.locationTable)
 print("path of csv file provided for thing table = %s" % file_name.thingTable)
-print("path of csv file provided for thing table = %s" % file_name.historicalLocationTable)
-print("path of csv file provided for thing table = %s" % file_name.observedPropertyTable)
-print("path of csv file provided for thing table = %s" % file_name.sensorTable)
-print("path of csv file provided for thing table = %s" % file_name.dataStreamTable)
-print("path of csv file provided for thing table = %s" % file_name.featuresOfInterestTable)
-print("path of csv file provided for thing table = %s" % file_name.ObservationTable)
+print("path of csv file provided for historicalLocation table = %s" % file_name.historicalLocationTable)
+print("path of csv file provided for observedProperty table = %s" % file_name.observedPropertyTable)
+print("path of csv file provided for sensor table = %s" % file_name.sensorTable)
+print("path of csv file provided for dataStream table = %s" % file_name.dataStreamTable)
+print("path of csv file provided for featuresOfInterest table = %s" % file_name.featuresOfInterestTable)
+print("path of csv file provided for Observation table = %s" % file_name.ObservationTable)
 print("__________________________________________________________________________________________")
 
 

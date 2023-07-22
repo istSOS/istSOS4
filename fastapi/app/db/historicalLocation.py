@@ -8,7 +8,7 @@ def generate_dummy_data():
 
     for i in range(1, 201):
         # Generate a unique ID
-        id = str(i)
+        id = i
 
         start_date = '2023-01-01'
         end_date = '2023-12-31'

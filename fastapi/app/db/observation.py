@@ -1,5 +1,7 @@
 import csv
 import random
+import random
+from datetime import datetime, timedelta
 
 
 def generate_dummy_data():
@@ -12,15 +14,29 @@ def generate_dummy_data():
 
 
         # Generate a unique name
-        
-        phenomenonTime ="2023-03-25 14:00:00+00 / 2023-03-25 15:00:00+00" 
-        resultTime ="2023-03-25 14:00:00+00 / 2023-03-25 15:00:00+00"
+        start_date = '2023-01-01'
+        end_date = '2023-12-31'
+        start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
+        end_datetime = datetime.strptime(end_date, '%Y-%m-%d')
+
+        # Calculate the time range in seconds
+        time_range = (end_datetime - start_datetime).total_seconds()
+
+        # Generate a random number of seconds within the time range
+        random_seconds = random.randint(0, int(time_range))
+
+        # Add the random number of seconds to the start datetime
+        time = start_datetime + timedelta(seconds=random_seconds)    
+
+        phenomenonTime = time
+        resultTime =time
         result=25
         resultQuality=""
         validTime=""
         parameters=""
-        datastream_id =random.randint(1, 200)
-        feature_of_interest_id =random.randint(1, 200)
+        #datastream_id =random.randint(1, 200)
+        datastream_id =i
+        feature_of_interest_id =i
 
 
   
@@ -39,5 +55,5 @@ print(dummy_data)
 # Write the data to a CSV file
 with open('Observation.csv', 'w', newline='') as file:
     writer = csv.writer(file)
-    writer.writerow(["id","name","phenomenonTime","resultTime","result","resultQuality","validTime","parameters","datastream_id","feature_of_interest_id"])
+    writer.writerow(["id","phenomenonTime","resultTime","result","resultQuality","validTime","parameters","datastream_id","feature_of_interest_id"])
     writer.writerows(dummy_data)

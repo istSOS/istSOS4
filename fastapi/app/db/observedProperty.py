@@ -22,7 +22,7 @@ def generate_dummy_data():
 
 
         # Append the row to the data list
-        data.append([str(id), name, defination,description])
+        data.append([id, name, defination,description])
         
     return data
 
