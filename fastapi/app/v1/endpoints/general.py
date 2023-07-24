@@ -203,9 +203,30 @@ async def catch_all_post(request: Request, path_name: str):
 
         url = "http://postgrest:3000/" + main_table
 
+
+        formatted_body = {}
+
+        # Loop trought all the keys in the body
+        for key in body:
+            if key in sta2rest.STA2REST.ENTITY_MAPPING:
+                value = body[key]
+                if "@iot.id" in value:
+                    # Convert the id
+                    new_key = sta2rest.STA2REST.convert_to_database_id(key)
+                    formatted_body[new_key] = value["@iot.id"]
+                else:
+                    # TODO(@filippofinke): Create nested entities
+                    pass
+            else:
+                formatted_body[key] = body[key]
+                
+        print("ORIGINAL BODY:", body)
+
+        print("FORMATTED BODY:", formatted_body)
+
         async with httpx.AsyncClient() as client:
             # post to postgrest
-            r = await client.post(url, json=body, headers={"Prefer": "return=representation"})
+            r = await client.post(url, json=formatted_body, headers={"Prefer": "return=representation"})
 
             # get response
             result = r.json()

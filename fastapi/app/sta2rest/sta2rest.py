@@ -447,7 +447,13 @@ class STA2REST:
             str: The converted entity name in REST format.
         """
         return STA2REST.ENTITY_MAPPING.get(entity, entity)
-  
+    
+    @staticmethod
+    def convert_to_database_id(entity: str) -> str:
+        # First we convert the entity to lower case
+        entity = STA2REST.convert_entity(entity).lower()
+        return entity + "_id"
+
     @staticmethod
     def convert_query(full_path: str) -> str:
         """
