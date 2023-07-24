@@ -78,7 +78,12 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "id" BIGSERIAL PRIMARY KEY,
     "phenomenonTime" TIMESTAMPTZ NOT NULL,
     "resultTime" TIMESTAMPTZ NOT NULL,
-    "result" FLOAT NOT NULL,
+    "resultType" INT NOT NULL,
+    "resultString" TEXT,
+    "resultInteger" INT,
+    "resultDouble" DOUBLE PRECISION,
+    "resultBoolean" BOOLEAN,
+    "resultJSON" jsonb,
     "resultQuality" TEXT,
     "validTime" tstzrange DEFAULT NULL,
     "parameters" jsonb,
@@ -86,6 +91,16 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "feature_of_interest_id" BIGINT REFERENCES sensorthings."FeaturesOfInterest"(id),
     UNIQUE ("datastream_id", "phenomenonTime")
 );
+
+CREATE OR REPLACE FUNCTION result(sensorthings."Observation") RETURNS text AS $$
+    SELECT CASE WHEN $1."resultType" = 0 THEN $1."resultString"
+                WHEN $1."resultType" = 1 THEN $1."resultInteger"::text
+                WHEN $1."resultType" = 2 THEN $1."resultDouble"::text
+                WHEN $1."resultType" = 3 THEN $1."resultBoolean"::text
+                WHEN $1."resultType" = 4 THEN $1."resultJSON"::text
+                ELSE NULL
+             END;
+$$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "@iot.id"(anyelement) RETURNS text AS $$
   SELECT $1.id;

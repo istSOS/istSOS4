@@ -81,11 +81,15 @@ VALUES ('Room 102', 'Feature of interest for Room 102', 'application/vnd.geo+jso
 
 
 -- observation
-INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultTime", "result", "resultQuality", "validTime", "parameters", "datastream_id", "feature_of_interest_id")
-VALUES ('2023-03-25 10:30:00-04', '2023-03-25 10:30:00-04', 23.5, NULL, NULL, NULL, 1, 1);
+INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultTime", "resultType", "resultDouble", "resultQuality", "validTime", "parameters", "datastream_id", "feature_of_interest_id")
+VALUES ('2023-03-25 10:30:00-04', '2023-03-25 10:30:00-04', 2, 23.5, NULL, NULL, NULL, 1, 1);
 
-INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultTime", "result", "resultQuality", "validTime", "parameters", "datastream_id", "feature_of_interest_id")
-VALUES ('2023-03-25 10:30:00-04', '2023-03-25 10:30:00-04', 23.5, NULL, NULL, NULL, 2, 2);
+INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultTime", "resultType", "resultDouble", "resultQuality", "validTime", "parameters", "datastream_id", "feature_of_interest_id")
+VALUES ('2023-03-25 10:30:00-04', '2023-03-25 10:30:00-04', 2, 23.5, NULL, NULL, NULL, 2, 2);
 
-INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultTime", "result", "resultQuality", "validTime", "parameters", "datastream_id", "feature_of_interest_id")
-VALUES ('2023-03-25 10:30:00-04', '2023-03-25 10:30:00-04', 23.5, NULL, NULL, NULL, 3, 3);
+INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultTime", "resultType", "resultDouble", "resultQuality", "validTime", "parameters", "datastream_id", "feature_of_interest_id")
+VALUES ('2023-03-25 10:30:00-04', '2023-03-25 10:30:00-04', 2, 23.5, NULL, NULL, NULL, 3, 3);
+
+INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultTime", "resultType", "resultString", "resultQuality", "validTime", "parameters", "datastream_id", "feature_of_interest_id")
+VALUES ('2023-03-26 10:30:00-04', '2023-03-26 10:30:00-04', 0, "Test", NULL, NULL, NULL, 3, 3);
+
