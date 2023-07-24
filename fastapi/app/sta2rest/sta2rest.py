@@ -20,6 +20,16 @@ odata_filter_lexer = ODataLexer()
 odata_filter_parser = ODataParser()
 
 class NodeVisitor(Visitor):
+
+    main_entity = None
+
+    """ 
+    Constructor for the NodeVisitor class that accepts the main entity name
+    """
+    def __init__(self, main_entity=None):
+        super().__init__()
+        self.main_entity = main_entity
+
     """
     This class provides a visitor to convert a STA query to a PostgREST query.
     """
@@ -34,6 +44,14 @@ class NodeVisitor(Visitor):
         Returns:
             str: The converted identifier.
         """
+
+        # if the identifier starts with @ add a double quote
+        if node.name.startswith('@'):
+            return f'"{node.name}"'
+        
+        # Replace / with -> for json columns
+        node.name = node.name.replace('/', '->>')
+
         return node.name
 
     def visit_SelectNode(self, node: ast.SelectNode):
@@ -60,6 +78,9 @@ class NodeVisitor(Visitor):
         Returns:
             str: The converted filter node.
         """
+
+        # replace @iot.id with id
+        node.filter = node.filter.replace("@iot.id", "id")
 
         # Parse the filter using the OData lexer and parser
         ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(node.filter))
@@ -216,7 +237,10 @@ class NodeVisitor(Visitor):
                 if not expand_identifier.subquery or not expand_identifier.subquery.select:
                     if not select:
                         select = ast.SelectNode([])
-                    select.identifiers.append(ast.IdentifierNode(f'{expand_identifier.identifier}(*)'))
+                    default_columns = STA2REST.get_default_column_names(expand_identifier.identifier)
+                    # join default columns as single string
+                    default_columns = ','.join(default_columns)
+                    select.identifiers.append(ast.IdentifierNode(f'{expand_identifier.identifier}({default_columns})'))
         
         # Return the converted expand node
         return {
@@ -263,6 +287,15 @@ class NodeVisitor(Visitor):
             if result['filter']:
                 query_parts.append(result['filter'])
 
+        if not node.select:
+            node.select = ast.SelectNode([])
+            # Add "@iot.id", "@iot.selfLink" and "*" to the select node
+
+            # get default columns for main entity
+            default_columns = STA2REST.get_default_column_names(self.main_entity)
+            for column in default_columns:
+                node.select.identifiers.append(ast.IdentifierNode(column))
+
         # Check if we have a select, filter, orderby, skip, top or count in the query
         if node.select:
             query_parts.append(self.visit(node.select))
@@ -295,7 +328,7 @@ class STA2REST:
         "ObservedProperties": "ObservedProperty",
         "Datastreams": "Datastream",
         "Observations": "Observation",
-        "FeaturesOfInterest": "FeatureOfInterest",
+        "FeaturesOfInterest": "FeaturesOfInterest",
         "HistoricalLocations": "HistoricalLocation",
 
         "Thing": "Thing",
@@ -304,9 +337,103 @@ class STA2REST:
         "ObservedProperty": "ObservedProperty",
         "Datastream": "Datastream",
         "Observation": "Observation",  
-        "FeatureOfInterest": "FeatureOfInterest",
+        "FeatureOfInterest": "FeaturesOfInterest",
         "HistoricalLocation": "HistoricalLocation",
     }
+
+    # Default columns for each entity
+    DEFAULT_SELECT = {
+        "Thing": [
+            '"@iot.id"',
+            '"@iot.selfLink"',
+            '"@iot.navigationLink"',
+            'name',
+            'description',
+            'properties',
+        ],
+        "Location": [
+            '"@iot.id"',
+            '"@iot.selfLink"',
+            '"@iot.navigationLink"',
+            'name',
+            'description',
+            'encodingType',
+            'location',
+            'properties',
+        ],
+        "Sensor": [
+            '"@iot.id"',
+            '"@iot.selfLink"',
+            '"@iot.navigationLink"',
+            'name',
+            'description',
+            'encodingType',
+            'metadata',
+            'properties',
+        ],
+        "ObservedProperty": [
+            '"@iot.id"',
+            '"@iot.selfLink"',
+            '"@iot.navigationLink"',
+            'name',
+            'description',
+            'definition',
+            'properties',
+        ],
+        "Datastream": [
+            '"@iot.id"',
+            '"@iot.selfLink"',
+            '"@iot.navigationLink"',
+            'name',
+            'description',
+            'unitOfMeasurement',
+            'observationType',
+            'observedArea',
+            'phenomenonTime',
+            'resultTime',
+            'properties',
+        ],
+        "Observation": [
+            '"@iot.id"',
+            '"@iot.selfLink"',
+            '"@iot.navigationLink"',
+            'phenomenonTime',
+            'resultTime',
+            'result',
+            'resultQuality',
+            'validTime',
+            'parameters',
+        ],
+        "FeaturesOfInterest": [
+            '"@iot.id"',
+            '"@iot.selfLink"',
+            '"@iot.navigationLink"',
+            'name',
+            'description',
+            'encodingType',
+            'feature',
+            'properties',
+        ],
+        "HistoricalLocation": [
+            '"@iot.id"',
+            '"@iot.selfLink"',
+            '"@iot.navigationLink"',
+            'time',  
+        ],
+    }
+
+    @staticmethod
+    def get_default_column_names(entity: str) -> list:
+        """
+        Get the default column names for a given entity.
+
+        Args:
+            entity (str): The entity name.
+
+        Returns:
+            list: The default column names.
+        """
+        return STA2REST.DEFAULT_SELECT.get(entity, ["*"])
 
     @staticmethod
     def convert_entity(entity: str) -> str:
@@ -320,7 +447,13 @@ class STA2REST:
             str: The converted entity name in REST format.
         """
         return STA2REST.ENTITY_MAPPING.get(entity, entity)
-  
+    
+    @staticmethod
+    def convert_to_database_id(entity: str) -> str:
+        # First we convert the entity to lower case
+        entity = STA2REST.convert_entity(entity).lower()
+        return entity + "_id"
+
     @staticmethod
     def convert_query(full_path: str) -> str:
         """
@@ -346,9 +479,7 @@ class STA2REST:
         
         if not uri:
             raise Exception("Error parsing uri")
-        
-        main_entity, main_entity_id = uri['entity']
-        url = f"/{main_entity}"
+    
 
         # Check if we have a query
         query_ast = ast.QueryNode(None, None, None, None, None, None, None, False)
@@ -358,7 +489,21 @@ class STA2REST:
             parser = Parser(tokens)
             query_ast = parser.parse()
 
+
+        main_entity, main_entity_id = uri['entity']
         entities = uri['entities']
+
+        # Check if size of entities is bigger than 2
+        if len(entities) > 1:
+            # Replace the main entity with the first entity
+            m = entities.pop(0)
+            main_entity = m[0]
+            main_entity_id = m[1]
+            single_result = True
+
+        url = f"/{main_entity}"
+
+
         if entities:
             if not query_ast.expand:
                 query_ast.expand = ast.ExpandNode([])
@@ -423,7 +568,7 @@ class STA2REST:
                 single_result = True
 
         # Visit the query ast to convert it
-        visitor = NodeVisitor()
+        visitor = NodeVisitor(main_entity)
         query_converted = visitor.visit(query_ast)
 
         return {

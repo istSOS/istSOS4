@@ -12,14 +12,15 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "name" VARCHAR(255) UNIQUE NOT NULL,
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "location" geometry(geometry, 4326) NOT NULL
+    "location" geometry(geometry, 4326) NOT NULL,
+    "properties" jsonb NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) UNIQUE NOT NULL,
     "description" TEXT NOT NULL,
-    "properties" jsonb,
+    "properties" jsonb NOT NULL,
     "location_id" BIGINT REFERENCES sensorthings."Location" (id)
 );
 
@@ -34,16 +35,18 @@ CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
 CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
     "id" BIGSERIAL PRIMARY KEY,
     "name" VARCHAR(255) UNIQUE NOT NULL,
-    --"definition" URI NOT NULL,
     "definition" VARCHAR(255) NOT NULL,
-    "description" VARCHAR(255) NOT NULL
+    "description" VARCHAR(255) NOT NULL,
+    "properties" jsonb NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) UNIQUE NOT NULL,
+    "description" VARCHAR(255) NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "metadata" jsonb NOT NULL
+    "metadata" jsonb NOT NULL,
+    "properties" jsonb NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
@@ -55,6 +58,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "observedArea" geometry(Polygon, 4326),
     "phenomenonTime" tstzrange,
     "resultTime" tstzrange,
+    "properties" jsonb,
     "thing_id" BIGINT REFERENCES sensorthings."Thing"(id) NOT NULL,
     "sensor_id" BIGINT REFERENCES sensorthings."Sensor"(id) NOT NULL,
     "observedproperty_id" BIGINT REFERENCES sensorthings."ObservedProperty"(id)
@@ -64,8 +68,10 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
 CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) NOT NULL,
+    "description" VARCHAR(255) NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "feature" geometry(geometry, 4326) NOT NULL
+    "feature" geometry(geometry, 4326) NOT NULL,
+    "properties" jsonb NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
@@ -80,6 +86,97 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "feature_of_interest_id" BIGINT REFERENCES sensorthings."FeaturesOfInterest"(id),
     UNIQUE ("datastream_id", "phenomenonTime")
 );
+
+CREATE OR REPLACE FUNCTION "@iot.id"(anyelement) RETURNS text AS $$
+  SELECT $1.id;
+$$ LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.selfLink"(anyelement) RETURNS text AS $$
+  SELECT concat(current_setting('custom.hostname'),substring(pg_typeof($1)::text from 2 for length(pg_typeof($1)::text) - 2),'(' || $1.id || ')');
+$$ LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Thing") RETURNS table(
+    "Locations@iot.navigationLink" text,
+    "Datastreams@iot.navigationLink" text,
+    "HistoricalLocations@iot.navigationLink" text
+) AS 
+$$
+  SELECT concat(current_setting('custom.hostname'),'Things(' || $1.id || ')/Locations'),
+         concat(current_setting('custom.hostname'),'Things(' || $1.id || ')/Datastreams'),
+         concat(current_setting('custom.hostname'),'Things(' || $1.id || ')/HistoricalLocations');
+$$ 
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Location") RETURNS table(
+    "Things@iot.navigationLink" text,
+    "HistoricalLocations@iot.navigationLink" text
+) AS 
+$$
+  SELECT concat(current_setting('custom.hostname'),'Locations(' || $1.id || ')/Things'),
+         concat(current_setting('custom.hostname'),'Locations(' || $1.id || ')/HistoricalLocations');
+$$ 
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."HistoricalLocation") RETURNS table(
+    "Locations@iot.navigationLink" text,
+    "Thing@iot.navigationLink" text
+) AS
+$$
+  SELECT concat(current_setting('custom.hostname'),'HistoricalLocations(' || $1.id || ')/Locations'),
+         concat(current_setting('custom.hostname'),'HistoricalLocations(' || $1.id || ')/Thing');
+$$
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Datastream") RETURNS table(
+    "Thing@iot.navigationLink" text,
+    "Sensor@iot.navigationLink" text,
+    "ObservedProperty@iot.navigationLink" text,
+    "Observations@iot.navigationLink" text
+) AS
+$$
+  SELECT concat(current_setting('custom.hostname'),'Datastreams(' || $1.id || ')/Thing'),
+         concat(current_setting('custom.hostname'),'Datastreams(' || $1.id || ')/Sensor'),
+         concat(current_setting('custom.hostname'),'Datastreams(' || $1.id || ')/ObservedProperty'),
+         concat(current_setting('custom.hostname'),'Datastreams(' || $1.id || ')/Observations');
+$$
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Observation") RETURNS table(
+    "FeatureOfInterest@iot.navigationLink" text,
+    "Datastream@iot.navigationLink" text
+) AS
+$$
+  SELECT concat(current_setting('custom.hostname'),'Observations(' || $1.id || ')/FeatureOfInterest'),
+         concat(current_setting('custom.hostname'),'Observations(' || $1.id || ')/Datastream');
+$$
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."FeaturesOfInterest") RETURNS table(
+    "Observations@iot.navigationLink" text,
+    "skip@iot.navigationLink" text
+) AS
+$$
+  SELECT concat(current_setting('custom.hostname'),'FeaturesOfInterest(' || $1.id || ')/Observations'), 'skip';
+$$
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."Sensor") RETURNS table(
+    "Datastreams@iot.navigationLink" text,
+    "skip@iot.navigationLink" text
+) AS
+$$
+  SELECT concat(current_setting('custom.hostname'),'Sensors(' || $1.id || ')/Datastreams'), 'skip';
+$$
+LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION "@iot.navigationLink"(sensorthings."ObservedProperty") RETURNS table(
+    "Datastreams@iot.navigationLink" text,
+    "skip@iot.navigationLink" text
+) AS
+$$
+  SELECT concat(current_setting('custom.hostname'),'ObservedProperties(' || $1.id || ')/Datastreams'), 'skip';
+$$
+LANGUAGE SQL;
 
 --- =======================
 --- SYSTEM_TIME extension
