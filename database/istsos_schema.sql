@@ -13,14 +13,14 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "location" geometry(geometry, 4326) NOT NULL,
-    "properties" jsonb NOT NULL
+    "properties" jsonb
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) UNIQUE NOT NULL,
     "description" TEXT NOT NULL,
-    "properties" jsonb NOT NULL,
+    "properties" jsonb,
     "location_id" BIGINT REFERENCES sensorthings."Location" (id)
 );
 
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
     "name" VARCHAR(255) UNIQUE NOT NULL,
     "definition" VARCHAR(255) NOT NULL,
     "description" VARCHAR(255) NOT NULL,
-    "properties" jsonb NOT NULL
+    "properties" jsonb
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
     "description" VARCHAR(255) NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "metadata" jsonb NOT NULL,
-    "properties" jsonb NOT NULL
+    "properties" jsonb
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
     "description" VARCHAR(255) NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "feature" geometry(geometry, 4326) NOT NULL,
-    "properties" jsonb NOT NULL
+    "properties" jsonb
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "validTime" tstzrange DEFAULT NULL,
     "parameters" jsonb,
     "datastream_id" BIGINT REFERENCES sensorthings."Datastream"(id),
-    "feature_of_interest_id" BIGINT REFERENCES sensorthings."FeaturesOfInterest"(id),
+    "featuresofinterest_id" BIGINT REFERENCES sensorthings."FeaturesOfInterest"(id),
     UNIQUE ("datastream_id", "phenomenonTime")
 );
 
