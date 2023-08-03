@@ -201,21 +201,34 @@ def get_result_type_and_column(input_string):
     else:
         raise Exception("Cannot cast result to a valid type")
     
-def flatten_entity_body(entity, body):
+def flatten_entity_body(entity, body, name = None):
 
     # check if entity is an array
     if isinstance(entity, list):
         # loop trought all the values
         for item in entity:
             # create the entity
-            flatten_entity_body(item, body)
+            flatten_entity_body(item, body, name)
         return body
 
-    
     for key in list(entity):
         if isinstance(key, str) and key in sta2rest.STA2REST.ENTITY_MAPPING:
-            body[sta2rest.STA2REST.convert_entity(key)] = entity[key]
-            flatten_entity_body(entity[key], body)
+            converted_key = sta2rest.STA2REST.convert_entity(key)
+            body[converted_key] = entity[key]
+            
+            flatten_entity_body(entity[key], body, converted_key)
+            
+            if name:
+                if isinstance(body[name], list):
+                    for item in body[name]:
+                        item[converted_key] = {
+                            "@iot.id": None
+                        }
+                else:
+                    body[name][converted_key] = {
+                        "@iot.id": None
+                    }
+
     return body
 
 def format_entity_body(entity_body): 
@@ -233,7 +246,7 @@ def format_entity_body(entity_body):
         if isinstance(key, str) and key in sta2rest.STA2REST.ENTITY_MAPPING:
             if "@iot.id" in entity_body[key]:
                 new_key = sta2rest.STA2REST.convert_to_database_id(key)
-                formatted_body[new_key] = value["@iot.id"]
+                formatted_body[new_key] = entity_body[key]["@iot.id"]
         elif key == "result":
             value = entity_body["result"]
             result_type, column_name = get_result_type_and_column(value)
@@ -246,14 +259,14 @@ def format_entity_body(entity_body):
 
 async def create_entity(entity_name, body):
 
-    body = flatten_entity_body(body, body)
-
     body[entity_name] = {}
     # Loop trough all keys in the body and if they are not an entity create a main entity
     for key in list(body):
         if isinstance(key, str) and key not in sta2rest.STA2REST.ENTITY_MAPPING:
             body[entity_name][key] = body[key]
             del body[key]
+
+    body = flatten_entity_body(body, body)
 
     # Creation order
     created_ids = {}
