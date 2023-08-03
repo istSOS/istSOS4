@@ -201,60 +201,85 @@ def get_result_type_and_column(input_string):
     else:
         raise Exception("Cannot cast result to a valid type")
     
+def flatten_entity_body(entity, body):
 
-async def create_entity(entity_name, body):
-    url = "http://postgrest:3000/" + entity_name
+    # check if entity is an array
+    if isinstance(entity, list):
+        # loop trought all the values
+        for item in entity:
+            # create the entity
+            flatten_entity_body(item, body)
+        return body
+
+    
+    for key in list(entity):
+        if isinstance(key, str) and key in sta2rest.STA2REST.ENTITY_MAPPING:
+            body[sta2rest.STA2REST.convert_entity(key)] = entity[key]
+            flatten_entity_body(entity[key], body)
+    return body
+
+def format_entity_body(entity_body): 
+    # Check if entity_body is an array
+    if isinstance(entity_body, list):
+        # Loop trought all the values
+        for i in range(len(entity_body)):
+            # Create the entity
+            entity_body[i] = format_entity_body(entity_body[i])
+        return entity_body
 
     formatted_body = {}
-
     # Loop trought all the keys in the body
-    for key in body:
+    for key in entity_body:
         if isinstance(key, str) and key in sta2rest.STA2REST.ENTITY_MAPPING:
-            value = body[key]
-            if "@iot.id" in value:
-                # Convert the id
+            if "@iot.id" in entity_body[key]:
                 new_key = sta2rest.STA2REST.convert_to_database_id(key)
                 formatted_body[new_key] = value["@iot.id"]
-            else:
-                entity_name = sta2rest.STA2REST.convert_entity(key)
-                print("MUST CREATE ENTITY", entity_name)
-                # check if value is an array
-                if isinstance(value, list):
-                    # create an empty array
-                    formatted_body[key] = []
-                    # loop trought all the values
-                    for item in value:
-                        # create the entity
-                        result = await create_entity(entity_name, item)
-                        # append the id to the array
-                        formatted_body[key].append(result)
-                else:
-                    formatted_body[key] = await create_entity(entity_name, value)
-
-                print("RESULT", formatted_body[key])
-
         elif key == "result":
-            value = body["result"]
+            value = entity_body["result"]
             result_type, column_name = get_result_type_and_column(value)
             formatted_body[column_name] = value
             formatted_body["resultType"] = result_type
         else:
-            formatted_body[key] = body[key]
+            formatted_body[key] = entity_body[key]
 
-    print("FORMATTED BODY", formatted_body)
+    return formatted_body
 
-    async with httpx.AsyncClient() as client:
-        # post to postgrest
-        r = await client.post(url, json=formatted_body, headers={"Prefer": "return=representation"})
+async def create_entity(entity_name, body):
 
-        # get response
-        result = r.json()
+    body = flatten_entity_body(body, body)
 
-        # print r status
-        if r.status_code != 201:
-            raise PostgRESTError(result["message"])
-        
-        return result
+    body[entity_name] = {}
+    # Loop trough all keys in the body and if they are not an entity create a main entity
+    for key in list(body):
+        if isinstance(key, str) and key not in sta2rest.STA2REST.ENTITY_MAPPING:
+            body[entity_name][key] = body[key]
+            del body[key]
+
+    # Creation order
+    created_ids = {}
+    creation_order = ["Thing", "Location", "Sensor", "ObservedProperty", "FeaturesOfInterest", "Datastream", "Observation"]
+    for entity_name in creation_order:
+        if entity_name in body:
+            formatted_body = format_entity_body(body[entity_name])
+
+            url = "http://postgrest:3000/" + entity_name
+
+            print("CREATING ENTITY", entity_name, formatted_body)
+            '''
+            async with httpx.AsyncClient() as client:   
+                # post to postgrest
+                r = await client.post(url, json=formatted_body, headers={"Prefer": "return=representation"})
+
+                # get response
+                result = r.json()
+
+                # print r status
+                if r.status_code != 201:
+                    raise PostgRESTError(result["message"])
+                
+                return result'''
+
+    return None
 
 
 # Handle POST requests
