@@ -222,11 +222,11 @@ def flatten_entity_body(entity, body, name = None):
                 if isinstance(body[name], list):
                     for item in body[name]:
                         item[converted_key] = {
-                            "@iot.id": None
+                            "@iot.id": entity[key]["@iot.id"] if "@iot.id" in entity[key] else None
                         }
                 else:
                     body[name][converted_key] = {
-                        "@iot.id": None
+                        "@iot.id": entity[key]["@iot.id"] if "@iot.id" in entity[key] else None
                     }
 
     return body
@@ -259,14 +259,11 @@ def format_entity_body(entity_body):
 
 async def create_entity(entity_name, body):
 
-    body[entity_name] = {}
-    # Loop trough all keys in the body and if they are not an entity create a main entity
-    for key in list(body):
-        if isinstance(key, str) and key not in sta2rest.STA2REST.ENTITY_MAPPING:
-            body[entity_name][key] = body[key]
-            del body[key]
+    entity_body = {
+        entity_name: body
+    }
 
-    body = flatten_entity_body(body, body)
+    body = flatten_entity_body(entity_body, entity_body)
 
 
     # Creation order
@@ -274,7 +271,11 @@ async def create_entity(entity_name, body):
     creation_order = ["Thing", "Location", "Sensor", "ObservedProperty", "FeaturesOfInterest", "Datastream", "Observation"]
     for entity_name in creation_order:
         if entity_name in body:
+            
             formatted_body = format_entity_body(body[entity_name])
+
+            if "@iot.id" in formatted_body:
+                continue
 
             # check if the entity has sub entities and if they are empty check if id is present
             if isinstance(formatted_body, list):
@@ -292,7 +293,6 @@ async def create_entity(entity_name, body):
 
             print("Creating entity: ", entity_name)
             print("Body: ", formatted_body)
-
             """
             async with httpx.AsyncClient() as client:   
                 # post to postgrest
