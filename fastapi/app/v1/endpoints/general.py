@@ -293,7 +293,7 @@ async def create_entity(entity_name, body):
 
             print("Creating entity: ", entity_name)
             print("Body: ", formatted_body)
-            """
+            
             async with httpx.AsyncClient() as client:   
                 # post to postgrest
                 r = await client.post(url, json=formatted_body, headers={"Prefer": "return=representation"})
@@ -312,7 +312,7 @@ async def create_entity(entity_name, body):
                 id_key = sta2rest.STA2REST.convert_to_database_id(entity_name)
                 created_ids[id_key] = result["id"]
 
-                print("Created entity: ", id_key, " with id: ", result["id"])"""
+                print("Created entity: ", id_key, " with id: ", result["id"])
 
     return None
 
