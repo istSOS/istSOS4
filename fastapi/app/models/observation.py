@@ -14,7 +14,7 @@ class Observation(BaseModel):
     validTime: str | None = None
     parameters: Json | None = None
     datastream_id: int
-    feature_of_interest_id: int
+    featuresofinterest_id: int
 
 class put_Observation(BaseModel):
     id: int | None = None
@@ -25,4 +25,4 @@ class put_Observation(BaseModel):
     validTime: str | None = None
     parameters: Json | None = None
     datastream_id: int | None = None
-    feature_of_interest_id: int | None = None
+    featuresofinterest_id: int | None = None

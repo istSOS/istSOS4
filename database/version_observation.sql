@@ -10,7 +10,7 @@ insert
 		"validTime",
 		"parameters",
 		"datastream_id",
-		"feature_of_interest_id"
+		"featuresofinterest_id"
 	)
 values (
 	now(),
@@ -33,7 +33,7 @@ set
 	--"validTime" = null,
 	--parameters = null,
 	--datastream_id = 1,
-	feature_of_interest_id = 1
+	featuresofinterest_id = 1
 	--system_time_validity = '["2023-03-25 14:35:11.272722+01",infinity)'::tstzrange
 where
 	id = 2;
@@ -48,7 +48,7 @@ set
 	--"validTime" = null,
 	--parameters = null,
 	--datastream_id = 1,
-	feature_of_interest_id = 1
+	featuresofinterest_id = 1
 	--system_time_validity = '["2023-03-25 14:35:11.272722+01",infinity)'::tstzrange
 where
 	id = 2;
@@ -63,7 +63,7 @@ set
 	--"validTime" = null,
 	--parameters = null,
 	--datastream_id = 1,
-	feature_of_interest_id = 1
+	featuresofinterest_id = 1
 	--system_time_validity = '["2023-03-25 14:35:11.272722+01",infinity)'::tstzrange
 where
 	id = 2;

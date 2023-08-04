@@ -34,7 +34,7 @@ async def get_observations(as_of_system_time: datetime | None = None):
                     'http://postgrest:3000/Observation',
                     params={
                         'limit':100,
-                        'select':'id, phenomenonTime, resultTime, result, resultQuality, validTime, parameters, datastream_id, feature_of_interest_id',
+                        'select':'id, phenomenonTime, resultTime, result, resultQuality, validTime, parameters, datastream_id, featuresofinterest_id',
                         'order': 'id.asc'
                     }
                 )
@@ -44,7 +44,7 @@ async def get_observations(as_of_system_time: datetime | None = None):
                     'http://postgrest:3000/Observation_traveltime' + 
                     '?limit=100&system_time_validity=' + 
                     f'cs.[{as_of_system_time.isoformat()}, {as_of_system_time.isoformat()}}}]'.replace('+','%2B')+
-                    '&select=id,phenomenonTime,resultTime,result,resultQuality,validTime,parameters,datastream_id,feature_of_interest_id' +
+                    '&select=id,phenomenonTime,resultTime,result,resultQuality,validTime,parameters,datastream_id,featuresofinterest_id' +
                     '&order=id.asc'
                 )
             print('result', ujson.loads(result.text))
@@ -73,7 +73,7 @@ async def get_observation(id: int, query_options: QueryParameters=Depends()):
                 params={
                     'id': f'eq.{id}',
                     'limit':100,
-                    'select':'id, phenomenonTime, resultTime, result, resultQuality, validTime, parameters, datastream_id, feature_of_interest_id',
+                    'select':'id, phenomenonTime, resultTime, result, resultQuality, validTime, parameters, datastream_id, featuresofinterest_id',
                     'order': 'id.asc'                    
                 },
                 headers={'Accept': 'application/vnd.pgrst.object+json'}
