@@ -567,6 +567,14 @@ class STA2REST:
             if not entities:
                 single_result = True
 
+        # Check if query has an expand but not a select
+        if query_ast.expand and not query_ast.select:
+            # Add default columns to the select node
+            default_columns = STA2REST.get_default_column_names(main_entity)
+            query_ast.select = ast.SelectNode([])
+            for column in default_columns:
+                query_ast.select.identifiers.append(ast.IdentifierNode(column))
+
         # Visit the query ast to convert it
         visitor = NodeVisitor(main_entity)
         query_converted = visitor.visit(query_ast)
