@@ -91,5 +91,5 @@ INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultTime", "resultT
 VALUES ('2023-03-25 10:30:00-04', '2023-03-25 10:30:00-04', 2, 23.5, NULL, NULL, NULL, 3, 3);
 
 INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultTime", "resultType", "resultString", "resultQuality", "validTime", "parameters", "datastream_id", "featuresofinterest_id")
-VALUES ('2023-03-26 10:30:00-04', '2023-03-26 10:30:00-04', 0, "Test", NULL, NULL, NULL, 3, 3);
+VALUES ('2023-03-26 10:30:00-04', '2023-03-26 10:30:00-04', 0, 'Test', NULL, NULL, NULL, 3, 3);
 
