@@ -567,8 +567,8 @@ class STA2REST:
             if not entities:
                 single_result = True
 
-        # Check if query has an expand but not a select
-        if query_ast.expand and not query_ast.select:
+        # Check if query has an expand but not a select and does not have sub entities
+        if query_ast.expand and not query_ast.select and not entities:
             # Add default columns to the select node
             default_columns = STA2REST.get_default_column_names(main_entity)
             query_ast.select = ast.SelectNode([])
