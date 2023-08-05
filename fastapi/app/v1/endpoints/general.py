@@ -268,7 +268,7 @@ async def create_entity(entity_name, body):
 
     # Creation order
     created_ids = {}
-    creation_order = ["Thing", "Location", "Sensor", "ObservedProperty", "FeaturesOfInterest", "Datastream", "Observation"]
+    creation_order = ["Location","Thing", "Sensor", "ObservedProperty", "FeaturesOfInterest", "Datastream", "Observation"]
     for entity_name in creation_order:
         if entity_name in body:
             
