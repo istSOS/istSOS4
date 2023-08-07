@@ -4,73 +4,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from fastapi import status
 from app.sta2rest import sta2rest
+from app.utils.utils import PostgRESTError, __create_ref_format, __flatten_expand_entity, __flatten_navigation_links
+from app.settings import tables, serverSettings
 
 v1 = APIRouter()
 
-tables = ["Datastreams", "FeaturesOfInterest", "HistoricalLocations", "Locations", "Observations", "ObservedProperties", "Sensors", "Things"]
-serverSettings = {
-    "conformance": [
-        "http://www.opengis.net/spec/iot_sensing/1.1/req/request-data",
-    ],
-}
-
-class PostgRESTError(Exception):
-    pass
-
-
-def __flatten_navigation_links(row):
-    if row and "@iot.navigationLink" in row:
-        # merge all the keys from the navigationLink
-        row.update(row["@iot.navigationLink"])
-        del row["@iot.navigationLink"]
-
-        # check if skip@iot.navigationLink is present and remove it
-        if "skip@iot.navigationLink" in row:
-            del row["skip@iot.navigationLink"]
-
-def __flatten_expand_entity(data):
-    # Check if it is an array
-    if not isinstance(data, list):
-        # throw an error
-        raise PostgRESTError(data)
-
-    # check if data is empty
-    if not data:
-        return data
-    
-    # Check if there is only one key and it is in an ENTITY_MAPPING from the sta2rest module
-    if len(data[0].keys()) == 1 and list(data[0].keys())[0] in sta2rest.STA2REST.ENTITY_MAPPING:
-        # Get the value of the first key
-        key_name = list(data[0].keys())[0]
-        data = data[0][key_name]
-
-    return data
-
-def __create_ref_format(data):
-
-    rows = [data]
-
-    # Check if it is an array
-    if isinstance(data, list):
-        key_name = list(data[0].keys())[0]
-        # Check if the key is in an ENTITY_MAPPING from the sta2rest module
-        if key_name in sta2rest.STA2REST.ENTITY_MAPPING:
-            rows = data[0][key_name]
-            if not isinstance(rows, list):
-                rows = [rows]
-        else:
-            rows = data
-
-    data = {
-        "value": []
-    }
-
-    for row in rows:
-        data["value"].append({
-            "@iot.selfLink": row["@iot.selfLink"]
-        })
-    
-    return data
 
 def __handle_root(request: Request):
     # Handle the root path
