@@ -38,14 +38,14 @@ async def catch_all_delete(request: Request, path_name: str):
                 result = r.json()
                 raise PostgRESTError(result["message"])
 
-        # Return okay
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "code": 200,
-                "type": "success"
-            }
-        )
+            # Return okay
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "code": 200,
+                    "type": "success"
+                }
+            )
         
     except Exception as e:
         # print stack trace
