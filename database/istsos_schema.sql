@@ -21,15 +21,15 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
     "name" VARCHAR(255) UNIQUE NOT NULL,
     "description" TEXT NOT NULL,
     "properties" jsonb,
-    "location_id" BIGINT REFERENCES sensorthings."Location" (id)
+    "location_id" BIGINT REFERENCES sensorthings."Location" (id) ON DELETE CASCADE
 );
 
 
 CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
     id BIGSERIAL NOT NULL PRIMARY KEY,
     time TIMESTAMPTZ NOT NULL,
-    thing_id BIGINT REFERENCES sensorthings."Thing"(id),
-    location_id BIGINT REFERENCES sensorthings."Location"(id)
+    thing_id BIGINT REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
+    location_id BIGINT REFERENCES sensorthings."Location"(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
@@ -59,9 +59,9 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "phenomenonTime" tstzrange,
     "resultTime" tstzrange,
     "properties" jsonb,
-    "thing_id" BIGINT REFERENCES sensorthings."Thing"(id) NOT NULL,
-    "sensor_id" BIGINT REFERENCES sensorthings."Sensor"(id) NOT NULL,
-    "observedproperty_id" BIGINT REFERENCES sensorthings."ObservedProperty"(id)
+    "thing_id" BIGINT REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
+    "sensor_id" BIGINT REFERENCES sensorthings."Sensor"(id) ON DELETE CASCADE,
+    "observedproperty_id" BIGINT REFERENCES sensorthings."ObservedProperty"(id) ON DELETE CASCADE
 );
 
 
@@ -87,8 +87,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "resultQuality" TEXT,
     "validTime" tstzrange DEFAULT NULL,
     "parameters" jsonb,
-    "datastream_id" BIGINT REFERENCES sensorthings."Datastream"(id),
-    "featuresofinterest_id" BIGINT REFERENCES sensorthings."FeaturesOfInterest"(id),
+    "datastream_id" BIGINT REFERENCES sensorthings."Datastream"(id) ON DELETE CASCADE,
+    "featuresofinterest_id" BIGINT REFERENCES sensorthings."FeaturesOfInterest"(id) ON DELETE CASCADE,
     UNIQUE ("datastream_id", "phenomenonTime")
 );
 
