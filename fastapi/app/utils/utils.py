@@ -1,6 +1,6 @@
 from app.sta2rest import sta2rest
 import datetime
-
+import json
 class PostgRESTError(Exception):
     """
     Exception raised for errors in the PostgREST response.
@@ -166,6 +166,9 @@ async def create_entity(entity_name, body, pgpool):
                                     item[key] = created_ids[key]
                                 elif "Time" in key:
                                     formatted_body[key] = datetime.datetime.fromisoformat(formatted_body[key])
+                                # check if value is a dict and convert it to a str
+                                elif isinstance(formatted_body[key], dict):
+                                    formatted_body[key] = json.dumps(formatted_body[key])
                     else:
                         for key in formatted_body:
                             # check if key is present in created_ids
@@ -173,14 +176,18 @@ async def create_entity(entity_name, body, pgpool):
                                 formatted_body[key] = created_ids[key]
                             elif "Time" in key:
                                 formatted_body[key] = datetime.datetime.fromisoformat(formatted_body[key])
+                            # check if value is a dict and convert it to a str
+                            elif isinstance(formatted_body[key], dict):
+                                formatted_body[key] = json.dumps(formatted_body[key])
                     
                     # Generate SQL from the body
                     keys = ', '.join(f'"{key}"' for key in formatted_body.keys())
                     values_placeholders = ', '.join(f'${i+1}' for i in range(len(formatted_body)))
 
+
                     query = f'INSERT INTO sensorthings."{entity_name}" ({keys}) VALUES ({values_placeholders}) RETURNING id'
 
-                    print(query)
+                    print(query, formatted_body)
                     new_id = await conn.fetchval(query, *formatted_body.values())
                     
                     id_key = sta2rest.STA2REST.convert_to_database_id(entity_name)
