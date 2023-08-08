@@ -123,6 +123,18 @@ def format_entity_body(entity_body):
 
     return formatted_body
 
+def prepare_entity_body_for_insert(entity_body, created_ids):
+    for key in entity_body:
+        # check if key is present in created_ids
+        if key in created_ids:
+            entity_body[key] = created_ids[key]
+        elif "Time" in key:
+            entity_body[key] = datetime.datetime.fromisoformat(entity_body[key])
+        # check if value is a dict and convert it to a str
+        elif isinstance(entity_body[key], dict):
+            entity_body[key] = json.dumps(entity_body[key])
+
+
 async def create_entity(entity_name, body, pgpool):
     """
     Create an entity
@@ -161,24 +173,9 @@ async def create_entity(entity_name, body, pgpool):
                     # check if the entity has sub entities and if they are empty check if id is present
                     if isinstance(formatted_body, list):
                         for item in formatted_body:
-                            for key in item:
-                                if key in created_ids:
-                                    item[key] = created_ids[key]
-                                elif "Time" in key:
-                                    formatted_body[key] = datetime.datetime.fromisoformat(formatted_body[key])
-                                # check if value is a dict and convert it to a str
-                                elif isinstance(formatted_body[key], dict):
-                                    formatted_body[key] = json.dumps(formatted_body[key])
+                            prepare_entity_body_for_insert(item, created_ids)
                     else:
-                        for key in formatted_body:
-                            # check if key is present in created_ids
-                            if key in created_ids:
-                                formatted_body[key] = created_ids[key]
-                            elif "Time" in key:
-                                formatted_body[key] = datetime.datetime.fromisoformat(formatted_body[key])
-                            # check if value is a dict and convert it to a str
-                            elif isinstance(formatted_body[key], dict):
-                                formatted_body[key] = json.dumps(formatted_body[key])
+                        prepare_entity_body_for_insert(formatted_body, created_ids)
                     
                     # Generate SQL from the body
                     keys = ', '.join(f'"{key}"' for key in formatted_body.keys())
