@@ -1,5 +1,5 @@
-import httpx
 from app.sta2rest import sta2rest
+import datetime
 
 class PostgRESTError(Exception):
     """
@@ -123,13 +123,14 @@ def format_entity_body(entity_body):
 
     return formatted_body
 
-async def create_entity(entity_name, body):
+async def create_entity(entity_name, body, pgpool):
     """
     Create an entity
 
     Args:
         entity_name (str): The entity name
         body (dict): The body
+        pgpool (asyncpg.pool.Pool): The database pool
 
     Raises:
         PostgRESTError: If the entity cannot be created
@@ -146,50 +147,44 @@ async def create_entity(entity_name, body):
     # Creation order
     created_ids = {}
     creation_order = ["Location","Thing", "Sensor", "ObservedProperty", "FeaturesOfInterest", "Datastream", "Observation"]
-    for entity_name in creation_order:
-        if entity_name in body:
-            
-            formatted_body = format_entity_body(body[entity_name])
 
-            if "@iot.id" in formatted_body:
-                continue
+    async with pgpool.acquire() as conn:
+        async with conn.transaction():
+            for entity_name in creation_order:
+                if entity_name in body:
+                    
+                    formatted_body = format_entity_body(body[entity_name])
 
-            # check if the entity has sub entities and if they are empty check if id is present
-            if isinstance(formatted_body, list):
-                for item in formatted_body:
-                    for key in item:
-                        if key in created_ids:
-                            item[key] = created_ids[key]
-            else:
-                for key in formatted_body:
-                    # check if key is present in created_ids
-                    if key in created_ids:
-                        formatted_body[key] = created_ids[key]
+                    if "@iot.id" in formatted_body:
+                        continue
 
-            url = "http://postgrest:3000/" + entity_name
+                    # check if the entity has sub entities and if they are empty check if id is present
+                    if isinstance(formatted_body, list):
+                        for item in formatted_body:
+                            for key in item:
+                                if key in created_ids:
+                                    item[key] = created_ids[key]
+                                elif "Time" in key:
+                                    formatted_body[key] = datetime.datetime.fromisoformat(formatted_body[key])
+                    else:
+                        for key in formatted_body:
+                            # check if key is present in created_ids
+                            if key in created_ids:
+                                formatted_body[key] = created_ids[key]
+                            elif "Time" in key:
+                                formatted_body[key] = datetime.datetime.fromisoformat(formatted_body[key])
+                    
+                    # Generate SQL from the body
+                    keys = ', '.join(f'"{key}"' for key in formatted_body.keys())
+                    values_placeholders = ', '.join(f'${i+1}' for i in range(len(formatted_body)))
 
-            print("Creating entity: ", entity_name)
-            print("Body: ", formatted_body)
-            
-            async with httpx.AsyncClient() as client:   
-                # post to postgrest
-                r = await client.post(url, json=formatted_body, headers={"Prefer": "return=representation"})
+                    query = f'INSERT INTO sensorthings."{entity_name}" ({keys}) VALUES ({values_placeholders}) RETURNING id'
 
-                # get response
-                result = r.json()
-
-                # print r status
-                if r.status_code != 201:
-                    raise PostgRESTError(result["message"])
-                
-                # get first element of the result
-                result = result[0]
-
-                # get the id of the created entity
-                id_key = sta2rest.STA2REST.convert_to_database_id(entity_name)
-                created_ids[id_key] = result["id"]
-
-                print("Created entity: ", id_key, " with id: ", result["id"])
+                    print(query)
+                    new_id = await conn.fetchval(query, *formatted_body.values())
+                    
+                    id_key = sta2rest.STA2REST.convert_to_database_id(entity_name)
+                    created_ids[id_key] = new_id            
 
     return None
 

@@ -4,12 +4,14 @@ from fastapi.responses import JSONResponse
 from fastapi import status
 from app.sta2rest import sta2rest
 from app.utils.utils import create_entity
+from fastapi import Depends
+from app.db.db import get_pool
 
 v1 = APIRouter()
 
 # Handle POST requests
 @v1.api_route("/{path_name:path}", methods=["POST"])
-async def catch_all_post(request: Request, path_name: str):
+async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_pool)):
     # Accept only content-type application/json
     if not "content-type" in request.headers or request.headers["content-type"] != "application/json":
         return JSONResponse(
@@ -28,7 +30,7 @@ async def catch_all_post(request: Request, path_name: str):
         # get json body
         body = await request.json()
         main_table = result["entity"][0]
-        result = await create_entity(main_table, body)
+        result = await create_entity(main_table, body, pgpool)
         # Return okay
         return JSONResponse(
             status_code=status.HTTP_200_OK,
