@@ -181,6 +181,17 @@ async def create_entity(entity_name, body, pgpool):
                     keys = ', '.join(f'"{key}"' for key in formatted_body.keys())
                     values_placeholders = ', '.join(f'${i+1}' for i in range(len(formatted_body)))
 
+                    # Prevent duplicates of the same entity
+                    if entity_name in ["ObservedProperty"]:
+                        # Check if the entity already exists with all the same values
+                        # Generate WHERE clause from the body
+                        where = ' AND '.join(f'"{key}" = ${i+1}' for i, key in enumerate(formatted_body.keys()))
+                        query = f'SELECT id FROM sensorthings."{entity_name}" WHERE {where}'
+                        existing_id = await conn.fetchval(query, *formatted_body.values())
+                        print(query, existing_id)
+                        if existing_id:
+                            created_ids[sta2rest.STA2REST.convert_to_database_id(entity_name)] = existing_id
+                            continue
 
                     query = f'INSERT INTO sensorthings."{entity_name}" ({keys}) VALUES ({values_placeholders}) RETURNING id'
 
