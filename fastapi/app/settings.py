@@ -15,6 +15,7 @@ serverSettings = {
         "http://www.opengis.net/spec/iot_sensing/1.1/req/request-data/expand",
         "http://www.opengis.net/spec/iot_sensing/1.1/req/request-data/select",
         "http://www.opengis.net/spec/iot_sensing/1.1/req/request-data/orderby",
+        "http://www.opengis.net/spec/iot_sensing/1.1/req/request-data/skip",
         "http://www.opengis.net/spec/iot_sensing/1.1/req/request-data/top",
         "http://www.opengis.net/spec/iot_sensing/1.1/req/request-data/filter",
         "http://www.opengis.net/spec/iot_sensing/1.1/req/request-data/built-in-filter-operations",
