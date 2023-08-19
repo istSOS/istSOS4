@@ -13,23 +13,23 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "location" geometry(geometry, 4326) NOT NULL,
-    "properties" jsonb NOT NULL
+    "properties" jsonb
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) UNIQUE NOT NULL,
     "description" TEXT NOT NULL,
-    "properties" jsonb NOT NULL,
-    "location_id" BIGINT REFERENCES sensorthings."Location" (id)
+    "properties" jsonb,
+    "location_id" BIGINT REFERENCES sensorthings."Location" (id) ON DELETE CASCADE
 );
 
 
 CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
     id BIGSERIAL NOT NULL PRIMARY KEY,
     time TIMESTAMPTZ NOT NULL,
-    thing_id BIGINT REFERENCES sensorthings."Thing"(id),
-    location_id BIGINT REFERENCES sensorthings."Location"(id)
+    thing_id BIGINT REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
+    location_id BIGINT REFERENCES sensorthings."Location"(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
     "name" VARCHAR(255) UNIQUE NOT NULL,
     "definition" VARCHAR(255) NOT NULL,
     "description" VARCHAR(255) NOT NULL,
-    "properties" jsonb NOT NULL
+    "properties" jsonb
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
     "description" VARCHAR(255) NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "metadata" jsonb NOT NULL,
-    "properties" jsonb NOT NULL
+    "properties" jsonb
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
@@ -59,9 +59,9 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "phenomenonTime" tstzrange,
     "resultTime" tstzrange,
     "properties" jsonb,
-    "thing_id" BIGINT REFERENCES sensorthings."Thing"(id) NOT NULL,
-    "sensor_id" BIGINT REFERENCES sensorthings."Sensor"(id) NOT NULL,
-    "observedproperty_id" BIGINT REFERENCES sensorthings."ObservedProperty"(id)
+    "thing_id" BIGINT REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
+    "sensor_id" BIGINT REFERENCES sensorthings."Sensor"(id) ON DELETE CASCADE,
+    "observedproperty_id" BIGINT REFERENCES sensorthings."ObservedProperty"(id) ON DELETE CASCADE
 );
 
 
@@ -71,21 +71,36 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
     "description" VARCHAR(255) NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "feature" geometry(geometry, 4326) NOT NULL,
-    "properties" jsonb NOT NULL
+    "properties" jsonb
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "id" BIGSERIAL PRIMARY KEY,
     "phenomenonTime" TIMESTAMPTZ NOT NULL,
     "resultTime" TIMESTAMPTZ NOT NULL,
-    "result" FLOAT NOT NULL,
+    "resultType" INT NOT NULL,
+    "resultString" TEXT,
+    "resultInteger" INT,
+    "resultDouble" DOUBLE PRECISION,
+    "resultBoolean" BOOLEAN,
+    "resultJSON" jsonb,
     "resultQuality" TEXT,
     "validTime" tstzrange DEFAULT NULL,
     "parameters" jsonb,
-    "datastream_id" BIGINT REFERENCES sensorthings."Datastream"(id),
-    "feature_of_interest_id" BIGINT REFERENCES sensorthings."FeaturesOfInterest"(id),
+    "datastream_id" BIGINT REFERENCES sensorthings."Datastream"(id) ON DELETE CASCADE,
+    "featuresofinterest_id" BIGINT REFERENCES sensorthings."FeaturesOfInterest"(id) ON DELETE CASCADE,
     UNIQUE ("datastream_id", "phenomenonTime")
 );
+
+CREATE OR REPLACE FUNCTION result(sensorthings."Observation") RETURNS text AS $$
+    SELECT CASE WHEN $1."resultType" = 0 THEN $1."resultString"
+                WHEN $1."resultType" = 1 THEN $1."resultInteger"::text
+                WHEN $1."resultType" = 2 THEN $1."resultDouble"::text
+                WHEN $1."resultType" = 3 THEN $1."resultBoolean"::text
+                WHEN $1."resultType" = 4 THEN $1."resultJSON"::text
+                ELSE NULL
+             END;
+$$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "@iot.id"(anyelement) RETURNS text AS $$
   SELECT $1.id;

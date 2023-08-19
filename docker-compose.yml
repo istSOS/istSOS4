@@ -35,24 +35,6 @@ services:
     depends_on:
       - database
 
-  # POSTGRESQL
-  # database_test:
-  #   build:
-  #     context: ./database_test
-  #     dockerfile: Dockerfile
-  #   restart: on-failure
-  #   ports:
-  #     - "55432:5432"
-  #   environment:
-  #     POSTGRES_DB: istsos_test
-  #     POSTGRES_USER: admin
-  #     POSTGRES_PASSWORD: admin
-  #     DATADIR: /var/lib/postgresql/data
-  #     POSTGRES_MULTIPLE_EXTENSIONS: postgis,hstore,postgis_topology,postgis_raster,pgrouting,ltree,pg_cron,uuid-ossp
-  #   volumes:
-  #     # - v-istsos-miu-postgis-sql-test:/docker-entrypoint-initdb.d
-  #     - v-istsos-miu-database-data-test:/var/lib/postgresql/data
-
   api:
     build:
       context: ./fastapi
@@ -63,13 +45,13 @@ services:
     ports:
       - 8018:5000
     command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app
+    depends_on:
+      - postgrest
 
 volumes:
   v-istsos-miu-postgis-sql:
     name: v-istsos-miu-postgis-sql
   v-istsos-miu-database-data:
     name: v-istsos-miu-database-data
-  # v-istsos-miu-postgis-sql-test:
-  #   name: v-istsos-miu-postgis-sql-test
   v-istsos-miu-database-data-test:
     name: v-istsos-miu-database-data-test

@@ -7,13 +7,13 @@ This module provides utility functions to convert various elements used in Senso
 representations in a REST API.
 """
 import re
-import sta_parser.ast as ast
 from .filter_visitor import FilterVisitor
 from odata_query.grammar import ODataLexer
 from odata_query.grammar import ODataParser
-from sta_parser.lexer import Lexer
-from sta_parser.visitor import Visitor
-from sta_parser.parser import Parser
+from .sta_parser.ast import *
+from .sta_parser.lexer import Lexer
+from .sta_parser.visitor import Visitor
+from .sta_parser.parser import Parser
 
 # Create the OData lexer and parser
 odata_filter_lexer = ODataLexer()
@@ -34,7 +34,7 @@ class NodeVisitor(Visitor):
     This class provides a visitor to convert a STA query to a PostgREST query.
     """
     
-    def visit_IdentifierNode(self, node: ast.IdentifierNode):
+    def visit_IdentifierNode(self, node: IdentifierNode):
         """
         Visit an identifier node.
 
@@ -54,7 +54,7 @@ class NodeVisitor(Visitor):
 
         return node.name
 
-    def visit_SelectNode(self, node: ast.SelectNode):
+    def visit_SelectNode(self, node: SelectNode):
         """
         Visit a select node.
 
@@ -68,7 +68,7 @@ class NodeVisitor(Visitor):
         identifiers = ','.join([self.visit(identifier) for identifier in node.identifiers])
         return f'select={identifiers}'
 
-    def visit_FilterNode(self, node: ast.FilterNode):
+    def visit_FilterNode(self, node: FilterNode):
         """
         Visit a filter node.
 
@@ -88,7 +88,7 @@ class NodeVisitor(Visitor):
         res = FilterVisitor().visit(ast)
         return res
 
-    def visit_OrderByNodeIdentifier(self, node: ast.OrderByNodeIdentifier):
+    def visit_OrderByNodeIdentifier(self, node: OrderByNodeIdentifier):
         """
         Visit an orderby node identifier.
 
@@ -102,7 +102,7 @@ class NodeVisitor(Visitor):
         # Convert the identifier to the format name.order
         return f'{node.identifier}.{node.order}'
 
-    def visit_OrderByNode(self, node: ast.OrderByNode):
+    def visit_OrderByNode(self, node: OrderByNode):
         """
         Visit an orderby node.
 
@@ -115,7 +115,7 @@ class NodeVisitor(Visitor):
         identifiers = ','.join([self.visit(identifier) for identifier in node.identifiers])
         return f'order={identifiers}'
 
-    def visit_SkipNode(self, node: ast.SkipNode):
+    def visit_SkipNode(self, node: SkipNode):
         """
         Visit a skip node.
 
@@ -127,7 +127,7 @@ class NodeVisitor(Visitor):
         """
         return f'offset={node.count}'
 
-    def visit_TopNode(self, node: ast.TopNode):
+    def visit_TopNode(self, node: TopNode):
         """
         Visit a top node.
 
@@ -139,7 +139,7 @@ class NodeVisitor(Visitor):
         """
         return f'limit={node.count}'
 
-    def visit_CountNode(self, node: ast.CountNode):
+    def visit_CountNode(self, node: CountNode):
         """
         Visit a count node.
 
@@ -151,7 +151,7 @@ class NodeVisitor(Visitor):
         """
         return f'count={node.value}'
     
-    def visit_ExpandNode(self, node: ast.ExpandNode, parent=None):
+    def visit_ExpandNode(self, node: ExpandNode, parent=None):
         """
         Visit an expand node.
         
@@ -188,9 +188,9 @@ class NodeVisitor(Visitor):
                     # check if we have a select, filter, orderby, skip, top or count in the subquery
                     if expand_identifier.subquery.select:
                         if not select:
-                            select = ast.SelectNode([])
+                            select = SelectNode([])
                         identifiers = ','.join([self.visit(identifier) for identifier in expand_identifier.subquery.select.identifiers])
-                        select.identifiers.append(ast.IdentifierNode(f'{expand_identifier.identifier}({identifiers})'))
+                        select.identifiers.append(IdentifierNode(f'{expand_identifier.identifier}({identifiers})'))
                     if expand_identifier.subquery.filter:
                         result = self.visit_FilterNode(expand_identifier.subquery.filter)
                         filter = prefix + result
@@ -210,7 +210,7 @@ class NodeVisitor(Visitor):
                         # merge the results
                         if result['select']:
                             if not select:
-                                select = ast.SelectNode([])
+                                select = SelectNode([])
                             select.identifiers.extend(result['select'].identifiers)
                         if result['orderby']:
                             if orderby:
@@ -236,11 +236,11 @@ class NodeVisitor(Visitor):
                 # If we don't have a subquery, we add the identifier to the select node
                 if not expand_identifier.subquery or not expand_identifier.subquery.select:
                     if not select:
-                        select = ast.SelectNode([])
+                        select = SelectNode([])
                     default_columns = STA2REST.get_default_column_names(expand_identifier.identifier)
                     # join default columns as single string
                     default_columns = ','.join(default_columns)
-                    select.identifiers.append(ast.IdentifierNode(f'{expand_identifier.identifier}({default_columns})'))
+                    select.identifiers.append(IdentifierNode(f'{expand_identifier.identifier}({default_columns})'))
         
         # Return the converted expand node
         return {
@@ -252,7 +252,7 @@ class NodeVisitor(Visitor):
             'count': count
         }
 
-    def visit_QueryNode(self, node: ast.QueryNode):
+    def visit_QueryNode(self, node: QueryNode):
         """
         Visit a query node.
 
@@ -274,7 +274,7 @@ class NodeVisitor(Visitor):
             # Merge the results with the other parts of the query
             if result['select']:
                 if not node.select:
-                    node.select = ast.SelectNode([])
+                    node.select = SelectNode([])
                 node.select.identifiers.extend(result['select'].identifiers)
             if result['orderby']:
                 query_parts.append(result['orderby'])
@@ -288,13 +288,13 @@ class NodeVisitor(Visitor):
                 query_parts.append(result['filter'])
 
         if not node.select:
-            node.select = ast.SelectNode([])
+            node.select = SelectNode([])
             # Add "@iot.id", "@iot.selfLink" and "*" to the select node
 
             # get default columns for main entity
             default_columns = STA2REST.get_default_column_names(self.main_entity)
             for column in default_columns:
-                node.select.identifiers.append(ast.IdentifierNode(column))
+                node.select.identifiers.append(IdentifierNode(column))
 
         # Check if we have a select, filter, orderby, skip, top or count in the query
         if node.select:
@@ -482,7 +482,7 @@ class STA2REST:
     
 
         # Check if we have a query
-        query_ast = ast.QueryNode(None, None, None, None, None, None, None, False)
+        query_ast = QueryNode(None, None, None, None, None, None, None, False)
         if query:
             lexer = Lexer(query)
             tokens = lexer.tokenize()
@@ -506,17 +506,17 @@ class STA2REST:
 
         if entities:
             if not query_ast.expand:
-                query_ast.expand = ast.ExpandNode([])
+                query_ast.expand = ExpandNode([])
             
             index = 0
 
             # Merge the entities with the query
             for entity in entities:
                 entity_name = entity[0]
-                sub_query = ast.QueryNode(None, None, None, None, None, None, None, True)
+                sub_query = QueryNode(None, None, None, None, None, None, None, True)
                 if entity[1]:
                     single_result = True
-                    sub_query.filter = ast.FilterNode(f"id eq {entity[1]}")
+                    sub_query.filter = FilterNode(f"id eq {entity[1]}")
 
                 # Check if we are the last entity
                 if index == len(entities) - 1:
@@ -524,8 +524,8 @@ class STA2REST:
                     if uri['property_name']:
                         # Add the property name to the select node
                         if not sub_query.select:
-                            sub_query.select = ast.SelectNode([])
-                        sub_query.select.identifiers.append(ast.IdentifierNode(uri['property_name']))
+                            sub_query.select = SelectNode([])
+                        sub_query.select.identifiers.append(IdentifierNode(uri['property_name']))
 
                     # Merge the query with the subquery
                     if query_ast.select:
@@ -552,20 +552,28 @@ class STA2REST:
                         sub_query.count = query_ast.count
                         query_ast.count = None
 
-                query_ast.expand.identifiers.append(ast.ExpandNodeIdentifier(entity_name, sub_query))
+                query_ast.expand.identifiers.append(ExpandNodeIdentifier(entity_name, sub_query))
                 index += 1
         else:
             if uri['property_name']:
                 if not query_ast.select:
-                    query_ast.select = ast.SelectNode([])
-                query_ast.select.identifiers.append(ast.IdentifierNode(uri['property_name']))
+                    query_ast.select = SelectNode([])
+                query_ast.select.identifiers.append(IdentifierNode(uri['property_name']))
 
         # Check if we have a filter in the query
         if main_entity_id:
-            query_ast.filter = ast.FilterNode(query_ast.filter.filter + f" and id eq {main_entity_id}" if query_ast.filter else f"id eq {main_entity_id}")
+            query_ast.filter = FilterNode(query_ast.filter.filter + f" and id eq {main_entity_id}" if query_ast.filter else f"id eq {main_entity_id}")
 
             if not entities:
                 single_result = True
+
+        # Check if query has an expand but not a select and does not have sub entities
+        if query_ast.expand and not query_ast.select and not entities:
+            # Add default columns to the select node
+            default_columns = STA2REST.get_default_column_names(main_entity)
+            query_ast.select = SelectNode([])
+            for column in default_columns:
+                query_ast.select.identifiers.append(IdentifierNode(column))
 
         # Visit the query ast to convert it
         visitor = NodeVisitor(main_entity)

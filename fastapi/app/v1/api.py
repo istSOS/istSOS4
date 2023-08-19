@@ -1,15 +1,13 @@
-from app.v1.endpoints import observed_properties as op
-from app.v1.endpoints import sensors
-from app.v1.endpoints import contacts
-from app.v1.endpoints import observations
-from app.v1.endpoints import general
+from app.v1.endpoints import read
+from app.v1.endpoints import insert
+from app.v1.endpoints import delete
+from app.v1.endpoints import update_patch
 from fastapi import FastAPI
 
 v1 = FastAPI()
 
-v1.include_router(general.v1)
-
-#v1.include_router(op.v1)
-# v1.include_router(sensors.v1)
-# v1.include_router(contacts.v1)
-#v1.include_router(observations.v1)
+# Register the endpoints
+v1.include_router(read.v1)
+v1.include_router(insert.v1)
+v1.include_router(delete.v1)
+v1.include_router(update_patch.v1)
