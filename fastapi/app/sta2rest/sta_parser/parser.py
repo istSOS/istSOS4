@@ -5,7 +5,7 @@ Author: Filippo Finke
 """
 
 from .lexer import Lexer
-import ast as ast
+from . import ast
 
 class Parser:
     def __init__(self, tokens):
