@@ -1,0 +1,2 @@
+id,name,description,properties,location_id
+2,Temperature Sensor_2,A sensor that measures the Temperature Sensor_2 in a room,"{""model"": ""Model-2"", ""manufacturer"": ""Manufacturer-2""}",103

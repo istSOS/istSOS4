@@ -1,0 +1,12 @@
+# config.yml content
+version: 2.1
+
+static_datastreams: 
+  observedProperties: 10
+  quantity: 10
+  observations_each: 1000
+
+dynamic_datastreams: 
+  observedProperties: 10
+  quantity: 8
+  observations_each: 500 
