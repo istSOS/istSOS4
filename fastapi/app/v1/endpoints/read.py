@@ -65,14 +65,15 @@ async def catch_all_get(request: Request, path_name: str):
                 if isinstance(data, list):
                     
                     # check if the array is empty
-                    return JSONResponse(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        content={
-                            "code": 404,
-                            "type": "error",
-                            "message": "Not Found"
-                        }
-                    )
+                    if len(data) == 0:
+                        return JSONResponse(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            content={
+                                "code": 404,
+                                "type": "error",
+                                "message": "Not Found"
+                            }
+                        )
 
                     data = data[0]
 
