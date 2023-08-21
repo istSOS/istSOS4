@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "resultDouble" DOUBLE PRECISION,
     "resultBoolean" BOOLEAN,
     "resultJSON" jsonb,
-    "resultQuality" TEXT,
+    "resultQuality" jsonb,
     "validTime" tstzrange DEFAULT NULL,
     "parameters" jsonb,
     "datastream_id" BIGINT REFERENCES sensorthings."Datastream"(id) ON DELETE CASCADE,
