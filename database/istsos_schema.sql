@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "id" BIGSERIAL PRIMARY KEY,
     "phenomenonTime" TIMESTAMPTZ NOT NULL,
-    "resultTime" TIMESTAMPTZ NOT NULL,
+    "resultTime" TIMESTAMPTZ ,
     "resultType" INT NOT NULL,
     "resultString" TEXT,
     "resultInteger" INT,

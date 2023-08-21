@@ -1,10 +1,10 @@
 # CREATE FASTAPI
 
 ```
-docker-compose up -d
+sudo docker compose up -d
 ```
 >For updating the docker image use the command: \
-```docker-compose up -d --build```
+```sudo docker compose up -d --build```
 
 ## See the automatic interactive API documentation
 
@@ -105,3 +105,11 @@ You can also check using : http://127.0.0.1:8000/docs
     
 
 
+
+## importing hoppscotch files
+
+ - open hoppscotch.io 
+ - login
+ - import json file from `API_test` folder
+ > for CORS error download the browser plugin of hoppscotch
+ 

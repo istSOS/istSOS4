@@ -1,0 +1,4 @@
+id,name,description,encodingType,location,properties
+1,Room No 0,A sensor that measures the Room No 0 in a room,application/vnd.geo+json,"ST_SetSRID(ST_MakePoint(-73.987, 40.766), 4326)",{}
+2,Room No 1,A sensor that measures the Room No 1 in a room,application/vnd.geo+json,"ST_SetSRID(ST_MakePoint(-73.987, 40.766), 4326)",{}
+3,Room No 2,A sensor that measures the Room No 2 in a room,application/vnd.geo+json,"ST_SetSRID(ST_MakePoint(-73.987, 40.766), 4326)",{}

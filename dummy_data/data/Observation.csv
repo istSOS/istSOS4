@@ -1,0 +1,501 @@
+id,phenomenonTime,resultTime,resultType,resultString,resultInteger,resultDouble,resultBoolean,resultJSON,resultQuality,validTime,parameters,datastream_id,feature_of_interest_id
+1001,2023-06-13 07:44:38,2023-06-13 07:44:38,4,None,None,None,False,None,None,None,{},9,1
+1002,2023-08-18 12:12:03,2023-08-18 12:12:03,1,testvalue,None,None,None,None,None,None,{},7,1
+1003,2023-02-28 09:00:39,2023-02-28 09:00:39,4,None,None,None,False,None,None,None,{},8,1
+1004,2023-05-12 07:53:35,2023-05-12 07:53:35,2,None,25,None,None,None,None,None,{},2,1
+1005,2023-11-30 11:17:50,2023-11-30 11:17:50,4,None,None,None,False,None,None,None,{},8,1
+1006,2023-05-23 22:56:32,2023-05-23 22:56:32,3,None,None,0.991347687470228,None,None,None,None,{},1,1
+1007,2023-10-26 14:52:10,2023-10-26 14:52:10,4,None,None,None,True,None,None,None,{},8,1
+1008,2023-01-23 06:44:08,2023-01-23 06:44:08,4,None,None,None,False,None,None,None,{},10,1
+1009,2023-01-03 05:52:19,2023-01-03 05:52:19,4,None,None,None,False,None,None,None,{},8,1
+1010,2023-02-04 09:27:24,2023-02-04 09:27:24,2,None,83,None,None,None,None,None,{},4,1
+1011,2023-10-18 13:49:51,2023-10-18 13:49:51,5,None,None,None,None,"{""testvalue"": ""value-10""}",None,None,{},4,1
+1012,2023-08-10 16:12:51,2023-08-10 16:12:51,2,None,92,None,None,None,None,None,{},2,1
+1013,2023-05-22 23:21:57,2023-05-22 23:21:57,3,None,None,0.29023118322479846,None,None,None,None,{},8,1
+1014,2023-03-13 11:45:53,2023-03-13 11:45:53,3,None,None,0.716351288045009,None,None,None,None,{},8,1
+1015,2023-01-16 19:12:52,2023-01-16 19:12:52,3,None,None,0.05704635162577698,None,None,None,None,{},6,1
+1016,2023-06-10 20:53:56,2023-06-10 20:53:56,2,None,14,None,None,None,None,None,{},2,1
+1017,2023-09-17 16:17:03,2023-09-17 16:17:03,5,None,None,None,None,"{""testvalue"": ""value-16""}",None,None,{},9,1
+1018,2023-09-13 23:50:50,2023-09-13 23:50:50,2,None,99,None,None,None,None,None,{},4,1
+1019,2023-09-18 15:57:38,2023-09-18 15:57:38,3,None,None,0.2788420713839438,None,None,None,None,{},9,1
+1020,2023-10-08 16:07:10,2023-10-08 16:07:10,4,None,None,None,True,None,None,None,{},7,1
+1021,2023-03-12 15:55:42,2023-03-12 15:55:42,1,testvalue,None,None,None,None,None,None,{},2,1
+1022,2023-02-26 13:41:47,2023-02-26 13:41:47,4,None,None,None,True,None,None,None,{},7,1
+1023,2023-08-18 22:31:08,2023-08-18 22:31:08,4,None,None,None,True,None,None,None,{},3,1
+1024,2023-12-10 10:39:17,2023-12-10 10:39:17,5,None,None,None,None,"{""testvalue"": ""value-23""}",None,None,{},4,1
+1025,2023-03-25 18:14:22,2023-03-25 18:14:22,4,None,None,None,True,None,None,None,{},10,1
+1026,2023-12-28 03:33:09,2023-12-28 03:33:09,4,None,None,None,False,None,None,None,{},2,1
+1027,2023-12-10 07:40:13,2023-12-10 07:40:13,1,testvalue,None,None,None,None,None,None,{},5,1
+1028,2023-08-12 04:29:51,2023-08-12 04:29:51,1,testvalue,None,None,None,None,None,None,{},10,1
+1029,2023-08-10 06:52:03,2023-08-10 06:52:03,1,testvalue,None,None,None,None,None,None,{},3,1
+1030,2023-12-07 02:13:40,2023-12-07 02:13:40,3,None,None,0.2974969424670888,None,None,None,None,{},1,1
+1031,2023-03-21 13:52:19,2023-03-21 13:52:19,4,None,None,None,False,None,None,None,{},4,1
+1032,2023-05-08 07:22:26,2023-05-08 07:22:26,4,None,None,None,False,None,None,None,{},10,1
+1033,2023-08-01 03:16:23,2023-08-01 03:16:23,4,None,None,None,False,None,None,None,{},9,1
+1034,2023-08-21 07:34:04,2023-08-21 07:34:04,3,None,None,0.7630377314911834,None,None,None,None,{},3,1
+1035,2023-07-20 04:28:12,2023-07-20 04:28:12,5,None,None,None,None,"{""testvalue"": ""value-34""}",None,None,{},10,1
+1036,2023-08-05 21:23:46,2023-08-05 21:23:46,5,None,None,None,None,"{""testvalue"": ""value-35""}",None,None,{},5,1
+1037,2023-08-16 20:22:04,2023-08-16 20:22:04,4,None,None,None,True,None,None,None,{},6,1
+1038,2023-07-31 21:29:19,2023-07-31 21:29:19,2,None,52,None,None,None,None,None,{},6,1
+1039,2023-11-23 10:40:25,2023-11-23 10:40:25,5,None,None,None,None,"{""testvalue"": ""value-38""}",None,None,{},2,1
+1040,2023-04-10 21:01:45,2023-04-10 21:01:45,3,None,None,0.14755307934064965,None,None,None,None,{},5,1
+1041,2023-04-10 16:59:55,2023-04-10 16:59:55,3,None,None,0.6281112983030409,None,None,None,None,{},1,1
+1042,2023-05-29 16:33:28,2023-05-29 16:33:28,4,None,None,None,True,None,None,None,{},5,1
+1043,2023-06-12 12:12:12,2023-06-12 12:12:12,5,None,None,None,None,"{""testvalue"": ""value-42""}",None,None,{},10,1
+1044,2023-05-12 05:18:13,2023-05-12 05:18:13,2,None,46,None,None,None,None,None,{},1,1
+1045,2023-12-23 20:04:38,2023-12-23 20:04:38,4,None,None,None,False,None,None,None,{},10,1
+1046,2023-04-04 15:40:05,2023-04-04 15:40:05,4,None,None,None,False,None,None,None,{},1,1
+1047,2023-11-20 18:44:41,2023-11-20 18:44:41,5,None,None,None,None,"{""testvalue"": ""value-46""}",None,None,{},2,1
+1048,2023-06-26 04:56:17,2023-06-26 04:56:17,3,None,None,0.3931985287659572,None,None,None,None,{},2,1
+1049,2023-05-18 17:20:36,2023-05-18 17:20:36,1,testvalue,None,None,None,None,None,None,{},10,1
+1050,2023-08-30 19:07:13,2023-08-30 19:07:13,3,None,None,0.09773584092519938,None,None,None,None,{},6,1
+1051,2023-02-24 04:19:13,2023-02-24 04:19:13,2,None,30,None,None,None,None,None,{},8,1
+1052,2023-10-02 08:00:34,2023-10-02 08:00:34,1,testvalue,None,None,None,None,None,None,{},8,1
+1053,2023-05-15 13:55:57,2023-05-15 13:55:57,1,testvalue,None,None,None,None,None,None,{},3,1
+1054,2023-02-19 13:01:11,2023-02-19 13:01:11,3,None,None,0.8405279277013595,None,None,None,None,{},8,1
+1055,2023-05-02 15:35:58,2023-05-02 15:35:58,2,None,25,None,None,None,None,None,{},6,1
+1056,2023-04-13 02:46:57,2023-04-13 02:46:57,5,None,None,None,None,"{""testvalue"": ""value-55""}",None,None,{},9,1
+1057,2023-10-11 00:18:30,2023-10-11 00:18:30,1,testvalue,None,None,None,None,None,None,{},1,1
+1058,2023-02-13 11:10:00,2023-02-13 11:10:00,1,testvalue,None,None,None,None,None,None,{},9,1
+1059,2023-06-19 04:59:52,2023-06-19 04:59:52,1,testvalue,None,None,None,None,None,None,{},1,1
+1060,2023-07-26 04:52:54,2023-07-26 04:52:54,5,None,None,None,None,"{""testvalue"": ""value-59""}",None,None,{},7,1
+1061,2023-09-13 04:51:07,2023-09-13 04:51:07,3,None,None,0.6251065654695469,None,None,None,None,{},5,1
+1062,2023-12-26 07:18:16,2023-12-26 07:18:16,2,None,39,None,None,None,None,None,{},6,1
+1063,2023-07-10 14:09:40,2023-07-10 14:09:40,5,None,None,None,None,"{""testvalue"": ""value-62""}",None,None,{},8,1
+1064,2023-04-16 20:01:51,2023-04-16 20:01:51,4,None,None,None,False,None,None,None,{},5,1
+1065,2023-05-16 22:25:34,2023-05-16 22:25:34,2,None,88,None,None,None,None,None,{},10,1
+1066,2023-04-19 18:54:55,2023-04-19 18:54:55,4,None,None,None,False,None,None,None,{},4,1
+1067,2023-11-10 21:20:30,2023-11-10 21:20:30,5,None,None,None,None,"{""testvalue"": ""value-66""}",None,None,{},9,1
+1068,2023-08-24 01:29:32,2023-08-24 01:29:32,5,None,None,None,None,"{""testvalue"": ""value-67""}",None,None,{},5,1
+1069,2023-08-18 21:20:41,2023-08-18 21:20:41,1,testvalue,None,None,None,None,None,None,{},3,1
+1070,2023-03-10 15:21:44,2023-03-10 15:21:44,5,None,None,None,None,"{""testvalue"": ""value-69""}",None,None,{},4,1
+1071,2023-09-13 19:04:50,2023-09-13 19:04:50,3,None,None,0.2490911604270276,None,None,None,None,{},4,1
+1072,2023-05-22 12:07:11,2023-05-22 12:07:11,3,None,None,0.5294783621616989,None,None,None,None,{},9,1
+1073,2023-09-07 14:09:12,2023-09-07 14:09:12,4,None,None,None,True,None,None,None,{},4,1
+1074,2023-09-01 21:40:16,2023-09-01 21:40:16,3,None,None,0.7967164105993786,None,None,None,None,{},8,1
+1075,2023-03-19 20:00:23,2023-03-19 20:00:23,1,testvalue,None,None,None,None,None,None,{},5,1
+1076,2023-12-23 01:48:01,2023-12-23 01:48:01,1,testvalue,None,None,None,None,None,None,{},7,1
+1077,2023-11-24 04:04:47,2023-11-24 04:04:47,4,None,None,None,False,None,None,None,{},7,1
+1078,2023-01-16 02:15:46,2023-01-16 02:15:46,5,None,None,None,None,"{""testvalue"": ""value-77""}",None,None,{},2,1
+1079,2023-08-18 00:56:59,2023-08-18 00:56:59,4,None,None,None,True,None,None,None,{},4,1
+1080,2023-04-07 17:49:02,2023-04-07 17:49:02,5,None,None,None,None,"{""testvalue"": ""value-79""}",None,None,{},7,1
+1081,2023-09-02 10:29:52,2023-09-02 10:29:52,3,None,None,0.8692163708811615,None,None,None,None,{},8,1
+1082,2023-11-24 13:40:07,2023-11-24 13:40:07,4,None,None,None,False,None,None,None,{},3,1
+1083,2023-10-05 15:57:04,2023-10-05 15:57:04,4,None,None,None,True,None,None,None,{},3,1
+1084,2023-02-26 20:00:10,2023-02-26 20:00:10,3,None,None,0.12834653472141344,None,None,None,None,{},3,1
+1085,2023-01-01 00:28:42,2023-01-01 00:28:42,5,None,None,None,None,"{""testvalue"": ""value-84""}",None,None,{},9,1
+1086,2023-09-21 02:24:21,2023-09-21 02:24:21,5,None,None,None,None,"{""testvalue"": ""value-85""}",None,None,{},4,1
+1087,2023-08-29 20:33:54,2023-08-29 20:33:54,2,None,23,None,None,None,None,None,{},2,1
+1088,2023-01-20 10:36:58,2023-01-20 10:36:58,3,None,None,0.4415133670727601,None,None,None,None,{},6,1
+1089,2023-08-12 18:39:19,2023-08-12 18:39:19,2,None,91,None,None,None,None,None,{},6,1
+1090,2023-11-15 18:10:00,2023-11-15 18:10:00,4,None,None,None,False,None,None,None,{},9,1
+1091,2023-05-18 08:14:45,2023-05-18 08:14:45,1,testvalue,None,None,None,None,None,None,{},7,1
+1092,2023-08-04 16:09:52,2023-08-04 16:09:52,1,testvalue,None,None,None,None,None,None,{},2,1
+1093,2023-04-06 10:52:13,2023-04-06 10:52:13,1,testvalue,None,None,None,None,None,None,{},5,1
+1094,2023-01-25 19:21:07,2023-01-25 19:21:07,2,None,9,None,None,None,None,None,{},10,1
+1095,2023-03-09 13:11:07,2023-03-09 13:11:07,3,None,None,0.7429277785375432,None,None,None,None,{},4,1
+1096,2023-03-19 16:05:26,2023-03-19 16:05:26,1,testvalue,None,None,None,None,None,None,{},3,1
+1097,2023-09-16 14:02:36,2023-09-16 14:02:36,4,None,None,None,True,None,None,None,{},5,1
+1098,2023-03-01 10:44:18,2023-03-01 10:44:18,3,None,None,0.5019218250682599,None,None,None,None,{},3,1
+1099,2023-11-03 19:13:41,2023-11-03 19:13:41,4,None,None,None,True,None,None,None,{},3,1
+1100,2023-03-29 03:35:29,2023-03-29 03:35:29,5,None,None,None,None,"{""testvalue"": ""value-99""}",None,None,{},1,1
+1101,2023-10-25 14:56:38,2023-10-25 14:56:38,1,testvalue,None,None,None,None,None,None,{},2,1
+1102,2023-04-04 06:16:11,2023-04-04 06:16:11,2,None,77,None,None,None,None,None,{},7,1
+1103,2023-04-05 12:57:26,2023-04-05 12:57:26,5,None,None,None,None,"{""testvalue"": ""value-102""}",None,None,{},4,1
+1104,2023-08-04 19:45:01,2023-08-04 19:45:01,2,None,17,None,None,None,None,None,{},5,1
+1105,2023-01-30 13:14:23,2023-01-30 13:14:23,4,None,None,None,True,None,None,None,{},10,1
+1106,2023-09-10 02:46:49,2023-09-10 02:46:49,2,None,23,None,None,None,None,None,{},1,1
+1107,2023-06-27 18:03:59,2023-06-27 18:03:59,1,testvalue,None,None,None,None,None,None,{},8,1
+1108,2023-09-04 19:07:34,2023-09-04 19:07:34,5,None,None,None,None,"{""testvalue"": ""value-107""}",None,None,{},4,1
+1109,2023-12-05 12:49:00,2023-12-05 12:49:00,1,testvalue,None,None,None,None,None,None,{},8,1
+1110,2023-04-10 08:34:30,2023-04-10 08:34:30,3,None,None,0.5240870101313139,None,None,None,None,{},8,1
+1111,2023-05-07 10:55:58,2023-05-07 10:55:58,2,None,24,None,None,None,None,None,{},10,1
+1112,2023-09-16 10:36:42,2023-09-16 10:36:42,1,testvalue,None,None,None,None,None,None,{},6,1
+1113,2023-01-25 21:33:13,2023-01-25 21:33:13,1,testvalue,None,None,None,None,None,None,{},2,1
+1114,2023-04-29 14:28:52,2023-04-29 14:28:52,3,None,None,0.9659810806473739,None,None,None,None,{},4,1
+1115,2023-12-28 16:40:35,2023-12-28 16:40:35,3,None,None,0.44174105152423015,None,None,None,None,{},4,1
+1116,2023-06-01 19:00:28,2023-06-01 19:00:28,3,None,None,0.9647076490288229,None,None,None,None,{},9,1
+1117,2023-05-29 13:08:21,2023-05-29 13:08:21,3,None,None,0.7023186478339646,None,None,None,None,{},2,1
+1118,2023-05-02 06:33:37,2023-05-02 06:33:37,1,testvalue,None,None,None,None,None,None,{},9,1
+1119,2023-03-04 19:42:54,2023-03-04 19:42:54,3,None,None,0.8533491474273579,None,None,None,None,{},10,1
+1120,2023-11-21 18:41:17,2023-11-21 18:41:17,3,None,None,0.8465012627792965,None,None,None,None,{},7,1
+1121,2023-11-05 04:25:32,2023-11-05 04:25:32,3,None,None,0.43662386736775005,None,None,None,None,{},4,1
+1122,2023-08-03 22:20:53,2023-08-03 22:20:53,5,None,None,None,None,"{""testvalue"": ""value-121""}",None,None,{},5,1
+1123,2023-01-31 09:23:03,2023-01-31 09:23:03,5,None,None,None,None,"{""testvalue"": ""value-122""}",None,None,{},9,1
+1124,2023-10-30 04:45:30,2023-10-30 04:45:30,5,None,None,None,None,"{""testvalue"": ""value-123""}",None,None,{},8,1
+1125,2023-11-12 21:49:56,2023-11-12 21:49:56,2,None,16,None,None,None,None,None,{},5,1
+1126,2023-01-24 15:17:53,2023-01-24 15:17:53,5,None,None,None,None,"{""testvalue"": ""value-125""}",None,None,{},5,1
+1127,2023-09-03 18:04:02,2023-09-03 18:04:02,3,None,None,0.9697141479471404,None,None,None,None,{},8,1
+1128,2023-04-21 07:03:32,2023-04-21 07:03:32,2,None,8,None,None,None,None,None,{},7,1
+1129,2023-08-09 02:55:00,2023-08-09 02:55:00,1,testvalue,None,None,None,None,None,None,{},9,1
+1130,2023-10-21 11:00:21,2023-10-21 11:00:21,4,None,None,None,True,None,None,None,{},7,1
+1131,2023-02-16 15:30:39,2023-02-16 15:30:39,2,None,45,None,None,None,None,None,{},1,1
+1132,2023-11-10 18:12:20,2023-11-10 18:12:20,1,testvalue,None,None,None,None,None,None,{},1,1
+1133,2023-10-18 21:43:14,2023-10-18 21:43:14,3,None,None,0.833442961879922,None,None,None,None,{},5,1
+1134,2023-05-23 00:05:06,2023-05-23 00:05:06,5,None,None,None,None,"{""testvalue"": ""value-133""}",None,None,{},10,1
+1135,2023-11-18 16:04:57,2023-11-18 16:04:57,5,None,None,None,None,"{""testvalue"": ""value-134""}",None,None,{},9,1
+1136,2023-03-26 21:48:29,2023-03-26 21:48:29,3,None,None,0.6677047731713942,None,None,None,None,{},3,1
+1137,2023-08-07 22:10:34,2023-08-07 22:10:34,2,None,44,None,None,None,None,None,{},2,1
+1138,2023-06-19 06:12:26,2023-06-19 06:12:26,1,testvalue,None,None,None,None,None,None,{},9,1
+1139,2023-02-28 04:25:24,2023-02-28 04:25:24,5,None,None,None,None,"{""testvalue"": ""value-138""}",None,None,{},3,1
+1140,2023-09-11 16:58:56,2023-09-11 16:58:56,1,testvalue,None,None,None,None,None,None,{},6,1
+1141,2023-10-19 06:30:41,2023-10-19 06:30:41,3,None,None,0.2433949573926637,None,None,None,None,{},3,1
+1142,2023-07-20 04:46:42,2023-07-20 04:46:42,3,None,None,0.5329326346845302,None,None,None,None,{},10,1
+1143,2023-11-19 10:49:47,2023-11-19 10:49:47,4,None,None,None,True,None,None,None,{},6,1
+1144,2023-11-05 13:45:25,2023-11-05 13:45:25,1,testvalue,None,None,None,None,None,None,{},5,1
+1145,2023-02-25 13:44:08,2023-02-25 13:44:08,2,None,10,None,None,None,None,None,{},3,1
+1146,2023-08-18 13:18:41,2023-08-18 13:18:41,5,None,None,None,None,"{""testvalue"": ""value-145""}",None,None,{},6,1
+1147,2023-06-12 19:55:28,2023-06-12 19:55:28,2,None,58,None,None,None,None,None,{},3,1
+1148,2023-09-14 09:40:48,2023-09-14 09:40:48,1,testvalue,None,None,None,None,None,None,{},7,1
+1149,2023-12-25 20:42:38,2023-12-25 20:42:38,5,None,None,None,None,"{""testvalue"": ""value-148""}",None,None,{},4,1
+1150,2023-09-04 12:02:21,2023-09-04 12:02:21,4,None,None,None,False,None,None,None,{},2,1
+1151,2023-09-27 06:58:48,2023-09-27 06:58:48,1,testvalue,None,None,None,None,None,None,{},3,1
+1152,2023-04-21 11:36:50,2023-04-21 11:36:50,5,None,None,None,None,"{""testvalue"": ""value-151""}",None,None,{},5,1
+1153,2023-12-05 17:09:50,2023-12-05 17:09:50,1,testvalue,None,None,None,None,None,None,{},8,1
+1154,2023-11-07 12:32:15,2023-11-07 12:32:15,3,None,None,0.44352965668299527,None,None,None,None,{},5,1
+1155,2023-04-20 15:20:48,2023-04-20 15:20:48,3,None,None,0.15025226597387364,None,None,None,None,{},9,1
+1156,2023-05-09 03:12:03,2023-05-09 03:12:03,1,testvalue,None,None,None,None,None,None,{},3,1
+1157,2023-03-07 05:58:41,2023-03-07 05:58:41,4,None,None,None,True,None,None,None,{},10,1
+1158,2023-09-24 16:35:16,2023-09-24 16:35:16,1,testvalue,None,None,None,None,None,None,{},10,1
+1159,2023-11-30 07:52:10,2023-11-30 07:52:10,1,testvalue,None,None,None,None,None,None,{},5,1
+1160,2023-05-19 14:55:32,2023-05-19 14:55:32,3,None,None,0.7498825336767632,None,None,None,None,{},10,1
+1161,2023-05-04 21:33:39,2023-05-04 21:33:39,3,None,None,0.14275648168870692,None,None,None,None,{},1,1
+1162,2023-04-16 11:34:00,2023-04-16 11:34:00,2,None,81,None,None,None,None,None,{},7,1
+1163,2023-09-19 04:10:58,2023-09-19 04:10:58,1,testvalue,None,None,None,None,None,None,{},4,1
+1164,2023-10-05 08:58:06,2023-10-05 08:58:06,2,None,30,None,None,None,None,None,{},4,1
+1165,2023-11-18 22:47:36,2023-11-18 22:47:36,1,testvalue,None,None,None,None,None,None,{},8,1
+1166,2023-08-25 05:08:28,2023-08-25 05:08:28,5,None,None,None,None,"{""testvalue"": ""value-165""}",None,None,{},7,1
+1167,2023-01-02 13:36:07,2023-01-02 13:36:07,4,None,None,None,False,None,None,None,{},1,1
+1168,2023-09-28 03:31:25,2023-09-28 03:31:25,2,None,39,None,None,None,None,None,{},8,1
+1169,2023-05-09 17:34:36,2023-05-09 17:34:36,5,None,None,None,None,"{""testvalue"": ""value-168""}",None,None,{},2,1
+1170,2023-06-07 00:15:30,2023-06-07 00:15:30,1,testvalue,None,None,None,None,None,None,{},4,1
+1171,2023-05-06 11:47:15,2023-05-06 11:47:15,2,None,16,None,None,None,None,None,{},2,1
+1172,2023-05-05 14:26:10,2023-05-05 14:26:10,1,testvalue,None,None,None,None,None,None,{},9,1
+1173,2023-03-13 11:02:12,2023-03-13 11:02:12,3,None,None,0.7856354134218548,None,None,None,None,{},8,1
+1174,2023-06-09 10:00:07,2023-06-09 10:00:07,1,testvalue,None,None,None,None,None,None,{},6,1
+1175,2023-02-27 14:47:31,2023-02-27 14:47:31,4,None,None,None,True,None,None,None,{},2,1
+1176,2023-12-07 20:17:47,2023-12-07 20:17:47,4,None,None,None,False,None,None,None,{},6,1
+1177,2023-08-17 18:00:25,2023-08-17 18:00:25,5,None,None,None,None,"{""testvalue"": ""value-176""}",None,None,{},3,1
+1178,2023-11-28 13:36:37,2023-11-28 13:36:37,3,None,None,0.6159446025995743,None,None,None,None,{},4,1
+1179,2023-08-24 04:42:59,2023-08-24 04:42:59,3,None,None,0.864257623255654,None,None,None,None,{},4,1
+1180,2023-05-10 07:42:54,2023-05-10 07:42:54,1,testvalue,None,None,None,None,None,None,{},6,1
+1181,2023-09-14 16:44:35,2023-09-14 16:44:35,4,None,None,None,True,None,None,None,{},8,1
+1182,2023-11-08 07:26:04,2023-11-08 07:26:04,5,None,None,None,None,"{""testvalue"": ""value-181""}",None,None,{},5,1
+1183,2023-11-09 23:59:38,2023-11-09 23:59:38,3,None,None,0.6757436939183425,None,None,None,None,{},8,1
+1184,2023-06-27 12:59:06,2023-06-27 12:59:06,1,testvalue,None,None,None,None,None,None,{},10,1
+1185,2023-02-27 02:40:22,2023-02-27 02:40:22,5,None,None,None,None,"{""testvalue"": ""value-184""}",None,None,{},2,1
+1186,2023-06-02 07:13:51,2023-06-02 07:13:51,3,None,None,0.6927572368064199,None,None,None,None,{},5,1
+1187,2023-10-02 10:11:12,2023-10-02 10:11:12,5,None,None,None,None,"{""testvalue"": ""value-186""}",None,None,{},1,1
+1188,2023-05-26 07:16:30,2023-05-26 07:16:30,3,None,None,0.7466580144225153,None,None,None,None,{},5,1
+1189,2023-12-12 13:01:26,2023-12-12 13:01:26,2,None,55,None,None,None,None,None,{},2,1
+1190,2023-07-26 14:04:52,2023-07-26 14:04:52,4,None,None,None,False,None,None,None,{},4,1
+1191,2023-05-28 23:50:33,2023-05-28 23:50:33,2,None,83,None,None,None,None,None,{},3,1
+1192,2023-09-27 04:44:04,2023-09-27 04:44:04,4,None,None,None,False,None,None,None,{},8,1
+1193,2023-01-10 15:07:34,2023-01-10 15:07:34,3,None,None,0.5598042427044341,None,None,None,None,{},5,1
+1194,2023-03-30 01:49:53,2023-03-30 01:49:53,4,None,None,None,False,None,None,None,{},9,1
+1195,2023-12-12 17:12:26,2023-12-12 17:12:26,5,None,None,None,None,"{""testvalue"": ""value-194""}",None,None,{},5,1
+1196,2023-04-10 06:04:30,2023-04-10 06:04:30,3,None,None,0.1924729495325398,None,None,None,None,{},3,1
+1197,2023-06-19 00:48:38,2023-06-19 00:48:38,3,None,None,0.19901879389535115,None,None,None,None,{},1,1
+1198,2023-04-13 02:51:56,2023-04-13 02:51:56,4,None,None,None,True,None,None,None,{},8,1
+1199,2023-02-12 09:36:00,2023-02-12 09:36:00,1,testvalue,None,None,None,None,None,None,{},1,1
+1200,2023-04-03 19:22:05,2023-04-03 19:22:05,5,None,None,None,None,"{""testvalue"": ""value-199""}",None,None,{},4,1
+1201,2023-11-01 01:26:00,2023-11-01 01:26:00,4,None,None,None,False,None,None,None,{},2,1
+1202,2023-01-02 11:34:03,2023-01-02 11:34:03,1,testvalue,None,None,None,None,None,None,{},8,1
+1203,2023-01-25 04:43:41,2023-01-25 04:43:41,2,None,93,None,None,None,None,None,{},7,1
+1204,2023-10-17 06:14:34,2023-10-17 06:14:34,5,None,None,None,None,"{""testvalue"": ""value-203""}",None,None,{},3,1
+1205,2023-08-12 23:50:24,2023-08-12 23:50:24,3,None,None,0.3974828999233708,None,None,None,None,{},3,1
+1206,2023-01-13 11:10:46,2023-01-13 11:10:46,5,None,None,None,None,"{""testvalue"": ""value-205""}",None,None,{},10,1
+1207,2023-05-10 15:31:34,2023-05-10 15:31:34,1,testvalue,None,None,None,None,None,None,{},1,1
+1208,2023-08-01 02:06:39,2023-08-01 02:06:39,3,None,None,0.020905401736009854,None,None,None,None,{},6,1
+1209,2023-06-11 00:26:59,2023-06-11 00:26:59,3,None,None,0.42070330030596315,None,None,None,None,{},5,1
+1210,2023-07-11 08:16:10,2023-07-11 08:16:10,5,None,None,None,None,"{""testvalue"": ""value-209""}",None,None,{},2,1
+1211,2023-05-30 01:34:00,2023-05-30 01:34:00,5,None,None,None,None,"{""testvalue"": ""value-210""}",None,None,{},7,1
+1212,2023-03-19 02:51:37,2023-03-19 02:51:37,1,testvalue,None,None,None,None,None,None,{},10,1
+1213,2023-10-21 06:37:59,2023-10-21 06:37:59,1,testvalue,None,None,None,None,None,None,{},6,1
+1214,2023-07-25 20:06:46,2023-07-25 20:06:46,4,None,None,None,False,None,None,None,{},8,1
+1215,2023-07-14 14:44:26,2023-07-14 14:44:26,3,None,None,0.8580275874902791,None,None,None,None,{},5,1
+1216,2023-10-09 02:35:28,2023-10-09 02:35:28,4,None,None,None,True,None,None,None,{},8,1
+1217,2023-12-28 21:10:04,2023-12-28 21:10:04,1,testvalue,None,None,None,None,None,None,{},10,1
+1218,2023-02-08 21:57:46,2023-02-08 21:57:46,2,None,100,None,None,None,None,None,{},5,1
+1219,2023-06-28 08:55:57,2023-06-28 08:55:57,5,None,None,None,None,"{""testvalue"": ""value-218""}",None,None,{},9,1
+1220,2023-06-11 00:40:26,2023-06-11 00:40:26,5,None,None,None,None,"{""testvalue"": ""value-219""}",None,None,{},2,1
+1221,2023-08-04 20:52:54,2023-08-04 20:52:54,3,None,None,0.5673876124176271,None,None,None,None,{},6,1
+1222,2023-02-04 05:37:13,2023-02-04 05:37:13,2,None,55,None,None,None,None,None,{},8,1
+1223,2023-05-15 11:20:49,2023-05-15 11:20:49,2,None,37,None,None,None,None,None,{},1,1
+1224,2023-01-17 05:09:58,2023-01-17 05:09:58,2,None,64,None,None,None,None,None,{},3,1
+1225,2023-11-23 12:10:47,2023-11-23 12:10:47,4,None,None,None,True,None,None,None,{},8,1
+1226,2023-04-19 11:49:20,2023-04-19 11:49:20,1,testvalue,None,None,None,None,None,None,{},6,1
+1227,2023-02-01 14:03:22,2023-02-01 14:03:22,3,None,None,0.0032132163775719924,None,None,None,None,{},2,1
+1228,2023-04-12 03:19:57,2023-04-12 03:19:57,2,None,79,None,None,None,None,None,{},5,1
+1229,2023-03-05 19:34:32,2023-03-05 19:34:32,2,None,66,None,None,None,None,None,{},8,1
+1230,2023-05-20 08:32:22,2023-05-20 08:32:22,3,None,None,0.9003553240367724,None,None,None,None,{},7,1
+1231,2023-03-15 12:48:21,2023-03-15 12:48:21,4,None,None,None,True,None,None,None,{},6,1
+1232,2023-05-16 04:06:21,2023-05-16 04:06:21,3,None,None,0.7856445053213449,None,None,None,None,{},9,1
+1233,2023-02-21 01:51:34,2023-02-21 01:51:34,5,None,None,None,None,"{""testvalue"": ""value-232""}",None,None,{},7,1
+1234,2023-06-09 01:40:50,2023-06-09 01:40:50,2,None,35,None,None,None,None,None,{},5,1
+1235,2023-06-30 19:46:17,2023-06-30 19:46:17,1,testvalue,None,None,None,None,None,None,{},3,1
+1236,2023-05-07 06:15:30,2023-05-07 06:15:30,3,None,None,0.18845812533241335,None,None,None,None,{},4,1
+1237,2023-12-21 02:01:03,2023-12-21 02:01:03,2,None,56,None,None,None,None,None,{},8,1
+1238,2023-03-08 13:37:47,2023-03-08 13:37:47,4,None,None,None,False,None,None,None,{},9,1
+1239,2023-07-16 23:46:54,2023-07-16 23:46:54,5,None,None,None,None,"{""testvalue"": ""value-238""}",None,None,{},3,1
+1240,2023-03-22 03:29:41,2023-03-22 03:29:41,5,None,None,None,None,"{""testvalue"": ""value-239""}",None,None,{},7,1
+1241,2023-09-25 19:38:26,2023-09-25 19:38:26,3,None,None,0.11112462306429305,None,None,None,None,{},10,1
+1242,2023-09-10 19:21:35,2023-09-10 19:21:35,1,testvalue,None,None,None,None,None,None,{},4,1
+1243,2023-01-14 11:17:17,2023-01-14 11:17:17,1,testvalue,None,None,None,None,None,None,{},4,1
+1244,2023-03-08 03:16:24,2023-03-08 03:16:24,5,None,None,None,None,"{""testvalue"": ""value-243""}",None,None,{},2,1
+1245,2023-12-03 00:57:26,2023-12-03 00:57:26,2,None,78,None,None,None,None,None,{},10,1
+1246,2023-04-25 00:28:27,2023-04-25 00:28:27,1,testvalue,None,None,None,None,None,None,{},1,1
+1247,2023-01-30 05:54:33,2023-01-30 05:54:33,3,None,None,0.8831998304207717,None,None,None,None,{},9,1
+1248,2023-07-27 01:50:10,2023-07-27 01:50:10,5,None,None,None,None,"{""testvalue"": ""value-247""}",None,None,{},3,1
+1249,2023-07-13 11:59:17,2023-07-13 11:59:17,4,None,None,None,False,None,None,None,{},2,1
+1250,2023-01-19 14:32:58,2023-01-19 14:32:58,3,None,None,0.3907704981472506,None,None,None,None,{},7,1
+1251,2023-11-14 15:38:09,2023-11-14 15:38:09,4,None,None,None,False,None,None,None,{},10,1
+1252,2023-07-21 03:58:40,2023-07-21 03:58:40,4,None,None,None,False,None,None,None,{},1,1
+1253,2023-09-23 07:40:06,2023-09-23 07:40:06,3,None,None,0.14174407131649347,None,None,None,None,{},4,1
+1254,2023-06-10 17:49:00,2023-06-10 17:49:00,5,None,None,None,None,"{""testvalue"": ""value-253""}",None,None,{},10,1
+1255,2023-12-13 03:28:54,2023-12-13 03:28:54,1,testvalue,None,None,None,None,None,None,{},10,1
+1256,2023-01-13 14:00:24,2023-01-13 14:00:24,2,None,83,None,None,None,None,None,{},9,1
+1257,2023-05-15 03:42:09,2023-05-15 03:42:09,2,None,33,None,None,None,None,None,{},5,1
+1258,2023-12-26 14:32:48,2023-12-26 14:32:48,1,testvalue,None,None,None,None,None,None,{},7,1
+1259,2023-06-18 18:51:32,2023-06-18 18:51:32,4,None,None,None,True,None,None,None,{},5,1
+1260,2023-05-16 16:42:32,2023-05-16 16:42:32,1,testvalue,None,None,None,None,None,None,{},9,1
+1261,2023-05-14 02:22:21,2023-05-14 02:22:21,4,None,None,None,False,None,None,None,{},10,1
+1262,2023-11-23 02:48:34,2023-11-23 02:48:34,4,None,None,None,True,None,None,None,{},9,1
+1263,2023-11-28 17:05:39,2023-11-28 17:05:39,1,testvalue,None,None,None,None,None,None,{},5,1
+1264,2023-05-18 05:43:39,2023-05-18 05:43:39,2,None,75,None,None,None,None,None,{},7,1
+1265,2023-01-10 08:15:12,2023-01-10 08:15:12,3,None,None,0.9196073579056029,None,None,None,None,{},3,1
+1266,2023-04-18 05:05:01,2023-04-18 05:05:01,3,None,None,0.19942518390617126,None,None,None,None,{},1,1
+1267,2023-06-16 22:32:05,2023-06-16 22:32:05,1,testvalue,None,None,None,None,None,None,{},10,1
+1268,2023-10-25 13:17:17,2023-10-25 13:17:17,3,None,None,0.07409977655460931,None,None,None,None,{},7,1
+1269,2023-08-27 07:53:43,2023-08-27 07:53:43,5,None,None,None,None,"{""testvalue"": ""value-268""}",None,None,{},4,1
+1270,2023-04-16 13:18:26,2023-04-16 13:18:26,1,testvalue,None,None,None,None,None,None,{},8,1
+1271,2023-11-11 04:44:26,2023-11-11 04:44:26,2,None,68,None,None,None,None,None,{},9,1
+1272,2023-10-24 01:22:00,2023-10-24 01:22:00,4,None,None,None,False,None,None,None,{},10,1
+1273,2023-11-29 20:04:43,2023-11-29 20:04:43,2,None,74,None,None,None,None,None,{},3,1
+1274,2023-03-24 13:13:52,2023-03-24 13:13:52,2,None,32,None,None,None,None,None,{},3,1
+1275,2023-06-07 08:55:40,2023-06-07 08:55:40,5,None,None,None,None,"{""testvalue"": ""value-274""}",None,None,{},5,1
+1276,2023-10-28 11:17:16,2023-10-28 11:17:16,3,None,None,0.9467517896164664,None,None,None,None,{},8,1
+1277,2023-08-06 21:28:09,2023-08-06 21:28:09,5,None,None,None,None,"{""testvalue"": ""value-276""}",None,None,{},7,1
+1278,2023-03-09 21:38:43,2023-03-09 21:38:43,3,None,None,0.11730597765475148,None,None,None,None,{},3,1
+1279,2023-01-29 17:40:25,2023-01-29 17:40:25,1,testvalue,None,None,None,None,None,None,{},6,1
+1280,2023-04-03 10:59:00,2023-04-03 10:59:00,2,None,7,None,None,None,None,None,{},6,1
+1281,2023-05-04 16:13:00,2023-05-04 16:13:00,1,testvalue,None,None,None,None,None,None,{},4,1
+1282,2023-11-13 15:18:58,2023-11-13 15:18:58,5,None,None,None,None,"{""testvalue"": ""value-281""}",None,None,{},10,1
+1283,2023-04-30 09:20:01,2023-04-30 09:20:01,4,None,None,None,False,None,None,None,{},6,1
+1284,2023-09-17 23:19:30,2023-09-17 23:19:30,1,testvalue,None,None,None,None,None,None,{},6,1
+1285,2023-10-10 04:20:42,2023-10-10 04:20:42,2,None,11,None,None,None,None,None,{},3,1
+1286,2023-01-05 15:36:41,2023-01-05 15:36:41,5,None,None,None,None,"{""testvalue"": ""value-285""}",None,None,{},2,1
+1287,2023-04-12 13:25:17,2023-04-12 13:25:17,4,None,None,None,False,None,None,None,{},8,1
+1288,2023-07-26 12:11:44,2023-07-26 12:11:44,4,None,None,None,True,None,None,None,{},4,1
+1289,2023-10-03 12:03:29,2023-10-03 12:03:29,3,None,None,0.4480858701339202,None,None,None,None,{},3,1
+1290,2023-07-09 12:12:20,2023-07-09 12:12:20,3,None,None,0.513607631108624,None,None,None,None,{},7,1
+1291,2023-03-10 13:43:06,2023-03-10 13:43:06,3,None,None,0.24905486141636657,None,None,None,None,{},1,1
+1292,2023-10-01 03:47:13,2023-10-01 03:47:13,3,None,None,0.3325372736241097,None,None,None,None,{},5,1
+1293,2023-08-31 03:06:13,2023-08-31 03:06:13,1,testvalue,None,None,None,None,None,None,{},2,1
+1294,2023-05-22 00:47:03,2023-05-22 00:47:03,1,testvalue,None,None,None,None,None,None,{},3,1
+1295,2023-09-30 01:50:51,2023-09-30 01:50:51,1,testvalue,None,None,None,None,None,None,{},6,1
+1296,2023-10-05 11:02:05,2023-10-05 11:02:05,5,None,None,None,None,"{""testvalue"": ""value-295""}",None,None,{},4,1
+1297,2023-07-08 19:52:33,2023-07-08 19:52:33,3,None,None,0.4890782122984644,None,None,None,None,{},5,1
+1298,2023-11-04 16:26:30,2023-11-04 16:26:30,5,None,None,None,None,"{""testvalue"": ""value-297""}",None,None,{},1,1
+1299,2023-03-20 13:50:09,2023-03-20 13:50:09,4,None,None,None,False,None,None,None,{},9,1
+1300,2023-01-13 14:00:11,2023-01-13 14:00:11,1,testvalue,None,None,None,None,None,None,{},7,1
+1301,2023-12-05 01:51:53,2023-12-05 01:51:53,2,None,60,None,None,None,None,None,{},4,1
+1302,2023-06-14 06:50:59,2023-06-14 06:50:59,2,None,63,None,None,None,None,None,{},5,1
+1303,2023-10-12 04:27:53,2023-10-12 04:27:53,4,None,None,None,True,None,None,None,{},4,1
+1304,2023-02-04 09:32:06,2023-02-04 09:32:06,5,None,None,None,None,"{""testvalue"": ""value-303""}",None,None,{},5,1
+1305,2023-08-13 23:20:50,2023-08-13 23:20:50,3,None,None,0.16342247198425375,None,None,None,None,{},10,1
+1306,2023-11-19 18:43:59,2023-11-19 18:43:59,2,None,12,None,None,None,None,None,{},1,1
+1307,2023-04-25 10:06:04,2023-04-25 10:06:04,1,testvalue,None,None,None,None,None,None,{},2,1
+1308,2023-08-07 10:44:01,2023-08-07 10:44:01,3,None,None,0.38918567703784235,None,None,None,None,{},4,1
+1309,2023-11-11 11:54:06,2023-11-11 11:54:06,5,None,None,None,None,"{""testvalue"": ""value-308""}",None,None,{},4,1
+1310,2023-03-06 03:34:40,2023-03-06 03:34:40,2,None,95,None,None,None,None,None,{},2,1
+1311,2023-07-24 23:17:39,2023-07-24 23:17:39,4,None,None,None,False,None,None,None,{},4,1
+1312,2023-04-19 02:59:04,2023-04-19 02:59:04,2,None,10,None,None,None,None,None,{},5,1
+1313,2023-08-09 02:14:12,2023-08-09 02:14:12,3,None,None,0.20483566817716126,None,None,None,None,{},8,1
+1314,2023-12-16 18:53:28,2023-12-16 18:53:28,4,None,None,None,True,None,None,None,{},4,1
+1315,2023-08-14 16:33:15,2023-08-14 16:33:15,5,None,None,None,None,"{""testvalue"": ""value-314""}",None,None,{},4,1
+1316,2023-01-06 09:47:15,2023-01-06 09:47:15,3,None,None,0.7337695618739059,None,None,None,None,{},6,1
+1317,2023-08-26 21:25:18,2023-08-26 21:25:18,4,None,None,None,True,None,None,None,{},2,1
+1318,2023-11-14 01:38:09,2023-11-14 01:38:09,4,None,None,None,False,None,None,None,{},5,1
+1319,2023-06-04 17:57:25,2023-06-04 17:57:25,1,testvalue,None,None,None,None,None,None,{},8,1
+1320,2023-03-13 12:18:17,2023-03-13 12:18:17,5,None,None,None,None,"{""testvalue"": ""value-319""}",None,None,{},8,1
+1321,2023-03-11 19:01:45,2023-03-11 19:01:45,5,None,None,None,None,"{""testvalue"": ""value-320""}",None,None,{},7,1
+1322,2023-08-17 07:45:15,2023-08-17 07:45:15,2,None,9,None,None,None,None,None,{},1,1
+1323,2023-03-28 07:08:42,2023-03-28 07:08:42,4,None,None,None,False,None,None,None,{},3,1
+1324,2023-12-09 00:38:24,2023-12-09 00:38:24,1,testvalue,None,None,None,None,None,None,{},10,1
+1325,2023-12-21 05:26:57,2023-12-21 05:26:57,5,None,None,None,None,"{""testvalue"": ""value-324""}",None,None,{},6,1
+1326,2023-03-18 10:46:21,2023-03-18 10:46:21,2,None,59,None,None,None,None,None,{},5,1
+1327,2023-03-18 10:09:34,2023-03-18 10:09:34,5,None,None,None,None,"{""testvalue"": ""value-326""}",None,None,{},1,1
+1328,2023-06-23 03:35:49,2023-06-23 03:35:49,3,None,None,0.7782658782246248,None,None,None,None,{},9,1
+1329,2023-10-11 20:48:42,2023-10-11 20:48:42,4,None,None,None,True,None,None,None,{},8,1
+1330,2023-11-01 22:04:26,2023-11-01 22:04:26,2,None,9,None,None,None,None,None,{},6,1
+1331,2023-06-04 18:37:32,2023-06-04 18:37:32,3,None,None,0.4756527477633211,None,None,None,None,{},10,1
+1332,2023-12-12 17:05:28,2023-12-12 17:05:28,3,None,None,0.5209859950636911,None,None,None,None,{},10,1
+1333,2023-12-25 23:02:46,2023-12-25 23:02:46,5,None,None,None,None,"{""testvalue"": ""value-332""}",None,None,{},9,1
+1334,2023-10-01 05:36:42,2023-10-01 05:36:42,4,None,None,None,False,None,None,None,{},7,1
+1335,2023-05-22 19:08:41,2023-05-22 19:08:41,1,testvalue,None,None,None,None,None,None,{},9,1
+1336,2023-04-11 06:08:20,2023-04-11 06:08:20,1,testvalue,None,None,None,None,None,None,{},9,1
+1337,2023-10-31 14:17:49,2023-10-31 14:17:49,2,None,41,None,None,None,None,None,{},1,1
+1338,2023-09-19 00:35:29,2023-09-19 00:35:29,2,None,38,None,None,None,None,None,{},4,1
+1339,2023-09-30 06:20:42,2023-09-30 06:20:42,3,None,None,0.22988962018355086,None,None,None,None,{},6,1
+1340,2023-02-26 09:32:06,2023-02-26 09:32:06,1,testvalue,None,None,None,None,None,None,{},9,1
+1341,2023-11-27 07:35:20,2023-11-27 07:35:20,5,None,None,None,None,"{""testvalue"": ""value-340""}",None,None,{},10,1
+1342,2023-08-13 06:02:34,2023-08-13 06:02:34,3,None,None,0.6835492750014736,None,None,None,None,{},5,1
+1343,2023-09-09 09:02:45,2023-09-09 09:02:45,2,None,40,None,None,None,None,None,{},8,1
+1344,2023-04-06 00:05:27,2023-04-06 00:05:27,4,None,None,None,False,None,None,None,{},3,1
+1345,2023-05-09 20:25:40,2023-05-09 20:25:40,4,None,None,None,False,None,None,None,{},3,1
+1346,2023-10-07 03:38:48,2023-10-07 03:38:48,3,None,None,0.7510336657480415,None,None,None,None,{},4,1
+1347,2023-11-04 06:35:20,2023-11-04 06:35:20,3,None,None,0.24102851669565128,None,None,None,None,{},6,1
+1348,2023-06-13 17:28:06,2023-06-13 17:28:06,3,None,None,0.04561369705719842,None,None,None,None,{},4,1
+1349,2023-09-12 09:44:21,2023-09-12 09:44:21,1,testvalue,None,None,None,None,None,None,{},6,1
+1350,2023-04-18 23:58:40,2023-04-18 23:58:40,5,None,None,None,None,"{""testvalue"": ""value-349""}",None,None,{},1,1
+1351,2023-07-26 03:11:19,2023-07-26 03:11:19,2,None,33,None,None,None,None,None,{},7,1
+1352,2023-12-14 21:01:41,2023-12-14 21:01:41,5,None,None,None,None,"{""testvalue"": ""value-351""}",None,None,{},4,1
+1353,2023-02-20 10:42:23,2023-02-20 10:42:23,4,None,None,None,True,None,None,None,{},7,1
+1354,2023-02-18 06:34:46,2023-02-18 06:34:46,3,None,None,0.5411792221412782,None,None,None,None,{},2,1
+1355,2023-02-02 03:08:09,2023-02-02 03:08:09,1,testvalue,None,None,None,None,None,None,{},10,1
+1356,2023-09-26 15:44:01,2023-09-26 15:44:01,5,None,None,None,None,"{""testvalue"": ""value-355""}",None,None,{},5,1
+1357,2023-09-14 22:09:46,2023-09-14 22:09:46,4,None,None,None,True,None,None,None,{},10,1
+1358,2023-11-25 04:36:34,2023-11-25 04:36:34,3,None,None,0.7028344860030528,None,None,None,None,{},3,1
+1359,2023-11-03 14:53:24,2023-11-03 14:53:24,3,None,None,0.7666050606187512,None,None,None,None,{},3,1
+1360,2023-07-16 08:09:10,2023-07-16 08:09:10,4,None,None,None,True,None,None,None,{},2,1
+1361,2023-02-23 19:56:36,2023-02-23 19:56:36,4,None,None,None,False,None,None,None,{},8,1
+1362,2023-01-05 20:25:31,2023-01-05 20:25:31,4,None,None,None,True,None,None,None,{},1,1
+1363,2023-06-06 13:41:38,2023-06-06 13:41:38,3,None,None,0.9348064158329942,None,None,None,None,{},8,1
+1364,2023-06-25 16:02:55,2023-06-25 16:02:55,4,None,None,None,True,None,None,None,{},9,1
+1365,2023-07-08 14:38:17,2023-07-08 14:38:17,3,None,None,0.351058697634146,None,None,None,None,{},8,1
+1366,2023-07-22 18:42:42,2023-07-22 18:42:42,1,testvalue,None,None,None,None,None,None,{},2,1
+1367,2023-03-30 01:50:02,2023-03-30 01:50:02,1,testvalue,None,None,None,None,None,None,{},7,1
+1368,2023-02-24 22:16:45,2023-02-24 22:16:45,2,None,36,None,None,None,None,None,{},9,1
+1369,2023-11-02 13:54:51,2023-11-02 13:54:51,2,None,17,None,None,None,None,None,{},2,1
+1370,2023-06-13 16:28:58,2023-06-13 16:28:58,2,None,16,None,None,None,None,None,{},7,1
+1371,2023-09-08 07:33:53,2023-09-08 07:33:53,5,None,None,None,None,"{""testvalue"": ""value-370""}",None,None,{},7,1
+1372,2023-09-28 08:44:31,2023-09-28 08:44:31,4,None,None,None,False,None,None,None,{},2,1
+1373,2023-01-23 10:36:40,2023-01-23 10:36:40,3,None,None,0.9808173091617792,None,None,None,None,{},3,1
+1374,2023-05-25 13:03:28,2023-05-25 13:03:28,4,None,None,None,False,None,None,None,{},4,1
+1375,2023-04-03 20:11:40,2023-04-03 20:11:40,5,None,None,None,None,"{""testvalue"": ""value-374""}",None,None,{},3,1
+1376,2023-08-08 01:13:34,2023-08-08 01:13:34,2,None,24,None,None,None,None,None,{},2,1
+1377,2023-08-15 23:49:46,2023-08-15 23:49:46,2,None,27,None,None,None,None,None,{},3,1
+1378,2023-11-26 14:34:10,2023-11-26 14:34:10,3,None,None,0.7021768614515901,None,None,None,None,{},2,1
+1379,2023-03-21 19:28:56,2023-03-21 19:28:56,4,None,None,None,False,None,None,None,{},7,1
+1380,2023-06-02 14:11:25,2023-06-02 14:11:25,3,None,None,0.9193227024721716,None,None,None,None,{},6,1
+1381,2023-08-08 10:29:25,2023-08-08 10:29:25,2,None,67,None,None,None,None,None,{},6,1
+1382,2023-04-10 03:30:36,2023-04-10 03:30:36,1,testvalue,None,None,None,None,None,None,{},7,1
+1383,2023-05-22 09:45:02,2023-05-22 09:45:02,1,testvalue,None,None,None,None,None,None,{},2,1
+1384,2023-12-02 09:54:02,2023-12-02 09:54:02,3,None,None,0.47917419227764835,None,None,None,None,{},7,1
+1385,2023-09-20 05:55:01,2023-09-20 05:55:01,5,None,None,None,None,"{""testvalue"": ""value-384""}",None,None,{},10,1
+1386,2023-09-04 16:23:52,2023-09-04 16:23:52,5,None,None,None,None,"{""testvalue"": ""value-385""}",None,None,{},6,1
+1387,2023-07-30 15:17:40,2023-07-30 15:17:40,2,None,83,None,None,None,None,None,{},10,1
+1388,2023-06-19 23:17:10,2023-06-19 23:17:10,5,None,None,None,None,"{""testvalue"": ""value-387""}",None,None,{},10,1
+1389,2023-05-28 10:25:45,2023-05-28 10:25:45,4,None,None,None,True,None,None,None,{},9,1
+1390,2023-08-06 17:03:11,2023-08-06 17:03:11,3,None,None,0.5611804002084937,None,None,None,None,{},5,1
+1391,2023-01-22 13:12:49,2023-01-22 13:12:49,4,None,None,None,False,None,None,None,{},4,1
+1392,2023-08-21 07:09:15,2023-08-21 07:09:15,3,None,None,0.7431005168559311,None,None,None,None,{},1,1
+1393,2023-06-03 01:14:52,2023-06-03 01:14:52,4,None,None,None,False,None,None,None,{},5,1
+1394,2023-11-07 04:14:30,2023-11-07 04:14:30,4,None,None,None,False,None,None,None,{},7,1
+1395,2023-01-17 02:39:16,2023-01-17 02:39:16,5,None,None,None,None,"{""testvalue"": ""value-394""}",None,None,{},10,1
+1396,2023-03-17 07:58:12,2023-03-17 07:58:12,4,None,None,None,False,None,None,None,{},4,1
+1397,2023-10-29 11:43:59,2023-10-29 11:43:59,3,None,None,0.48536365207739673,None,None,None,None,{},4,1
+1398,2023-09-08 16:53:08,2023-09-08 16:53:08,2,None,76,None,None,None,None,None,{},6,1
+1399,2023-11-27 23:28:24,2023-11-27 23:28:24,2,None,80,None,None,None,None,None,{},10,1
+1400,2023-04-02 17:47:24,2023-04-02 17:47:24,4,None,None,None,True,None,None,None,{},8,1
+1401,2023-01-10 19:47:47,2023-01-10 19:47:47,3,None,None,0.6370359059843327,None,None,None,None,{},6,1
+1402,2023-01-07 10:47:52,2023-01-07 10:47:52,4,None,None,None,True,None,None,None,{},6,1
+1403,2023-03-12 22:27:38,2023-03-12 22:27:38,1,testvalue,None,None,None,None,None,None,{},4,1
+1404,2023-06-22 13:00:51,2023-06-22 13:00:51,4,None,None,None,True,None,None,None,{},3,1
+1405,2023-01-23 07:18:20,2023-01-23 07:18:20,4,None,None,None,True,None,None,None,{},7,1
+1406,2023-09-08 10:39:30,2023-09-08 10:39:30,1,testvalue,None,None,None,None,None,None,{},6,1
+1407,2023-09-09 18:22:48,2023-09-09 18:22:48,2,None,81,None,None,None,None,None,{},2,1
+1408,2023-03-09 10:14:58,2023-03-09 10:14:58,3,None,None,0.912467437175714,None,None,None,None,{},10,1
+1409,2023-05-08 08:20:43,2023-05-08 08:20:43,5,None,None,None,None,"{""testvalue"": ""value-408""}",None,None,{},10,1
+1410,2023-03-15 01:10:19,2023-03-15 01:10:19,3,None,None,0.8669354632282682,None,None,None,None,{},5,1
+1411,2023-08-11 03:35:38,2023-08-11 03:35:38,2,None,2,None,None,None,None,None,{},8,1
+1412,2023-04-15 05:57:07,2023-04-15 05:57:07,5,None,None,None,None,"{""testvalue"": ""value-411""}",None,None,{},10,1
+1413,2023-01-27 06:44:01,2023-01-27 06:44:01,3,None,None,0.4059047134485847,None,None,None,None,{},6,1
+1414,2023-03-05 10:55:41,2023-03-05 10:55:41,1,testvalue,None,None,None,None,None,None,{},7,1
+1415,2023-02-16 03:00:28,2023-02-16 03:00:28,1,testvalue,None,None,None,None,None,None,{},9,1
+1416,2023-06-04 18:05:32,2023-06-04 18:05:32,1,testvalue,None,None,None,None,None,None,{},9,1
+1417,2023-05-14 09:00:36,2023-05-14 09:00:36,4,None,None,None,True,None,None,None,{},1,1
+1418,2023-02-25 03:36:01,2023-02-25 03:36:01,5,None,None,None,None,"{""testvalue"": ""value-417""}",None,None,{},5,1
+1419,2023-05-17 12:46:08,2023-05-17 12:46:08,2,None,37,None,None,None,None,None,{},3,1
+1420,2023-11-03 17:30:55,2023-11-03 17:30:55,4,None,None,None,False,None,None,None,{},9,1
+1421,2023-01-11 05:29:51,2023-01-11 05:29:51,3,None,None,0.9026816904009834,None,None,None,None,{},1,1
+1422,2023-04-20 23:37:22,2023-04-20 23:37:22,1,testvalue,None,None,None,None,None,None,{},6,1
+1423,2023-11-30 16:56:08,2023-11-30 16:56:08,4,None,None,None,True,None,None,None,{},1,1
+1424,2023-04-11 21:35:04,2023-04-11 21:35:04,4,None,None,None,True,None,None,None,{},5,1
+1425,2023-08-04 05:04:38,2023-08-04 05:04:38,1,testvalue,None,None,None,None,None,None,{},7,1
+1426,2023-06-24 11:26:36,2023-06-24 11:26:36,3,None,None,0.7728427005819356,None,None,None,None,{},9,1
+1427,2023-02-13 15:10:15,2023-02-13 15:10:15,5,None,None,None,None,"{""testvalue"": ""value-426""}",None,None,{},1,1
+1428,2023-11-26 10:43:03,2023-11-26 10:43:03,2,None,33,None,None,None,None,None,{},9,1
+1429,2023-05-16 08:51:15,2023-05-16 08:51:15,3,None,None,0.8294834572016965,None,None,None,None,{},8,1
+1430,2023-10-15 00:24:58,2023-10-15 00:24:58,5,None,None,None,None,"{""testvalue"": ""value-429""}",None,None,{},5,1
+1431,2023-12-14 10:19:36,2023-12-14 10:19:36,5,None,None,None,None,"{""testvalue"": ""value-430""}",None,None,{},7,1
+1432,2023-09-17 08:47:25,2023-09-17 08:47:25,2,None,33,None,None,None,None,None,{},1,1
+1433,2023-01-16 23:11:57,2023-01-16 23:11:57,2,None,25,None,None,None,None,None,{},3,1
+1434,2023-08-03 09:15:12,2023-08-03 09:15:12,2,None,72,None,None,None,None,None,{},2,1
+1435,2023-04-02 12:59:58,2023-04-02 12:59:58,4,None,None,None,True,None,None,None,{},1,1
+1436,2023-07-25 09:51:34,2023-07-25 09:51:34,1,testvalue,None,None,None,None,None,None,{},4,1
+1437,2023-07-03 09:54:19,2023-07-03 09:54:19,4,None,None,None,True,None,None,None,{},5,1
+1438,2023-12-18 19:49:18,2023-12-18 19:49:18,5,None,None,None,None,"{""testvalue"": ""value-437""}",None,None,{},7,1
+1439,2023-09-01 06:32:45,2023-09-01 06:32:45,1,testvalue,None,None,None,None,None,None,{},4,1
+1440,2023-09-11 04:49:45,2023-09-11 04:49:45,3,None,None,0.13733916715263683,None,None,None,None,{},5,1
+1441,2023-03-01 10:30:01,2023-03-01 10:30:01,4,None,None,None,True,None,None,None,{},3,1
+1442,2023-04-07 01:39:08,2023-04-07 01:39:08,2,None,23,None,None,None,None,None,{},6,1
+1443,2023-09-29 12:50:53,2023-09-29 12:50:53,4,None,None,None,True,None,None,None,{},7,1
+1444,2023-08-01 12:34:53,2023-08-01 12:34:53,4,None,None,None,True,None,None,None,{},5,1
+1445,2023-10-07 09:38:09,2023-10-07 09:38:09,4,None,None,None,False,None,None,None,{},7,1
+1446,2023-03-21 22:48:19,2023-03-21 22:48:19,5,None,None,None,None,"{""testvalue"": ""value-445""}",None,None,{},6,1
+1447,2023-05-14 10:36:58,2023-05-14 10:36:58,4,None,None,None,True,None,None,None,{},3,1
+1448,2023-09-03 18:55:50,2023-09-03 18:55:50,4,None,None,None,False,None,None,None,{},2,1
+1449,2023-06-12 19:53:16,2023-06-12 19:53:16,1,testvalue,None,None,None,None,None,None,{},1,1
+1450,2023-01-08 22:03:08,2023-01-08 22:03:08,2,None,92,None,None,None,None,None,{},8,1
+1451,2023-08-16 08:39:41,2023-08-16 08:39:41,3,None,None,0.5179692662222734,None,None,None,None,{},4,1
+1452,2023-01-22 17:46:19,2023-01-22 17:46:19,2,None,36,None,None,None,None,None,{},4,1
+1453,2023-10-28 20:18:08,2023-10-28 20:18:08,3,None,None,0.10383756078913764,None,None,None,None,{},10,1
+1454,2023-03-24 11:56:54,2023-03-24 11:56:54,1,testvalue,None,None,None,None,None,None,{},6,1
+1455,2023-03-03 21:00:58,2023-03-03 21:00:58,4,None,None,None,True,None,None,None,{},7,1
+1456,2023-10-13 02:48:02,2023-10-13 02:48:02,2,None,82,None,None,None,None,None,{},7,1
+1457,2023-11-18 09:03:16,2023-11-18 09:03:16,2,None,43,None,None,None,None,None,{},1,1
+1458,2023-12-13 11:59:23,2023-12-13 11:59:23,4,None,None,None,False,None,None,None,{},6,1
+1459,2023-01-27 05:40:02,2023-01-27 05:40:02,4,None,None,None,False,None,None,None,{},9,1
+1460,2023-08-04 09:01:36,2023-08-04 09:01:36,3,None,None,0.6287330819152778,None,None,None,None,{},2,1
+1461,2023-01-31 15:07:05,2023-01-31 15:07:05,5,None,None,None,None,"{""testvalue"": ""value-460""}",None,None,{},5,1
+1462,2023-09-22 19:59:30,2023-09-22 19:59:30,1,testvalue,None,None,None,None,None,None,{},3,1
+1463,2023-10-21 07:14:59,2023-10-21 07:14:59,2,None,73,None,None,None,None,None,{},1,1
+1464,2023-01-18 00:38:54,2023-01-18 00:38:54,4,None,None,None,False,None,None,None,{},2,1
+1465,2023-04-13 07:49:21,2023-04-13 07:49:21,5,None,None,None,None,"{""testvalue"": ""value-464""}",None,None,{},9,1
+1466,2023-07-04 01:59:02,2023-07-04 01:59:02,2,None,21,None,None,None,None,None,{},9,1
+1467,2023-03-02 09:52:19,2023-03-02 09:52:19,4,None,None,None,True,None,None,None,{},9,1
+1468,2023-04-09 13:11:08,2023-04-09 13:11:08,1,testvalue,None,None,None,None,None,None,{},8,1
+1469,2023-01-06 22:35:26,2023-01-06 22:35:26,2,None,19,None,None,None,None,None,{},9,1
+1470,2023-06-17 16:56:09,2023-06-17 16:56:09,5,None,None,None,None,"{""testvalue"": ""value-469""}",None,None,{},8,1
+1471,2023-04-11 07:00:44,2023-04-11 07:00:44,5,None,None,None,None,"{""testvalue"": ""value-470""}",None,None,{},4,1
+1472,2023-04-06 17:48:35,2023-04-06 17:48:35,2,None,4,None,None,None,None,None,{},7,1
+1473,2023-01-29 02:02:43,2023-01-29 02:02:43,1,testvalue,None,None,None,None,None,None,{},7,1
+1474,2023-07-30 10:21:03,2023-07-30 10:21:03,3,None,None,0.06680786612713219,None,None,None,None,{},3,1
+1475,2023-03-18 22:30:42,2023-03-18 22:30:42,3,None,None,0.1467302203538191,None,None,None,None,{},5,1
+1476,2023-05-24 06:07:59,2023-05-24 06:07:59,5,None,None,None,None,"{""testvalue"": ""value-475""}",None,None,{},5,1
+1477,2023-04-05 21:40:59,2023-04-05 21:40:59,3,None,None,0.9116607876402638,None,None,None,None,{},5,1
+1478,2023-09-25 06:00:44,2023-09-25 06:00:44,3,None,None,0.09253008663400752,None,None,None,None,{},2,1
+1479,2023-12-14 09:12:03,2023-12-14 09:12:03,2,None,40,None,None,None,None,None,{},5,1
+1480,2023-06-22 07:41:35,2023-06-22 07:41:35,4,None,None,None,True,None,None,None,{},3,1
+1481,2023-06-11 02:46:33,2023-06-11 02:46:33,5,None,None,None,None,"{""testvalue"": ""value-480""}",None,None,{},9,1
+1482,2023-09-02 11:23:54,2023-09-02 11:23:54,5,None,None,None,None,"{""testvalue"": ""value-481""}",None,None,{},9,1
+1483,2023-01-07 08:43:34,2023-01-07 08:43:34,2,None,59,None,None,None,None,None,{},4,1
+1484,2023-02-13 04:14:53,2023-02-13 04:14:53,5,None,None,None,None,"{""testvalue"": ""value-483""}",None,None,{},4,1
+1485,2023-04-09 11:57:19,2023-04-09 11:57:19,2,None,5,None,None,None,None,None,{},9,1
+1486,2023-09-27 03:19:45,2023-09-27 03:19:45,4,None,None,None,True,None,None,None,{},1,1
+1487,2023-07-10 13:23:52,2023-07-10 13:23:52,5,None,None,None,None,"{""testvalue"": ""value-486""}",None,None,{},8,1
+1488,2023-06-18 11:55:44,2023-06-18 11:55:44,1,testvalue,None,None,None,None,None,None,{},6,1
+1489,2023-01-30 10:05:16,2023-01-30 10:05:16,5,None,None,None,None,"{""testvalue"": ""value-488""}",None,None,{},5,1
+1490,2023-10-03 05:52:08,2023-10-03 05:52:08,3,None,None,0.1622601993053594,None,None,None,None,{},10,1
+1491,2023-11-29 22:53:11,2023-11-29 22:53:11,1,testvalue,None,None,None,None,None,None,{},4,1
+1492,2023-07-31 12:00:41,2023-07-31 12:00:41,5,None,None,None,None,"{""testvalue"": ""value-491""}",None,None,{},3,1
+1493,2023-12-04 18:11:40,2023-12-04 18:11:40,4,None,None,None,True,None,None,None,{},5,1
+1494,2023-09-27 03:38:56,2023-09-27 03:38:56,3,None,None,0.8994733691036055,None,None,None,None,{},5,1
+1495,2023-09-24 17:01:21,2023-09-24 17:01:21,2,None,48,None,None,None,None,None,{},10,1
+1496,2023-09-04 19:58:55,2023-09-04 19:58:55,2,None,99,None,None,None,None,None,{},1,1
+1497,2023-12-02 12:08:35,2023-12-02 12:08:35,2,None,73,None,None,None,None,None,{},3,1
+1498,2023-03-22 07:42:47,2023-03-22 07:42:47,2,None,20,None,None,None,None,None,{},6,1
+1499,2023-01-18 21:41:30,2023-01-18 21:41:30,1,testvalue,None,None,None,None,None,None,{},7,1
+1500,2023-03-03 23:52:36,2023-03-03 23:52:36,3,None,None,0.22443531295586772,None,None,None,None,{},2,1
