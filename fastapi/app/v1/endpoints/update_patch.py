@@ -4,13 +4,14 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from fastapi import status
 from app.sta2rest import sta2rest
-from app.utils.utils import PostgRESTError
+from fastapi import Depends
+from app.db.db import get_pool
 
 v1 = APIRouter()
 
 # Handle UPDATE requests
 @v1.api_route("/{path_name:path}", methods=["PATCH"])
-async def catch_all_update(request: Request, path_name: str):
+async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_pool)):
     # Accept only content-type application/json
     if not "content-type" in request.headers or request.headers["content-type"] != "application/json":
         return JSONResponse(
@@ -40,16 +41,20 @@ async def catch_all_update(request: Request, path_name: str):
 
         body = await request.json()
 
-        async with httpx.AsyncClient() as client:   
-            url = "http://postgrest:3000/" + name + "?id=eq." + id
+        # Check that the column names (key) contains only alphanumeric characters and underscores
+        for key in body.keys():
+            if not key.isalnum():
+                raise Exception(f"Invalid column name: {key}")
 
-            # post to postgrest
-            r = await client.patch(url, json=body)
-
-            if r.status_code != 204:
-                result = r.json()
-                raise PostgRESTError(result["message"])
+        async with pgpool.acquire() as conn:
+            # Generate the Update SQL query from the body
+            query = f'UPDATE sensorthings."{name}" SET ' + ', '.join([f'"{key}" = ${i+1}' for i, key in enumerate(body.keys())]) + f' WHERE id = ${len(body.keys()) + 1};'
         
+            print(query, body.values(), id)
+
+            # Execute query
+            await conn.execute(query, *body.values(), int(id))
+
             # Return okay
             return JSONResponse(
                 status_code=status.HTTP_200_OK,
