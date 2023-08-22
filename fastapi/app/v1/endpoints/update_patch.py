@@ -1,11 +1,11 @@
 import traceback
-import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from fastapi import status
 from app.sta2rest import sta2rest
 from fastapi import Depends
 from app.db.db import get_pool
+from app.utils.utils import format_entity_body, prepare_entity_body_for_insert
 
 v1 = APIRouter()
 
@@ -45,6 +45,9 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
         for key in body.keys():
             if not key.isalnum():
                 raise Exception(f"Invalid column name: {key}")
+            
+        body = format_entity_body(body)
+        prepare_entity_body_for_insert(body, {})
 
         async with pgpool.acquire() as conn:
             # Generate the Update SQL query from the body
