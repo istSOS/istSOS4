@@ -33,33 +33,33 @@ def generate_observation_data(id_num,obs,data_stream_num,feature_num):
         
         
         
-        resultType=random.randint(1, 5)
-        if resultType==1:
+        resultType=random.randint(0, 4)
+        if resultType==0:
             resultString="testvalue"
             resultInteger="None"
             resultDouble="None"
             resultBoolean="None"
             resultJSON="None"
-        elif resultType==2:
+        elif resultType==1:
             resultInteger=random.randint(1,100)
             resultString="None"
             resultDouble="None"
             resultBoolean="None"
             resultJSON="None"
-        elif resultType==3:
+        elif resultType==2:
             resultDouble=random.random()
             resultString="None"
             resultInteger="None"
             resultBoolean="None"
             resultJSON="None"
                         
-        elif resultType==4:
+        elif resultType==3:
             resultString="None"
             resultInteger="None"
             resultDouble="None"
             resultJSON="None"        
             resultBoolean=bool(random.choice([True, False]))
-        elif resultType==5:
+        elif resultType==4:
             resultJSON=metadata=f'{{"testvalue": "value-{i}"}}'
             resultString="None"
             resultInteger="None"

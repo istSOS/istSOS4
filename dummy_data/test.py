@@ -96,6 +96,7 @@ def update_loc():
     ALTER SEQUENCE sensorthings."ObservedProperty_id_seq" RESTART WITH 21;
     ALTER SEQUENCE sensorthings."Sensor_id_seq" RESTART WITH 3;
     ALTER SEQUENCE sensorthings."Thing_id_seq" RESTART WITH 3;
+    
         """
 
     cur = conn.cursor()

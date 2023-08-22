@@ -111,5 +111,7 @@ You can also check using : http://127.0.0.1:8000/docs
  - open hoppscotch.io 
  - login
  - import json file from `API_test` folder
- > for CORS error download the browser plugin of hoppscotch
+ > for CORS error download the browser plugin of hoppscotch </br>
+ for more details refer [here](https://docs.hoppscotch.io/documentation/features/interceptor).
+ 
  
