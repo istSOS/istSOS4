@@ -21,7 +21,7 @@ services:
       # - v-istsos-miu-postgis-sql:/docker-entrypoint-initdb.d
       - v-istsos-miu-database-data:/var/lib/postgresql/data
     healthcheck:
-      test: pg_isready -U istsos
+      test: pg_isready -U admin -d istsos
       interval: 10s
       timeout: 5s
       retries: 5

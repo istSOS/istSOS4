@@ -7,7 +7,7 @@
 
 
 import yaml
-
+from clear_data import clear
 from thing import generate_thing_data
 from sensor import generate_sensor_data
 from location import generate_location_data
@@ -19,13 +19,17 @@ from observation import generate_observation_data
 from postgres_data import add_data
 import time
 from test import update_loc
+import psycopg2
+
+from seq import alter_seq
 
 
 
 
-
-
+# clear()
 def create_data():
+
+
 
         # Assuming the config.yml file is in the current directory
     config_file_path = "config.yml"
@@ -51,15 +55,21 @@ def create_data():
 #Datastream -10
 #Observed property -10
 #Observation - 1000
+    #number of data values in each tables
+    static_location =1
+    static_thing=1
+    static_historical_location=1
+    static_sensor_data=1
+    static_features_of_interest=1
     print("###### static data ########")
-    generate_location_data(1,1) #start_id_num , number of location data
-    generate_thing_data(1,1,1) #tart_id_num,thng num, loc number
-    generate_historicalLocation_data(1,1,1,1) # start_id_num, hist loc, thng num, loc number
+    generate_location_data(1,static_location) #start_id_num , number of location data
+    generate_thing_data(1,static_thing,static_location) #tart_id_num,thng num, loc number
+    generate_historicalLocation_data(1,static_historical_location,static_thing,static_location) # start_id_num, hist loc, thng num, loc number
     generate_observedProperty_data(1,static_observed_properties)
-    generate_sensor_data(1,1)
-    generate_datastream_data(1,static_datastreams,1,1,static_observed_properties)  # datastream  num, thing num, sensor num, obs prop num
-    generate_featuresOfInterest_data(1,1)
-    generate_observation_data(1,static_observations,static_datastreams,1) #obs,data_stream_num,feature_num
+    generate_sensor_data(1,static_sensor_data)
+    generate_datastream_data(1,static_datastreams,static_thing,static_sensor_data,static_observed_properties)  # datastream  num, thing num, sensor num, obs prop num
+    generate_featuresOfInterest_data(1,static_features_of_interest)
+    generate_observation_data(1,static_observations,static_datastreams,static_features_of_interest) #obs,data_stream_num,feature_num
 
     print("__________Updating static data_____________")
     add_data()
@@ -73,16 +83,23 @@ def create_data():
 #datasstream 8
 #observed property 10
 #observation 500
+
+    dynamic_location =500
+    dynamic_thing=1
+    dynamic_historical_location=500
+    dynamic_sensor_data=1
+    dynamic_features_of_interest=500
     print("###### dynamic data ########")
-    generate_location_data(2,500)
-    generate_thing_data(2,1,500) #thng num, loc number
-    generate_historicalLocation_data(2,500,1,500) # hist loc, thng num, loc number
+    generate_location_data(static_location+1,dynamic_location)
+    # generate_thing_data(2,1,500) #thng num, loc number
+    generate_thing_data(static_thing+1,dynamic_thing,dynamic_location)
+    generate_historicalLocation_data(static_historical_location+1,dynamic_historical_location,dynamic_thing,dynamic_location) # hist loc, thng num, loc number
     generate_observedProperty_data(static_observed_properties+1,dynamic_observed_properties)
-    generate_sensor_data(2,1)
-    generate_datastream_data(static_datastreams+1,dynamic_datastreams,1,1,static_observed_properties)  # datastream  num, thing num, sensor num, obs prop num
-    generate_featuresOfInterest_data(2,500)
+    generate_sensor_data(static_sensor_data+1,dynamic_sensor_data)
+    generate_datastream_data(static_datastreams+1,dynamic_datastreams,dynamic_thing,dynamic_sensor_data,static_observed_properties)  # datastream  num, thing num, sensor num, obs prop num
+    generate_featuresOfInterest_data(static_features_of_interest+1,dynamic_features_of_interest)
    
-    generate_observation_data(static_observations+1,dynamic_observations,static_datastreams,1) #obs,data_stream_num,feature_num
+    generate_observation_data(static_observations*static_datastreams+1,dynamic_observations,static_datastreams,dynamic_features_of_interest) #obs,data_stream_num,feature_num
 
     print("__________Updating dynamic data_____________")
     add_data()
@@ -90,7 +107,9 @@ def create_data():
     print("updatin g locations")
 
     update_loc()
+    alter_seq(static_datastreams+dynamic_datastreams+1,static_features_of_interest+dynamic_features_of_interest+1,static_historical_location+dynamic_historical_location+1,static_location+dynamic_location+1,static_observations+dynamic_observations+1,static_observed_properties+dynamic_observed_properties+1,static_sensor_data+dynamic_sensor_data+1,static_thing+dynamic_thing+1)
 
+# def alter_seq(Datastream,FeaturesOfInterest,HistoricalLocation,Location,Observation,ObservedProperty,Sensor,Thing):
 
 
 

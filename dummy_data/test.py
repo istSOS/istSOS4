@@ -10,7 +10,7 @@ from psycopg2 import sql
 
 
 conn = psycopg2.connect(
-    host="172.17.0.1", 
+    host="0.0.0.0", 
     port="45432",
     database="istsos",
     user="admin",
