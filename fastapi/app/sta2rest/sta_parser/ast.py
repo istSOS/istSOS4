@@ -249,6 +249,23 @@ class CountNode(Node):
         """
         self.value = value
 
+class TravelTimeNode(Node):
+    """
+    A class representing a travel time node.
+
+    Inherits from Node.
+    
+    Attributes:
+    value (str): The travel time string.
+    """
+    def __init__(self, value):
+        """
+        Initializes a TravelTimeNode object.
+
+        Args:
+        value (str): The value string.
+        """
+        self.value = value
 
 class QueryNode(Node):
     """
@@ -268,7 +285,7 @@ class QueryNode(Node):
     """
 
     def __init__(self, select=None, filter=None, expand=None, orderby=None, skip=None, top=None, count=None,
-                 is_subquery=False):
+                 traveltime=None, is_subquery=False):
         """
         Initializes a QueryNode object.
 
@@ -289,4 +306,5 @@ class QueryNode(Node):
         self.skip = skip
         self.top = top
         self.count = count
+        self.traveltime = traveltime
         self.is_subquery = is_subquery
