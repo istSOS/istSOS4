@@ -18,7 +18,7 @@ from observedProperty import generate_observedProperty_data
 from observation import generate_observation_data
 from postgres_data import add_data
 import time
-from test import update_loc
+from loc import update_loc
 import psycopg2
 
 from seq import alter_seq
@@ -104,10 +104,10 @@ def create_data():
     print("__________Updating dynamic data_____________")
     add_data()
 
-    print("updatin g locations")
+    print("updating locations")
 
     update_loc()
-    alter_seq(static_datastreams+dynamic_datastreams+1,static_features_of_interest+dynamic_features_of_interest+1,static_historical_location+dynamic_historical_location+1,static_location+dynamic_location+1,static_observations+dynamic_observations+1,static_observed_properties+dynamic_observed_properties+1,static_sensor_data+dynamic_sensor_data+1,static_thing+dynamic_thing+1)
+    alter_seq(static_datastreams+dynamic_datastreams+1,static_features_of_interest+dynamic_features_of_interest+1,static_historical_location+dynamic_historical_location+1,static_location+dynamic_location+1,static_observations*static_datastreams+dynamic_observations*dynamic_datastreams+1,static_observed_properties+dynamic_observed_properties+1,static_sensor_data+dynamic_sensor_data+1,static_thing+dynamic_thing+1)
 
 # def alter_seq(Datastream,FeaturesOfInterest,HistoricalLocation,Location,Observation,ObservedProperty,Sensor,Thing):
 

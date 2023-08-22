@@ -117,7 +117,7 @@ For populating data: </br>
 
 For clearing data: </br>
 ```python3 clear_data.py```
-
+> This will clear all data from the tables
 
 
 ## importing hoppscotch files
