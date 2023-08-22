@@ -204,6 +204,19 @@ class Parser:
         self.match('BOOL')
         return ast.CountNode(value)
     
+    def parse_traveltime(self):
+        """
+        Parse a traveltime expression.
+
+        Returns:
+            ast.TravelTimeNode: The parsed traveltime expression.
+        """
+        self.match('TRAVELTIME')
+        value = self.current_token.value
+        self.match('TIMESTAMP')
+
+        return ast.TravelTimeNode(value)
+    
     def parse_subquery(self):
         """
         Parse a subquery.
@@ -219,6 +232,7 @@ class Parser:
         skip = None
         top = None
         count = None
+        traveltime = None
 
         # continue parsing until we reach the end of the query
         while True:
@@ -236,6 +250,8 @@ class Parser:
                 top = self.parse_top()
             elif self.current_token.type == 'COUNT':
                 count = self.parse_count()
+            elif self.current_token.type == 'TRAVELTIME':
+                traveltime = self.parse_traveltime()
             else:
                 raise Exception(f"Unexpected token: {self.current_token.type}")
             
@@ -247,7 +263,7 @@ class Parser:
         
         self.match('RIGHT_PAREN')
 
-        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, True)
+        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, traveltime, True)
 
     def parse_query(self):
         """
@@ -263,6 +279,7 @@ class Parser:
         skip = None
         top = None
         count = None
+        traveltime = None
 
         # continue parsing until we reach the end of the query
         while self.current_token != None:
@@ -280,13 +297,15 @@ class Parser:
                 top = self.parse_top()
             elif self.current_token.type == 'COUNT':
                 count = self.parse_count()
+            elif self.current_token.type == 'TRAVELTIME':
+                traveltime = self.parse_traveltime()
             else:
                 raise Exception(f"Unexpected token: {self.current_token.type}")
             
             if self.current_token != None:
                 self.match('OPTIONS_SEPARATOR')
 
-        return ast.QueryNode(select, filter, expand, orderby, skip, top, count)
+        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, traveltime)
 
     def parse(self):
         """
