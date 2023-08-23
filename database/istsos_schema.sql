@@ -26,11 +26,14 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
 
 
 CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
-    id BIGSERIAL NOT NULL PRIMARY KEY,
-    time TIMESTAMPTZ NOT NULL,
-    thing_id BIGINT REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
-    location_id BIGINT REFERENCES sensorthings."Location"(id) ON DELETE CASCADE
+    "id" BIGSERIAL NOT NULL PRIMARY KEY,
+    "time" TIMESTAMPTZ NOT NULL,
+    "thing_id" BIGINT REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
+    "location_id" BIGINT REFERENCES sensorthings."Location"(id) ON DELETE CASCADE
 );
+
+-- SELECT create_hypertable('sensorthings."HistoricalLocation"', 'time');
+
 
 CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
     "id" BIGSERIAL PRIMARY KEY,
@@ -77,7 +80,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "id" BIGSERIAL PRIMARY KEY,
     "phenomenonTime" TIMESTAMPTZ NOT NULL,
-    "resultTime" TIMESTAMPTZ ,
+    "resultTime" TIMESTAMPTZ NOT NULL,
     "resultType" INT NOT NULL,
     "resultString" TEXT,
     "resultInteger" INT,
@@ -91,6 +94,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "featuresofinterest_id" BIGINT REFERENCES sensorthings."FeaturesOfInterest"(id) ON DELETE CASCADE,
     UNIQUE ("datastream_id", "phenomenonTime")
 );
+
+-- SELECT create_hypertable('sensorthings."Observation"', 'phenomenonTime');
 
 CREATE OR REPLACE FUNCTION result(sensorthings."Observation") RETURNS text AS $$
     SELECT CASE WHEN $1."resultType" = 0 THEN $1."resultString"

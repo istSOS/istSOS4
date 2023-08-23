@@ -5,7 +5,7 @@
 #observation
 
 
-
+import time
 import yaml
 from clear_data import clear
 from thing import generate_thing_data
@@ -26,7 +26,8 @@ from seq import alter_seq
 
 
 
-# clear()
+
+
 def create_data():
 
 
@@ -110,11 +111,21 @@ def create_data():
     alter_seq(static_datastreams+dynamic_datastreams+1,static_features_of_interest+dynamic_features_of_interest+1,static_historical_location+dynamic_historical_location+1,static_location+dynamic_location+1,static_observations*static_datastreams+dynamic_observations*dynamic_datastreams+1,static_observed_properties+dynamic_observed_properties+1,static_sensor_data+dynamic_sensor_data+1,static_thing+dynamic_thing+1)
 
 # def alter_seq(Datastream,FeaturesOfInterest,HistoricalLocation,Location,Observation,ObservedProperty,Sensor,Thing):
-
-
-
+clear()
 create_data()
 
+# try:
+#     clear()  # Assuming this function is defined
+#     create_data()  # Assuming this function is defined
+# except psycopg2.OperationalError as e:
+#     print("PostgreSQL connection issue:", e)
+#     print("Trying to connect again...")
+#     time.sleep(5)  # Add a delay before retrying
+#     try:
+#         clear()
+#         create_data()
+#     except Exception as e:
+#         print("Error:", e)
 
 
 
