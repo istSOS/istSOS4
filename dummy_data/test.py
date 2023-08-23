@@ -13,3 +13,10 @@ pg_port = os.getenv('POSTGRES_PORT')
 
 print(f"postgres host: {pg_host}")
 print(f"postgres port: {pg_port}")
+
+# import docker
+
+# client = docker.DockerClient()
+# container = client.containers.get(istsos-miu-database)
+# ip_add = container.attrs['NetworkSettings']['IPAddress']
+# print(ip_add)

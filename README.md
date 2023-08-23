@@ -105,9 +105,9 @@ You can also check using : http://127.0.0.1:8000/docs
     
 ## Adding dummy data to database
 
-When you build the docker the script will automatically clear the database and add the static and dynamic values as per config.yaml file.
+<!--- When you build the docker the script will automatically clear the database and add the static and dynamic values as per config.yaml file. -->
 
-You can also run the script once the docker is build whenever required or clear the database.
+You can run the script once the docker is build
 
 Inside ```dummy_data``` folder run the gen_data.py script
 

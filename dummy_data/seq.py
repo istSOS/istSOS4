@@ -29,7 +29,13 @@ conn = psycopg2.connect(
     user="admin",
     password="admin"
 )
-
+# conn = psycopg2.connect(
+#     host="172.17.0.1", 
+#     port="45432",
+#     database="istsos",
+#     user="admin",
+#     password="admin"
+# )
 
 #for changing incrementing sequence id
 def alter_seq(Datastream,FeaturesOfInterest,HistoricalLocation,Location,Observation,ObservedProperty,Sensor,Thing):

@@ -31,6 +31,15 @@ conn = psycopg2.connect(
     password="admin"
 )
 
+# conn = psycopg2.connect(
+#     host="172.17.0.1", 
+#     port="45432",
+#     database="istsos",
+#     user="admin",
+#     password="admin"
+# )
+
+
 def clear():
 
         
@@ -48,7 +57,7 @@ def clear():
 
         
     """
-
+    
 
     # Create a cursor
     cur = conn.cursor()
@@ -59,6 +68,7 @@ def clear():
     # Commit the changes
     conn.commit()
     cur.close()
+
 clear()
 
 

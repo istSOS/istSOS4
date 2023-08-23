@@ -9,14 +9,20 @@ from psycopg2 import sql
 
 
 
+# conn = psycopg2.connect(
+#     host="0.0.0.0", 
+#     port="45432",
+#     database="istsos",
+#     user="admin",
+#     password="admin"
+# )
 conn = psycopg2.connect(
-    host="0.0.0.0", 
+    host="172.17.0.1", 
     port="45432",
     database="istsos",
     user="admin",
     password="admin"
 )
-
 def update_loc():
     radius = 1000000                         #Choose your own radius
     radiusInDegrees=radius/111300            

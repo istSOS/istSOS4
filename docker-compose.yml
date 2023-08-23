@@ -55,20 +55,32 @@ services:
       - postgrest
 
 
-  dummy_data:
-    build:
-      context: ./dummy_data
-      dockerfile: Dockerfile
-    volumes:
-      - ./dummy_data:/code/app
-    working_dir: /dummy_data
+  # dummy_data:
+  #   build:
+  #     context: ./dummy_data
+  #     dockerfile: Dockerfile
+  #   volumes:
+  #     - ./dummy_data:/code/app
+  #   working_dir: /dummy_data
 
-    command: python3 gen_data.py
+  #   command: python3 gen_data.py
 
-    depends_on:
-       database:
-            condition: service_healthy
+  #   depends_on:
+  #      database:
+  #           condition: service_healthy
           
+  # dummy_data:
+  #   build:
+  #     context: ./dummy_data
+  #     dockerfile: Dockerfile
+  #   volumes:
+  #     - ./dummy_data:/code/app
+  #   working_dir: /dummy_data
+
+  #   command: python3 gen_data.py
+
+  #   depends_on:
+  #      - database
 
 
 

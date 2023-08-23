@@ -23,6 +23,17 @@ import psycopg2
 
 from seq import alter_seq
 
+import os
+from dotenv import load_dotenv
+
+# Specify the path to the .env file
+dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+
+# Load the environment variables from the .env file
+load_dotenv(dotenv_path)
+
+# Access environment variables
+dummy_data_status = os.getenv('dummy_data')
 
 
 
@@ -111,8 +122,10 @@ def create_data():
     alter_seq(static_datastreams+dynamic_datastreams+1,static_features_of_interest+dynamic_features_of_interest+1,static_historical_location+dynamic_historical_location+1,static_location+dynamic_location+1,static_observations*static_datastreams+dynamic_observations*dynamic_datastreams+1,static_observed_properties+dynamic_observed_properties+1,static_sensor_data+dynamic_sensor_data+1,static_thing+dynamic_thing+1)
 
 # def alter_seq(Datastream,FeaturesOfInterest,HistoricalLocation,Location,Observation,ObservedProperty,Sensor,Thing):
+# if dummy_data_status=="True":
 clear()
 create_data()
+print("data update successfull..")
 
 # try:
 #     clear()  # Assuming this function is defined
