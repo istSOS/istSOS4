@@ -23,21 +23,21 @@ pg_port = os.getenv('POSTGRES_PORT')
 
 
 
-conn = psycopg2.connect(
-    host=pg_host, 
-    port=pg_port,
-    database="istsos",
-    user="admin",
-    password="admin"
-)
-
 # conn = psycopg2.connect(
-#     host="172.17.0.1", 
-#     port="45432",
+#     host=pg_host, 
+#     port=pg_port,
 #     database="istsos",
 #     user="admin",
 #     password="admin"
 # )
+
+conn = psycopg2.connect(
+    host="172.17.0.1", 
+    port="45432",
+    database="istsos",
+    user="admin",
+    password="admin"
+)
 
 
 def clear():
