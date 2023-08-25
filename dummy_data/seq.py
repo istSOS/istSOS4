@@ -18,7 +18,8 @@ pg_port = os.getenv('POSTGRES_PORT')
 # print(f"postgres host: {pg_host}")
 # print(f"postgres port: {pg_port}")
 
-
+connection_url = "postgres://admin:admin@database:5432/istsos"
+conn = psycopg2.connect(connection_url)
 
 
 
@@ -29,13 +30,13 @@ pg_port = os.getenv('POSTGRES_PORT')
 #     user="admin",
 #     password="admin"
 # )
-conn = psycopg2.connect(
-    host="172.17.0.1", 
-    port="45432",
-    database="istsos",
-    user="admin",
-    password="admin"
-)
+# conn = psycopg2.connect(
+#     host="172.17.0.1", 
+#     port="45432",
+#     database="istsos",
+#     user="admin",
+#     password="admin"
+# )
 
 #for changing incrementing sequence id
 def alter_seq(Datastream,FeaturesOfInterest,HistoricalLocation,Location,Observation,ObservedProperty,Sensor,Thing):

@@ -20,7 +20,8 @@ pg_port = os.getenv('POSTGRES_PORT')
 # print(f"postgres port: {pg_port}")
 
 
-
+connection_url = "postgres://admin:admin@database:5432/istsos"
+conn = psycopg2.connect(connection_url)
 
 
 # conn = psycopg2.connect(
@@ -31,13 +32,13 @@ pg_port = os.getenv('POSTGRES_PORT')
 #     password="admin"
 # )
 
-conn = psycopg2.connect(
-    host="172.17.0.1", 
-    port="45432",
-    database="istsos",
-    user="admin",
-    password="admin"
-)
+# conn = psycopg2.connect(
+#     host="172.17.0.1", 
+#     port="45432",
+#     database="istsos",
+#     user="admin",
+#     password="admin"
+# )
             
 #adding data to table from csv
 def add_data():

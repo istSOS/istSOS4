@@ -105,9 +105,20 @@ You can also check using : http://127.0.0.1:8000/docs
     
 ## Adding dummy data to database
 
-<!--- When you build the docker the script will automatically clear the database and add the static and dynamic values as per config.yaml file. -->
+ When you build the docker the script will automatically clear the database and add the static and dynamic values as per config.yaml file. 
 
-You can run the script once the docker is build
+For disabling addtion of the synthetic data to database
+inside the ```.env```
+
+change the variable  **dummy_data** to **False**
+
+```
+HOSTNAME=http://localhost:8018/v1.1/
+dummy_data=False #True/False  When True database table will be cleared and populated with synthetic data
+```
+
+<!-- 
+You can also run the script once the docker is build
 
 Inside ```dummy_data``` folder run the gen_data.py script
 
@@ -119,7 +130,7 @@ For clearing data: </br>
 ```python3 clear_data.py```
 > This will clear all data from the tables
 
-
+>
 ## importing hoppscotch files
 
  - open hoppscotch.io 

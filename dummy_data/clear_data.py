@@ -14,6 +14,7 @@ load_dotenv(dotenv_path)
 
 # Access environment variables
 pg_host = os.getenv('POSTGRES_HOST')
+# pg_host = os.getenv('HOSTNAME')
 pg_port = os.getenv('POSTGRES_PORT')
 
 # print(f"postgres host: {pg_host}")
@@ -21,6 +22,9 @@ pg_port = os.getenv('POSTGRES_PORT')
 
 
 
+
+connection_url = "postgres://admin:admin@database:5432/istsos"
+conn = psycopg2.connect(connection_url)
 
 
 # conn = psycopg2.connect(
@@ -31,13 +35,13 @@ pg_port = os.getenv('POSTGRES_PORT')
 #     password="admin"
 # )
 
-conn = psycopg2.connect(
-    host="172.17.0.1", 
-    port="45432",
-    database="istsos",
-    user="admin",
-    password="admin"
-)
+# conn = psycopg2.connect(
+#     host="172.17.0.1", 
+#     port="45432",
+#     database="istsos",
+#     user="admin",
+#     password="admin"
+# )
 
 
 def clear():
