@@ -73,7 +73,7 @@ def clear():
     conn.commit()
     cur.close()
 
-clear()
+
 
 
 

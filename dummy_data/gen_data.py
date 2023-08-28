@@ -19,7 +19,7 @@ from observation import generate_observation_data
 from postgres_data import add_data
 import time
 from loc import update_loc
-import psycopg2
+
 
 from seq import alter_seq
 
@@ -127,6 +127,21 @@ if dummy_data_status=="True":
     create_data()
     print("data update successfull..")
 
+
+
+    folder_path = 'data'
+
+    # Get a list of all files in the folder
+    file_list = os.listdir(folder_path)
+
+    # Iterate through the files and delete CSV files
+    for filename in file_list:
+        if filename.endswith('.csv'):
+            file_path = os.path.join(folder_path, filename)
+            os.remove(file_path)
+            print(f"Deleted: {filename}")    
+else:
+    print("data retained")
 # try:
 #     clear()  # Assuming this function is defined
 #     create_data()  # Assuming this function is defined

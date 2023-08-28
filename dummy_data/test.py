@@ -24,10 +24,22 @@
 
 # import netifaces as ni
 
-import docker
+# import docker
 
-client = docker.DockerClient()
-container = client.containers.get("database")
-ip_add = container.attrs['NetworkSettings']['IPAddress']
-print(ip_add)
-print("#############################")
+# client = docker.DockerClient()
+# container = client.containers.get("database")
+# ip_add = container.attrs['NetworkSettings']['IPAddress']
+# print(ip_add)
+# print("#############################")
+
+import os
+folder_path = 'data'
+
+# Get a list of all files in the folder
+file_list = os.listdir(folder_path)
+print(file_list)
+# Iterate through the files and delete CSV files
+for filename in file_list:
+    if filename.endswith('.csv'):
+        file_path = os.path.join(folder_path, filename)
+        os.remove(file_path)

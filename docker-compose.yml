@@ -20,6 +20,7 @@ services:
     volumes:
       # - v-istsos-miu-postgis-sql:/docker-entrypoint-initdb.d
       - v-istsos-miu-database-data:/var/lib/postgresql/data
+      
     healthcheck:
       test: pg_isready -U admin -d istsos
       interval: 10s
@@ -62,7 +63,7 @@ services:
       context: ./dummy_data
       dockerfile: Dockerfile
     volumes:
-      - ./dummy_data:/code/app
+      - ./dummy_data:/dummy_data
     working_dir: /dummy_data
 
     command: python3 gen_data.py
@@ -70,22 +71,21 @@ services:
     depends_on:
        database:
             condition: service_healthy
-          
+
   # dummy_data:
+  #   env_file:
+  #     - .env
   #   build:
   #     context: ./dummy_data
   #     dockerfile: Dockerfile
   #   volumes:
-  #     - ./dummy_data:/code/app
+  #     - ./dummy_data:/dummy_data
   #   working_dir: /dummy_data
 
   #   command: python3 gen_data.py
 
   #   depends_on:
-  #      - database
-
-
-
+  #      - database        
 
 
 volumes:
