@@ -48,6 +48,7 @@ USER postgres
 
 COPY ./istsos_schema.sql /docker-entrypoint-initdb.d/11_init_db_istsos_schema.sql
 # ./istsos_schema.sql /docker-entrypoint-initdb.d/table_schema.sql
-
+#COPY ./istsos_schema.sql /var/lib/postgresql/data/test.sql
 #COPY ./istsos_example_data.sql /docker-entrypoint-initdb.d/fill_dummy_data.sql
+#COPY ./istsos_example_data.sql /var/lib/postgresql/data/fill_dummy_data.sql
 

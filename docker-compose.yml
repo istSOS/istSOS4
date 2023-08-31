@@ -68,6 +68,7 @@ services:
 
     command: python3 gen_data.py
 
+
     depends_on:
        database:
             condition: service_healthy
@@ -95,6 +96,7 @@ volumes:
     name: v-istsos-miu-database-data
   v-istsos-miu-database-data-test:
     name: v-istsos-miu-database-data-test
-  
+  v-istsos-miu-dummy-data:
+    name: v-istsos-miu-dummy-data
 
   

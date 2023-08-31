@@ -35,7 +35,7 @@ load_dotenv(dotenv_path)
 # Access environment variables
 dummy_data_status = os.getenv('dummy_data')
 
-
+print(dummy_data_status)
 
 
 
@@ -58,6 +58,11 @@ def create_data():
     dynamic_observed_properties=config_data['dynamic_datastreams']['observedProperties']
     dynamic_datastreams=config_data['dynamic_datastreams']['quantity']
     dynamic_observations=config_data['dynamic_datastreams']['observations_each']
+
+    start_datetime=config_data['start_datetime']
+    print(start_datetime)
+    timestep=config_data['timestep']
+    print(timestep)
     #pass function parameters to the module and create csv 
     # print(static_datastreams)
 
@@ -81,7 +86,7 @@ def create_data():
     generate_sensor_data(1,static_sensor_data)
     generate_datastream_data(1,static_datastreams,static_thing,static_sensor_data,static_observed_properties)  # datastream  num, thing num, sensor num, obs prop num
     generate_featuresOfInterest_data(1,static_features_of_interest)
-    generate_observation_data(1,static_observations,static_datastreams,static_features_of_interest) #obs,data_stream_num,feature_num
+    generate_observation_data(1,static_observations,static_datastreams,static_features_of_interest,start_datetime,timestep) #obs,data_stream_num,feature_num
 
     print("__________Updating static data_____________")
     add_data()
@@ -111,7 +116,7 @@ def create_data():
     generate_datastream_data(static_datastreams+1,dynamic_datastreams,dynamic_thing,dynamic_sensor_data,static_observed_properties)  # datastream  num, thing num, sensor num, obs prop num
     generate_featuresOfInterest_data(static_features_of_interest+1,dynamic_features_of_interest)
    
-    generate_observation_data(static_observations*static_datastreams+1,dynamic_observations,static_datastreams,dynamic_features_of_interest) #obs,data_stream_num,feature_num
+    generate_observation_data(static_observations*static_datastreams+1,dynamic_observations,static_datastreams,dynamic_features_of_interest,start_datetime,timestep) #obs,data_stream_num,feature_num
 
     print("__________Updating dynamic data_____________")
     add_data()
@@ -129,17 +134,18 @@ if dummy_data_status=="True":
 
 
 
-    folder_path = 'data'
+    # folder_path = 'data'
 
-    # Get a list of all files in the folder
-    file_list = os.listdir(folder_path)
+    # # Get a list of all files in the folder
+    # file_list = os.listdir(folder_path)
 
-    # Iterate through the files and delete CSV files
-    for filename in file_list:
-        if filename.endswith('.csv'):
-            file_path = os.path.join(folder_path, filename)
-            os.remove(file_path)
-            print(f"Deleted: {filename}")    
+    # # Iterate through the files and delete CSV files
+    # for filename in file_list:
+    #     if filename.endswith('.csv'):
+    #         file_path = os.path.join(folder_path, filename)
+    #         os.remove(file_path)
+    #         print(f"Deleted: {filename}")    
+       
 else:
     print("data retained")
 # try:

@@ -1,12 +1,35 @@
 import csv
 import random
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
+from isodate import parse_datetime, parse_duration
 
+def generate_observation_data(id_num,obs,data_stream_num,feature_num,start_datetime,timestep):
 
-def generate_observation_data(id_num,obs,data_stream_num,feature_num):
     data = []
     last_id=0
+
+        # Specify the start datetime and timestep duration
+    # start_datetime_str = '2020-01-01T12:00:00.000+01:00'
+    # timestep_str = 'PT10M'
+    start_datetime_str = start_datetime
+    timestep_str = timestep
+
+    # Parse the start datetime and timestep duration using iso8601
+    start_datetime = start_datetime_str
+    # print(start_datetime)
+    timestep_duration = parse_duration(timestep_str)
+    # print(timestep_duration)
+    # Generate timestamps using the specified timestep
+
+    current_time = start_datetime
+
+    # Generate timestamps until a certain point (e.g., 10 timestamps)
+    # for _ in range(10):
+    #     timestamps.append(current_time.isoformat())
+    #     current_time += timestep_duration
+
+
     for j in range(0,data_stream_num):
         for i in range(0, obs):
 
@@ -14,23 +37,12 @@ def generate_observation_data(id_num,obs,data_stream_num,feature_num):
             id = id_num+i+last_id
 
 
-            # Generate a unique name
-            start_date = '2023-01-01'
-            end_date = '2023-12-31'
-            start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
-            end_datetime = datetime.strptime(end_date, '%Y-%m-%d')
+            timestamps=current_time.isoformat()
+            current_time += timestep_duration
+          
 
-            # Calculate the time range in seconds
-            time_range = (end_datetime - start_datetime).total_seconds()
-
-            # Generate a random number of seconds within the time range
-            random_seconds = random.randint(0, int(time_range))
-
-            # Add the random number of seconds to the start datetime
-            time = start_datetime + timedelta(seconds=random_seconds)    
-
-            phenomenonTime = time
-            resultTime =time
+            phenomenonTime = timestamps
+            resultTime =timestamps
             
             
             
@@ -95,3 +107,7 @@ def generate_observation_data(id_num,obs,data_stream_num,feature_num):
         writer = csv.writer(file)
         writer.writerow(["id","phenomenonTime","resultTime","resultType","resultString","resultInteger","resultDouble","resultBoolean","resultJSON","resultQuality","validTime","parameters","datastream_id","feature_of_interest_id"])
         writer.writerows(data)
+
+
+
+# generate_observation_data(1,6,5,3)
