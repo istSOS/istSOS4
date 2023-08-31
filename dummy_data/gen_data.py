@@ -150,17 +150,17 @@ elif dummy_data_status == True and clear_data_status == True:
 
 
 
-    # folder_path = 'data'
+    folder_path = 'data'
 
-    # # Get a list of all files in the folder
-    # file_list = os.listdir(folder_path)
+    # Get a list of all files in the folder
+    file_list = os.listdir(folder_path)
 
-    # # Iterate through the files and delete CSV files
-    # for filename in file_list:
-    #     if filename.endswith('.csv'):
-    #         file_path = os.path.join(folder_path, filename)
-    #         os.remove(file_path)
-    #         print(f"Deleted: {filename}")  
+    # Iterate through the files and delete CSV files
+    for filename in file_list:
+        if filename.endswith('.csv'):
+            file_path = os.path.join(folder_path, filename)
+            os.remove(file_path)
+            print(f"Deleted: {filename}")  
 
 elif dummy_data_status == False and clear_data_status == True:
     clear()
