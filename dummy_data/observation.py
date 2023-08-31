@@ -4,7 +4,7 @@ import random
 from datetime import datetime
 from isodate import parse_datetime, parse_duration
 
-def generate_observation_data(id_num,obs,data_stream_num,feature_num,start_datetime,timestep):
+def generate_observation_data(id_num,obs,static_data_num,data_stream_num,feature_num,start_datetime,timestep):
 
     data = []
     last_id=0
@@ -85,7 +85,8 @@ def generate_observation_data(id_num,obs,data_stream_num,feature_num,start_datet
             validTime="None"
 
             
-            datastream_id = j+1
+            datastream_id = static_data_num+j
+            # print(datastream_id)
             # datastream_id =i+1
             feature_of_interest_id =random.randint(1, feature_num)
 
@@ -107,7 +108,8 @@ def generate_observation_data(id_num,obs,data_stream_num,feature_num,start_datet
         writer = csv.writer(file)
         writer.writerow(["id","phenomenonTime","resultTime","resultType","resultString","resultInteger","resultDouble","resultBoolean","resultJSON","resultQuality","validTime","parameters","datastream_id","feature_of_interest_id"])
         writer.writerows(data)
-
-
+    last_id=0
+    print("after clearing:")
+    print(id)
 
 # generate_observation_data(1,6,5,3)

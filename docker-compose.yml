@@ -57,8 +57,7 @@ services:
 
 
   dummy_data:
-    env_file:
-      - .env
+
     build:
       context: ./dummy_data
       dockerfile: Dockerfile

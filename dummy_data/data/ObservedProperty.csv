@@ -1,11 +1,11 @@
 id,name,defination,description,properties
 11,Pressure Sensor_11,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Pressure Sensor_11,Pressure Sensor_11 present in a substance or an object,{}
-12,Pressure Sensor_12,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Pressure Sensor_12,Pressure Sensor_12 present in a substance or an object,{}
-13,CO2 Sensor_13,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#CO2 Sensor_13,CO2 Sensor_13 present in a substance or an object,{}
-14,Humidity Sensor_14,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Humidity Sensor_14,Humidity Sensor_14 present in a substance or an object,{}
+12,Light Sensor_12,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Light Sensor_12,Light Sensor_12 present in a substance or an object,{}
+13,Light Sensor_13,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Light Sensor_13,Light Sensor_13 present in a substance or an object,{}
+14,Pressure Sensor_14,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Pressure Sensor_14,Pressure Sensor_14 present in a substance or an object,{}
 15,Light Sensor_15,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Light Sensor_15,Light Sensor_15 present in a substance or an object,{}
 16,Motion Sensor_16,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Motion Sensor_16,Motion Sensor_16 present in a substance or an object,{}
-17,Temperature Sensor_17,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Temperature Sensor_17,Temperature Sensor_17 present in a substance or an object,{}
+17,CO2 Sensor_17,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#CO2 Sensor_17,CO2 Sensor_17 present in a substance or an object,{}
 18,Humidity Sensor_18,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Humidity Sensor_18,Humidity Sensor_18 present in a substance or an object,{}
-19,Light Sensor_19,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Light Sensor_19,Light Sensor_19 present in a substance or an object,{}
-20,Light Sensor_20,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Light Sensor_20,Light Sensor_20 present in a substance or an object,{}
+19,Pressure Sensor_19,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Pressure Sensor_19,Pressure Sensor_19 present in a substance or an object,{}
+20,Pressure Sensor_20,http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Pressure Sensor_20,Pressure Sensor_20 present in a substance or an object,{}

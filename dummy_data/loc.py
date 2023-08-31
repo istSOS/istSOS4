@@ -7,25 +7,6 @@ from psycopg2 import sql
 
 
 
-import os
-from dotenv import load_dotenv
-
-# Specify the path to the .env file
-dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
-
-# Load the environment variables from the .env file
-load_dotenv(dotenv_path)
-
-# Access environment variables
-pg_host = os.getenv('POSTGRES_HOST')
-pg_port = os.getenv('POSTGRES_PORT')
-
-# print(f"postgres host: {pg_host}")
-# print(f"postgres port: {pg_port}")
-
-
-connection_url = "postgres://admin:admin@database:5432/istsos"
-conn = psycopg2.connect(connection_url)
 
 
 # conn = psycopg2.connect(
@@ -42,15 +23,16 @@ conn = psycopg2.connect(connection_url)
 #     user="admin",
 #     password="admin"
 # )
-def update_loc():
+def update_loc(loc_count):
     radius = 1000000                         #Choose your own radius
     radiusInDegrees=radius/111300            
     r = radiusInDegrees
     x0 = 21.311022205455732
     y0 = 79.43170395550221
+    connection_url = "postgres://admin:admin@database:5432/istsos"
+    conn = psycopg2.connect(connection_url)
 
-
-    for i in range(1,500):
+    for i in range(0,loc_count):
 
         u = float(random.uniform(0.0,1.0))
         v = float(random.uniform(0.0,1.0))

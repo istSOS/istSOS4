@@ -1,2 +1,2 @@
 id,name,description,properties,location_id
-2,Pressure Sensor_2,A sensor that measures the Pressure Sensor_2 in a room,"{""model"": ""Model-2"", ""manufacturer"": ""Manufacturer-2""}",114
+2,Motion Sensor_2,A sensor that measures the Motion Sensor_2 in a room,"{""model"": ""Model-2"", ""manufacturer"": ""Manufacturer-2""}",257
