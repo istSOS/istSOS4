@@ -4,14 +4,12 @@ import random
 from datetime import datetime
 from isodate import parse_datetime, parse_duration
 
-def generate_observation_data(id_num,obs,static_data_num,data_stream_num,feature_num,start_datetime,timestep):
+
+def generate_observation_data(id_num,obs,datastream_start_id,data_stream_num,feature_num,start_datetime,timestep):
 
     data = []
-    last_id=0
 
-        # Specify the start datetime and timestep duration
-    # start_datetime_str = '2020-01-01T12:00:00.000+01:00'
-    # timestep_str = 'PT10M'
+
     start_datetime_str = start_datetime
     timestep_str = timestep
 
@@ -24,17 +22,15 @@ def generate_observation_data(id_num,obs,static_data_num,data_stream_num,feature
 
     current_time = start_datetime
 
-    # Generate timestamps until a certain point (e.g., 10 timestamps)
-    # for _ in range(10):
-    #     timestamps.append(current_time.isoformat())
-    #     current_time += timestep_duration
 
+    id=id_num-1
 
     for j in range(0,data_stream_num):
+        
         for i in range(0, obs):
 
             # Generate a unique ID
-            id = id_num+i+last_id
+            id = id+1
 
 
             timestamps=current_time.isoformat()
@@ -85,8 +81,9 @@ def generate_observation_data(id_num,obs,static_data_num,data_stream_num,feature
             validTime="None"
 
             
-            datastream_id = static_data_num+j
-            # print(datastream_id)
+            datastream_id = datastream_start_id
+  
+
             # datastream_id =i+1
             feature_of_interest_id =random.randint(1, feature_num)
 
@@ -97,8 +94,9 @@ def generate_observation_data(id_num,obs,static_data_num,data_stream_num,feature
 
 
             # Append the row to the data list
-            data.append([str(id), phenomenonTime,resultTime,resultType,resultString,resultInteger,resultDouble,resultBoolean,resultJSON,resultQuality,validTime,parameters,datastream_id,feature_of_interest_id])
-        last_id = id
+            data.append([id, phenomenonTime,resultTime,resultType,resultString,resultInteger,resultDouble,resultBoolean,resultJSON,resultQuality,validTime,parameters,datastream_id,feature_of_interest_id])
+
+        datastream_start_id = datastream_start_id+1
 
 # Generate 200 combinations of data
     #print(data)
@@ -108,7 +106,7 @@ def generate_observation_data(id_num,obs,static_data_num,data_stream_num,feature
         writer = csv.writer(file)
         writer.writerow(["id","phenomenonTime","resultTime","resultType","resultString","resultInteger","resultDouble","resultBoolean","resultJSON","resultQuality","validTime","parameters","datastream_id","feature_of_interest_id"])
         writer.writerows(data)
-    last_id=0
+
     print("after clearing:")
     print(id)
 

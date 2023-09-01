@@ -22,7 +22,8 @@ from loc import update_loc
 from seq import alter_seq
 import os
 from id_num import id_sequence
-# Assuming the config.yml file is in the current directory
+
+# Readingconfig.yml file is in the current directory
 config_file_path = "config.yml"
 with open(config_file_path, 'r') as config_file:
     config_data = yaml.safe_load(config_file)
@@ -43,18 +44,15 @@ dynamic_datastreams=config_data['dynamic_datastreams']['quantity']
 dynamic_observations=config_data['dynamic_datastreams']['observations_each']
 
 start_datetime=config_data['start_datetime']
-print(start_datetime)
+# print(start_datetime)
 timestep=config_data['timestep']
-print(timestep)
+# print(timestep)
 
 
 
 def create_data():
 
 
-
-    #pass function parameters to the module and create csv 
-    # print(static_datastreams)
 
 ################static###################
 
@@ -92,25 +90,23 @@ def create_data():
 #observed property 10
 #observation 500
 
-    location_id,thing_id,historicalLoc_id,observedProperty_id,sensor_id,datastream_id,featuresOfInterest_id,observation_id=id_sequence()
-
+    location_id,thing_id,historicalLoc_id,observedProperty_id,sensor_id,datastream_id,featuresOfInterest_id,dy_observation_id=id_sequence()
+    print(id_sequence())
     dynamic_location =500
     dynamic_thing=1
     dynamic_historical_location=500
     dynamic_sensor_data=1
     dynamic_features_of_interest=500
     print("###### dynamic data ########")
-    print("dynamic_data_is: ", location_id)
     generate_location_data(location_id+1,dynamic_location)
-    # generate_thing_data(2,1,500) #thng num, loc number
     generate_thing_data(thing_id+1,dynamic_thing,dynamic_location)
     generate_historicalLocation_data(historicalLoc_id+1,dynamic_historical_location,dynamic_thing,dynamic_location) # hist loc, thng num, loc number
     generate_observedProperty_data(observedProperty_id+1,dynamic_observed_properties)
     generate_sensor_data(sensor_id+1,dynamic_sensor_data)
     generate_datastream_data(datastream_id+1,dynamic_datastreams,dynamic_thing,dynamic_sensor_data,static_observed_properties)  # datastream  num, thing num, sensor num, obs prop num
     generate_featuresOfInterest_data(featuresOfInterest_id+1,dynamic_features_of_interest)
-    generate_observation_data(observation_id+1,dynamic_observations,datastream_id+1,dynamic_datastreams,dynamic_features_of_interest,start_datetime,timestep) #obs,data_stream_num,feature_num
-    print("################observation id:",observation_id)
+    generate_observation_data(dy_observation_id+1,dynamic_observations,datastream_id+1,dynamic_datastreams,dynamic_features_of_interest,start_datetime,timestep) #obs,data_stream_num,feature_num
+    
     print("__________Updating dynamic data_____________")
     add_data()
 
@@ -120,7 +116,6 @@ def create_data():
 
     location_id,thing_id,historicalLoc_id,observedProperty_id,sensor_id,datastream_id,featuresOfInterest_id,observation_id=id_sequence()
     update_loc(location_id)
-    print("################last..observation id:",observation_id)
     alter_seq(datastream_id+1,featuresOfInterest_id+1,historicalLoc_id+1,location_id+1,observation_id+1,observedProperty_id+1,sensor_id+1,thing_id+1)
 
 # def alter_seq(Datastream,FeaturesOfInterest,HistoricalLocation,Location,Observation,ObservedProperty,Sensor,Thing):

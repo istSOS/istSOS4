@@ -23,4 +23,4 @@ static_datastreams:
 dynamic_datastreams: 
   observedProperties: 10
   quantity: 8
-  observations_each: 500 
+  observations_each: 500

@@ -8,7 +8,7 @@ if not os.path.exists(path):
     os.makedirs(path)
     print("Folder created successfully.")
 else:
-    print("Folder already exists.")
+    print("No new folder created as folder already exists.")
 
 def generate_location_data(id_num,location_num):
     data = []
