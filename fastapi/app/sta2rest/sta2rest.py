@@ -489,7 +489,6 @@ class STA2REST:
             parser = Parser(tokens)
             query_ast = parser.parse()
 
-
         main_entity, main_entity_id = uri['entity']
         entities = uri['entities']
 
@@ -501,9 +500,14 @@ class STA2REST:
             main_entity_id = m[1]
             single_result = True
 
+
+        if query_ast.traveltime:
+            main_entity += "_traveltime"
+
         url = f"/{main_entity}"
 
-
+        print(f"Main entity: {main_entity}")
+        
         if entities:
             if not query_ast.expand:
                 query_ast.expand = ExpandNode([])
@@ -575,9 +579,13 @@ class STA2REST:
             for column in default_columns:
                 query_ast.select.identifiers.append(IdentifierNode(column))
 
+        print(query_ast)
+
         # Visit the query ast to convert it
         visitor = NodeVisitor(main_entity)
         query_converted = visitor.visit(query_ast)
+
+        
 
         return {
             'url': url + "?" + query_converted if query_converted else url,
