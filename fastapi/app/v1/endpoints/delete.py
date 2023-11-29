@@ -1,16 +1,16 @@
 import traceback
-import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from fastapi import status
 from app.sta2rest import sta2rest
-from app.utils.utils import PostgRESTError
+from fastapi import Depends
+from app.db.db import get_pool
 
 v1 = APIRouter()
 
 # Handle DELETE requests
 @v1.api_route("/{path_name:path}", methods=["DELETE"])
-async def catch_all_delete(request: Request, path_name: str):
+async def catch_all_delete(request: Request, path_name: str, pgpool=Depends(get_pool)):
 
     try:
         full_path = request.url.path
@@ -23,29 +23,28 @@ async def catch_all_delete(request: Request, path_name: str):
         # Get the name and id
         if not name:
             raise Exception("No entity name provided")
-    
+        
         if not id:
             raise Exception("No entity id provided")
+        
 
-        async with httpx.AsyncClient() as client:   
-            url = "http://postgrest:3000/" + name + "?id=eq." + id
+        async with pgpool.acquire() as conn:
+            # Create delete SQL query
+            query = f'DELETE FROM sensorthings."{name}" WHERE id = $1'
 
-            # post to postgrest
-            r = await client.delete(url)
+            print(query, id)
 
+            # Execute query
+            await conn.execute(query, int(id))
 
-            if r.status_code != 204:
-                result = r.json()
-                raise PostgRESTError(result["message"])
-
-            # Return okay
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,
-                content={
-                    "code": 200,
-                    "type": "success"
-                }
-            )
+        # Return okay
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "code": 200,
+                "type": "success"
+            }
+        )
         
     except Exception as e:
         # print stack trace
