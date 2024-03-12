@@ -8,3 +8,6 @@ httpx
 asyncio
 postgrest
 odata-query
+sqlalchemy>=1.4.0
+geoalchemy2
+psycopg2-binary

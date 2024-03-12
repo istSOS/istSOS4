@@ -16,31 +16,19 @@ services:
       POSTGRES_PASSWORD: admin
       DATADIR: /var/lib/postgresql/data
       POSTGRES_MULTIPLE_EXTENSIONS: postgis,hstore,postgis_topology,postgis_raster,pgrouting,ltree,pg_cron,uuid-ossp
-    command: postgres -c custom.hostname="${HOSTNAME}"
+    command: >
+      postgres
+      -c custom.hostname="${HOSTNAME}"
+      -c custom.versioning="${VERSIONING}"
     volumes:
       # - v-istsos-miu-postgis-sql:/docker-entrypoint-initdb.d
       - v-istsos-miu-database-data:/var/lib/postgresql/data
-      
+
     healthcheck:
       test: pg_isready -U admin -d istsos
       interval: 10s
       timeout: 5s
       retries: 5
-
-  postgrest:
-    image: postgrest/postgrest
-    ports:
-      - "3000:3000"
-    links:
-      - database:db
-    environment:
-      PGRST_DB_URI: postgres://admin:admin@database:5432/istsos
-      PGRST_DB_SCHEMA: sensorthings
-      PGRST_DB_ANON_ROLE: admin #In production this role should not be the same as the one used for the connection
-      PGRST_OPENAPI_SERVER_PROXY_URI: http://127.0.0.1:3000
-      PGRST_LOG_LEVEL: info
-    depends_on:
-      - database
 
   api:
     build:
@@ -49,44 +37,24 @@ services:
     volumes:
       - ./fastapi/app:/code/app
     working_dir: /code
+    environment:
+      DATABASE_URL: postgresql://admin:admin@database:5432/istsos
+      HOSTNAME: ${HOSTNAME}
     ports:
       - 8018:5000
-    command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app 
-    depends_on:
-      - postgrest
-
+    command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app
 
   dummy_data:
-
     build:
       context: ./dummy_data
       dockerfile: Dockerfile
     volumes:
       - ./dummy_data:/dummy_data
     working_dir: /dummy_data
-
     command: python3 gen_data.py
-
-
     depends_on:
-       database:
-            condition: service_healthy
-
-  # dummy_data:
-  #   env_file:
-  #     - .env
-  #   build:
-  #     context: ./dummy_data
-  #     dockerfile: Dockerfile
-  #   volumes:
-  #     - ./dummy_data:/dummy_data
-  #   working_dir: /dummy_data
-
-  #   command: python3 gen_data.py
-
-  #   depends_on:
-  #      - database        
-
+      database:
+        condition: service_healthy
 
 volumes:
   v-istsos-miu-postgis-sql:
@@ -97,5 +65,3 @@ volumes:
     name: v-istsos-miu-database-data-test
   v-istsos-miu-dummy-data:
     name: v-istsos-miu-dummy-data
-
-  

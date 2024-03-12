@@ -26,7 +26,7 @@ TOKEN_TYPES = {
     'OR': r'\bor\b',
     'ORDER': r'\basc\b|\bdesc\b',
     'BOOL': r'\btrue\b|\bfalse\b',
-    'TIMESTAMP': r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}',
+    'TIMESTAMP': r'(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(Z|[+-]\d{2}:\d{2})?',
     'IDENTIFIER': r'@{0,1}[a-zA-Z_][.a-zA-Z0-9_/]*',
     'FLOAT': r'[0-9]+\.[0-9]+',
     'INTEGER': r'[0-9]+',
