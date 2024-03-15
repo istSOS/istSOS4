@@ -249,7 +249,7 @@ class CountNode(Node):
         """
         self.value = value
 
-class TravelTimeNode(Node):
+class AsOfNode(Node):
     """
     A class representing a travel time node.
 
@@ -260,7 +260,7 @@ class TravelTimeNode(Node):
     """
     def __init__(self, value):
         """
-        Initializes a TravelTimeNode object.
+        Initializes a AsOfNode object.
 
         Args:
         value (str): The value string.
@@ -285,7 +285,7 @@ class QueryNode(Node):
     """
 
     def __init__(self, select=None, filter=None, expand=None, orderby=None, skip=None, top=None, count=None,
-                 traveltime=None, is_subquery=False):
+                 as_of=None, is_subquery=False):
         """
         Initializes a QueryNode object.
 
@@ -306,5 +306,5 @@ class QueryNode(Node):
         self.skip = skip
         self.top = top
         self.count = count
-        self.traveltime = traveltime
+        self.as_of = as_of
         self.is_subquery = is_subquery

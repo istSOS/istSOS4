@@ -7,7 +7,6 @@ This module provides a visitor for the filter AST.
 """
 from odata_query import ast, visitor
 from sqlalchemy import all_, any_, and_, or_, not_, text
-from ..models.models import Location, Thing, HistoricalLocation, ObservedProperty, Sensor, Datastream, Observation, FeaturesOfInterest
 
 class FilterVisitor(visitor.NodeVisitor):
    """

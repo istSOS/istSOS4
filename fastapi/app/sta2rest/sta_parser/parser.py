@@ -204,18 +204,18 @@ class Parser:
         self.match('BOOL')
         return ast.CountNode(value)
     
-    def parse_traveltime(self):
+    def parse_asof(self):
         """
-        Parse a traveltime expression.
+        Parse a asof expression.
 
         Returns:
-            ast.TravelTimeNode: The parsed traveltime expression.
+            ast.AsOfNode: The parsed asof expression.
         """
-        self.match('TRAVELTIME')
+        self.match('ASOF')
         value = self.current_token.value
         self.match('TIMESTAMP')
 
-        return ast.TravelTimeNode(value)
+        return ast.AsOfNode(value)
     
     def parse_subquery(self):
         """
@@ -232,7 +232,7 @@ class Parser:
         skip = None
         top = None
         count = None
-        traveltime = None
+        asof = None
 
         # continue parsing until we reach the end of the query
         while True:
@@ -250,8 +250,8 @@ class Parser:
                 top = self.parse_top()
             elif self.current_token.type == 'COUNT':
                 count = self.parse_count()
-            elif self.current_token.type == 'TRAVELTIME':
-                traveltime = self.parse_traveltime()
+            elif self.current_token.type == 'ASOF':
+                asof = self.parse_asof()
             else:
                 raise Exception(f"Unexpected token: {self.current_token.type}")
             
@@ -263,7 +263,7 @@ class Parser:
         
         self.match('RIGHT_PAREN')
 
-        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, traveltime, True)
+        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, asof, True)
 
     def parse_query(self):
         """
@@ -279,7 +279,7 @@ class Parser:
         skip = None
         top = None
         count = None
-        traveltime = None
+        asof = None
 
         # continue parsing until we reach the end of the query
         while self.current_token != None:
@@ -297,15 +297,15 @@ class Parser:
                 top = self.parse_top()
             elif self.current_token.type == 'COUNT':
                 count = self.parse_count()
-            elif self.current_token.type == 'TRAVELTIME':
-                traveltime = self.parse_traveltime()
+            elif self.current_token.type == 'ASOF':
+                asof = self.parse_asof()
             else:
                 raise Exception(f"Unexpected token: {self.current_token.type}")
             
             if self.current_token != None:
                 self.match('OPTIONS_SEPARATOR')
 
-        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, traveltime)
+        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, asof)
 
     def parse(self):
         """

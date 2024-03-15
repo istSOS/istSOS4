@@ -7,6 +7,7 @@ This module provides utility functions to convert various elements used in Senso
 representations in a REST API.
 """
 import re
+import os
 from .filter_visitor import FilterVisitor
 from odata_query.grammar import ODataLexer
 from odata_query.grammar import ODataParser
@@ -14,10 +15,16 @@ from .sta_parser.ast import *
 from .sta_parser.lexer import Lexer
 from .sta_parser.visitor import Visitor
 from .sta_parser.parser import Parser
-from ..models.models import Location, Thing, HistoricalLocation, ObservedProperty, Sensor, Datastream, Observation, FeaturesOfInterest
 from sqlalchemy.orm import sessionmaker, load_only, contains_eager
 from sqlalchemy import create_engine, select, func, asc, desc, and_, or_
-import os
+from datetime import datetime, timezone
+from ..models import (
+    Location, Thing, HistoricalLocation, ObservedProperty, Sensor,
+    Datastream, FeaturesOfInterest, Observation,
+    LocationTravelTime, ThingTravelTime, HistoricalLocationTravelTime,
+    ObservedPropertyTravelTime, SensorTravelTime, DatastreamTravelTime,
+    FeaturesOfInterestTravelTime, ObservationTravelTime
+)
 
 # Create the OData lexer and parser
 odata_filter_lexer = ODataLexer()
@@ -91,12 +98,13 @@ class NodeVisitor(Visitor):
         # Visit the tree to convert the filter
         res = FilterVisitor().visit(ast)
         results = []
-        pattern = re.compile(r'((?:\w+\.)?\w+)(__eq__|__ne__|__gt__|__lt__|__ge__|__le__)(-?\d+(?:\.\d+)?)')
+        pattern = re.compile(r'((?:\w+\.)?\w+)(__eq__|__ne__|__gt__|__lt__|__ge__|__le__)(((\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(Z|[+-]\d{2}:\d{2})?)|(-?\d+(?:\.\d+)?))')
         logical_op = res[0] if isinstance(res, tuple) else None
-        conditions = []
         search_string = ','.join(res[1:]) if isinstance(res, tuple) else res
         matches = pattern.findall(search_string)
-        for column, operator, value in matches:
+        conditions = []
+        for match in matches:
+            column, operator, value = match[0], match[1], match[2]
             conditions.append([self.main_entity, column, operator, value])
         return [logical_op, conditions]
 
@@ -127,7 +135,7 @@ class NodeVisitor(Visitor):
         identifiers = [self.visit(identifier) for identifier in node.identifiers]
         attribute_name, *_, order = identifiers[0].split('.')
         if self.main_entity == 'Observation' and 'result' in identifiers[0]:
-            results_attrs = ['resultDouble', 'resultInteger', 'resultBoolean', 'resultString', 'resultJSON']
+            results_attrs = ['result_double', 'result_integer', 'result_boolean', 'result_string', 'result_json']
             return [getattr(globals()[self.main_entity], attr) for attr in results_attrs], order
         return [getattr(globals()[self.main_entity], attribute_name)], order
 
@@ -212,7 +220,7 @@ class NodeVisitor(Visitor):
                         if prefix == 'Observation' and 'result' in identifier_list:
                             if 'result' in identifier_list:
                                 identifier_list.remove('result')
-                            new_results = ['resultInteger', 'resultBoolean', 'resultString', 'resultDouble', 'resultJSON']
+                            new_results = ['result_integer', 'result_boolean', 'result_string', 'result_double', 'result_json']
                             identifier_list.extend(new_results)
                         identifiers = ','.join(identifier_list)
                         select.identifiers.append(IdentifierNode(f'{expand_identifier.identifier}({identifiers})'))
@@ -238,7 +246,7 @@ class NodeVisitor(Visitor):
                         attribute_name, *_, order = identifiers[0].split('.')
                         attrs = []
                         if prefix == 'Observation' and 'result' in identifiers[0]:
-                            results_attrs = ['resultDouble', 'resultInteger', 'resultBoolean', 'resultString', 'resultJSON']
+                            results_attrs = ['result_double', 'result_integer', 'result_boolean', 'result_string', 'result_json']
                             attrs = [getattr(fk_entity, attr) for attr in results_attrs]
                         else:
                             results_attrs = attribute_name
@@ -256,7 +264,7 @@ class NodeVisitor(Visitor):
                     if not select:
                         select = SelectNode([])
                     default_columns = STA2REST.get_default_column_names(expand_identifier.identifier)
-                    default_columns = [item for item in default_columns if "NavigationLink" not in item]
+                    default_columns = [item for item in default_columns if "navigation_link" not in item]
                     # join default columns as single string
                     default_columns = ','.join(default_columns)
                     select.identifiers.append(IdentifierNode(f'{expand_identifier.identifier}({default_columns})'))
@@ -300,9 +308,9 @@ class NodeVisitor(Visitor):
         session = Session()
         pk_entity = globals()[self.main_entity]
         query_parts = session.query(pk_entity)
-        count_query = [session.query(func.count(getattr(pk_entity, 'id').distinct()))]
+        count_query = [session.query(func.count(getattr(pk_entity, 'id').distinct()))] if not 'TravelTime' in self.main_entity else [session.query(func.count(getattr(pk_entity, 'system_time_validity').distinct()))]
         no_limited_count = None
-        limited_query = select(getattr(pk_entity, 'id'))
+        limited_query = select(getattr(pk_entity, 'id')) if not 'TravelTime' in self.main_entity else select(getattr(pk_entity, 'system_time_validity'))
         window = None
         sub_query_parts = None
         subqueries = []
@@ -415,11 +423,11 @@ class NodeVisitor(Visitor):
                     globals()["id_query_result"] = True
                 if field_name == 'result':
                     select_query.extend([
-                        getattr(pk_entity, 'resultInteger'),
-                        getattr(pk_entity, 'resultDouble'),
-                        getattr(pk_entity, 'resultString'),
-                        getattr(pk_entity, 'resultBoolean'),
-                        getattr(pk_entity, 'resultJSON')
+                        getattr(pk_entity, 'result_integer'),
+                        getattr(pk_entity, 'result_double'),
+                        getattr(pk_entity, 'result_string'),
+                        getattr(pk_entity, 'result_boolean'),
+                        getattr(pk_entity, 'result_json')
                     ])
                 else:
                     select_query.append(getattr(pk_entity, field_name))
@@ -435,7 +443,11 @@ class NodeVisitor(Visitor):
                         filter_expression = or_(*result_conditions)
                     else:
                         filter_query = getattr(globals()[entity], column)
-                        filter_expression = getattr(filter_query, operator)(value)
+                        if 'TravelTime' in entity:
+                            value = datetime.fromisoformat(value.rstrip("Z")).replace(tzinfo=timezone.utc)
+                            filter_expression = filter_query.op('@>')(func.timestamptz(value))
+                        else:
+                            filter_expression = getattr(filter_query, operator)(value)
                 else:
                     sub_entity, sub_column = column.split('.')
                     sub_query_parts = sub_query_parts or session.query(globals()[sub_entity])
@@ -474,8 +486,8 @@ class NodeVisitor(Visitor):
                 )
             ) 
         if not limited_skipped_subqueries:
-            query_parts = query_parts.filter(getattr(pk_entity, 'id').in_(select(limited_query.c.id)))
-        count_query[0] = count_query[0].filter(getattr(pk_entity, 'id').in_(select(no_limited_count.c.id))) 
+            query_parts = query_parts.filter(getattr(pk_entity, 'id').in_(select(limited_query.c.id))) if not 'TravelTime' in self.main_entity else query_parts.filter(getattr(pk_entity, 'system_time_validity').in_(select(limited_query.c.system_time_validity)))
+        count_query[0] = count_query[0].filter(getattr(pk_entity, 'id').in_(select(no_limited_count.c.id))) if not 'TravelTime' in self.main_entity else count_query[0].filter(getattr(pk_entity, 'system_time_validity').in_(select(no_limited_count.c.system_time_validity)))
 
         if not node.count:
            count_query.append(False)
@@ -513,95 +525,191 @@ class STA2REST:
 
     # Default columns for each entity
     DEFAULT_SELECT = {
-        "Thing": [
-            'id',
-            'selfLink',
-            'locationsNavigationLink',
-            'historicalLocationsNavigationLink',
-            'datastreamsLocationsNavigationLink',
-            'name',
-            'description',
-            'properties',
-        ],
         "Location": [
             'id',
-            'selfLink',
-            'thingsNavigationLink',
-            'historicalLocationsNavigationLink',
+            'self_link',
+            'things_navigation_link',
+            'historical_locations_navigation_link',
             'name',
             'description',
-            'encodingType',
+            'encoding_type',
             'location',
             'properties',
         ],
-        "Sensor": [
+        "LocationTravelTime": [
             'id',
-            'selfLink',
-            'datastreamsNavigationLink',
+            'self_link',
+            'things_navigation_link',
+            'historical_locations_navigation_link',
             'name',
             'description',
-            'encodingType',
-            'sensor_metadata',
+            'encoding_type',
+            'location',
             'properties',
+            'system_time_validity',
+        ],
+        "Thing": [
+            'id',
+            'self_link',
+            'locations_navigation_link',
+            'historical_locations_navigation_link',
+            'datastreams_locations_navigation_link',
+            'name',
+            'description',
+            'properties',
+        ],
+        "ThingTravelTime": [
+            'id',
+            'self_link',
+            'locations_navigation_link',
+            'historical_locations_navigation_link',
+            'datastreams_locations_navigation_link',
+            'name',
+            'description',
+            'properties',
+            'system_time_validity',
+        ],
+        "HistoricalLocation": [
+            'id',
+            'self_link',
+            'locations_navigation_link',
+            'thing_navigation_link',
+            'time',  
+        ],
+        "HistoricalLocationTravelTime": [
+            'id',
+            'self_link',
+            'locations_navigation_link',
+            'thing_navigation_link',
+            'time',  
+            'system_time_validity',
         ],
         "ObservedProperty": [
             'id',
-            'selfLink',
-            'datastreamsNavigationLink',
+            'self_link',
+            'datastreams_navigation_link',
             'name',
             'description',
             'definition',
             'properties',
         ],
-        "Datastream": [
+        "ObservedPropertyTravelTime": [
             'id',
-            'selfLink',
-            'thingNavigationLink',
-            'sensorNavigationLink',
-            'observedPropertyNavigationLink',
-            'observationsNavigationLink',
+            'self_link',
+            'datastreams_navigation_link',
             'name',
             'description',
-            'unitOfMeasurement',
-            'observationType',
-            'observedArea',
-            'phenomenonTime',
-            'resultTime',
+            'definition',
+            'properties',
+            'system_time_validity',
+        ],
+        "Sensor": [
+            'id',
+            'self_link',
+            'datastreams_navigation_link',
+            'name',
+            'description',
+            'encoding_type',
+            'sensor_metadata',
             'properties',
         ],
-        "Observation": [
+        "SensorTravelTime": [
             'id',
-            'selfLink',
-            'featureOfInterestNavigationLink',
-            'datastreamNavigationLink',
-            'phenomenonTime',
-            'resultTime',
-            'resultInteger',
-            'resultString',
-            'resultInteger',
-            'resultDouble',
-            'resultBoolean',
-            'resultJSON',
-            'resultQuality',
-            'validTime',
-            'parameters',
+            'self_link',
+            'datastreams_navigation_link',
+            'name',
+            'description',
+            'encoding_type',
+            'sensor_metadata',
+            'properties',
+            'system_time_validity',
+        ],
+        "Datastream": [
+            'id',
+            'self_link',
+            'thing_navigation_link',
+            'sensor_navigation_link',
+            'observed_property_navigation_link',
+            'observations_navigation_link',
+            'name',
+            'description',
+            'unit_of_measurement',
+            'observation_type',
+            'observed_area',
+            'phenomenon_time',
+            'result_time',
+            'properties',
+        ],
+        "DatastreamTravelTime": [
+            'id',
+            'self_link',
+            'thing_navigation_link',
+            'sensor_navigation_link',
+            'observed_property_navigation_link',
+            'observations_navigation_link',
+            'name',
+            'description',
+            'unit_of_measurement',
+            'observation_type',
+            'observed_area',
+            'phenomenon_time',
+            'result_time',
+            'properties',
+            'system_time_validity',
         ],
         "FeaturesOfInterest": [
             'id',
-            'selfLink',
-            'observationsNavigationLink',
+            'self_link',
+            'observations_navigation_link',
             'name',
             'description',
-            'encodingType',
+            'encoding_type',
             'feature',
             'properties',
         ],
-        "HistoricalLocation": [
+        "FeaturesOfInterestTravelTime": [
             'id',
-            'selfLink',
-            'locationsNavigationLink',
-            'thingNavigationLink',
-            'time',  
+            'self_link',
+            'observations_navigation_link',
+            'name',
+            'description',
+            'encoding_type',
+            'feature',
+            'properties',
+            'system_time_validity',
+        ],
+        "Observation": [
+            'id',
+            'self_link',
+            'feature_of_interest_navigation_link',
+            'datastream_navigation_link',
+            'phenomenon_time',
+            'result_time',
+            'result_string',
+            'result_integer',
+            'result_double',
+            'result_boolean',
+            'result_json',
+            'result_quality',
+            'valid_time',
+            'parameters',
+        ],
+        "Observation_traveltime": [
+            'id',
+            'self_link',
+            'feature_of_interest_navigation_link',
+            'datastream_navigation_link',
+            'phenomenon_time',
+            'result_time',
+            'result_string',
+            'result_integer',
+            'result_double',
+            'result_boolean',
+            'result_json',
+            'result_quality',
+            'valid_time',
+            'parameters',
+            'system_time_validity'
         ],
     }
 
@@ -676,13 +784,13 @@ class STA2REST:
         main_entity, main_entity_id = uri['entity']
         entities = uri['entities']
 
-        # if query_ast.as_of:
-        #     if len(entities) == 0:
-        #         main_entity += "_traveltime"
-        #         as_of_filter = f"system_time_validity=cs.[{query_ast.as_of.value},{query_ast.as_of.value}{'}'}]"
-        #         query_ast.filter = FilterNode(query_ast.filter.filter + f" and {as_of_filter}" if query_ast.filter else as_of_filter)
-        #     else:
-        #         raise Exception("AS_OF function available only for single entity")
+        if query_ast.as_of:
+            if len(entities) == 0 and not query_ast.expand:
+                main_entity += "TravelTime"
+                as_of_filter = f"system_time_validity eq {query_ast.as_of.value}"
+                query_ast.filter = FilterNode(query_ast.filter.filter + f" and {as_of_filter}" if query_ast.filter else as_of_filter)
+            else:
+                raise Exception("AS_OF function available only for single entity")
         
         url = f"/{main_entity}"
 
@@ -847,11 +955,11 @@ class STA2REST:
     def handle_observation_result(operator, value):
         result_conditions = []
         if operator in ['__eq__', '__ne__', '__gt__', '__lt__', '__ge__', '__le__']:
-            for result_type in ['resultInteger', 'resultDouble']:
+            for result_type in ['result_integer', 'result_double']:
                 filter_query = getattr(globals()['Observation'], result_type)
                 result_conditions.append(getattr(filter_query, operator)(float(value)))
         elif operator in ['__eq__', '__ne__']:
-            filter_query_string = getattr(globals()['Observation'], 'resultString')
+            filter_query_string = getattr(globals()['Observation'], 'result_string')
             result_conditions.append(getattr(filter_query_string, operator)(value))
         return result_conditions
 

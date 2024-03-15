@@ -17,7 +17,7 @@ TOKEN_TYPES = {
     'FILTER': r'\$filter=',
     'EXPAND': r'\$expand=',
     'ORDERBY': r'\$orderby=',
-    'TRAVELTIME': r'\$traveltime=',
+    'ASOF': r'\$asof=',
     'SUBQUERY_SEPARATOR': r';',
     'VALUE_SEPARATOR': r',',
     'OPTIONS_SEPARATOR': r'&',
