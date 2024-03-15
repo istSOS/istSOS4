@@ -1,11 +1,10 @@
 from .database import Base, SCHEMA_NAME
-from sqlalchemy import Column, Integer, Text, String, ForeignKey, Float, Boolean
+from sqlalchemy import Column, Integer, Text, Float, Boolean, ForeignKey
 from sqlalchemy.inspection import inspect
-from sqlalchemy.dialects.postgresql import JSON, TIMESTAMP
-from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import JSON, TIMESTAMP, TSTZRANGE
 
-class Observation(Base):
-    __tablename__ = 'Observation'
+class ObservationTravelTime(Base):
+    __tablename__ = 'Observation_traveltime'
     __table_args__ = {'schema': SCHEMA_NAME}
 
     id = Column(Integer, primary_key=True)
@@ -23,9 +22,8 @@ class Observation(Base):
     valid_time = Column("validTime", TIMESTAMP)
     parameters = Column(JSON)
     datastream_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Datastream.id'), nullable=False)
-    datastream = relationship("Datastream", back_populates="observation")
     featuresofinterest_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.FeaturesOfInterest.id'), nullable=False)
-    featuresofinterest = relationship("FeaturesOfInterest", back_populates="observation")
+    system_time_validity = Column(TSTZRANGE)
 
     def _serialize_columns(self):
         """Serialize model columns to a dict, applying naming transformations."""
@@ -62,23 +60,12 @@ class Observation(Base):
                 data.pop(field)
 
     def to_dict_expand(self):
-        """Serialize the Observation model to a dict, including expanded relationships and handling result fields."""
+        """Serialize the ObservationTravelTime model to a dict, excluding 'system_time_validity' and handling result fields."""
         data = self._serialize_columns()
+        data.pop('system_time_validity', None)
         self._handle_result_fields(data)
-        for relationships in ['datastream', 'featuresofinterest']:
-            if relationships not in inspect(self).unloaded:
-                related_obj = getattr(self, relationships, None)
-                if related_obj is not None:
-                    relationship_key = relationships[0].upper() + relationships[1:]
-                    data[relationship_key] = related_obj.to_dict_expand()
         return data
 
-    def to_dict(self):
-        """Serialize the Observation model to a dict without expanding relationships but still handling result fields."""
-        data = self._serialize_columns()
-        self._handle_result_fields(data)
-        return data
-    
     def _format_datetime_range(self, range_obj):
         if range_obj:
             lower = getattr(range_obj, 'lower', None)

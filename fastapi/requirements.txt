@@ -10,4 +10,5 @@ postgrest
 odata-query
 sqlalchemy>=1.4.0
 geoalchemy2
+geoalchemy2[shapely]
 psycopg2-binary
