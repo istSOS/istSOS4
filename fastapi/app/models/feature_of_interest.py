@@ -1,11 +1,11 @@
 from .database import Base, SCHEMA_NAME
-from sqlalchemy import Column, Integer, Text, String
+from sqlalchemy.sql.schema import Column
+from sqlalchemy.sql.sqltypes import Integer, Text, String
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import JSON, TSTZRANGE
+from sqlalchemy.dialects.postgresql.json import JSON
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from geoalchemy2 import Geometry
-from shapely.wkb import loads as wkb_loads
-import json
 
 class FeaturesOfInterest(Base):
     __tablename__ = 'FeaturesOfInterest'
@@ -18,6 +18,7 @@ class FeaturesOfInterest(Base):
     description = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
     feature = Column(Geometry(geometry_type='GEOMETRY', srid=4326), nullable=False)
+    feature_geojson = Column(JSON)
     properties = Column(JSON)
     observation = relationship("Observation", back_populates="featuresofinterest")
 
@@ -35,9 +36,8 @@ class FeaturesOfInterest(Base):
             if column.key not in inspect(self).unloaded
         }
         if 'feature' in serialized_data and self.feature is not None:
-            shapely_geom = wkb_loads(bytes(self.feature.data))
-            geojson_dict = json.loads(json.dumps(shapely_geom.__geo_interface__))
-            serialized_data['feature'] = geojson_dict
+            serialized_data['feature'] = self.feature_geojson
+            serialized_data.pop('feature_geojson', None)
         return serialized_data
 
     def to_dict_expand(self):

@@ -1,11 +1,12 @@
 from .database import Base, SCHEMA_NAME
-from sqlalchemy import Column, Integer, Text, String, ForeignKey
+from sqlalchemy.sql.schema import Column, ForeignKey
+from sqlalchemy.sql.sqltypes import Integer, Text, String
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import JSON, TIMESTAMP, TSTZRANGE
+from sqlalchemy.dialects.postgresql.json import JSON
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
+from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from geoalchemy2 import Geometry
-from shapely.wkb import loads as wkb_loads
-import json
 
 class Datastream(Base):
     __tablename__ = 'Datastream'
@@ -22,6 +23,7 @@ class Datastream(Base):
     unit_of_measurement = Column("unitOfMeasurement", JSON, nullable=False)
     observation_type = Column("observationType", String(100), nullable=False)
     observed_area = Column("observedArea", Geometry(geometry_type='POLYGON', srid=4326))
+    observed_area_geojson = Column(JSON)
     phenomenon_time = Column("phenomenonTime", TSTZRANGE)
     result_time = Column("resultTime", TIMESTAMP)
     properties = Column(JSON)
@@ -54,9 +56,8 @@ class Datastream(Base):
             if column.key not in inspect(self).unloaded
         }
         if 'observedArea' in serialized_data and self.observed_area is not None:
-            shapely_geom = wkb_loads(bytes(self.observed_area.data))
-            geojson_dict = json.loads(json.dumps(shapely_geom.__geo_interface__))
-            serialized_data['observedArea'] = geojson_dict
+            serialized_data['observedArea'] = self.observed_area_geojson
+            serialized_data.pop('observed_area_geojson', None)
         if 'phenomenonTime' in serialized_data and self.phenomenon_time is not None:
             serialized_data['phenomenonTime'] = self._format_datetime_range(self.phenomenon_time)
         if 'resultTime' in serialized_data and self.result_time is not None:

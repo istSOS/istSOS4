@@ -1,7 +1,9 @@
-from sqlalchemy import Column, Integer, Text, String
-from sqlalchemy.inspection import inspect
-from sqlalchemy.dialects.postgresql import JSON, TSTZRANGE
 from .database import Base, SCHEMA_NAME
+from sqlalchemy.sql.schema import Column
+from sqlalchemy.sql.sqltypes import Integer, Text, String
+from sqlalchemy.inspection import inspect
+from sqlalchemy.dialects.postgresql.json import JSON
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 
 class SensorTravelTime(Base):
     __tablename__ = 'Sensor_traveltime'

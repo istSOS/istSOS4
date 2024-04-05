@@ -1,11 +1,10 @@
 from .database import Base, SCHEMA_NAME
-from sqlalchemy import Column, Integer, Text, String
+from sqlalchemy.sql.schema import Column
+from sqlalchemy.sql.sqltypes import Integer, Text, String
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.dialects.postgresql.json import JSON
 from geoalchemy2 import Geometry
-from shapely.wkb import loads as wkb_loads
-import json
 
 class Location(Base):
     __tablename__ = 'Location'
@@ -19,6 +18,7 @@ class Location(Base):
     description = Column(Text, nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
     location = Column(Geometry(geometry_type='GEOMETRY', srid=4326), nullable=False)
+    location_geojson = Column(JSON)
     properties = Column(JSON)
     thing = relationship("Thing", back_populates="location")
     historicallocation = relationship("HistoricalLocation", back_populates="location")
@@ -38,9 +38,8 @@ class Location(Base):
             if column.key not in inspect(self).unloaded
         }
         if 'location' in serialized_data and self.location is not None:
-            shapely_geom = wkb_loads(bytes(self.location.data))
-            geojson_dict = json.loads(json.dumps(shapely_geom.__geo_interface__))
-            serialized_data['location'] = geojson_dict
+            serialized_data['location'] = self.location_geojson
+            serialized_data.pop('location_geojson', None)
         return serialized_data
 
     def to_dict_expand(self):

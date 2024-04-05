@@ -1,7 +1,10 @@
 from .database import Base, SCHEMA_NAME
-from sqlalchemy import Column, Integer, Text, Float, Boolean, ForeignKey
+from sqlalchemy.sql.schema import Column, ForeignKey
+from sqlalchemy.sql.sqltypes import Integer, Text, Float, Boolean
 from sqlalchemy.inspection import inspect
-from sqlalchemy.dialects.postgresql import JSON, TIMESTAMP, TSTZRANGE
+from sqlalchemy.dialects.postgresql.json import JSON
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
+from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 
 class ObservationTravelTime(Base):
     __tablename__ = 'Observation_traveltime'
@@ -55,9 +58,9 @@ class ObservationTravelTime(Base):
         result_fields = ['result_string', 'result_integer', 'result_double', 'result_boolean', 'result_json']
         for field in result_fields:
             if field in data and data[field] is not None:
-                data['result'] = data.pop(field)
+                data['result'] = data.pop(field, None)
             else:
-                data.pop(field)
+                data.pop(field, None)
 
     def to_dict_expand(self):
         """Serialize the ObservationTravelTime model to a dict, excluding 'system_time_validity' and handling result fields."""
