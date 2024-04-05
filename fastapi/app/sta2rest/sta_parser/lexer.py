@@ -30,6 +30,7 @@ TOKEN_TYPES = {
     'IDENTIFIER': r'@{0,1}[a-zA-Z_][.a-zA-Z0-9_/]*',
     'FLOAT': r'[0-9]+\.[0-9]+',
     'INTEGER': r'[0-9]+',
+    'GEOGRAPHY': r"geography'(?:[^']|'')*'",
     'STRING': r"'[^']*'",
     'LEFT_PAREN': r'\(',
     'RIGHT_PAREN': r'\)',

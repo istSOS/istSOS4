@@ -25,6 +25,7 @@ from ..models import (
     ObservedPropertyTravelTime, SensorTravelTime, DatastreamTravelTime,
     FeaturesOfInterestTravelTime, ObservationTravelTime
 )
+from geoalchemy2 import Geometry, WKTElement
 
 # Create the OData lexer and parser
 odata_filter_lexer = ODataLexer()
@@ -82,7 +83,7 @@ class NodeVisitor(Visitor):
         identifiers = [f'{self.main_entity}.{self.visit(identifier)}' for identifier in node.identifiers]
         return identifiers
 
-    def visit_FilterNode(self, node: FilterNode):
+    def visit_FilterNode(self, node: FilterNode, entity: str):
         """
         Visit a filter node.
 
@@ -96,17 +97,8 @@ class NodeVisitor(Visitor):
         # Parse the filter using the OData lexer and parser
         ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(node.filter))
         # Visit the tree to convert the filter
-        res = FilterVisitor().visit(ast)
-        results = []
-        pattern = re.compile(r'((?:\w+\.)?\w+)(__eq__|__ne__|__gt__|__lt__|__ge__|__le__)(((\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(Z|[+-]\d{2}:\d{2})?)|(-?\d+(?:\.\d+)?))')
-        logical_op = res[0] if isinstance(res, tuple) else None
-        search_string = ','.join(res[1:]) if isinstance(res, tuple) else res
-        matches = pattern.findall(search_string)
-        conditions = []
-        for match in matches:
-            column, operator, value = match[0], match[1], match[2]
-            conditions.append([self.main_entity, column, operator, value])
-        return [logical_op, conditions]
+        res = FilterVisitor(entity).visit(ast)
+        return res
 
     def visit_OrderByNodeIdentifier(self, node: OrderByNodeIdentifier):
         """
@@ -136,8 +128,10 @@ class NodeVisitor(Visitor):
         attribute_name, *_, order = identifiers[0].split('.')
         if self.main_entity == 'Observation' and 'result' in identifiers[0]:
             results_attrs = ['result_double', 'result_integer', 'result_boolean', 'result_string', 'result_json']
-            return [getattr(globals()[self.main_entity], attr) for attr in results_attrs], order
-        return [getattr(globals()[self.main_entity], attribute_name)], order
+            attributes = [getattr(globals()[self.main_entity], attr) for attr in results_attrs]
+        else:
+            attributes = [getattr(globals()[self.main_entity], attribute_name)]
+        return attributes, order
 
     def visit_SkipNode(self, node: SkipNode):
         """
@@ -189,7 +183,7 @@ class NodeVisitor(Visitor):
 
         # dict to store the converted parts of the expand node
         select = None
-        filter = []
+        filter = None
         filters = []
         orderby = ""
         orderbys = []
@@ -209,71 +203,61 @@ class NodeVisitor(Visitor):
                 if parent:
                     prefix = parent
                 prefix += expand_identifier.identifier
-                fk_entity = globals()[prefix]
+                sub_entity = globals()[prefix]
                 # Check if we have a subquery
                 if expand_identifier.subquery:
-                    # check if we have a select, filter, orderby, skip, top or count in the subquery
+                    # Check for select clause in subquery
                     if expand_identifier.subquery.select:
                         if not select:
                             select = SelectNode([])
-                        identifier_list = [self.visit(identifier) for identifier in expand_identifier.subquery.select.identifiers]
-                        if prefix == 'Observation' and 'result' in identifier_list:
-                            if 'result' in identifier_list:
-                                identifier_list.remove('result')
-                            new_results = ['result_integer', 'result_boolean', 'result_string', 'result_double', 'result_json']
-                            identifier_list.extend(new_results)
-                        identifiers = ','.join(identifier_list)
+                        identifiers = [self.visit(identifier) for identifier in expand_identifier.subquery.select.identifiers]
+                        identifiers = ','.join(identifiers)
                         select.identifiers.append(IdentifierNode(f'{expand_identifier.identifier}({identifiers})'))
+
+                    # Check for filter clause in subquery
                     if expand_identifier.subquery.filter:
-                        logical_op, filter_criteria = self.visit_FilterNode(expand_identifier.subquery.filter)
-                        filter_expressions_child = []
-                        filter_expressions_father = []
-                        for criteria in filter_criteria:
-                            entity, column, operator, value = criteria
-                            filter_expression = None
-                            if prefix == 'Observation' and column == 'result':
-                                result_conditions = STA2REST.handle_observation_result(operator, value)
-                                filter_expression = or_(*result_conditions)
-                            else:
-                                filter_expression = getattr(getattr(fk_entity, column), operator)(value)
-                            filter_expressions_child.append(filter_expression)
-                            if hasattr(globals()[entity], f"{prefix.lower()}_id"):
-                                filter_expression_father = getattr(getattr(globals()[entity], f"{prefix.lower()}_id"), operator)(value)
-                                filter_expressions_father.append(filter_expression_father)
-                        filter = [logical_op, filter_expressions_child, filter_expressions_father]
+                        filter = self.visit_FilterNode(expand_identifier.subquery.filter, expand_identifier.identifier)
+
+                    # Check for orderby clause in subquery
                     if expand_identifier.subquery.orderby:
                         identifiers = [self.visit(identifier) for identifier in expand_identifier.subquery.orderby.identifiers]
                         attribute_name, *_, order = identifiers[0].split('.')
                         attrs = []
                         if prefix == 'Observation' and 'result' in identifiers[0]:
                             results_attrs = ['result_double', 'result_integer', 'result_boolean', 'result_string', 'result_json']
-                            attrs = [getattr(fk_entity, attr) for attr in results_attrs]
+                            attrs = [getattr(sub_entity, attr) for attr in results_attrs]
                         else:
                             results_attrs = attribute_name
-                            attrs.append(getattr(fk_entity, attribute_name))
+                            attrs.append(getattr(sub_entity, attribute_name))
                         orderby = [attrs, order, results_attrs]
+
+                    # Check for skip clause in subquery
                     if expand_identifier.subquery.skip:
                         skip = str(expand_identifier.subquery.skip.count) 
+
+                    # Check for top clause in subquery
                     if expand_identifier.subquery.top:
                         top = str(expand_identifier.subquery.top.count)
-                    if expand_identifier.subquery.count:
-                        count = str(expand_identifier.subquery.count.value).lower()
 
-                # If we don't have a subquery, we add the identifier to the select node
+                    # Check for count clause in subquery
+                    # if expand_identifier.subquery.count:
+                    #     count = str(expand_identifier.subquery.count.value).lower()
+
+                # If there's no subquery or no select clause in the subquery, add the identifier to the select node
                 if not expand_identifier.subquery or not expand_identifier.subquery.select:
                     if not select:
                         select = SelectNode([])
                     default_columns = STA2REST.get_default_column_names(expand_identifier.identifier)
                     default_columns = [item for item in default_columns if "navigation_link" not in item]
-                    # join default columns as single string
                     default_columns = ','.join(default_columns)
                     select.identifiers.append(IdentifierNode(f'{expand_identifier.identifier}({default_columns})'))
 
+                # If there's an identifier and no subquery or no orderby clause in the subquery, set default orderby
                 if expand_identifier.identifier and (not expand_identifier.subquery or not expand_identifier.subquery.orderby):
                     orderby = [[getattr(globals()[expand_identifier.identifier], 'id')], 'desc', None]
 
                 filters.append(filter)
-                filter = []
+                filter = None
                 orderbys.append(orderby)
                 orderby = ""
                 skips.append(skip)
@@ -306,19 +290,17 @@ class NodeVisitor(Visitor):
 
         # list to store the converted parts of the query node
         session = Session()
-        pk_entity = globals()[self.main_entity]
-        query_parts = session.query(pk_entity)
-        count_query = [session.query(func.count(getattr(pk_entity, 'id').distinct()))] if not 'TravelTime' in self.main_entity else [session.query(func.count(getattr(pk_entity, 'system_time_validity').distinct()))]
-        no_limited_count = None
-        limited_query = select(getattr(pk_entity, 'id')) if not 'TravelTime' in self.main_entity else select(getattr(pk_entity, 'system_time_validity'))
+        main_entity = globals()[self.main_entity]
+        main_query = session.query(main_entity)
+        main_query_select_pagination = select(getattr(main_entity, 'id')) if not 'TravelTime' in self.main_entity else select(getattr(main_entity, 'id'), getattr(main_entity, 'system_time_validity'))
+        count_query = [session.query(func.count(getattr(main_entity, 'id').distinct()))] if not 'TravelTime' in self.main_entity else [session.query(func.count(func.distinct(getattr(main_entity, 'id'), getattr(main_entity, 'system_time_validity'))))]
+        main_query_select = None
         window = None
-        sub_query_parts = None
-        subqueries = []
+        subquery_parts = None
         order_subquery = None
+
+        subqueries = []
         limited_skipped_subqueries = []
-        limit_subquery_value = 100
-        skip_subquery_value = 0
-        orderby_subqueries = None
         globals()["id_query_result"] = False
         globals()["id_subquery_result"] = []
         # Check if we have an expand node before the other parts of the query
@@ -326,175 +308,220 @@ class NodeVisitor(Visitor):
             # Visit the expand node
             result = self.visit(node.expand)
             for index in range(len(node.expand.identifiers)):
-                fk_entity = globals()[node.expand.identifiers[index].identifier]
-                limit_subquery_value = 100
-                skip_subquery_value = 0
+                sub_entity = globals()[node.expand.identifiers[index].identifier]
                 foreign_key_attr_name = f"{self.main_entity.lower()}_id"
-                if hasattr(fk_entity, foreign_key_attr_name):
-                    foreign_key_attr  = getattr(fk_entity, foreign_key_attr_name)
+                if hasattr(sub_entity, foreign_key_attr_name):
+                    foreign_key_attr  = getattr(sub_entity, foreign_key_attr_name)
                 else:
-                    foreign_key_attr  = getattr(fk_entity, 'id')
+                    foreign_key_attr  = getattr(sub_entity, 'id')
                 window = func.row_number().over(
                     partition_by=foreign_key_attr, order_by=desc(foreign_key_attr)
                 ).label("rank")
-                sub_query_parts = session.query(fk_entity, window)
+                subquery_parts = session.query(sub_entity, window)
 
                 globals()["id_subquery_result"].append((node.expand.identifiers[index].identifier, False))
                 # Merge the results with the other parts of the query
                 if result['select']:
-                    if not node.select:
-                        node.select = SelectNode([])
+                    select_query = []
                     match = re.match(r'(.*?)\((.*?)\)', result['select'].identifiers[index].name)
                     entity = match.group(1)
                     fields = match.group(2).split(',')
+                    
                     if "id" in fields:
                         globals()["id_subquery_result"][index] = (node.expand.identifiers[index].identifier, True)
-                    select_query = [getattr(globals()[entity], field.strip()) for field in fields]
-                if result['filter'][index]:
-                    logical_op, filter_expressions_child, filter_expressions_father = result['filter'][index]
+                        
+                    for field in fields:
+                        if (entity in ['Observation', 'ObservationTravelTime']) and field == 'result':
+                            select_query.extend([
+                                getattr(globals()[entity], 'result_integer'),
+                                getattr(globals()[entity], 'result_double'),
+                                getattr(globals()[entity], 'result_string'),
+                                getattr(globals()[entity], 'result_boolean'),
+                                getattr(globals()[entity], 'result_json')
+                            ])
+                        else:
+                            select_query.append(getattr(globals()[entity], field.strip()))
+
+                if result['filter'][index] is not None:
                     is_limited_query = None
-                    if filter_expressions_father:
-                        expressions = filter_expressions_father
-                        is_limited_query = True
-                    else:
-                        expressions = filter_expressions_child
-                        is_limited_query = False
-                    if logical_op:
-                        combined_expression = logical_op(*expressions)
-                    else:
-                        combined_expression = expressions[0]
-                    if is_limited_query:
-                        limited_query = limited_query.filter(combined_expression)
-                    else:
-                        sub_query_parts = sub_query_parts.filter(combined_expression)
+                    
+                    # Check if the main entity has an attribute based on the expand
+                    if hasattr(globals()[self.main_entity], f"{node.expand.identifiers[index].identifier.lower()}_id"):
+                        main_query_select_pagination = main_query_select_pagination.join(globals()[node.expand.identifiers[index].identifier]).filter(result['filter'][index])
+                    
+                    # Check if the expand entity has an attribute based on the main entity
+                    if hasattr(globals()[node.expand.identifiers[index].identifier], f"{self.main_entity.lower()}_id"):
+                        main_query_select_pagination = main_query_select_pagination.join(globals()[node.expand.identifiers[index].identifier]).filter(result['filter'][index])
+                        subquery_parts = subquery_parts.filter(result['filter'][index])
+
                 if result['orderby'][index]:
                     attrs, order, attr_name = result['orderby'][index]
-                    order_subquery = order, attr_name
-                    ordering = [asc(attribute) for attribute in attrs] if order == 'asc' else [desc(attribute) for attribute in attrs]
-                    sub_query_parts = sub_query_parts.order_by(*ordering)
-                if result['skip'][index]:
-                    skip_subquery_value = result['skip'][index]
-                if result['top'][index]:
-                    limit_subquery_value = result['top'][index]
-                if result['count'][index]:
-                    sub_query_parts = sub_query_parts.count()
+                    order_subquery = (order, attr_name)
+                    
+                    # Create list of ordering attributes based on the specified order
+                    ordering = [asc(attribute) if order == 'asc' else desc(attribute) for attribute in attrs]
+                    
+                    # Apply ordering to the subquery parts
+                    subquery_parts = subquery_parts.order_by(*ordering)
 
-                sub_query_parts = sub_query_parts.subquery()
-                subqueries.append(sub_query_parts)
-                limited_skipped_subqueries.append([sub_query_parts, skip_subquery_value, limit_subquery_value])
+                skip_subquery_value = result['skip'][index] or 0
+
+                limit_subquery_value = result['top'][index] or 100
+
+                # if result['count'][index]:
+                #     subquery_parts = subquery_parts.count()
+
+                # Convert subquery_parts to a subquery
+                subquery_parts = subquery_parts.subquery()
+
+                # Append subquery to list of subqueries
+                subqueries.append(subquery_parts)
+
+                # Append subquery with skip and limit values to another list
+                limited_skipped_subqueries.append([subquery_parts, skip_subquery_value, limit_subquery_value])
+
+                # Determine foreign key attribute name
                 foreign_key_attr_name = f"{node.expand.identifiers[index].identifier.lower()}_id"
-                if hasattr(pk_entity, foreign_key_attr_name):
-                    foreign_key_value = getattr(pk_entity, foreign_key_attr_name, None)
-                    query_parts = query_parts.join(
+
+                # Check if the main entity has a foreign key attribute
+                if hasattr(main_entity, foreign_key_attr_name):
+                    foreign_key_value = getattr(main_entity, foreign_key_attr_name, None)
+                    
+                    # Join main query with subquery using foreign key value
+                    main_query = main_query.join(
                         subqueries[index], 
                         foreign_key_value == subqueries[index].c.id
                     )
+                    
                     count_query[0] = count_query[0].join(
                         subqueries[index], 
                         foreign_key_value == subqueries[index].c.id
                     )
                 else:
-                    default_join_condition = getattr(pk_entity, 'id') == subqueries[index].c.get(f"{self.main_entity.lower()}_id", None)
-                    query_parts = query_parts.join(subqueries[index], default_join_condition)
+                    # Define default join condition
+                    default_join_condition = getattr(main_entity, 'id') == subqueries[index].c.get(f"{self.main_entity.lower()}_id", None)
+                    
+                    # Join main query with subquery using default join condition
+                    main_query = main_query.join(subqueries[index], default_join_condition)
                     count_query[0] = count_query[0].join(subqueries[index], default_join_condition)
-            
-                query_parts = query_parts.options(
+
+                # Configure options for main query
+                main_query = main_query.options(
                     contains_eager(
-                        getattr(pk_entity, node.expand.identifiers[index].identifier.lower(), None), 
+                        getattr(main_entity, node.expand.identifiers[index].identifier.lower(), None), 
                         alias=subqueries[index]
                     ).load_only(*select_query)
-                )
+)
+
 
         if not node.select:
             node.select = SelectNode([])
             # get default columns for main entity
             default_columns = STA2REST.get_default_column_names(self.main_entity)
             for column in default_columns:
-                if column == 'id':
-                    globals()["id_query_result"] = True
                 node.select.identifiers.append(IdentifierNode(column))
 
         # Check if we have a select, filter, orderby, skip, top or count in the query
         if node.select:
             select_query = []
+            
+            # Iterate over fields in node.select
             for field in self.visit(node.select):
                 field_name = field.split('.')[-1]
+                
+                # Check if field is 'id' and set id_query_result flag
                 if field_name == 'id':
                     globals()["id_query_result"] = True
-                if field_name == 'result':
+                
+                # Check if main_entity is Observation or ObservationTravelTime and field is 'result'
+                if (self.main_entity in ['Observation', 'ObservationTravelTime']) and field_name == 'result':
+                    # Extend select_query with result fields
                     select_query.extend([
-                        getattr(pk_entity, 'result_integer'),
-                        getattr(pk_entity, 'result_double'),
-                        getattr(pk_entity, 'result_string'),
-                        getattr(pk_entity, 'result_boolean'),
-                        getattr(pk_entity, 'result_json')
+                        getattr(main_entity, 'result_integer'),
+                        getattr(main_entity, 'result_double'),
+                        getattr(main_entity, 'result_string'),
+                        getattr(main_entity, 'result_boolean'),
+                        getattr(main_entity, 'result_json')
                     ])
                 else:
-                    select_query.append(getattr(pk_entity, field_name))
-            query_parts = query_parts.options(load_only(*select_query)) if select_query else query_parts
+                    # Append field to select_query
+                    select_query.append(getattr(main_entity, field_name))
+            
+            # Set options for main_query if select_query is not empty
+            main_query = main_query.options(load_only(*select_query)) if select_query else main_query
         if node.filter:
-            logical_op, filter_criteria = self.visit(node.filter)
-            filter_expressions = []
-            for entity, column, operator, value in filter_criteria:
-                filter_expression = None
-                if '.' not in column:
-                    if entity == 'Observation' and column == 'result':
-                        result_conditions = STA2REST.handle_observation_result(operator, value)
-                        filter_expression = or_(*result_conditions)
-                    else:
-                        filter_query = getattr(globals()[entity], column)
-                        if 'TravelTime' in entity:
-                            value = datetime.fromisoformat(value.rstrip("Z")).replace(tzinfo=timezone.utc)
-                            filter_expression = filter_query.op('@>')(func.timestamptz(value))
-                        else:
-                            filter_expression = getattr(filter_query, operator)(value)
-                else:
-                    sub_entity, sub_column = column.split('.')
-                    sub_query_parts = sub_query_parts or session.query(globals()[sub_entity])
-                    filter_query = getattr(globals()[sub_entity], sub_column)
-                    filter_expression = getattr(filter_query, operator)(value)
-                if filter_expression is not None:
-                    filter_expressions.append(filter_expression)
-            combined_expression = logical_op(*filter_expressions) if logical_op else filter_expressions[0]
-            if '.' not in filter_criteria[-1][1]:
-                limited_query = limited_query.filter(combined_expression)
-            else:
-                sub_query_parts = sub_query_parts.filter(combined_expression).subquery()
-                limited_query = limited_query.join(sub_query_parts)
+            main_query_select_pagination = main_query_select_pagination.filter(self.visit_FilterNode(node.filter, self.main_entity))
+
         if node.orderby:
             attrs, order = self.visit(node.orderby)
-            ordering = [asc(attribute) for attribute in attrs] if order == 'asc' else [desc(attribute) for attribute in attrs]
+            ordering = [asc(attribute) if order == 'asc' else desc(attribute) for attribute in attrs]
         else:
-            ordering = [desc(getattr(pk_entity, 'id'))]
-        limited_query = limited_query.order_by(*ordering)
-        query_parts = query_parts.order_by(*ordering)
+            ordering = [desc(getattr(main_entity, 'id'))]
+
+        # Apply ordering to main_query_select_pagination
+        main_query_select_pagination = main_query_select_pagination.order_by(*ordering)
+
+        # Apply ordering to main_query
+        main_query = main_query.order_by(*ordering)
+
+        # Iterate over subqueries and apply ordering
         for sq in subqueries:
             if order_subquery[1] is not None:
-                query_parts = query_parts.order_by(asc(getattr(sq.c, order_subquery[1]))) if (order_subquery[0] == 'asc') else query_parts.order_by(desc(getattr(sq.c, order_subquery[1])))
+                order_attr = getattr(sq.c, order_subquery[1])
+                ordering = asc(order_attr) if order_subquery[0] == 'asc' else desc(order_attr)
             else:
-                query_parts = query_parts.order_by(asc(sq.c.id)) if (order_subquery[0] == 'asc') else query_parts.order_by(desc(sq.c.id))
-        skip_base = self.visit(node.skip) if node.skip else 0
-        top_limit = self.visit(node.top) if node.top else 100
-        no_limited_count = limited_query.subquery()
-        limited_query = limited_query.offset(skip_base).limit(top_limit).subquery()
+                ordering = asc(sq.c.id) if order_subquery[0] == 'asc' else desc(sq.c.id)
+            
+            # Apply ordering to main_query
+            main_query = main_query.order_by(ordering)
+
+        # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
+        skip_value = self.visit(node.skip) if node.skip else 0
+        top_value = self.visit(node.top) if node.top else 100
+
+        # Create subquery for pagination
+        main_query_select = main_query_select_pagination.subquery()
+        main_query_select_pagination = main_query_select_pagination.offset(skip_value).limit(top_value).subquery()
+
+        # Apply filters based on limited_skipped_subqueries
         for lsq in limited_skipped_subqueries:
-            query_parts = query_parts.filter(
+            main_query = main_query.filter(
                 and_(
                     lsq[0].c.rank > lsq[1],
                     lsq[0].c.rank <= (int(lsq[1]) + int(lsq[2])),
-                    getattr(pk_entity, 'id').in_(select(limited_query.c.id))
+                    getattr(main_entity, 'id').in_(select(main_query_select_pagination.c.id))
                 )
-            ) 
+            )
+
+        # Apply additional filters if limited_skipped_subqueries is empty
         if not limited_skipped_subqueries:
-            query_parts = query_parts.filter(getattr(pk_entity, 'id').in_(select(limited_query.c.id))) if not 'TravelTime' in self.main_entity else query_parts.filter(getattr(pk_entity, 'system_time_validity').in_(select(limited_query.c.system_time_validity)))
-        count_query[0] = count_query[0].filter(getattr(pk_entity, 'id').in_(select(no_limited_count.c.id))) if not 'TravelTime' in self.main_entity else count_query[0].filter(getattr(pk_entity, 'system_time_validity').in_(select(no_limited_count.c.system_time_validity)))
+            if 'TravelTime' not in self.main_entity:
+                main_query = main_query.filter(getattr(main_entity, 'id').in_(select(main_query_select_pagination.c.id)))
+            else:
+                main_query = main_query.filter(
+                    and_(
+                        getattr(main_entity, 'id') == main_query_select_pagination.c.id,
+                        getattr(main_entity, 'system_time_validity') == main_query_select_pagination.c.system_time_validity
+                    )
+                )
+
+        # Apply filters to count_query
+        if 'TravelTime' not in self.main_entity:
+            count_query[0] = count_query[0].filter(getattr(main_entity, 'id').in_(select(main_query_select.c.id)))
+        else:
+            count_query[0] = count_query[0].filter(
+                and_(
+                    getattr(main_entity, 'id') == main_query_select.c.id,
+                    getattr(main_entity, 'system_time_validity') == main_query_select.c.system_time_validity
+                )
+            )
 
         if not node.count:
-           count_query.append(False)
+            count_query.append(False)
         else:
-           count_query.append(True)
+            count_query.append(True)
         # Join the converted parts of the query
-        return query_parts, subqueries, count_query
+        return main_query, subqueries, count_query
 
 class STA2REST:
     """
@@ -534,6 +561,7 @@ class STA2REST:
             'description',
             'encoding_type',
             'location',
+            'location_geojson',
             'properties',
         ],
         "LocationTravelTime": [
@@ -545,6 +573,7 @@ class STA2REST:
             'description',
             'encoding_type',
             'location',
+            'location_geojson',
             'properties',
             'system_time_validity',
         ],
@@ -636,6 +665,7 @@ class STA2REST:
             'unit_of_measurement',
             'observation_type',
             'observed_area',
+            'observed_area_geojson',
             'phenomenon_time',
             'result_time',
             'properties',
@@ -652,6 +682,7 @@ class STA2REST:
             'unit_of_measurement',
             'observation_type',
             'observed_area',
+            'observed_area_geojson',
             'phenomenon_time',
             'result_time',
             'properties',
@@ -665,6 +696,7 @@ class STA2REST:
             'description',
             'encoding_type',
             'feature',
+            'feature_geojson',
             'properties',
         ],
         "FeaturesOfInterestTravelTime": [
@@ -675,6 +707,7 @@ class STA2REST:
             'description',
             'encoding_type',
             'feature',
+            'feature_geojson',
             'properties',
             'system_time_validity',
         ],
@@ -694,7 +727,7 @@ class STA2REST:
             'valid_time',
             'parameters',
         ],
-        "Observation_traveltime": [
+        "ObservationTravelTime": [
             'id',
             'self_link',
             'feature_of_interest_navigation_link',
@@ -789,6 +822,9 @@ class STA2REST:
                 main_entity += "TravelTime"
                 as_of_filter = f"system_time_validity eq {query_ast.as_of.value}"
                 query_ast.filter = FilterNode(query_ast.filter.filter + f" and {as_of_filter}" if query_ast.filter else as_of_filter)
+            # if query_ast.expand:
+            #     query_ast.expand.identifiers[0].identifier = query_ast.expand.identifiers[0].identifier + "TravelTime"
+            #     query_ast.expand.subquery = query_ast.filter
             else:
                 raise Exception("AS_OF function available only for single entity")
         
@@ -950,18 +986,6 @@ class STA2REST:
             'ref': ref,
             'value': value
         }
-
-    @staticmethod
-    def handle_observation_result(operator, value):
-        result_conditions = []
-        if operator in ['__eq__', '__ne__', '__gt__', '__lt__', '__ge__', '__le__']:
-            for result_type in ['result_integer', 'result_double']:
-                filter_query = getattr(globals()['Observation'], result_type)
-                result_conditions.append(getattr(filter_query, operator)(float(value)))
-        elif operator in ['__eq__', '__ne__']:
-            filter_query_string = getattr(globals()['Observation'], 'result_string')
-            result_conditions.append(getattr(filter_query_string, operator)(value))
-        return result_conditions
 
 if __name__ == "__main__":
     """

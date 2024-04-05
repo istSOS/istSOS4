@@ -72,11 +72,10 @@ async def catch_all_get(request: Request, path_name: str):
                         del item["@iot.id"]
 
             keys_to_check = {tp[0] for tp in result["id_subquery_result"] if not tp[1]}
-
             for item in item_dicts:
                 for key in keys_to_check:
-                    if key in item and isinstance(item[key], (list, dict)):
-                        val = item[key]
+                    if (key in item and isinstance(item[key], (list, dict))) or (f"{key}s" in item and isinstance(item[f"{key}s"], (list, dict))):
+                        val = item[key] if key in item else item[f"{key}s"]
                         if isinstance(val, list):
                             for v in val:
                                 if isinstance(v, dict) and "@iot.id" in v:
