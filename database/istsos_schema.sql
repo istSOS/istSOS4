@@ -114,15 +114,26 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "Datastream@iot.navigationLink" TEXT
 );
 
--- CREATE OR REPLACE FUNCTION result(sensorthings."Observation") RETURNS text AS $$
---     SELECT CASE WHEN $1."resultType" = 0 THEN $1."resultString"
---                 WHEN $1."resultType" = 1 THEN $1."resultInteger"::text
---                 WHEN $1."resultType" = 2 THEN $1."resultDouble"::text
---                 WHEN $1."resultType" = 3 THEN $1."resultBoolean"::text
---                 WHEN $1."resultType" = 4 THEN $1."resultJSON"::text
---                 ELSE NULL
---              END;
--- $$ LANGUAGE SQL;
+CREATE OR REPLACE FUNCTION location_geojson(sensorthings."Location")
+RETURNS jsonb AS $$
+BEGIN
+    RETURN ST_AsGeoJSON($1."location")::jsonb;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION observed_area_geojson(sensorthings."Datastream")
+RETURNS jsonb AS $$
+BEGIN
+    RETURN ST_AsGeoJSON($1."observedArea")::jsonb;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION feature_geojson(sensorthings."FeaturesOfInterest")
+RETURNS jsonb AS $$
+BEGIN
+    RETURN ST_AsGeoJSON($1."feature")::jsonb;
+END;
+$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION update_location_self_link()
 RETURNS TRIGGER AS $$
@@ -455,6 +466,15 @@ BEGIN
             EXECUTE format('SELECT sensorthings.add_table_to_versioning(%L, %L);', tablename, original_schema);
         END LOOP;
 
+    -- Create the location_geojson function
+    EXECUTE 'CREATE OR REPLACE FUNCTION location_geojson(sensorthings."Location_traveltime") RETURNS jsonb AS $$ BEGIN RETURN ST_AsGeoJSON($1."location")::jsonb; END; $$ LANGUAGE plpgsql;';
+
+    -- Create the observed_area_geojson function
+    EXECUTE 'CREATE OR REPLACE FUNCTION observed_area_geojson(sensorthings."Datastream_traveltime") RETURNS jsonb AS $$ BEGIN RETURN ST_AsGeoJSON($1."observedArea")::jsonb; END; $$ LANGUAGE plpgsql;';
+
+    -- Create the feature_geojson function
+    EXECUTE 'CREATE OR REPLACE FUNCTION feature_geojson(sensorthings."FeaturesOfInterest_traveltime") RETURNS jsonb AS $$ BEGIN RETURN ST_AsGeoJSON($1."feature")::jsonb; END; $$ LANGUAGE plpgsql;';
+
     RAISE NOTICE 'Schema % is now versionized.', original_schema;
 END;
 $body$;
@@ -466,18 +486,6 @@ BEGIN
     -- First, set up schema versioning
         EXECUTE 'SELECT sensorthings.add_schema_to_versioning(''sensorthings'');';
 
-        -- After versioning is set up and Observation_traveltime exists, define the result function
-        CREATE OR REPLACE FUNCTION result(sensorthings."Observation_traveltime")
-            RETURNS text AS $body$
-                SELECT CASE 
-                WHEN $1."resultType" = 0 THEN to_json($1."resultString")
-                WHEN $1."resultType" = 1 THEN to_json($1."resultInteger")
-                WHEN $1."resultType" = 2 THEN to_json($1."resultDouble")
-                WHEN $1."resultType" = 3 THEN to_json($1."resultBoolean")
-                WHEN $1."resultType" = 4 THEN $1."resultJSON"::json
-                ELSE NULL
-             END;
-            $body$ LANGUAGE SQL;
     END IF;
 END $$;
 -- ==================

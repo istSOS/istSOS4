@@ -1,7 +1,9 @@
 from .database import Base, SCHEMA_NAME
-from sqlalchemy import Column, Integer, Text, ForeignKey
+from sqlalchemy.sql.schema import Column, ForeignKey
+from sqlalchemy.sql.sqltypes import Integer, Text
 from sqlalchemy.inspection import inspect
-from sqlalchemy.dialects.postgresql import TIMESTAMP, TSTZRANGE
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
+from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 
 class HistoricalLocationTravelTime(Base):
     __tablename__ = 'HistoricalLocation_traveltime'
