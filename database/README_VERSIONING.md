@@ -215,5 +215,5 @@ WHERE id = 1 and system_time_validity @> timestamptz('2024-04-09T17:16:00Z');
 ``` sql
 -- note: replace timestamps with correct values
 SELECT * FROM my_schema.users_traveltime
-WHERE id = 1 and system_time_validity <@ tstzrange(timestamptz('2024-04-09T17:16:00Z'), timestamptz('2024-04-09T19:16:00Z'));
+WHERE id = 1 and system_time_validity <@ tstzrange(timestamptz('2024-04-09T17:16:00Z'), timestamptz('2024-04-10T19:16:00Z'));
 ```
