@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS my_schema.posts (
 ## ADD TABLE TO VERSIONING
 
 ```
--- Create a schema for versioned records named {SCHEMA_NAME}\_history
+<!--- Create a schema for versioned records named {SCHEMA_NAME}\_history -->
 CREATE SCHEMA IF NOT EXISTS my_schema_history;
 ```
 
