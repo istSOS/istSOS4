@@ -87,7 +87,7 @@ BEGIN
 END;
 $body$;
 ```
-
+### Create function to avoid insert/update in history
 ```
 CREATE OR REPLACE FUNCTION istsos_prevent_table_update()
 RETURNS trigger
@@ -99,9 +99,8 @@ RETURN NULL;
 END;
 $body$;
 ```
-### Create function to avoid insert/update in history
+### Create function to add table to versioning schema
 ```
--- Create function to add table to versioning schema
 CREATE OR REPLACE FUNCTION my_schema.add_table_to_versioning(tablename text, schemaname text DEFAULT 'public')
 RETURNS void
 LANGUAGE plpgsql
@@ -116,10 +115,10 @@ BEGIN
     EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_commiter text DEFAULT NULL;', schemaname, tablename);
     EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_commit_message text DEFAULT NULL;', schemaname, tablename);
 
--- Create a new table with the same structure as the original table, but no data
-EXECUTE format('CREATE TABLE %I.%I AS SELECT \* FROM %I.%I WITH NO DATA;', schemaname || '\_history', tablename, schemaname, tablename);
--- Add constraint to enforce a single observation does not have two values at the same time
-EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I EXCLUDE USING gist (id WITH =, system_time_validity WITH &&);', schemaname || '\_history', tablename, tablename || '\_history_unique_obs');
+    -- Create a new table with the same structure as the original table, but no data
+    EXECUTE format('CREATE TABLE %I.%I AS SELECT \* FROM %I.%I WITH NO DATA;', schemaname || '\_history', tablename, schemaname, tablename);
+    -- Add constraint to enforce a single observation does not have two values at the same time
+    EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I EXCLUDE USING gist (id WITH =, system_time_validity WITH &&);', schemaname || '\_history', tablename, tablename || '\_history_unique_obs');
 
     -- Add triggers for versioning
     EXECUTE format('CREATE TRIGGER %I BEFORE INSERT OR UPDATE OR DELETE ON %I.%I FOR EACH ROW EXECUTE PROCEDURE istsos_mutate_history();', tablename || '_history_trigger', schemaname, tablename);
@@ -139,8 +138,8 @@ END;
 $body$;
 ```
 
--- Add the table to the versioning
--- !!! BEWARE !!! if you have multiple tables you must respect the order following REFRENCES
+### Add the table to the versioning
+### !!! BEWARE !!! if you have multiple tables you must respect the order following REFRENCES
 
 ```
 SELECT my_schema.add_table_to_versioning('users', 'my_schema');
