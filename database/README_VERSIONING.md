@@ -144,9 +144,7 @@ SELECT my_schema.add_table_to_versioning('users', 'my_schema');
 SELECT my_schema.add_table_to_versioning('posts', 'my_schema');
 ```
 
-'''
-
-## Insert and update example
+## Insert and update
 
 ```
 -- Insert data into the users table
