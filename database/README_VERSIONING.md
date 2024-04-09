@@ -3,9 +3,9 @@
 ## Create a new schema
 
 -- Create a schema
-'''
+```
 CREATE SCHEMA IF NOT EXISTS my_schema;
-'''
+```
 
 ## CREATE TABLES
 
