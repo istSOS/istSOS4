@@ -1,5 +1,5 @@
 from .database import Base, SCHEMA_NAME
-from sqlalchemy.sql.schema import Column, ForeignKey
+from sqlalchemy.sql.schema import Column, ForeignKey, PrimaryKeyConstraint
 from sqlalchemy.sql.sqltypes import Integer, Text
 from sqlalchemy.inspection import inspect
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
@@ -7,9 +7,8 @@ from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 
 class HistoricalLocationTravelTime(Base):
     __tablename__ = 'HistoricalLocation_traveltime'
-    __table_args__ = {'schema': SCHEMA_NAME}
     
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
     locations_navigation_link = Column("Locations@iot.navigationLink", Text)
     thing_navigation_link = Column("Thing@iot.navigationLink", Text)
@@ -17,6 +16,8 @@ class HistoricalLocationTravelTime(Base):
     thing_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Thing.id'), nullable=False)
     location_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Location.id'), nullable=False)
     system_time_validity = Column(TSTZRANGE)
+
+    __table_args__ = (PrimaryKeyConstraint(id, system_time_validity), {'schema': SCHEMA_NAME })
 
     def _serialize_columns(self):
         """Serialize model columns to a dict, applying naming transformations."""

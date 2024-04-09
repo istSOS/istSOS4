@@ -216,6 +216,22 @@ class Parser:
         self.match('TIMESTAMP')
 
         return ast.AsOfNode(value)
+
+    def parse_fromto(self):
+        """
+        Parse a fromto expression.
+
+        Returns:
+            ast.FromToNode: The parsed fromto expression.
+        """
+        self.match('FROMTO')
+        value1 = self.current_token.value
+        self.match('TIMESTAMP')
+        self.match('VALUE_SEPARATOR')
+        self.match('WHITESPACE')
+        value2 = self.current_token.value
+        self.match('TIMESTAMP')
+        return ast.FromToNode(value1, value2)
     
     def parse_subquery(self):
         """
@@ -233,6 +249,7 @@ class Parser:
         top = None
         count = None
         asof = None
+        fromto = None
 
         # continue parsing until we reach the end of the query
         while True:
@@ -252,6 +269,8 @@ class Parser:
                 count = self.parse_count()
             elif self.current_token.type == 'ASOF':
                 asof = self.parse_asof()
+            elif self.current_token.type == 'FROMTO':
+                fromto = self.parse_fromto()
             else:
                 raise Exception(f"Unexpected token: {self.current_token.type}")
             
@@ -263,7 +282,7 @@ class Parser:
         
         self.match('RIGHT_PAREN')
 
-        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, asof, True)
+        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, asof, fromto, True)
 
     def parse_query(self):
         """
@@ -280,6 +299,7 @@ class Parser:
         top = None
         count = None
         asof = None
+        fromto = None
 
         # continue parsing until we reach the end of the query
         while self.current_token != None:
@@ -299,13 +319,15 @@ class Parser:
                 count = self.parse_count()
             elif self.current_token.type == 'ASOF':
                 asof = self.parse_asof()
+            elif self.current_token.type == 'FROMTO':
+                fromto = self.parse_fromto()
             else:
                 raise Exception(f"Unexpected token: {self.current_token.type}")
             
             if self.current_token != None:
                 self.match('OPTIONS_SEPARATOR')
 
-        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, asof)
+        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, asof, fromto)
 
     def parse(self):
         """

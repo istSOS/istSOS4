@@ -267,6 +267,26 @@ class AsOfNode(Node):
         """
         self.value = value
 
+class FromToNode(Node):
+    """
+    A class representing a travel time node.
+
+    Inherits from Node.
+    
+    Attributes:
+    value1 (str): The travel time string.
+    value2 (str): The travel time string.
+    """
+    def __init__(self, value1, value2):
+        """
+        Initializes a FromToNode object.
+
+        Args:
+        value (str): The value string.
+        """
+        self.value1 = value1
+        self.value2 = value2
+
 class QueryNode(Node):
     """
     A class representing a query node.
@@ -285,7 +305,7 @@ class QueryNode(Node):
     """
 
     def __init__(self, select=None, filter=None, expand=None, orderby=None, skip=None, top=None, count=None,
-                 as_of=None, is_subquery=False):
+                 as_of=None, from_to=None, is_subquery=False):
         """
         Initializes a QueryNode object.
 
@@ -307,4 +327,5 @@ class QueryNode(Node):
         self.top = top
         self.count = count
         self.as_of = as_of
+        self. from_to = from_to
         self.is_subquery = is_subquery

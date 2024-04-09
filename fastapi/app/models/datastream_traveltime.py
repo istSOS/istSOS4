@@ -1,5 +1,5 @@
 from .database import Base, SCHEMA_NAME
-from sqlalchemy.sql.schema import Column, ForeignKey
+from sqlalchemy.sql.schema import Column, ForeignKey, PrimaryKeyConstraint
 from sqlalchemy.sql.sqltypes import Integer, Text, String
 from sqlalchemy.inspection import inspect
 from sqlalchemy.dialects.postgresql.json import JSON
@@ -9,7 +9,6 @@ from geoalchemy2 import Geometry
 
 class DatastreamTravelTime(Base):
     __tablename__ = 'Datastream_traveltime'
-    __table_args__ = {'schema': SCHEMA_NAME}
 
     id = Column(Integer, primary_key=True)
     self_link = Column("@iot.selfLink", Text)
@@ -30,6 +29,8 @@ class DatastreamTravelTime(Base):
     sensor_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Sensor.id'), nullable=False)
     observedproperty_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.ObservedProperty.id'), nullable=False)
     system_time_validity = Column(TSTZRANGE)
+
+    __table_args__ = (PrimaryKeyConstraint(id, system_time_validity), {'schema': SCHEMA_NAME })
 
     def _serialize_columns(self):
         """Serialize model columns to a dict, applying naming transformations."""
