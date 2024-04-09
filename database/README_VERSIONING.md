@@ -136,8 +136,7 @@ END;
 $body$;
 ```
 
-### Add the table to the versioning
-### !!! BEWARE !!! if you have multiple tables you must respect the order following REFRENCES
+### Add the table to the versioning (must respect the order following REFERENCES
 
 ```
 SELECT my_schema.add_table_to_versioning('users', 'my_schema');
