@@ -1,6 +1,6 @@
 # QUICK START
 
-### Create the schema
+### Create schema
 
 ```
 CREATE SCHEMA IF NOT EXISTS my_schema;
