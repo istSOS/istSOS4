@@ -2,7 +2,7 @@
 
 Create a new schema
 
-## CREATE SCHEMA 
+## CREATE A TABLE 
 
 '''
   -- Create a schema
@@ -15,7 +15,7 @@ Create a new schema
       email VARCHAR(100) UNIQUE NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
-  
+
   -- Create the second table
   CREATE TABLE IF NOT EXISTS my_schema.posts (
       post_id SERIAL PRIMARY KEY,
@@ -24,22 +24,47 @@ Create a new schema
       user_id INT REFERENCES my_schema.users(user_id),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
-  
-  -- Create the third table
-  CREATE TABLE IF NOT EXISTS my_schema.comments (
-      comment_id SERIAL PRIMARY KEY,
-      post_id INT REFERENCES my_schema.posts(post_id),
-      user_id INT REFERENCES my_schema.users(user_id),
-      comment TEXT NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  );
 '''
 
+## ADD TABLE TO VERSIONING
+'''
+  -- Create a schema for versioned records named {SCHEMA_NAME}_history
+  CREATE SCHEMA IF NOT EXISTS myschema_history;
 
-## ADD SCHEMA TO VERSIONING
+  -- Add the table to the versioning
+  -- !!! BEWARE !!! if you have multiple tables you must respect the order following REFRENCES
+  SELECT sensorthings.add_table_to_versioning(users, myschema)
+  SELECT sensorthings.add_table_to_versioning(posts, myschema)
+'''
 
+## INSERT & MODIFY RECORDS
+'''
+  -- Insert data into the users table
+  INSERT INTO my_schema.users (username, email) VALUES
+      ('user1', 'user1@example.com'),
+      ('user2', 'user2@example.com'),
+      ('user3', 'user3@example.com');
+  
+  -- Insert data into the posts table
+  INSERT INTO my_schema.posts (title, content, user_id) VALUES
+      ('First Post', 'Content of the first post.', 1),
+      ('Second Post', 'Content of the second post.', 2),
+      ('Third Post', 'Content of the third post.', 1);
 
-## MODIFY RECORDS
+  -- Update data in the users table
+  UPDATE my_schema.users
+  SET email = 'new_email@example.com'
+  WHERE user_id = 1;
+
+-- Update data in the users table
+  UPDATE my_schema.users
+  SET email = 'new_email@example.com'
+  WHERE user_id = 1;
+  
+  -- Update data in the posts table
+  UPDATE my_schema.posts
+  SET content = 'Updated content of the second post'
+  WHERE post_id = 2;
 
 
 ## QUERY HISTORICAL VERSIONS
