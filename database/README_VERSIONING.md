@@ -3,6 +3,7 @@
 ## Create a new schema
 
 ### Create a schema
+
 ```
 CREATE SCHEMA IF NOT EXISTS my_schema;
 ```
@@ -10,30 +11,30 @@ CREATE SCHEMA IF NOT EXISTS my_schema;
 ## CREATE TABLES
 
 ```
--- Create the first table
 CREATE TABLE IF NOT EXISTS my_schema.users (
-id SERIAL PRIMARY KEY,
-username VARCHAR(50) UNIQUE NOT NULL,
-email VARCHAR(100) UNIQUE NOT NULL,
-created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id SERIAL PRIMARY KEY,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  email VARCHAR(100) UNIQUE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
---- Create the second table
 CREATE TABLE IF NOT EXISTS my_schema.posts (
-id SERIAL PRIMARY KEY,
-title VARCHAR(100) NOT NULL,
-content TEXT NOT NULL,
-user_id INT REFERENCES my_schema.users(id),
-created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(100) NOT NULL,
+  content TEXT NOT NULL,
+  user_id INT REFERENCES my_schema.users(id),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
 ## ADD TABLE TO VERSIONING
 
-'''
+```
 -- Create a schema for versioned records named {SCHEMA_NAME}\_history
 CREATE SCHEMA IF NOT EXISTS my_schema_history;
+```
 
+```
 -- Create function to update raw in history
 CREATE OR REPLACE FUNCTION istsos_mutate_history()
 RETURNS trigger
@@ -80,7 +81,9 @@ END IF;
 
 END;
 $body$;
+```
 
+```
 CREATE OR REPLACE FUNCTION istsos_prevent_table_update()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -90,7 +93,9 @@ RAISE EXCEPTION 'Updates or Deletes on this table are not allowed';
 RETURN NULL;
 END;
 $body$;
+```
 
+```
 -- Create function to add table to versioning schema
 CREATE OR REPLACE FUNCTION my_schema.add_table_to_versioning(tablename text, schemaname text DEFAULT 'public')
 RETURNS void
@@ -127,18 +132,22 @@ EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I EXCLUDE USING gist (id WITH 
 
 END;
 $body$;
+```
 
 -- Add the table to the versioning
 -- !!! BEWARE !!! if you have multiple tables you must respect the order following REFRENCES
 
+```
 SELECT my_schema.add_table_to_versioning('users', 'my_schema');
 
 SELECT my_schema.add_table_to_versioning('posts', 'my_schema');
+```
+
 '''
 
 ## INSERT & MODIFY RECORDS
 
-'''
+```
 -- Insert data into the users table
 INSERT INTO my_schema.users (username, email) VALUES
 ('user1', 'user1@example.com'),
@@ -160,6 +169,6 @@ WHERE id = 1;
 UPDATE my_schema.posts
 SET content = 'Updated content of the second post'
 WHERE id = 2;
-'''
+```
 
 ## QUERY HISTORICAL VERSIONS
