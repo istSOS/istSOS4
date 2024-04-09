@@ -1,2 +1,46 @@
 # QUICK START
 
+Create a new schema
+
+CREATE SCHEMA 
+
+'''
+  -- Create a schema
+  CREATE SCHEMA IF NOT EXISTS my_schema;
+  
+  -- Create the first table
+  CREATE TABLE IF NOT EXISTS my_schema.users (
+      user_id SERIAL PRIMARY KEY,
+      username VARCHAR(50) UNIQUE NOT NULL,
+      email VARCHAR(100) UNIQUE NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  
+  -- Create the second table
+  CREATE TABLE IF NOT EXISTS my_schema.posts (
+      post_id SERIAL PRIMARY KEY,
+      title VARCHAR(100) NOT NULL,
+      content TEXT NOT NULL,
+      user_id INT REFERENCES my_schema.users(user_id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  
+  -- Create the third table
+  CREATE TABLE IF NOT EXISTS my_schema.comments (
+      comment_id SERIAL PRIMARY KEY,
+      post_id INT REFERENCES my_schema.posts(post_id),
+      user_id INT REFERENCES my_schema.users(user_id),
+      comment TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+'''
+
+
+ADD SCHEMA TO VERSIONING
+
+
+MODIFY RECORDS
+
+
+QUERY HISTORICAL VERSIONS
+
