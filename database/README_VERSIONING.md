@@ -10,7 +10,7 @@ CREATE SCHEMA IF NOT EXISTS my_schema;
 ## CREATE TABLES
 
 ```
-### Create the first table
+-- Create the first table
 CREATE TABLE IF NOT EXISTS my_schema.users (
 id SERIAL PRIMARY KEY,
 username VARCHAR(50) UNIQUE NOT NULL,
@@ -18,7 +18,7 @@ email VARCHAR(100) UNIQUE NOT NULL,
 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-### Create the second table
+--- Create the second table
 CREATE TABLE IF NOT EXISTS my_schema.posts (
 id SERIAL PRIMARY KEY,
 title VARCHAR(100) NOT NULL,
