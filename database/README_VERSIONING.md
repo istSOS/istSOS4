@@ -1,14 +1,12 @@
 # QUICK START
 
-## Create new schema
-
 ### Create the schema
 
 ```
 CREATE SCHEMA IF NOT EXISTS my_schema;
 ```
 
-## Create tables
+### Create tables
 
 ```
 CREATE TABLE IF NOT EXISTS my_schema.users (
