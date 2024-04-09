@@ -145,26 +145,29 @@ SELECT my_schema.add_table_to_versioning('posts', 'my_schema');
 ```
 
 ## Insert and update
+###  Insert data into the users table
 
 ```
--- Insert data into the users table
 INSERT INTO my_schema.users (username, email) VALUES
 ('user1', 'user1@example.com'),
 ('user2', 'user2@example.com'),
 ('user3', 'user3@example.com');
-
--- Insert data into the posts table
+```
+### Insert data into the posts table
+```
 INSERT INTO my_schema.posts (title, content, user_id) VALUES
 ('First Post', 'Content of the first post.', 1),
 ('Second Post', 'Content of the second post.', 2),
 ('Third Post', 'Content of the third post.', 1);
-
--- Update data in the users table
+```
+### Update data in the users table
+```
 UPDATE my_schema.users
 SET email = 'new_email@example.com'
 WHERE id = 1;
-
--- Update data in the posts table
+```
+### Update data in the posts table
+```
 UPDATE my_schema.posts
 SET content = 'Updated content of the second post'
 WHERE id = 2;
