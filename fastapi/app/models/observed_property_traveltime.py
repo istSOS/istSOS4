@@ -1,5 +1,5 @@
 from .database import Base, SCHEMA_NAME
-from sqlalchemy.sql.schema import Column
+from sqlalchemy.sql.schema import Column, PrimaryKeyConstraint
 from sqlalchemy.sql.sqltypes import Integer, Text, String
 from sqlalchemy.inspection import inspect
 from sqlalchemy.dialects.postgresql.json import JSON
@@ -7,9 +7,8 @@ from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 
 class ObservedPropertyTravelTime(Base):
     __tablename__ = 'ObservedProperty_traveltime'
-    __table_args__ = {'schema': SCHEMA_NAME}
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
     datastreams_navigation_link = Column("Datastreams@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
@@ -17,6 +16,8 @@ class ObservedPropertyTravelTime(Base):
     description = Column(String(255), nullable=False)
     properties = Column(JSON)
     system_time_validity = Column(TSTZRANGE)
+
+    __table_args__ = (PrimaryKeyConstraint(id, system_time_validity), {'schema': SCHEMA_NAME })
 
     def _serialize_columns(self):
         """Serialize model columns to a dict, applying naming transformations."""

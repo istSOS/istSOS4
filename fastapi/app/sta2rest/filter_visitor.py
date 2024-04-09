@@ -5,11 +5,35 @@ Author: Filippo Finke
 
 This module provides a visitor for the filter AST.
 """
-from odata_query import ast, visitor, typing, exceptions as ex
-from sqlalchemy.sql.expression import all_, any_, and_, or_, text
-from sqlalchemy.sql import functions
-from typing import Type
+import operator
+from typing import Type, Any, Callable, List, Optional, Union
+from sqlalchemy.inspection import inspect
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm.decl_api import DeclarativeMeta
+from sqlalchemy.orm.relationships import RelationshipProperty
+from sqlalchemy.sql import functions
+from sqlalchemy.sql.expression import (
+   BinaryExpression,
+   BindParameter,
+   BooleanClauseList,
+   ClauseElement,
+   ColumnClause,
+   False_,
+   Null,
+   True_,
+   and_,
+   cast,
+   extract,
+   false,
+   literal,
+   null,
+   or_,
+   true,
+   text,
+   all_,
+   any_
+)
+from odata_query import ast, exceptions as ex, visitor, utils, typing
 from ..models import (
    Location,
    Thing,
@@ -28,29 +52,9 @@ from ..models import (
    FeaturesOfInterestTravelTime,
    ObservationTravelTime
 )
-import operator
-from typing import Any, Callable, Optional, Union
-from sqlalchemy.sql.expression import (
-   BinaryExpression,
-   BindParameter,
-   BooleanClauseList,
-   ClauseElement,
-   ColumnClause,
-   False_,
-   Null,
-   True_,
-   and_,
-   cast,
-   extract,
-   false,
-   literal,
-   null,
-   or_,
-   true
-)
-from sqlalchemy.orm.attributes import InstrumentedAttribute
 from geoalchemy2 import WKTElement
 from datetime import datetime, timezone
+
 class FilterVisitor(visitor.NodeVisitor):
    """
       Visitor for the filter AST.  
@@ -58,6 +62,7 @@ class FilterVisitor(visitor.NodeVisitor):
 
    def __init__(self, root_model: str):
       self.root_model = root_model
+      self.join_relationships: List[InstrumentedAttribute] = []
 
    def visit_All(self, node: ast.All) -> str:
       return all_
@@ -74,8 +79,7 @@ class FilterVisitor(visitor.NodeVisitor):
    def visit_Boolean(self, node: ast.Boolean) -> Union[True_, False_]:
       if node.val == "true":
          return true()
-      else:
-         return false()
+      return false()
 
    def visit_String(self, node: ast.String) -> BindParameter:
       return node.val
@@ -121,6 +125,9 @@ class FilterVisitor(visitor.NodeVisitor):
    def visit_In(self, node: ast.In) -> Callable[[ClauseElement, ClauseElement], BinaryExpression]:
       return lambda a, b: a.in_(b)
 
+   def visit_List(self, node: ast.List) -> list:
+      return [self.visit(n) for n in node.val]
+
    ####################################################################################
    # Arithmetic Operators
    ####################################################################################
@@ -150,11 +157,22 @@ class FilterVisitor(visitor.NodeVisitor):
                getattr(globals()[self.root_model], 'result_boolean'),
                getattr(globals()[self.root_model], 'result_json')
             )
-         return getattr(globals()[self.root_model], node.name)
+         name = node.name.lower() if node.name[0].isupper() else node.name
+         return getattr(globals()[self.root_model], name)
       except AttributeError:
          raise ex.InvalidFieldException(node.name)
 
-   def visit_Attribute(self, node: ast.Attribute) -> str:
+   def visit_Attribute(self, node: ast.Attribute) ->  ColumnClause:
+      rel_attr = self.visit(node.owner)
+      prop_inspect = inspect(rel_attr).property
+      if not isinstance(prop_inspect, RelationshipProperty):
+         raise ValueError(f"Not a relationship: {node.owner}")
+      self.join_relationships.append(rel_attr)
+      owner_cls = prop_inspect.entity.class_
+      try:
+         return getattr(owner_cls, node.attr)
+      except AttributeError:
+         raise ex.InvalidFieldException(node.attr)
       return node
    
    def visit_BinOp(self, node: ast.BinOp) -> Any:
@@ -171,27 +189,16 @@ class FilterVisitor(visitor.NodeVisitor):
       return op(left, right)
    
    def visit_Compare(self, node: ast.Compare) -> BinaryExpression:
-      left = super().visit(node.left)
-      right = super().visit(node.right)
-      op = super().visit(node.comparator)
-
-      # Check if the right is an attribute
-      if isinstance(right, (ast.Identifier)):
-         right = right.name
-
+      left = self.visit(node.left)
+      right =  self.visit(node.right)
+      op =  self.visit(node.comparator)
       if isinstance(left, InstrumentedAttribute):
          if "system_time_validity" in left.key and f"__{getattr(op, '__name__')}__" == "__eq__":
+            if isinstance(right, list):
+               right = functions.func.tstzrange(functions.func.timestamptz(right[0]), functions.func.timestamptz(right[1]))
+               return left.op('<@')(right)
             right = datetime.fromisoformat(right.rstrip("Z")).replace(tzinfo=timezone.utc)
             return left.op('@>')(functions.func.timestamptz(right))
-      # Check if the left is an attribute
-      elif isinstance(left, (ast.Attribute)):
-         owner = left.owner.name
-         attr = left.attr
-         left = f"{owner}.{attr}"
-      # Otherwise it is an identifier
-      elif isinstance(left, (ast.Identifier)):
-         left = left.name
-      # Otherwise it is a function
       else:
          if isinstance(left, BooleanClauseList):
             left = FilterVisitor.handle_observation_result(self.root_model, left, op, right)
@@ -200,7 +207,6 @@ class FilterVisitor(visitor.NodeVisitor):
 
    def visit_Call(self, node: ast.Call) -> ClauseElement:
       try:
-         print(node.func.name)
          handler = getattr(self, "func_" + node.func.name.lower()) if len(node.func.namespace) == 0 else getattr(self, "func_" + node.func.namespace[0] + node.func.name.lower())
       except AttributeError:
          raise ex.UnsupportedFunctionException(node.func.name)
@@ -212,16 +218,13 @@ class FilterVisitor(visitor.NodeVisitor):
    ####################################################################################
 
    def _substr_function(self, field: ast._Node, substr: ast._Node, func: str) -> ClauseElement:
-      typing.typecheck(field, (ast.Identifier, ast.String), "field")
-      typing.typecheck(substr, ast.String, "substring")
-
       identifier = self.visit(field)
       substring = self.visit(substr)
       op = getattr(identifier, func)
 
       return op(substring)
 
-   def func_contains(self, field: ast._Node, substr: ast._Node) -> ClauseElement:
+   def func_substringof(self, substr: ast._Node, field: ast._Node) -> ClauseElement:
       return self._substr_function(field, substr, "contains")
 
    def func_endswith(self, field: ast._Node, substr: ast._Node) -> ClauseElement:
@@ -327,6 +330,33 @@ class FilterVisitor(visitor.NodeVisitor):
 
    def func_geointersects(self, field: ast.Identifier, geography: ast.Geography) -> functions.Function:
       return functions.func.ST_Intersects(getattr(globals()[self.root_model], field.name), WKTElement(geography.val, srid=4326))
+   
+   def func_st_equals(self, field: ast.Identifier, geography: ast.Geography) -> functions.Function:
+      return functions.func.ST_Equals(getattr(globals()[self.root_model], field.name), WKTElement(geography.val, srid=4326))
+
+   def func_st_disjoint(self, field: ast.Identifier, geography: ast.Geography) -> functions.Function:
+      return functions.func.ST_Disjoint(getattr(globals()[self.root_model], field.name), WKTElement(geography.val, srid=4326))
+
+   def func_st_touches(self, field: ast.Identifier, geography: ast.Geography) -> functions.Function:
+      return functions.func.ST_Touches(getattr(globals()[self.root_model], field.name), WKTElement(geography.val, srid=4326))
+
+   def func_st_within(self, field: ast.Identifier, geography: ast.Geography) -> functions.Function:
+      return functions.func.ST_Within(getattr(globals()[self.root_model], field.name), WKTElement(geography.val, srid=4326))
+
+   def func_st_overlaps(self, field: ast.Identifier, geography: ast.Geography) -> functions.Function:
+      return functions.func.ST_Overlaps(getattr(globals()[self.root_model], field.name), WKTElement(geography.val, srid=4326))
+
+   def func_st_crosses(self, field: ast.Identifier, geography: ast.Geography) -> functions.Function:
+      return functions.func.ST_Crosses(getattr(globals()[self.root_model], field.name), WKTElement(geography.val, srid=4326))
+
+   def func_st_intersects(self, field: ast.Identifier, geography: ast.Geography) -> functions.Function:
+      return functions.func.ST_Intersects(getattr(globals()[self.root_model], field.name), WKTElement(geography.val, srid=4326))
+
+   def func_st_contains(self, field: ast.Identifier, geography: ast.Geography) -> functions.Function:
+      return functions.func.ST_Contains(getattr(globals()[self.root_model], field.name), WKTElement(geography.val, srid=4326))
+
+   def func_st_relate(self, field: ast.Identifier, geography: ast.Geography, intersectionMatrixPattern: Optional[ast._Node] = None) -> functions.Function:
+      return functions.func.ST_Relate(getattr(globals()[self.root_model], field.name), WKTElement(geography.val, srid=4326), self.visit(intersectionMatrixPattern))
 
    @staticmethod
    def handle_observation_result(entity, list, operator, value):
@@ -353,4 +383,3 @@ class FilterVisitor(visitor.NodeVisitor):
             except TypeError:
                pass
       return result_conditions
-

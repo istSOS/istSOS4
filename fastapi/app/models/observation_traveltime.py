@@ -1,5 +1,5 @@
 from .database import Base, SCHEMA_NAME
-from sqlalchemy.sql.schema import Column, ForeignKey
+from sqlalchemy.sql.schema import Column, ForeignKey, PrimaryKeyConstraint
 from sqlalchemy.sql.sqltypes import Integer, Text, Float, Boolean
 from sqlalchemy.inspection import inspect
 from sqlalchemy.dialects.postgresql.json import JSON
@@ -8,9 +8,8 @@ from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 
 class ObservationTravelTime(Base):
     __tablename__ = 'Observation_traveltime'
-    __table_args__ = {'schema': SCHEMA_NAME}
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
     feature_of_interest_navigation_link = Column("FeatureOfInterest@iot.navigationLink", Text)
     datastream_navigation_link = Column("Datastream@iot.navigationLink", Text)
@@ -27,6 +26,8 @@ class ObservationTravelTime(Base):
     datastream_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Datastream.id'), nullable=False)
     featuresofinterest_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.FeaturesOfInterest.id'), nullable=False)
     system_time_validity = Column(TSTZRANGE)
+
+    __table_args__ = (PrimaryKeyConstraint(id, system_time_validity), {'schema': SCHEMA_NAME })
 
     def _serialize_columns(self):
         """Serialize model columns to a dict, applying naming transformations."""

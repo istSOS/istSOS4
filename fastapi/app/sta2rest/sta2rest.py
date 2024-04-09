@@ -9,6 +9,7 @@ representations in a REST API.
 import re
 import os
 from .filter_visitor import FilterVisitor
+from odata_query import grammar
 from odata_query.grammar import ODataLexer
 from odata_query.grammar import ODataParser
 from .sta_parser.ast import *
@@ -16,6 +17,7 @@ from .sta_parser.lexer import Lexer
 from .sta_parser.visitor import Visitor
 from .sta_parser.parser import Parser
 from sqlalchemy.orm import sessionmaker, load_only, contains_eager
+from sqlalchemy.sql.expression import BooleanClauseList, BinaryExpression
 from sqlalchemy import create_engine, select, func, asc, desc, and_, or_
 from datetime import datetime, timezone
 from ..models import (
@@ -26,6 +28,52 @@ from ..models import (
     FeaturesOfInterestTravelTime, ObservationTravelTime
 )
 from geoalchemy2 import Geometry, WKTElement
+
+ODATA_FUNCTIONS = {
+    # String functions
+    "substringof": 2,
+    "endswith": 2,
+    "startswith": 2,
+    "length": 1,
+    "indexof": 2,
+    "substring": (2, 3),
+    "tolower": 1,
+    "toupper": 1,
+    "trim": 1,
+    "concat": 2,
+    # Datetime functions
+    "year": 1,
+    "month": 1,
+    "day": 1,
+    "hour": 1,
+    "minute": 1,
+    "second": 1,
+    "fractionalseconds": 1,
+    "date": 1,
+    "time": 1,
+    "totaloffsetminutes": 1,
+    "now": 0,
+    "mindatetime": 0,
+    "maxdatetime": 0,
+    # Math functions
+    "round": 1,
+    "floor": 1,
+    "ceiling": 1,
+    # Geo functions
+    "geo.distance": 2,
+    "geo.length": 1,
+    "geo.intersects": 2,
+    "st_equals": 2,
+    "st_disjoint": 2,
+    "st_touches": 2,
+    "st_within": 2,
+    "st_overlaps": 2,
+    "st_crosses": 2,
+    "st_intersects": 2,
+    "st_contains": 2,
+    "st_relate": (2, 3),
+}
+grammar.ODATA_FUNCTIONS = ODATA_FUNCTIONS
 
 # Create the OData lexer and parser
 odata_filter_lexer = ODataLexer()
@@ -97,8 +145,9 @@ class NodeVisitor(Visitor):
         # Parse the filter using the OData lexer and parser
         ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(node.filter))
         # Visit the tree to convert the filter
-        res = FilterVisitor(entity).visit(ast)
-        return res
+        transformer = FilterVisitor(entity)
+        res = transformer.visit(ast)
+        return res, transformer.join_relationships
 
     def visit_OrderByNodeIdentifier(self, node: OrderByNodeIdentifier):
         """
@@ -314,6 +363,7 @@ class NodeVisitor(Visitor):
                     foreign_key_attr  = getattr(sub_entity, foreign_key_attr_name)
                 else:
                     foreign_key_attr  = getattr(sub_entity, 'id')
+
                 window = func.row_number().over(
                     partition_by=foreign_key_attr, order_by=desc(foreign_key_attr)
                 ).label("rank")
@@ -344,15 +394,26 @@ class NodeVisitor(Visitor):
 
                 if result['filter'][index] is not None:
                     is_limited_query = None
-                    
+                    filter, join_relationships = result['filter'][index]
+                    expand_identifier = node.expand.identifiers[index].identifier
+                    main_entity_has_expand_attribute = hasattr(globals()[self.main_entity], f"{expand_identifier.lower()}_id")
+                    expand_entity_has_main_entity_attribute = hasattr(globals()[expand_identifier], f"{self.main_entity.lower()}_id")
+
                     # Check if the main entity has an attribute based on the expand
-                    if hasattr(globals()[self.main_entity], f"{node.expand.identifiers[index].identifier.lower()}_id"):
-                        main_query_select_pagination = main_query_select_pagination.join(globals()[node.expand.identifiers[index].identifier]).filter(result['filter'][index])
-                    
+                    if main_entity_has_expand_attribute:
+                        main_query_select_pagination = main_query_select_pagination.join(globals()[expand_identifier])
+                        for rel in join_relationships:
+                            main_query_select_pagination = main_query_select_pagination.join(rel)
+                        main_query_select_pagination = main_query_select_pagination.filter(filter)
+
                     # Check if the expand entity has an attribute based on the main entity
-                    if hasattr(globals()[node.expand.identifiers[index].identifier], f"{self.main_entity.lower()}_id"):
-                        main_query_select_pagination = main_query_select_pagination.join(globals()[node.expand.identifiers[index].identifier]).filter(result['filter'][index])
-                        subquery_parts = subquery_parts.filter(result['filter'][index])
+                    if expand_entity_has_main_entity_attribute:
+                        main_query_select_pagination = main_query_select_pagination.join(globals()[expand_identifier])
+                        for rel in join_relationships:
+                            main_query_select_pagination = main_query_select_pagination.join(rel)
+                            subquery_parts = subquery_parts.join(rel)
+                        main_query_select_pagination = main_query_select_pagination.filter(filter)
+                        subquery_parts = subquery_parts.filter(filter)
 
                 if result['orderby'][index]:
                     attrs, order, attr_name = result['orderby'][index]
@@ -411,7 +472,7 @@ class NodeVisitor(Visitor):
                         getattr(main_entity, node.expand.identifiers[index].identifier.lower(), None), 
                         alias=subqueries[index]
                     ).load_only(*select_query)
-)
+                )
 
 
         if not node.select:
@@ -449,8 +510,12 @@ class NodeVisitor(Visitor):
             
             # Set options for main_query if select_query is not empty
             main_query = main_query.options(load_only(*select_query)) if select_query else main_query
+
         if node.filter:
-            main_query_select_pagination = main_query_select_pagination.filter(self.visit_FilterNode(node.filter, self.main_entity))
+            filter, join_relationships = self.visit_FilterNode(node.filter, self.main_entity)
+            for rel in join_relationships:
+                main_query_select_pagination = main_query_select_pagination.join(rel)
+            main_query_select_pagination = main_query_select_pagination.filter(filter)
 
         if node.orderby:
             attrs, order = self.visit(node.orderby)
@@ -520,7 +585,7 @@ class NodeVisitor(Visitor):
             count_query.append(False)
         else:
             count_query.append(True)
-        # Join the converted parts of the query
+
         return main_query, subqueries, count_query
 
 class STA2REST:
@@ -804,7 +869,6 @@ class STA2REST:
         
         if not uri:
             raise Exception("Error parsing uri")
-    
 
         # Check if we have a query
         query_ast = QueryNode(None, None, None, None, None, None, None, False)
@@ -827,6 +891,17 @@ class STA2REST:
             #     query_ast.expand.subquery = query_ast.filter
             else:
                 raise Exception("AS_OF function available only for single entity")
+
+        if query_ast.from_to:
+            if len(entities) == 0 and not query_ast.expand:
+                main_entity += "TravelTime"
+                from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
+                query_ast.filter = FilterNode(query_ast.filter.filter + f" and {from_to_filter}" if query_ast.filter else from_to_filter)
+            # if query_ast.expand:
+            #     query_ast.expand.identifiers[0].identifier = query_ast.expand.identifiers[0].identifier + "TravelTime"
+            #     query_ast.expand.subquery = query_ast.filter
+            else:
+                raise Exception("FROM_TO function available only for single entity")
         
         url = f"/{main_entity}"
 
