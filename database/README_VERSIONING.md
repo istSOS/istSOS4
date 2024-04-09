@@ -1,6 +1,6 @@
 # QUICK START
 
-## CREATE NEW SCHEMA
+## Create new schema
 
 ### Create the schema
 
@@ -8,7 +8,7 @@
 CREATE SCHEMA IF NOT EXISTS my_schema;
 ```
 
-## CREATE TABLES
+## Create tables
 
 ```
 CREATE TABLE IF NOT EXISTS my_schema.users (
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS my_schema.posts (
 );
 ```
 
-## ADD TABLE TO VERSIONING
+## Add table to versioning
 
 ### Create a schema for versioned records named {SCHEMA_NAME}\_history
 
@@ -149,7 +149,7 @@ SELECT my_schema.add_table_to_versioning('posts', 'my_schema');
 
 '''
 
-## INSERT & MODIFY RECORDS
+## Insert and update example
 
 ```
 -- Insert data into the users table
@@ -175,4 +175,4 @@ SET content = 'Updated content of the second post'
 WHERE id = 2;
 ```
 
-## QUERY HISTORICAL VERSIONS
+## Query historical tables
