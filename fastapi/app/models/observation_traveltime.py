@@ -21,7 +21,7 @@ class ObservationTravelTime(Base):
     result_boolean = Column("resultBoolean", Boolean)
     result_json = Column("resultJSON", JSON)
     result_quality = Column("resultQuality", JSON)
-    valid_time = Column("validTime", TIMESTAMP)
+    valid_time = Column("validTime", TSTZRANGE)
     parameters = Column(JSON)
     datastream_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Datastream.id'), nullable=False)
     featuresofinterest_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.FeaturesOfInterest.id'), nullable=False)
@@ -52,6 +52,8 @@ class ObservationTravelTime(Base):
             serialized_data['resultTime'] = self.result_time.isoformat()
         if 'valid_time' in serialized_data and self.valid_time is not None:
             serialized_data['validTime'] = self._format_datetime_range(self.valid_time)
+        if 'system_time_validity' in serialized_data and self.system_time_validity is not None:
+            serialized_data['system_time_validity'] = self._format_datetime_range(self.system_time_validity)
         return serialized_data
 
     def _handle_result_fields(self, data):
@@ -66,7 +68,6 @@ class ObservationTravelTime(Base):
     def to_dict_expand(self):
         """Serialize the ObservationTravelTime model to a dict, excluding 'system_time_validity' and handling result fields."""
         data = self._serialize_columns()
-        data.pop('system_time_validity', None)
         self._handle_result_fields(data)
         return data
 
@@ -74,8 +75,6 @@ class ObservationTravelTime(Base):
         if range_obj:
             lower = getattr(range_obj, 'lower', None)
             upper = getattr(range_obj, 'upper', None)
-            return {
-                "start": lower.isoformat() if lower else None,
-                "end": upper.isoformat() if upper else None
-            }
+            return f"{lower.isoformat()}/{upper.isoformat()}"
+
         return None

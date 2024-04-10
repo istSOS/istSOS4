@@ -5,7 +5,6 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
-from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from geoalchemy2 import Geometry
 
 class Datastream(Base):
@@ -25,7 +24,7 @@ class Datastream(Base):
     observed_area = Column("observedArea", Geometry(geometry_type='POLYGON', srid=4326))
     observed_area_geojson = Column(JSON)
     phenomenon_time = Column("phenomenonTime", TSTZRANGE)
-    result_time = Column("resultTime", TIMESTAMP)
+    result_time = Column("resultTime", TSTZRANGE)
     properties = Column(JSON)
     thing_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Thing.id'), nullable=False)
     thing = relationship("Thing", back_populates="datastream")
@@ -84,8 +83,5 @@ class Datastream(Base):
         if range_obj:
             lower = getattr(range_obj, 'lower', None)
             upper = getattr(range_obj, 'upper', None)
-            return {
-                "start": lower.isoformat() if lower else None,
-                "end": upper.isoformat() if upper else None
-            }
+            return f"{lower.isoformat()}/{upper.isoformat()}"
         return None

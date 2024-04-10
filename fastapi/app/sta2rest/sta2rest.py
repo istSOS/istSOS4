@@ -474,7 +474,6 @@ class NodeVisitor(Visitor):
                     ).load_only(*select_query)
                 )
 
-
         if not node.select:
             node.select = SelectNode([])
             # get default columns for main entity
@@ -897,9 +896,6 @@ class STA2REST:
                 main_entity += "TravelTime"
                 from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
                 query_ast.filter = FilterNode(query_ast.filter.filter + f" and {from_to_filter}" if query_ast.filter else from_to_filter)
-            # if query_ast.expand:
-            #     query_ast.expand.identifiers[0].identifier = query_ast.expand.identifiers[0].identifier + "TravelTime"
-            #     query_ast.expand.subquery = query_ast.filter
             else:
                 raise Exception("FROM_TO function available only for single entity")
         

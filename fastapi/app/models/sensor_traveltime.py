@@ -14,7 +14,7 @@ class SensorTravelTime(Base):
     name = Column(String(255), unique=True, nullable=False)
     description = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
-    sensor_metadata = Column("metadata", JSON, nullable=False)  # Directly used the corrected name
+    sensor_metadata = Column("metadata", JSON, nullable=False)
     properties = Column(JSON)
     system_time_validity = Column(TSTZRANGE)
 
@@ -34,10 +34,18 @@ class SensorTravelTime(Base):
             for column in self.__class__.__mapper__.column_attrs
             if column.key not in inspect(self).unloaded
         }
+        if 'system_time_validity' in serialized_data and self.system_time_validity is not None:
+            serialized_data['system_time_validity'] = self._format_datetime_range(self.system_time_validity)
         return serialized_data
 
     def to_dict_expand(self):
         """Serialize the SensorTravelTime model to a dict, excluding 'system_time_validity'."""
-        data = self._serialize_columns()
-        data.pop('system_time_validity', None)
-        return data
+        return self._serialize_columns()
+
+    def _format_datetime_range(self, range_obj):
+        if range_obj:
+            lower = getattr(range_obj, 'lower', None)
+            upper = getattr(range_obj, 'upper', None)
+            return f"{lower.isoformat()}/{upper.isoformat()}"
+
+        return None

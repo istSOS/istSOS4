@@ -15,7 +15,7 @@ class Sensor(Base):
     name = Column(String(255), unique=True, nullable=False)
     description = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
-    sensor_metadata = Column("metadata", JSON, nullable=False)  # Renamed for clarity
+    sensor_metadata = Column("metadata", JSON, nullable=False)
     properties = Column(JSON)
     datastream = relationship("Datastream", back_populates="sensor")
 

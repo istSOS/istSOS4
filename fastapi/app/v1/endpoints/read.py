@@ -87,7 +87,11 @@ async def catch_all_get(request: Request, path_name: str):
             new_top_value = 100
             if '$top' in nextLink:
                 start_index = nextLink.find('$top=') + 5
-                end_index = nextLink.find('&', start_index) if '&' in nextLink[start_index:] else len(nextLink)
+                end_index = len(nextLink)
+                for char in ('&', ';', ')'):
+                    char_index = nextLink.find(char, start_index)
+                    if char_index != -1 and char_index < end_index:
+                        end_index = char_index
                 top_value = int(nextLink[start_index:end_index])
                 new_top_value = top_value
                 nextLink = nextLink[:start_index] + str(new_top_value) + nextLink[end_index:]
@@ -98,7 +102,11 @@ async def catch_all_get(request: Request, path_name: str):
                     nextLink = nextLink + f"?$top={new_top_value}"
             if '$skip' in nextLink:
                 start_index = nextLink.find('$skip=') + 6
-                end_index = nextLink.find('&', start_index) if '&' in nextLink[start_index:] else len(nextLink)
+                end_index = len(nextLink)
+                for char in ('&', ';', ')'):
+                    char_index = nextLink.find(char, start_index)
+                    if char_index != -1 and char_index < end_index:
+                        end_index = char_index
                 skip_value = int(nextLink[start_index:end_index])
                 new_skip_value = skip_value + new_top_value
                 nextLink = nextLink[:start_index] + str(new_skip_value) + nextLink[end_index:]

@@ -4,7 +4,6 @@ from sqlalchemy.sql.sqltypes import Integer, Text, String
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql.json import JSON
-from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from geoalchemy2 import Geometry
 
 class FeaturesOfInterest(Base):
