@@ -48,7 +48,7 @@ BEGIN
     THEN
         RAISE EXCEPTION 'the ID must not be changed (%)', NEW.id;
     END IF;
-    -- Set the new START system_type_validity for the main table
+    > Set the new START system_type_validity for the main table
     NEW.system_time_validity := tstzrange(current_timestamp, TIMESTAMPTZ 'infinity');
 
     -- Set the END system_time_validity to the 'current_timestamp'
