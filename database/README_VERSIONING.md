@@ -2,13 +2,13 @@
 
 ### Create schema
 
-``` sql
+```sql
 CREATE SCHEMA IF NOT EXISTS my_schema;
 ```
 
 ### Create tables
 
-``` sql
+```sql
 CREATE TABLE IF NOT EXISTS my_schema.users (
   id SERIAL PRIMARY KEY,
   username VARCHAR(50) UNIQUE NOT NULL,
@@ -29,13 +29,13 @@ CREATE TABLE IF NOT EXISTS my_schema.posts (
 
 ### Create a schema for versioned records named {SCHEMA_NAME}\_history
 
-```
+```sql
 CREATE SCHEMA IF NOT EXISTS my_schema_history;
 ```
 
-### Create function to update raw in history in case of insert/update
+### Create function to update raw in history in case of insert, update or delete
 
-``` sql
+```sql
 CREATE OR REPLACE FUNCTION istsos_mutate_history()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -87,9 +87,9 @@ END;
 $body$;
 ```
 
-### Create function to avoid insert/update in history
+### Create function to avoid update and delete in history schema
 
-``` sql
+```sql
 CREATE OR REPLACE FUNCTION istsos_prevent_table_update()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -103,7 +103,7 @@ $body$;
 
 ### Create function to add table to versioning schema
 
-``` sql
+```sql
 CREATE OR REPLACE FUNCTION my_schema.add_table_to_versioning(tablename text, schemaname text DEFAULT 'public')
 RETURNS void
 LANGUAGE plpgsql
@@ -141,9 +141,9 @@ END;
 $body$;
 ```
 
-### Add the table to the versioning (must respect the order following REFERENCES
+### Add the table to the versioning (must respect the order following references)
 
-``` sql
+```sql
 SELECT my_schema.add_table_to_versioning('users', 'my_schema');
 
 SELECT my_schema.add_table_to_versioning('posts', 'my_schema');
@@ -153,7 +153,7 @@ SELECT my_schema.add_table_to_versioning('posts', 'my_schema');
 
 ### Insert data into the users table
 
-``` sql
+```sql
 INSERT INTO my_schema.users (username, email) VALUES
 ('user1', 'user1@example.com'),
 ('user2', 'user2@example.com'),
@@ -162,7 +162,7 @@ INSERT INTO my_schema.users (username, email) VALUES
 
 ### Insert data into the posts table
 
-``` sql
+```sql
 INSERT INTO my_schema.posts (title, content, user_id) VALUES
 ('First Post', 'Content of the first post.', 1),
 ('Second Post', 'Content of the second post.', 2),
@@ -171,7 +171,7 @@ INSERT INTO my_schema.posts (title, content, user_id) VALUES
 
 ### Update data in the users table
 
-``` sql
+```sql
 UPDATE my_schema.users
 SET email = 'new_email@example.com'
 WHERE id = 1;
@@ -179,7 +179,7 @@ WHERE id = 1;
 
 ### Update data in the posts table
 
-``` sql
+```sql
 UPDATE my_schema.posts
 SET content = 'Updated content of the second post'
 WHERE id = 2;
@@ -189,30 +189,29 @@ WHERE id = 2;
 
 ### Get current user with id = 1
 
-``` sql
+```sql
 SELECT * FROM my_schema.users
 WHERE id = 1;
 ```
 
 ### Get historical changes on user with id = 1
 
-``` sql
+```sql
 SELECT * FROM my_schema.users_traveltime
 WHERE id = 1;
 ```
 
 ### Get user 1 as it was in the DB at a certain instant in time
 
-``` sql
+```sql
 -- note: replace timestamp with correct value
 SELECT * FROM my_schema.users_traveltime
 WHERE id = 1 and system_time_validity @> timestamptz('2024-04-09T17:16:00Z');
 ```
 
-
 ### Get user 1 as it was in the DB at a certain period
 
-``` sql
+```sql
 -- note: replace timestamps with correct values
 SELECT * FROM my_schema.users_traveltime
 WHERE id = 1 and system_time_validity <@ tstzrange(timestamptz('2024-04-09T17:16:00Z'), timestamptz('2024-04-10T19:16:00Z'));
