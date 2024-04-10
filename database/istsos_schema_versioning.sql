@@ -1,6 +1,6 @@
---- =======================
---- SYSTEM_TIME extension
---- =======================
+-- =======================
+-- SYSTEM_TIME extension
+-- =======================
 
 -- triggers to handle table versioning with system_time
 CREATE OR REPLACE FUNCTION istsos_mutate_history()
