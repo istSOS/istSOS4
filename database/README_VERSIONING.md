@@ -43,29 +43,25 @@ AS $body$
 BEGIN
     IF (TG_OP = 'UPDATE')
     THEN
-    -- verify the id is not modified
-    IF (NEW.id <> OLD.id)
-    THEN
-        RAISE EXCEPTION 'the ID must not be changed (%)', NEW.id;
-    END IF;
-    -- Set the new START system_type_validity for the main table
-    NEW.system_time_validity := tstzrange(current_timestamp, TIMESTAMPTZ 'infinity');
-
-    -- Set the END system_time_validity to the 'current_timestamp'
-    OLD.system_time_validity := tstzrange(lower(OLD.system_time_validity), current_timestamp);
-
-    -- Copy the original row to the history table
-    EXECUTE format('INSERT INTO %I.%I SELECT ($1).\*', TG_TABLE_SCHEMA || '\_history', TG_TABLE_NAME) USING OLD;
-
-    -- Return the NEW record modified to run the table UPDATE
-    RETURN NEW;
+        -- verify the id is not modified
+        IF (NEW.id <> OLD.id)
+        THEN
+            RAISE EXCEPTION 'the ID must not be changed (%)', NEW.id;
+        END IF;
+        -- Set the new START system_type_validity for the main table
+        NEW.system_time_validity := tstzrange(current_timestamp, TIMESTAMPTZ  'infinity');
+        -- Set the END system_time_validity to the 'current_timestamp'
+        OLD.system_time_validity := tstzrange(lower(OLD.system_time_validity), current_timestamp);
+        -- Copy the original row to the history table
+        EXECUTE format('INSERT INTO %I.%I SELECT ($1).*', TG_TABLE_SCHEMA || '_history', TG_TABLE_NAME) USING OLD;
+        -- Return the NEW record modified to run the table UPDATE
+        RETURN NEW;
     END IF;
 
     IF (TG_OP = 'INSERT')
     THEN
         -- Set the new START system_type_validity for the main table
         NEW.system_time_validity := tstzrange(current_timestamp, 'infinity');
-
         -- Return the NEW record modified to run the table UPDATE
         RETURN NEW;
     END IF;
@@ -74,12 +70,10 @@ BEGIN
     THEN
         -- Set the END system_time_validity to the 'current_timestamp'
         OLD.system_time_validity := tstzrange(lower(OLD.system_time_validity), current_timestamp);
-
         -- Copy the original row to the history table
         EXECUTE format('INSERT INTO %I.%I SELECT ($1).*', TG_TABLE_SCHEMA || '_history', TG_TABLE_NAME) USING OLD;
         RETURN OLD;
     END IF;
-
 END;
 $body$;
 ```
