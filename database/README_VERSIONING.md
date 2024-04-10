@@ -33,15 +33,13 @@ CREATE TABLE IF NOT EXISTS my_schema.posts (
 CREATE SCHEMA IF NOT EXISTS my_schema_history;
 ```
 
-### Create function to update raw in history in case of insert, update or delete
+### Create trigger to update raw in history in case of insert, update or delete
 
 ```sql
 CREATE OR REPLACE FUNCTION istsos_mutate_history()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $body$
--- DECLARE
--- cts TIMESTAMP := current_timestamp;
 BEGIN
     IF (TG_OP = 'UPDATE')
     THEN
@@ -57,7 +55,6 @@ BEGIN
     OLD.system_time_validity := tstzrange(lower(OLD.system_time_validity), current_timestamp);
 
     -- Copy the original row to the history table
-    RAISE NOTICE 'Generated SQL: INSERT INTO %.% VALUES %', TG_TABLE_SCHEMA || '\_history', TG_TABLE_NAME, OLD;
     EXECUTE format('INSERT INTO %I.%I SELECT ($1).\*', TG_TABLE_SCHEMA || '\_history', TG_TABLE_NAME) USING OLD;
 
     -- Return the NEW record modified to run the table UPDATE
@@ -87,7 +84,7 @@ END;
 $body$;
 ```
 
-### Create function to avoid update and delete in history schema
+### Create trigger to avoid update and delete in history schema
 
 ```sql
 CREATE OR REPLACE FUNCTION istsos_prevent_table_update()
@@ -109,10 +106,6 @@ RETURNS void
 LANGUAGE plpgsql
 AS $body$
 BEGIN
--- Quote the schemaname and tablename parameters
---schemaname := quote_ident(schemaname);
---tablename := quote_ident(tablename);
-
     -- Add the new columns for versioning to the original table
     EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_time_validity tstzrange DEFAULT tstzrange(current_timestamp, TIMESTAMPTZ ''infinity'');', schemaname, tablename);
     EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_commiter text DEFAULT NULL;', schemaname, tablename);
@@ -120,6 +113,7 @@ BEGIN
 
     -- Create a new table with the same structure as the original table, but no data
     EXECUTE format('CREATE TABLE %I.%I AS SELECT \* FROM %I.%I WITH NO DATA;', schemaname || '\_history', tablename, schemaname, tablename);
+
     -- Add constraint to enforce a single observation does not have two values at the same time
     EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I EXCLUDE USING gist (id WITH =, system_time_validity WITH &&);', schemaname || '\_history', tablename, tablename || '\_history_unique_obs');
 
@@ -129,7 +123,7 @@ BEGIN
     -- Add triggers to raise an error if the history table is updated or deleted
     EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE OR DELETE ON %I.%I FOR EACH ROW EXECUTE FUNCTION istsos_prevent_table_update();', tablename || '_history_no_mutate', schemaname || '_history', tablename);
 
-    -- Create the travelitime view to query data modification history
+    -- Create the traveltime view to query data modification history
     EXECUTE format('CREATE VIEW %I.%I AS SELECT * FROM %I.%I UNION SELECT * FROM %I.%I;',
         schemaname, tablename || '_traveltime',
         schemaname, tablename,
