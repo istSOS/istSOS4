@@ -7,8 +7,6 @@ CREATE OR REPLACE FUNCTION istsos_mutate_history()
 RETURNS trigger 
 LANGUAGE plpgsql
 AS $body$
--- DECLARE
---     cts TIMESTAMP := current_timestamp;
 BEGIN
     IF (TG_OP = 'UPDATE')
     THEN
@@ -22,8 +20,6 @@ BEGIN
         -- Set the END system_time_validity to the 'current_timestamp'
         OLD.system_time_validity := tstzrange(lower(OLD.system_time_validity), current_timestamp);
         -- Copy the original row to the history table
-        RAISE NOTICE 'Generated SQL: INSERT INTO %.% VALUES %', TG_TABLE_SCHEMA || '_history', TG_TABLE_NAME, OLD;
-        -- EXECUTE format('INSERT INTO %I.%I VALUES %s', TG_TABLE_SCHEMA || '_history', TG_TABLE_NAME, OLD);
         EXECUTE format('INSERT INTO %I.%I SELECT ($1).*', TG_TABLE_SCHEMA || '_history', TG_TABLE_NAME) USING OLD;
         -- Return the NEW record modified to run the table UPDATE
         RETURN NEW;
@@ -65,16 +61,12 @@ RETURNS void
 LANGUAGE plpgsql
 AS $body$
 BEGIN
-    -- Quote the schemaname and tablename parameters
-    --schemaname := quote_ident(schemaname);
-    --tablename := quote_ident(tablename);
-
     -- Add the new columns for versioning to the original table
     EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_time_validity tstzrange DEFAULT tstzrange(current_timestamp, TIMESTAMPTZ ''infinity'');', schemaname, tablename);
     EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_commiter text DEFAULT NULL;', schemaname, tablename);
     EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_commit_message text DEFAULT NULL;', schemaname, tablename);
-   
- -- Create a new table with the same structure as the original table, but no data
+
+    -- Create a new table with the same structure as the original table, but no data
     EXECUTE format('CREATE TABLE %I.%I AS SELECT * FROM %I.%I WITH NO DATA;', schemaname || '_history', tablename, schemaname, tablename);
     -- Add constraint to enforce a single observation does not have two values at the same time
     EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I EXCLUDE USING gist (id WITH =, system_time_validity WITH &&);', schemaname || '_history', tablename, tablename || '_history_unique_obs');
