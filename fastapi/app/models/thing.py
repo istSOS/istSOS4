@@ -10,7 +10,7 @@ class Thing(Base):
     __table_args__ = {'schema': SCHEMA_NAME}
     
     id = Column(Integer, primary_key=True)
-    self_link = Column("@iot.selfLink", Text)  # Consider renaming for Pythonic naming, if possible
+    self_link = Column("@iot.selfLink", Text)
     locations_navigation_link = Column("Locations@iot.navigationLink", Text)
     historical_locations_navigation_link = Column("HistoricalLocations@iot.navigationLink", Text)
     datastreams_locations_navigation_link = Column("Datastreams@iot.navigationLink", Text)

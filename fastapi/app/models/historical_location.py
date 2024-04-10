@@ -3,7 +3,6 @@ from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, Text
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 
 class HistoricalLocation(Base):

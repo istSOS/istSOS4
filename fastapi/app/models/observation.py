@@ -23,7 +23,7 @@ class Observation(Base):
     result_boolean = Column("resultBoolean", Boolean)
     result_json = Column("resultJSON", JSON)
     result_quality = Column("resultQuality", JSON)
-    valid_time = Column("validTime", TIMESTAMP)
+    valid_time = Column("validTime", TSTZRANGE)
     parameters = Column(JSON)
     datastream_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Datastream.id'), nullable=False)
     datastream = relationship("Datastream", back_populates="observation")
@@ -86,8 +86,6 @@ class Observation(Base):
         if range_obj:
             lower = getattr(range_obj, 'lower', None)
             upper = getattr(range_obj, 'upper', None)
-            return {
-                "start": lower.isoformat() if lower else None,
-                "end": upper.isoformat() if upper else None
-            }
+            return f"{lower.isoformat()}/{upper.isoformat()}"
+
         return None

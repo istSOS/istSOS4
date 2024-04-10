@@ -4,7 +4,6 @@ from sqlalchemy.sql.sqltypes import Integer, Text, String
 from sqlalchemy.inspection import inspect
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
-from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from geoalchemy2 import Geometry
 
 class DatastreamTravelTime(Base):
@@ -23,7 +22,7 @@ class DatastreamTravelTime(Base):
     observed_area = Column("observedArea", Geometry(geometry_type='POLYGON', srid=4326))
     observed_area_geojson = Column(JSON)
     phenomenon_time = Column("phenomenonTime", TSTZRANGE)
-    result_time = Column("resultTime", TIMESTAMP)
+    result_time = Column("resultTime", TSTZRANGE)
     properties = Column(JSON)
     thing_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Thing.id'), nullable=False)
     sensor_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Sensor.id'), nullable=False)
@@ -59,20 +58,17 @@ class DatastreamTravelTime(Base):
             serialized_data['phenomenonTime'] = self._format_datetime_range(self.phenomenon_time)
         if 'resultTime' in serialized_data and self.result_time is not None:
             serialized_data['resultTime'] = self._format_datetime_range(self.result_time)
+        if 'system_time_validity' in serialized_data and self.system_time_validity is not None:
+            serialized_data['system_time_validity'] = self._format_datetime_range(self.system_time_validity)
         return serialized_data
 
     def to_dict_expand(self):
         """Serialize the DatastreamTravelTime model to a dict, excluding 'system_time_validity'."""
-        data = self._serialize_columns()
-        data.pop('system_time_validity', None)
-        return data
+        return self._serialize_columns()
 
     def _format_datetime_range(self, range_obj):
         if range_obj:
             lower = getattr(range_obj, 'lower', None)
             upper = getattr(range_obj, 'upper', None)
-            return {
-                "start": lower.isoformat() if lower else None,
-                "end": upper.isoformat() if upper else None
-            }
+            return f"{lower.isoformat()}/{upper.isoformat()}"
         return None

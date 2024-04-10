@@ -34,10 +34,17 @@ class HistoricalLocationTravelTime(Base):
         }
         if 'time' in serialized_data and self.time is not None:
             serialized_data['time'] = self.time.isoformat()
+        if 'system_time_validity' in serialized_data and self.system_time_validity is not None:
+            serialized_data['system_time_validity'] = self._format_datetime_range(self.system_time_validity)
         return serialized_data
 
     def to_dict_expand(self):
         """Serialize the HistoricalLocationTravelTime model to a dict, excluding 'system_time_validity'."""
-        data = self._serialize_columns()
-        data.pop('system_time_validity', None)
-        return data
+        return self._serialize_columns()
+    
+    def _format_datetime_range(self, range_obj):
+        if range_obj:
+            lower = getattr(range_obj, 'lower', None)
+            upper = getattr(range_obj, 'upper', None)
+            return f"{lower.isoformat()}/{upper.isoformat()}"
+        return None
