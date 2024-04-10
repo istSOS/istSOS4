@@ -196,7 +196,7 @@ class FilterVisitor(visitor.NodeVisitor):
          if "system_time_validity" in left.key and f"__{getattr(op, '__name__')}__" == "__eq__":
             if isinstance(right, list):
                right = functions.func.tstzrange(functions.func.timestamptz(right[0]), functions.func.timestamptz(right[1]))
-               return left.op('<@')(right)
+               return left.op('&&')(right)
             right = datetime.fromisoformat(right.rstrip("Z")).replace(tzinfo=timezone.utc)
             return left.op('@>')(functions.func.timestamptz(right))
       else:

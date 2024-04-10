@@ -10,7 +10,7 @@ from geoalchemy2 import Geometry
 class DatastreamTravelTime(Base):
     __tablename__ = 'Datastream_traveltime'
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
     thing_navigation_link = Column("Thing@iot.navigationLink", Text)
     sensor_navigation_link = Column("Sensor@iot.navigationLink", Text)

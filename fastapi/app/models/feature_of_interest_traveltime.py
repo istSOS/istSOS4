@@ -9,7 +9,7 @@ from geoalchemy2 import Geometry
 class FeaturesOfInterestTravelTime(Base):
     __tablename__ = 'FeaturesOfInterest_traveltime'
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
     observations_navigation_link = Column("Observations@iot.navigationLink", Text)
     name = Column(String(255), nullable=False)
