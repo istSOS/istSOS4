@@ -112,10 +112,9 @@ BEGIN
     EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_commit_message text DEFAULT NULL;', schemaname, tablename);
 
     -- Create a new table with the same structure as the original table, but no data
-    EXECUTE format('CREATE TABLE %I.%I AS SELECT \* FROM %I.%I WITH NO DATA;', schemaname || '\_history', tablename, schemaname, tablename);
-
+    EXECUTE format('CREATE TABLE %I.%I AS SELECT * FROM %I.%I WITH NO DATA;', schemaname || '_history', tablename, schemaname, tablename);
     -- Add constraint to enforce a single observation does not have two values at the same time
-    EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I EXCLUDE USING gist (id WITH =, system_time_validity WITH &&);', schemaname || '\_history', tablename, tablename || '\_history_unique_obs');
+    EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I EXCLUDE USING gist (id WITH =, system_time_validity WITH &&);', schemaname || '_history', tablename, tablename || '_history_unique_obs');
 
     -- Add triggers for versioning
     EXECUTE format('CREATE TRIGGER %I BEFORE INSERT OR UPDATE OR DELETE ON %I.%I FOR EACH ROW EXECUTE PROCEDURE istsos_mutate_history();', tablename || '_history_trigger', schemaname, tablename);
@@ -130,7 +129,6 @@ BEGIN
         schemaname || '_history', tablename);
 
     RAISE NOTICE '%.% is now added to versioning', schemaname, tablename;
-
 END;
 $body$;
 ```
