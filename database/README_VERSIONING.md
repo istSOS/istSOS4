@@ -1,5 +1,20 @@
 # QUICK START
 
+This will show how to add versioning at a PostgreSQL schema (and its tables).
+If you have a schema with some related tables, the following actions will create a second schema 
+(named SCHEMANEMAE_history) that contains the same tables (named TABLENAME_historical) but with historacal records, how they were 
+before any update or delete. The tables will have a new column named _system_time_validity_, which is a time range 
+that defines the validity of the record in time (how it was in the system in that poeriod), open ended interval to +infinity 
+identify it is the current value.
+
+The user will apply it operations (UPDATE, DELETE, INSERT) on the original schema without caring of anything.
+The triggers will update and record changes automatically.
+To get the current values you will query the orginal tables that always contains the current status of the database, so that most 
+of the query won't have any overload, while to query the versioned values you will query the created views (TABLENAME_traveltime) that 
+have all the current and historical records.
+Note that in the view the database integrity with defined relations is not guarantee, since unique IDs are no more unique there!
+
+
 ### Create schema
 
 ```sql
