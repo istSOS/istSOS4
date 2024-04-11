@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS my_schema.posts (
 CREATE SCHEMA IF NOT EXISTS my_schema_history;
 ```
 
-### Create trigger to update raw in history in case of insert, update or delete
+### Create trigger to update rows in history in case of insert, update or delete
 
 ```sql
 CREATE OR REPLACE FUNCTION istsos_mutate_history()
@@ -92,7 +92,7 @@ END;
 $body$;
 ```
 
-### Create function to add table to versioning schema
+### Create function to add a table to versioning schema
 
 ```sql
 CREATE OR REPLACE FUNCTION my_schema.add_table_to_versioning(tablename text, schemaname text DEFAULT 'public')
@@ -171,11 +171,12 @@ SET content = 'Updated content of the second post'
 WHERE id = 2;
 ```
 
-## Query historical tables
+## Query versioned tables
 
 ### Get current user with id = 1
 
 ```sql
+-- note that we query the original table with only current values
 SELECT * FROM my_schema.users
 WHERE id = 1;
 ```
@@ -183,6 +184,7 @@ WHERE id = 1;
 ### Get historical changes on user with id = 1
 
 ```sql
+-- note that here we query the traveltime view to access all historical records
 SELECT * FROM my_schema.users_traveltime
 WHERE id = 1;
 ```
