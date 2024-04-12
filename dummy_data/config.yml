@@ -2,8 +2,8 @@
 version: 2.1
 
 
-dummy_data : True #True/False  When True database table will be cleared and populated with synthetic data
-clear_data : True #True/False  True: clearing database False: Not clearing
+dummy_data: True #True/False  When True database table will be cleared and populated with synthetic data
+clear_data: True #True/False  True: clearing database False: Not clearing
 
 # dummy_data, clear_data | Table Data Status
 # _______________________|____________________________________
