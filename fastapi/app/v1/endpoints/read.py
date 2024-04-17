@@ -83,7 +83,7 @@ async def catch_all_get(request: Request, path_name: str):
                         elif isinstance(val, dict) and "@iot.id" in val:
                             del val["@iot.id"]
 
-            nextLink = f"{os.getenv('HOSTNAME').rstrip('/v1.1/')}{full_path}"
+            nextLink = f"{os.getenv('HOSTNAME')}{full_path}"
             new_top_value = 100
             if '$top' in nextLink:
                 start_index = nextLink.find('$top=') + 5

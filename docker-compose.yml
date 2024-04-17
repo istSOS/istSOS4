@@ -11,25 +11,26 @@ services:
     ports:
       - "45432:5432"
     environment:
-      POSTGRES_DB: istsos
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DATADIR: /var/lib/postgresql/data
       POSTGRES_MULTIPLE_EXTENSIONS: postgis,hstore,postgis_topology,postgis_raster,pgrouting,ltree,pg_cron,uuid-ossp
     command: >
       postgres
       -c custom.hostname="${HOSTNAME}"
+      -c custom.subpath="${SUBPATH}"
+      -c custom.version="${VERSION}"
       -c custom.versioning="${VERSIONING}"
     volumes:
-      # - v-istsos-miu-postgis-sql:/docker-entrypoint-initdb.d
       - v-istsos-miu-database-data:/var/lib/postgresql/data
-
     healthcheck:
       test: pg_isready -U admin -d istsos
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # FASTAPI
   api:
     build:
       context: ./fastapi
@@ -38,8 +39,10 @@ services:
       - ./fastapi/app:/code/app
     working_dir: /code
     environment:
-      DATABASE_URL: postgresql://admin:admin@database:5432/istsos
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
       HOSTNAME: ${HOSTNAME}
+      SUBPATH: ${SUBPATH}
+      VERSION: ${VERSION}
     ports:
       - 8018:5000
     command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app
@@ -57,11 +60,5 @@ services:
         condition: service_healthy
 
 volumes:
-  v-istsos-miu-postgis-sql:
-    name: v-istsos-miu-postgis-sql
   v-istsos-miu-database-data:
     name: v-istsos-miu-database-data
-  v-istsos-miu-database-data-test:
-    name: v-istsos-miu-database-data-test
-  v-istsos-miu-dummy-data:
-    name: v-istsos-miu-dummy-data

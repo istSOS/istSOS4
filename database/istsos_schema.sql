@@ -138,7 +138,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION update_location_self_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), TG_TABLE_NAME, '(', NEW.id, ')');
+    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, '(', NEW.id, ')');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -151,8 +151,8 @@ EXECUTE FUNCTION update_location_self_link();
 CREATE OR REPLACE FUNCTION update_location_navigation_links()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."Things@iot.navigationLink" := concat(current_setting('custom.hostname'), 'Locations(', NEW.id, ')/Things');
-    NEW."HistoricalLocations@iot.navigationLink" := concat(current_setting('custom.hostname'), 'Locations(', NEW.id, ')/HistoricalLocations');
+    NEW."Things@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/Locations(', NEW.id, ')/Things');
+    NEW."HistoricalLocations@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/Locations(', NEW.id, ')/HistoricalLocations');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -165,7 +165,7 @@ EXECUTE FUNCTION update_location_navigation_links();
 CREATE OR REPLACE FUNCTION update_thing_self_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), TG_TABLE_NAME, '(', NEW.id, ')');
+    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, '(', NEW.id, ')');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -178,9 +178,9 @@ EXECUTE FUNCTION update_thing_self_link();
 CREATE OR REPLACE FUNCTION update_thing_navigation_links()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."Locations@iot.navigationLink" := concat(current_setting('custom.hostname'), 'Things(', NEW.id, ')/Locations');
-    NEW."Datastreams@iot.navigationLink" := concat(current_setting('custom.hostname'), 'Things(', NEW.id, ')/Datastreams');
-    NEW."HistoricalLocations@iot.navigationLink" := concat(current_setting('custom.hostname'), 'Things(', NEW.id, ')/HistoricalLocations');
+    NEW."Locations@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/Things(', NEW.id, ')/Locations');
+    NEW."Datastreams@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/Things(', NEW.id, ')/Datastreams');
+    NEW."HistoricalLocations@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/Things(', NEW.id, ')/HistoricalLocations');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -193,7 +193,7 @@ EXECUTE FUNCTION update_thing_navigation_links();
 CREATE OR REPLACE FUNCTION update_historical_location_self_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), TG_TABLE_NAME, '(', NEW.id, ')');
+    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, '(', NEW.id, ')');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -206,8 +206,8 @@ EXECUTE FUNCTION update_historical_location_self_link();
 CREATE OR REPLACE FUNCTION update_historical_location_navigation_links()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."Locations@iot.navigationLink" := concat(current_setting('custom.hostname'), 'HistoricalLocations(', NEW.id, ')/Locations');
-    NEW."Thing@iot.navigationLink" := concat(current_setting('custom.hostname'), 'HistoricalLocations(', NEW.id, ')/Thing');
+    NEW."Locations@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/HistoricalLocations(', NEW.id, ')/Locations');
+    NEW."Thing@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/HistoricalLocations(', NEW.id, ')/Thing');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -220,7 +220,7 @@ EXECUTE FUNCTION update_historical_location_navigation_links();
 CREATE OR REPLACE FUNCTION update_observed_property_self_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), TG_TABLE_NAME, '(', NEW.id, ')');
+    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, '(', NEW.id, ')');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -233,7 +233,7 @@ EXECUTE FUNCTION update_observed_property_self_link();
 CREATE OR REPLACE FUNCTION update_observed_property_navigation_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."Datastreams@iot.navigationLink" := concat(current_setting('custom.hostname'), 'ObservedProperties(', NEW.id, ')/Datastreams');
+    NEW."Datastreams@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/ObservedProperties(', NEW.id, ')/Datastreams');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -246,7 +246,7 @@ EXECUTE FUNCTION update_observed_property_navigation_link();
 CREATE OR REPLACE FUNCTION update_sensor_self_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), TG_TABLE_NAME, '(', NEW.id, ')');
+    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, '(', NEW.id, ')');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -259,7 +259,7 @@ EXECUTE FUNCTION update_sensor_self_link();
 CREATE OR REPLACE FUNCTION update_sensor_navigation_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."Datastreams@iot.navigationLink" := concat(current_setting('custom.hostname'), 'Sensors(', NEW.id, ')/Datastreams');
+    NEW."Datastreams@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/Sensors(', NEW.id, ')/Datastreams');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -272,7 +272,7 @@ EXECUTE FUNCTION update_sensor_navigation_link();
 CREATE OR REPLACE FUNCTION update_datastream_self_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), TG_TABLE_NAME, '(', NEW.id, ')');
+    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, '(', NEW.id, ')');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -285,10 +285,10 @@ EXECUTE FUNCTION update_datastream_self_link();
 CREATE OR REPLACE FUNCTION update_datastream_navigation_links()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."Thing@iot.navigationLink" := concat(current_setting('custom.hostname'), 'Datastreams(', NEW.id, ')/Thing');
-    NEW."Sensor@iot.navigationLink" := concat(current_setting('custom.hostname'), 'Datastreams(', NEW.id, ')/Sensor');
-    NEW."ObservedProperty@iot.navigationLink" := concat(current_setting('custom.hostname'), 'Datastreams(', NEW.id, ')/ObservedProperty');
-    NEW."Observations@iot.navigationLink" := concat(current_setting('custom.hostname'), 'Datastreams(', NEW.id, ')/Observations');
+    NEW."Thing@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/Datastreams(', NEW.id, ')/Thing');
+    NEW."Sensor@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/Datastreams(', NEW.id, ')/Sensor');
+    NEW."ObservedProperty@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/Datastreams(', NEW.id, ')/ObservedProperty');
+    NEW."Observations@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/Datastreams(', NEW.id, ')/Observations');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -301,7 +301,7 @@ EXECUTE FUNCTION update_datastream_navigation_links();
 CREATE OR REPLACE FUNCTION update_feature_of_interest_self_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), TG_TABLE_NAME, '(', NEW.id, ')');
+    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, '(', NEW.id, ')');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -314,7 +314,7 @@ EXECUTE FUNCTION update_feature_of_interest_self_link();
 CREATE OR REPLACE FUNCTION update_feature_of_interest_navigation_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."Observations@iot.navigationLink" := concat(current_setting('custom.hostname'), 'FeaturesOfInterest(', NEW.id, ')/Observations');
+    NEW."Observations@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/FeaturesOfInterest(', NEW.id, ')/Observations');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -327,7 +327,7 @@ EXECUTE FUNCTION update_feature_of_interest_navigation_link();
 CREATE OR REPLACE FUNCTION update_observation_self_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), TG_TABLE_NAME, '(', NEW.id, ')');
+    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, '(', NEW.id, ')');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -340,8 +340,8 @@ EXECUTE FUNCTION update_observation_self_link();
 CREATE OR REPLACE FUNCTION update_observation_navigation_links()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."FeatureOfInterest@iot.navigationLink" := concat(current_setting('custom.hostname'), 'Observations(', NEW.id, ')/FeatureOfInterest');
-    NEW."Datastream@iot.navigationLink" := concat(current_setting('custom.hostname'), 'Observations(', NEW.id, ')/Datastream');
+    NEW."FeatureOfInterest@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/Observations(', NEW.id, ')/FeatureOfInterest');
+    NEW."Datastream@iot.navigationLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/Observations(', NEW.id, ')/Datastream');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
