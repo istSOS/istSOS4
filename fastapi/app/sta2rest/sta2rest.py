@@ -870,7 +870,7 @@ class STA2REST:
             raise Exception("Error parsing uri")
 
         # Check if we have a query
-        query_ast = QueryNode(None, None, None, None, None, None, None, False)
+        query_ast = QueryNode(None, None, None, None, None, None, None, None, None, False)
         if query:
             lexer = Lexer(query)
             tokens = lexer.tokenize()
@@ -881,15 +881,14 @@ class STA2REST:
         entities = uri['entities']
 
         if query_ast.as_of:
-            if len(entities) == 0 and not query_ast.expand:
-                main_entity += "TravelTime"
-                as_of_filter = f"system_time_validity eq {query_ast.as_of.value}"
-                query_ast.filter = FilterNode(query_ast.filter.filter + f" and {as_of_filter}" if query_ast.filter else as_of_filter)
-            # if query_ast.expand:
-            #     query_ast.expand.identifiers[0].identifier = query_ast.expand.identifiers[0].identifier + "TravelTime"
-            #     query_ast.expand.subquery = query_ast.filter
-            else:
-                raise Exception("AS_OF function available only for single entity")
+            main_entity += "TravelTime"
+            as_of_filter = f"system_time_validity eq {query_ast.as_of.value}"
+            query_ast.filter = FilterNode(query_ast.filter.filter + f" and {as_of_filter}" if query_ast.filter else as_of_filter)
+            if query_ast.expand:
+                for identifier in query_ast.expand.identifiers:
+                    identifier.identifier = identifier.identifier + "TravelTime"
+                    identifier.subquery = QueryNode(None, None, None, None, None, None, None, None, None, True) if identifier.subquery is None else identifier.subquery
+                    identifier.subquery.filter = FilterNode(identifier.subquery.filter + f" and {as_of_filter}" if identifier.subquery.filter else as_of_filter)
 
         if query_ast.from_to:
             if len(entities) == 0 and not query_ast.expand:
@@ -913,7 +912,7 @@ class STA2REST:
             # Merge the entities with the query
             for entity in entities:
                 entity_name = entity[0]
-                sub_query = QueryNode(None, None, None, None, None, None, None, True)
+                sub_query = QueryNode(None, None, None, None, None, None, None, None, None, True)
                 if entity[1]:
                     single_result = True
                     sub_query.filter = FilterNode(f"id eq {entity[1]}")
@@ -1010,12 +1009,13 @@ class STA2REST:
     @staticmethod
     def parse_uri(uri: str) -> str:
         # Split the uri by the '/' character
-        parts = uri.split('/')
+        version = os.getenv('VERSION')
+        parts = uri.split(version)
+        parts = parts[1]
+        parts = parts.split('/')
+
         # Remove the first part
         parts.pop(0)
-
-        # Check if we have a version number
-        version = parts.pop(0)
 
         # Parse first entity
         main_entity = STA2REST.parse_entity(parts.pop(0))
