@@ -810,6 +810,18 @@ class STA2REST:
         ],
     }
 
+    SELECT_MAPPING = {
+        'encodingType': 'encoding_type',
+        'metadata': 'sensor_metadata',
+        'unitOfMeasurement': 'unit_of_measurement',
+        'observationType': 'observation_type',
+        'observedArea': 'observed_area',
+        'phenomenonTime': 'phenomenon_time',
+        'resultTime': 'result_time',
+        'resultQuality': 'result_quality',
+        'validTime': 'valid_time'
+    }
+
     @staticmethod
     def get_default_column_names(entity: str) -> list:
         """
@@ -821,7 +833,12 @@ class STA2REST:
         Returns:
             list: The default column names.
         """
-        return STA2REST.DEFAULT_SELECT.get(entity, ["*"])
+        select = STA2REST.DEFAULT_SELECT.get(entity, ["*"])
+        for old_key, new_key in STA2REST.SELECT_MAPPING.items():
+            if old_key in select:
+                select.remove(old_key)
+                select.append(new_key)
+        return select
 
     @staticmethod
     def convert_entity(entity: str) -> str:

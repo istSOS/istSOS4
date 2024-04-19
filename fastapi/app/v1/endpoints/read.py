@@ -134,14 +134,14 @@ async def catch_all_get(request: Request, path_name: str):
         if len(data) == 0 or ("value" in data and len(data["value"]) == 0):
             data.pop("@iot.nextLink", None)
             data.pop("@iot.count", None)
-            # return JSONResponse(
-            #     status_code=status.HTTP_404_NOT_FOUND,
-            #     content={
-            #         "code": 404,
-            #         "type": "error",
-            #         "message": "Not Found"
-            #     }
-            # )
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "code": 404,
+                    "type": "error",
+                    "message": "Not Found"
+                }
+            )
         return data
     except Exception as e:
         # print stack trace
