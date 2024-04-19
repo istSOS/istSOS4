@@ -27,6 +27,7 @@ TOKEN_TYPES = {
     'TIMESTAMP': r"[1-9]\d{3}-(?:0\d|1[0-2])-(?:[0-2]\d|3[01])" + r"T" + r"(?:[01]\d|2[0-3]):[0-5]\d(:?:[0-5]\d(?:\.\d{1,12})?)" + r"?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?",
     'IDENTIFIER': r'[a-zA-Z_][.a-zA-Z0-9_/]*',
     'INTEGER': r'[0-9]+',
+    'STRING': r"'[^']*'",
     'LEFT_PAREN': r'\(',
     'RIGHT_PAREN': r'\)',
     'WHITESPACE': r'\s+',
