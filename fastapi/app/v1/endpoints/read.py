@@ -30,7 +30,7 @@ def __handle_root(request: Request):
             {
                 "name": table,
                 "url": 
-                request.url._url + table,
+                f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}" + "/" + table,
             }
         )
 
