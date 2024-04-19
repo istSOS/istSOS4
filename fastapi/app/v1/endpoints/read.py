@@ -2,13 +2,13 @@ import httpx
 import traceback
 import os
 import pprint
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi import status
 from app.sta2rest import sta2rest
 from app.utils.utils import PostgRESTError, __create_ref_format, __flatten_expand_entity, __flatten_navigation_links
 from app.settings import tables, serverSettings
-from sqlalchemy.orm import sessionmaker, joinedload, load_only
+from sqlalchemy.orm import sessionmaker, joinedload, load_only, Session
 from sqlalchemy import create_engine, or_
 from ...models import (
     Location, Thing, HistoricalLocation, ObservedProperty, Sensor,
@@ -17,9 +17,16 @@ from ...models import (
     ObservedPropertyTravelTime, SensorTravelTime, DatastreamTravelTime,
     FeaturesOfInterestTravelTime, ObservationTravelTime
 )
+from app.models.database import SessionLocal, engine
 
 v1 = APIRouter()
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 def __handle_root(request: Request):
     # Handle the root path
@@ -41,7 +48,7 @@ def __handle_root(request: Request):
     return response
 
 @v1.api_route("/{path_name:path}", methods=["GET"])
-async def catch_all_get(request: Request, path_name: str):
+async def catch_all_get(request: Request, path_name: str, db: Session = Depends(get_db)):
     if not path_name:
         # Handle the root path
         return __handle_root(request)
@@ -52,14 +59,10 @@ async def catch_all_get(request: Request, path_name: str):
         if request.url.query:
             full_path += "?" + request.url.query
 
-        result = sta2rest.STA2REST.convert_query(full_path)
-        subqueries = []
-        for subquery in result["subqueries"]:
-            subqueries.append(subquery)
-        query = result["query"]
-        items = query.all()
+        result = sta2rest.STA2REST.convert_query(full_path, db)
+        items = result["query"]
+        query_count = result["query_count"]
         item_dicts = [item.to_dict_expand() if result["dict_expand"] else item.to_dict() for item in items]
-        query_count = result["count_query"][0].scalar()
         data = {}
         if len(item_dicts) == 1 and result["single_result"]:
             data = item_dicts[0]
