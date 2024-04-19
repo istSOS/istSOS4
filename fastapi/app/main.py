@@ -5,7 +5,7 @@ import os
 
 app = FastAPI(debug=True)
 
-def __handle_root(request: Request):
+def __handle_root():
     # Handle the root path
     value = []
     # append the domain to the path for each table
@@ -14,7 +14,7 @@ def __handle_root(request: Request):
             {
                 "name": table,
                 "url": 
-                request.url._url + "/" + table,
+                f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}" + "/" + table,
             }
         )
 
@@ -25,8 +25,8 @@ def __handle_root(request: Request):
     return response
 
 @app.get(f"{os.getenv('SUBPATH')}{os.getenv('VERSION')}")
-async def read_root(request: Request):
-    return __handle_root(request)
+async def read_root():
+    return __handle_root()
 
 app.mount(f"{os.getenv('SUBPATH')}{os.getenv('VERSION')}", api.v1)
 
