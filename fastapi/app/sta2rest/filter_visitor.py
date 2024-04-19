@@ -55,6 +55,18 @@ from ..models import (
 from geoalchemy2 import WKTElement
 from datetime import datetime, timezone
 
+SELECT_MAPPING = {
+      'encodingType': 'encoding_type',
+      'metadata': 'sensor_metadata',
+      'unitOfMeasurement': 'unit_of_measurement',
+      'observationType': 'observation_type',
+      'observedArea': 'observed_area',
+      'phenomenonTime': 'phenomenon_time',
+      'resultTime': 'result_time',
+      'resultQuality': 'result_quality',
+      'validTime': 'valid_time'
+   }
+
 class FilterVisitor(visitor.NodeVisitor):
    """
       Visitor for the filter AST.  
@@ -158,6 +170,9 @@ class FilterVisitor(visitor.NodeVisitor):
                getattr(globals()[self.root_model], 'result_json')
             )
          name = node.name.lower() if node.name[0].isupper() else node.name
+         for old_key, new_key in SELECT_MAPPING.items():
+            if old_key == node.name:
+               name = new_key
          return getattr(globals()[self.root_model], name)
       except AttributeError:
          raise ex.InvalidFieldException(node.name)
