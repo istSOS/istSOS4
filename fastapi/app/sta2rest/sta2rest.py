@@ -114,7 +114,9 @@ class NodeVisitor(Visitor):
 
         # Replace / with -> for json columns
         node.name = node.name.replace('/', '.')
-
+        for old_key, new_key in STA2REST.SELECT_MAPPING.items():
+            if old_key == node.name:
+                node.name = new_key
         return node.name
 
     def visit_SelectNode(self, node: SelectNode):
@@ -159,7 +161,9 @@ class NodeVisitor(Visitor):
         Returns:
             str: The converted orderby node identifier.
         """
-
+        for old_key, new_key in STA2REST.SELECT_MAPPING.items():
+            if old_key == node.identifier:
+                node.identifier = new_key
         # Convert the identifier to the format name.order
         return f'{node.identifier}.{node.order}'
 
