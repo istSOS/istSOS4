@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) UNIQUE NOT NULL,
     "definition" VARCHAR(255) NOT NULL,
-    "description" VARCHAR(255) NOT NULL,
+    "description" TEXT NOT NULL,
     "properties" jsonb,
     "@iot.selfLink" TEXT,
     "Datastreams@iot.navigationLink" TEXT
@@ -54,9 +54,9 @@ CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
 CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) UNIQUE NOT NULL,
-    "description" VARCHAR(255) NOT NULL,
+    "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "metadata" jsonb NOT NULL,
+    "metadata" VARCHAR(255) NOT NULL,
     "properties" jsonb,
     "@iot.selfLink" TEXT,
     "Datastreams@iot.navigationLink" TEXT
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
 CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) NOT NULL,
-    "description" VARCHAR(255) NOT NULL,
+    "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "feature" geometry(geometry, 4326) NOT NULL,
     "properties" jsonb,
