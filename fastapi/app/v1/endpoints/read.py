@@ -1,23 +1,13 @@
-import httpx
 import traceback
 import os
-import pprint
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi import status
 from app.sta2rest import sta2rest
-from app.utils.utils import PostgRESTError, __create_ref_format, __flatten_expand_entity, __flatten_navigation_links
 from app.settings import tables, serverSettings
-from sqlalchemy.orm import sessionmaker, joinedload, load_only, Session
-from sqlalchemy import create_engine, or_
-from ...models import (
-    Location, Thing, HistoricalLocation, ObservedProperty, Sensor,
-    Datastream, FeaturesOfInterest, Observation,
-    LocationTravelTime, ThingTravelTime, HistoricalLocationTravelTime,
-    ObservedPropertyTravelTime, SensorTravelTime, DatastreamTravelTime,
-    FeaturesOfInterestTravelTime, ObservationTravelTime
-)
-from app.models.database import SessionLocal, engine
+from sqlalchemy.orm import Session
+from app.models.database import SessionLocal
+from collections.abc import Iterable
 
 v1 = APIRouter()
 
@@ -134,9 +124,7 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
         if result['value']:
             data = data[list(data.keys())[0]]
 
-        if len(data) == 0 or ("value" in data and len(data["value"]) == 0):
-            data.pop("@iot.nextLink", None)
-            data.pop("@iot.count", None)
+        if not data or (isinstance(data, Iterable) and "value" in data and len(data["value"]) == 0):
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content={
