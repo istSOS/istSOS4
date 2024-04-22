@@ -128,7 +128,7 @@ def prepare_entity_body_for_insert(entity_body, created_ids):
         # check if key is present in created_ids
         if key in created_ids:
             entity_body[key] = created_ids[key]
-        elif "Time" in key:
+        elif "time" in key.lower():
             entity_body[key] = datetime.datetime.fromisoformat(entity_body[key])
         # check if value is a dict and convert it to a str
         elif isinstance(entity_body[key], dict):
@@ -158,7 +158,7 @@ async def create_entity(entity_name, body, pgpool):
 
     # Creation order
     created_ids = {}
-    creation_order = ["Location","Thing", "Sensor", "ObservedProperty", "FeaturesOfInterest", "Datastream", "Observation"]
+    creation_order = ["Location", "Thing", "HistoricalLocation", "ObservedProperty", "Sensor", "Datastream", "FeaturesOfInterest", "Observation"]
 
     async with pgpool.acquire() as conn:
         async with conn.transaction():
