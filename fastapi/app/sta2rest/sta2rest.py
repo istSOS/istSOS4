@@ -360,6 +360,8 @@ class NodeVisitor(Visitor):
             ID_QUERY_RESULT = False
             ID_SUBQUERY_RESULT = []
 
+            subqueriesNotExpand = []
+
             # Check if we have an expand node before the other parts of the query
             if node.expand:
                 # Visit the expand node
@@ -482,13 +484,16 @@ class NodeVisitor(Visitor):
                             ).load_only(*select_query)
                         )
                     else:
+                        expand_identifier = node.expand.identifiers[index].identifier
+                        subquery = session.query(globals()[expand_identifier])
+                        if (index > 0):
+                            subquery = subquery.join(subqueriesNotExpand[index - 1])
                         if result['filter'][index] is not None:
                             filter, join_relationships = result['filter'][index]
-                            expand_identifier = node.expand.identifiers[index].identifier
-                            if (globals()[expand_identifier] != main_entity):
-                                main_query_select_pagination = main_query_select_pagination.join(globals()[expand_identifier])
-                            main_query_select_pagination = main_query_select_pagination.filter(filter)
-
+                            subquery = subquery.filter(filter)
+                        subquery = subquery.subquery()
+                        subqueriesNotExpand.append(subquery)
+                main_query_select_pagination = main_query_select_pagination.join(subqueriesNotExpand[-1])
             if not node.select:
                 node.select = SelectNode([])
                 # get default columns for main entity
