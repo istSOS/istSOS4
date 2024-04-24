@@ -54,7 +54,8 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
         query_count = result["query_count"]
         item_dicts = [item.to_dict_expand() if result["dict_expand"] else item.to_dict() for item in items]
         data = {}
-        if len(item_dicts) == 1 and result["single_result"] and not full_path.endswith("s"):
+        print(full_path)
+        if len(item_dicts) == 1 and result["single_result"] and not full_path.endswith("s") and not (result['ref'] or result['value']):
             data = item_dicts[0]
             if not result["id_query_result"]:
                 del data["@iot.id"]
