@@ -485,7 +485,8 @@ class NodeVisitor(Visitor):
                         if result['filter'][index] is not None:
                             filter, join_relationships = result['filter'][index]
                             expand_identifier = node.expand.identifiers[index].identifier
-                            main_query_select_pagination = main_query_select_pagination.join(globals()[expand_identifier])
+                            if (globals()[expand_identifier] != main_entity):
+                                main_query_select_pagination = main_query_select_pagination.join(globals()[expand_identifier])
                             main_query_select_pagination = main_query_select_pagination.filter(filter)
 
             if not node.select:
