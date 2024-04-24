@@ -494,6 +494,7 @@ class NodeVisitor(Visitor):
                         subquery = subquery.subquery()
                         subqueriesNotExpand.append(subquery)
                 main_query_select_pagination = main_query_select_pagination.join(subqueriesNotExpand[-1])
+
             if not node.select:
                 node.select = SelectNode([])
                 # get default columns for main entity
@@ -1089,6 +1090,7 @@ class STA2REST:
             entities.append(main_entity)
             main_entity = entities[0]
             entities.pop(0)
+            entities = entities[::-1]
 
         return {
             'version': version,
