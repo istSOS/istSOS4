@@ -115,7 +115,7 @@ class ExpandNodeIdentifier(Node):
     subquery (QueryNode): The subquery associated with the expand node.
     """
 
-    def __init__(self, identifier, subquery=None):
+    def __init__(self, identifier, subquery=None, expand=True):
         """
         Initializes an ExpandNodeIdentifier object.
 
@@ -125,6 +125,7 @@ class ExpandNodeIdentifier(Node):
         """
         self.identifier = identifier
         self.subquery = subquery
+        self.expand = expand
 
 
 class ExpandNode(Node):
