@@ -116,8 +116,14 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
 
 CREATE OR REPLACE FUNCTION location_geojson(sensorthings."Location")
 RETURNS jsonb AS $$
+DECLARE
+    geojson jsonb;
 BEGIN
-    RETURN ST_AsGeoJSON($1."location")::jsonb;
+    geojson := jsonb_build_object(
+        'type', 'Feature',
+        'geometry', ST_AsGeoJSON($1."location")::jsonb
+    );
+    RETURN geojson;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -130,8 +136,14 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION feature_geojson(sensorthings."FeaturesOfInterest")
 RETURNS jsonb AS $$
+DECLARE
+    geojson jsonb;
 BEGIN
-    RETURN ST_AsGeoJSON($1."feature")::jsonb;
+    geojson := jsonb_build_object(
+        'type', 'Feature',
+        'geometry', ST_AsGeoJSON($1."feature")::jsonb
+    );
+    RETURN geojson;
 END;
 $$ LANGUAGE plpgsql;
 
