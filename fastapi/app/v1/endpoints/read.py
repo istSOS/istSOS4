@@ -55,7 +55,10 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
         item_dicts = [item.to_dict_expand() if result["dict_expand"] else item.to_dict() for item in items]
         data = {}
         print(full_path)
-        if len(item_dicts) == 1 and result["single_result"] and not full_path.endswith("s") and not (result['ref'] or result['value']):
+        tmpPath = full_path.split('/')[-1]
+        if tmpPath == "$ref":
+            tmpPath = full_path.split('/')[-2]
+        if len(item_dicts) == 1 and result["single_result"] and not tmpPath.endswith("s"):
             data = item_dicts[0]
             if not result["id_query_result"]:
                 del data["@iot.id"]
@@ -136,7 +139,6 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
             )
         return data
     except Exception as e:
-        # print stack trace
         traceback.print_exc()
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
