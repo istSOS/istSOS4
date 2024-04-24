@@ -83,8 +83,8 @@ engine = create_engine(os.getenv('DATABASE_URL'), echo=True)
 
 Session = sessionmaker(bind=engine)
 
-id_query_result = False
-id_subquery_result = []
+ID_QUERY_RESULT = False
+ID_SUBQUERY_RESULT = []
 
 class NodeVisitor(Visitor):
 
@@ -353,132 +353,140 @@ class NodeVisitor(Visitor):
             window = None
             subquery_parts = None
             order_subquery = None
-
             subqueries = []
             limited_skipped_subqueries = []
-            globals()["id_query_result"] = False
-            globals()["id_subquery_result"] = []
+
+            global ID_QUERY_RESULT, ID_SUBQUERY_RESULT
+            ID_QUERY_RESULT = False
+            ID_SUBQUERY_RESULT = []
+
             # Check if we have an expand node before the other parts of the query
             if node.expand:
                 # Visit the expand node
                 result = self.visit(node.expand)
-                for index in range(len(node.expand.identifiers)):
-                    sub_entity = globals()[node.expand.identifiers[index].identifier]
-                    foreign_key_attr_name = f"{self.main_entity.lower()}_id"
-                    if hasattr(sub_entity, foreign_key_attr_name):
-                        foreign_key_attr  = getattr(sub_entity, foreign_key_attr_name)
-                    else:
-                        foreign_key_attr  = getattr(sub_entity, 'id')
+                for index, expand_identifier in enumerate(node.expand.identifiers):
+                    if (node.expand.identifiers[index].expand):
+                        sub_entity = globals()[node.expand.identifiers[index].identifier]
+                        foreign_key_attr_name = f"{self.main_entity.lower()}_id"
+                        if hasattr(sub_entity, foreign_key_attr_name):
+                            foreign_key_attr  = getattr(sub_entity, foreign_key_attr_name)
+                        else:
+                            foreign_key_attr  = getattr(sub_entity, 'id')
 
-                    window = func.row_number().over(
-                        partition_by=foreign_key_attr, order_by=desc(foreign_key_attr)
-                    ).label("rank")
-                    subquery_parts = session.query(sub_entity, window)
+                        window = func.row_number().over(
+                            partition_by=foreign_key_attr, order_by=desc(foreign_key_attr)
+                        ).label("rank")
+                        subquery_parts = session.query(sub_entity, window)
 
-                    globals()["id_subquery_result"].append((node.expand.identifiers[index].identifier, False))
-                    # Merge the results with the other parts of the query
-                    if result['select']:
-                        select_query = []
-                        match = re.match(r'(.*?)\((.*?)\)', result['select'].identifiers[index].name)
-                        entity = match.group(1)
-                        fields = match.group(2).split(',')
-                        
-                        if "id" in fields:
-                            globals()["id_subquery_result"][index] = (node.expand.identifiers[index].identifier, True)
+                        ID_SUBQUERY_RESULT.append((node.expand.identifiers[index].identifier, False))
+                        # Merge the results with the other parts of the query
+                        if result['select']:
+                            select_query = []
+                            match = re.match(r'(.*?)\((.*?)\)', result['select'].identifiers[index].name)
+                            entity = match.group(1)
+                            fields = match.group(2).split(',')
                             
-                        for field in fields:
-                            if (entity in ['Observation', 'ObservationTravelTime']) and field == 'result':
-                                select_query.extend([
-                                    getattr(globals()[entity], 'result_integer'),
-                                    getattr(globals()[entity], 'result_double'),
-                                    getattr(globals()[entity], 'result_string'),
-                                    getattr(globals()[entity], 'result_boolean'),
-                                    getattr(globals()[entity], 'result_json')
-                                ])
-                            else:
-                                select_query.append(getattr(globals()[entity], field.strip()))
+                            if "id" in fields:
+                                ID_SUBQUERY_RESULT[index] = (node.expand.identifiers[index].identifier, True)
+                                
+                            for field in fields:
+                                if (entity in ['Observation', 'ObservationTravelTime']) and field == 'result':
+                                    select_query.extend([
+                                        getattr(globals()[entity], 'result_integer'),
+                                        getattr(globals()[entity], 'result_double'),
+                                        getattr(globals()[entity], 'result_string'),
+                                        getattr(globals()[entity], 'result_boolean'),
+                                        getattr(globals()[entity], 'result_json')
+                                    ])
+                                else:
+                                    select_query.append(getattr(globals()[entity], field.strip()))
 
-                    if result['filter'][index] is not None:
-                        is_limited_query = None
-                        filter, join_relationships = result['filter'][index]
-                        expand_identifier = node.expand.identifiers[index].identifier
-                        main_entity_has_expand_attribute = hasattr(globals()[self.main_entity], f"{expand_identifier.lower()}_id")
-                        expand_entity_has_main_entity_attribute = hasattr(globals()[expand_identifier], f"{self.main_entity.lower()}_id")
+                        if result['filter'][index] is not None:
+                            filter, join_relationships = result['filter'][index]
+                            expand_identifier = node.expand.identifiers[index].identifier
+                            main_entity_has_expand_attribute = hasattr(globals()[self.main_entity], f"{expand_identifier.lower()}_id")
+                            expand_entity_has_main_entity_attribute = hasattr(globals()[expand_identifier], f"{self.main_entity.lower()}_id")
 
-                        # Check if the main entity has an attribute based on the expand
-                        if main_entity_has_expand_attribute:
-                            main_query_select_pagination = main_query_select_pagination.join(globals()[expand_identifier])
-                            for rel in join_relationships:
-                                main_query_select_pagination = main_query_select_pagination.join(rel)
-                            main_query_select_pagination = main_query_select_pagination.filter(filter)
+                            # Check if the main entity has an attribute based on the expand
+                            if main_entity_has_expand_attribute:
+                                main_query_select_pagination = main_query_select_pagination.join(globals()[expand_identifier])
+                                for rel in join_relationships:
+                                    main_query_select_pagination = main_query_select_pagination.join(rel)
+                                main_query_select_pagination = main_query_select_pagination.filter(filter)
 
-                        # Check if the expand entity has an attribute based on the main entity
-                        if expand_entity_has_main_entity_attribute:
-                            main_query_select_pagination = main_query_select_pagination.join(globals()[expand_identifier])
-                            for rel in join_relationships:
-                                main_query_select_pagination = main_query_select_pagination.join(rel)
-                                subquery_parts = subquery_parts.join(rel)
-                            main_query_select_pagination = main_query_select_pagination.filter(filter)
-                            subquery_parts = subquery_parts.filter(filter)
+                            # Check if the expand entity has an attribute based on the main entity
+                            if expand_entity_has_main_entity_attribute:
+                                main_query_select_pagination = main_query_select_pagination.join(globals()[expand_identifier])
+                                for rel in join_relationships:
+                                    main_query_select_pagination = main_query_select_pagination.join(rel)
+                                    subquery_parts = subquery_parts.join(rel)
+                                main_query_select_pagination = main_query_select_pagination.filter(filter)
+                                subquery_parts = subquery_parts.filter(filter)
 
-                    if result['orderby'][index]:
-                        attrs, order, attr_name = result['orderby'][index]
-                        order_subquery = (order, attr_name)
-                        
-                        # Create list of ordering attributes based on the specified order
-                        ordering = [asc(attribute) if order == 'asc' else desc(attribute) for attribute in attrs]
-                        
-                        # Apply ordering to the subquery parts
-                        subquery_parts = subquery_parts.order_by(*ordering)
+                        if result['orderby'][index]:
+                            attrs, order, attr_name = result['orderby'][index]
+                            order_subquery = (order, attr_name)
+                            
+                            # Create list of ordering attributes based on the specified order
+                            ordering = [asc(attribute) if order == 'asc' else desc(attribute) for attribute in attrs]
+                            
+                            # Apply ordering to the subquery parts
+                            subquery_parts = subquery_parts.order_by(*ordering)
 
-                    skip_subquery_value = result['skip'][index] or 0
+                        skip_subquery_value = result['skip'][index] or 0
 
-                    limit_subquery_value = result['top'][index] or 100
+                        limit_subquery_value = result['top'][index] or 100
 
-                    # if result['count'][index]:
-                    #     subquery_parts = subquery_parts.count()
+                        # if result['count'][index]:
+                        #     subquery_parts = subquery_parts.count()
 
-                    # Convert subquery_parts to a subquery
-                    subquery_parts = subquery_parts.subquery()
+                        # Convert subquery_parts to a subquery
+                        subquery_parts = subquery_parts.subquery()
 
-                    # Append subquery to list of subqueries
-                    subqueries.append(subquery_parts)
+                        # Append subquery to list of subqueries
+                        subqueries.append(subquery_parts)
 
-                    # Append subquery with skip and limit values to another list
-                    limited_skipped_subqueries.append([subquery_parts, skip_subquery_value, limit_subquery_value])
+                        # Append subquery with skip and limit values to another list
+                        limited_skipped_subqueries.append([subquery_parts, skip_subquery_value, limit_subquery_value])
 
-                    # Determine foreign key attribute name
-                    foreign_key_attr_name = f"{node.expand.identifiers[index].identifier.lower()}_id"
+                        # Determine foreign key attribute name
+                        foreign_key_attr_name = f"{node.expand.identifiers[index].identifier.lower()}_id"
 
-                    # Check if the main entity has a foreign key attribute
-                    if hasattr(main_entity, foreign_key_attr_name):
-                        foreign_key_value = getattr(main_entity, foreign_key_attr_name, None)
-                        
-                        # Join main query with subquery using foreign key value
-                        main_query = main_query.join(
-                            subqueries[index], 
-                            foreign_key_value == subqueries[index].c.id
-                        )
-                        
-                        count_query[0] = count_query[0].join(
-                            subqueries[index], 
-                            foreign_key_value == subqueries[index].c.id
+                        # Check if the main entity has a foreign key attribute
+                        if hasattr(main_entity, foreign_key_attr_name):
+                            foreign_key_value = getattr(main_entity, foreign_key_attr_name, None)
+                            
+                            # Join main query with subquery using foreign key value
+                            main_query = main_query.join(
+                                subqueries[index], 
+                                foreign_key_value == subqueries[index].c.id
+                            )
+                            
+                            count_query[0] = count_query[0].join(
+                                subqueries[index], 
+                                foreign_key_value == subqueries[index].c.id
+                            )
+                        else:
+                            # Define default join condition
+                            default_join_condition = getattr(main_entity, 'id') == subqueries[index].c.get(f"{self.main_entity.lower()}_id", None)
+                            
+                            # Join main query with subquery using default join condition
+                            main_query = main_query.join(subqueries[index], default_join_condition)
+                            count_query[0] = count_query[0].join(subqueries[index], default_join_condition)
+
+                        # Configure options for main query
+                        main_query = main_query.options(
+                            contains_eager(
+                                getattr(main_entity, node.expand.identifiers[index].identifier.lower(), None), 
+                                alias=subqueries[index]
+                            ).load_only(*select_query)
                         )
                     else:
-                        # Define default join condition
-                        default_join_condition = getattr(main_entity, 'id') == subqueries[index].c.get(f"{self.main_entity.lower()}_id", None)
-                        
-                        # Join main query with subquery using default join condition
-                        main_query = main_query.join(subqueries[index], default_join_condition)
-                        count_query[0] = count_query[0].join(subqueries[index], default_join_condition)
-
-                    # Configure options for main query
-                    main_query = main_query.options(
-                        contains_eager(
-                            getattr(main_entity, node.expand.identifiers[index].identifier.lower(), None), 
-                            alias=subqueries[index]
-                        ).load_only(*select_query)
-                    )
+                        if result['filter'][index] is not None:
+                            filter, join_relationships = result['filter'][index]
+                            expand_identifier = node.expand.identifiers[index].identifier
+                            main_query_select_pagination = main_query_select_pagination.join(globals()[expand_identifier])
+                            main_query_select_pagination = main_query_select_pagination.filter(filter)
 
             if not node.select:
                 node.select = SelectNode([])
@@ -497,7 +505,7 @@ class NodeVisitor(Visitor):
                     
                     # Check if field is 'id' and set id_query_result flag
                     if field_name == 'id':
-                        globals()["id_query_result"] = True
+                        ID_QUERY_RESULT = True
                     
                     # Check if main_entity is Observation or ObservationTravelTime and field is 'result'
                     if (self.main_entity in ['Observation', 'ObservationTravelTime']) and field_name == 'result':
@@ -969,7 +977,7 @@ class STA2REST:
                         sub_query.count = query_ast.count
                         query_ast.count = None
 
-                query_ast.expand.identifiers.append(ExpandNodeIdentifier(entity_name, sub_query))
+                query_ast.expand.identifiers.append(ExpandNodeIdentifier(entity_name, sub_query, False))
                 index += 1
         else:
             if uri['property_name']:
@@ -999,6 +1007,7 @@ class STA2REST:
         query_converted = visitor.visit(query_ast)
 
         subqueries = [subquery for subquery in query_converted[1]]
+        global ID_QUERY_RESULT, ID_SUBQUERY_RESULT
         return {
             'query': query_converted[0].all() if query_converted else url,
             'count_query': query_converted[2],
@@ -1006,8 +1015,8 @@ class STA2REST:
             'ref': uri['ref'],
             'value': uri['value'],
             'single_result': single_result,
-            'id_query_result': globals()["id_query_result"],
-            'id_subquery_result': globals()["id_subquery_result"],
+            'id_query_result': ID_QUERY_RESULT,
+            'id_subquery_result': ID_SUBQUERY_RESULT,
             'dict_expand' : dict_expand
         }
 
@@ -1067,12 +1076,14 @@ class STA2REST:
                     raise Exception("Error parsing uri: $value without property name")
             else:
                 property_name = entity
+
         # Reverse order of entities
         if entities:
             entities = entities[::-1]
             entities.append(main_entity)
             main_entity = entities[0]
             entities.pop(0)
+
         return {
             'version': version,
             'entity': main_entity,
