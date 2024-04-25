@@ -79,7 +79,7 @@ grammar.ODATA_FUNCTIONS = ODATA_FUNCTIONS
 odata_filter_lexer = ODataLexer()
 odata_filter_parser = ODataParser()
 
-engine = create_engine(os.getenv('DATABASE_URL'), echo=True)
+engine = create_engine(os.getenv('DATABASE_URL'))
 
 Session = sessionmaker(bind=engine)
 
