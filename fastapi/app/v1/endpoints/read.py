@@ -54,7 +54,7 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
         query_count = result["query_count"]
         item_dicts = [item.to_dict_expand() if result["dict_expand"] else item.to_dict() for item in items]
         data = {}
-        print(full_path)
+        print("PATH: ",full_path)
         tmpPath = full_path.split('/')[-1]
         if tmpPath == "$ref":
             tmpPath = full_path.split('/')[-2]

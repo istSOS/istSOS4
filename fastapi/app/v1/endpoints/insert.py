@@ -29,6 +29,8 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
         result = sta2rest.STA2REST.parse_uri(full_path)
         # get json body
         body = await request.json()
+        print("PATH: ",full_path)
+        print("BODY: ", body)
         main_table = result["entity"][0]
         result = await create_entity(main_table, body, pgpool)
         # Return okay
