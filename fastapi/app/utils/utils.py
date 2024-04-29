@@ -158,7 +158,7 @@ async def create_entity(entity_name, body, pgpool):
 
     # Creation order
     created_ids = {}
-    creation_order = ["Location", "Thing", "HistoricalLocation", "ObservedProperty", "Sensor", "Datastream", "FeaturesOfInterest", "Observation"]
+    creation_order = ["Location", "Thing", "Sensor", "ObservedProperty", "FeaturesOfInterest", "Datastream", "Observation"]
 
     async with pgpool.acquire() as conn:
         async with conn.transaction():
