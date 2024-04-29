@@ -25,21 +25,29 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
     "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
     "properties" jsonb,
-    "location_id" BIGINT NOT NULL REFERENCES sensorthings."Location" (id) ON DELETE CASCADE,
     "@iot.selfLink" TEXT,
     "Locations@iot.navigationLink" TEXT,
     "HistoricalLocations@iot.navigationLink" TEXT,
     "Datastreams@iot.navigationLink" TEXT
 );
 
+CREATE TABLE IF NOT EXISTS sensorthings."Thing_Location" (
+    "thing_id" BIGINT NOT NULL REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
+    "location_id" BIGINT NOT NULL REFERENCES sensorthings."Location"(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "time" TIMESTAMPTZ DEFAULT NOW(),
     "thing_id" BIGINT NOT NULL REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
-    "location_id" BIGINT NOT NULL REFERENCES sensorthings."Location"(id) ON DELETE CASCADE,
     "@iot.selfLink" TEXT,
     "Locations@iot.navigationLink" TEXT,
     "Thing@iot.navigationLink" TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sensorthings."Location_HistoricalLocation" (
+    "location_id" BIGINT NOT NULL REFERENCES sensorthings."Location"(id) ON DELETE CASCADE,
+    "historicallocation_id" BIGINT NOT NULL REFERENCES sensorthings."HistoricalLocation"(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
@@ -96,8 +104,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
 
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
-    "phenomenonTime" TIMESTAMPTZ NOT NULL,
-    "resultTime" TIMESTAMPTZ DEFAULT NOW(),
+    "phenomenonTime" TIMESTAMPTZ DEFAULT NOW(),
+    "resultTime" TIMESTAMPTZ DEFAULT NULL,
     "resultType" INT NOT NULL,
     "resultString" TEXT,
     "resultInteger" INT,

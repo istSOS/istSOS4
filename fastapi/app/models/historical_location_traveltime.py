@@ -14,7 +14,6 @@ class HistoricalLocationTravelTime(Base):
     thing_navigation_link = Column("Thing@iot.navigationLink", Text)
     time = Column(TIMESTAMP, nullable=False)
     thing_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Thing.id'), nullable=False)
-    location_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Location.id'), nullable=False)
     system_time_validity = Column(TSTZRANGE)
 
     __table_args__ = (PrimaryKeyConstraint(id, system_time_validity), {'schema': SCHEMA_NAME })

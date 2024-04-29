@@ -16,7 +16,6 @@ class ThingTravelTime(Base):
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     properties = Column(JSON)
-    location_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Location.id'), nullable=False)
     system_time_validity = Column(TSTZRANGE)
 
     __table_args__ = (PrimaryKeyConstraint(id, system_time_validity), {'schema': SCHEMA_NAME })
