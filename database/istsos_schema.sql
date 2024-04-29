@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "properties" jsonb,
     "@iot.selfLink" TEXT,
     "Things@iot.navigationLink" TEXT,
-    "HistoricalLocations@iot.navigationLink" TEXT
+    "HistoricalLocations@iot.navigationLink" TEXT,
+    "gen_foi_id" BIGINT
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
@@ -24,7 +25,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
     "name" VARCHAR(255) UNIQUE NOT NULL,
     "description" TEXT NOT NULL,
     "properties" jsonb,
-    "location_id" BIGINT REFERENCES sensorthings."Location" (id) ON DELETE CASCADE,
+    "location_id" BIGINT NOT NULL REFERENCES sensorthings."Location" (id) ON DELETE CASCADE,
     "@iot.selfLink" TEXT,
     "Locations@iot.navigationLink" TEXT,
     "HistoricalLocations@iot.navigationLink" TEXT,
@@ -33,9 +34,9 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
 
 CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
-    "time" TIMESTAMPTZ NOT NULL,
-    "thing_id" BIGINT REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
-    "location_id" BIGINT REFERENCES sensorthings."Location"(id) ON DELETE CASCADE,
+    "time" TIMESTAMPTZ DEFAULT NOW(),
+    "thing_id" BIGINT NOT NULL REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
+    "location_id" BIGINT NOT NULL REFERENCES sensorthings."Location"(id) ON DELETE CASCADE,
     "@iot.selfLink" TEXT,
     "Locations@iot.navigationLink" TEXT,
     "Thing@iot.navigationLink" TEXT
@@ -72,9 +73,9 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "phenomenonTime" tstzrange,
     "resultTime" tstzrange,
     "properties" jsonb,
-    "thing_id" BIGINT REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
-    "sensor_id" BIGINT REFERENCES sensorthings."Sensor"(id) ON DELETE CASCADE,
-    "observedproperty_id" BIGINT REFERENCES sensorthings."ObservedProperty"(id) ON DELETE CASCADE,
+    "thing_id" BIGINT NOT NULL REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
+    "sensor_id" BIGINT NOT NULL REFERENCES sensorthings."Sensor"(id) ON DELETE CASCADE,
+    "observedproperty_id" BIGINT NOT NULL REFERENCES sensorthings."ObservedProperty"(id) ON DELETE CASCADE,
     "@iot.selfLink" TEXT,
     "Thing@iot.navigationLink" TEXT,
     "Sensor@iot.navigationLink" TEXT,
@@ -96,7 +97,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "phenomenonTime" TIMESTAMPTZ NOT NULL,
-    "resultTime" TIMESTAMPTZ NOT NULL,
+    "resultTime" TIMESTAMPTZ,
     "resultType" INT NOT NULL,
     "resultString" TEXT,
     "resultInteger" INT,
@@ -106,8 +107,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "resultQuality" jsonb,
     "validTime" tstzrange DEFAULT NULL,
     "parameters" jsonb,
-    "datastream_id" BIGINT REFERENCES sensorthings."Datastream"(id) ON DELETE CASCADE,
-    "featuresofinterest_id" BIGINT REFERENCES sensorthings."FeaturesOfInterest"(id) ON DELETE CASCADE,
+    "datastream_id" BIGINT NOT NULL REFERENCES sensorthings."Datastream"(id) ON DELETE CASCADE,
+    "featuresofinterest_id" BIGINT NOT NULL REFERENCES sensorthings."FeaturesOfInterest"(id) ON DELETE CASCADE,
     UNIQUE ("datastream_id", "phenomenonTime"),
     "@iot.selfLink" TEXT,
     "FeatureOfInterest@iot.navigationLink" TEXT,
