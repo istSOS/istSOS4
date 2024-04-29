@@ -32,6 +32,8 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
         # get json body
         body = await request.json()
         main_table = result["entity"][0]
+        print("PATH", full_path)
+        print("BODY", body)
         # result = await create_entity(main_table, body, pgpool)
         result = await insert(main_table, body, pgpool)
         # Return okay
@@ -247,11 +249,9 @@ async def insertObservation(payload, conn):
                     "properties": properties
                 }
 
-                query = f'''
-                    INSERT INTO sensorthings."FeaturesOfInterest" ({', '.join(foi_payload.keys())}) 
-                    VALUES ({', '.join(['$' + str(i+1) for i in range(len(foi_payload))])}) 
-                    RETURNING id
-                '''
+                keys = ', '.join(f'"{key}"' for key in foi_payload.keys())
+                values_placeholders = ', '.join(f'${i+1}' for i in range(len(foi_payload)))
+                query = f'INSERT INTO sensorthings."FeaturesOfInterest" ({keys}) VALUES ({values_placeholders}) RETURNING id'
 
                 foi_id = await conn.fetchval(query, *foi_payload.values())
 
