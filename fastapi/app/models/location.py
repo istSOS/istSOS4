@@ -5,7 +5,8 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql.json import JSON
 from geoalchemy2 import Geometry
-
+from .thing_location import Thing_Location
+from .location_historicallocation import Location_HistoricalLocation
 class Location(Base):
     __tablename__ = 'Location'
     __table_args__ = {'schema': SCHEMA_NAME}
@@ -20,8 +21,8 @@ class Location(Base):
     location = Column(Geometry(geometry_type='GEOMETRY', srid=4326), nullable=False)
     location_geojson = Column(JSON)
     properties = Column(JSON)
-    thing = relationship("Thing", back_populates="location")
-    historicallocation = relationship("HistoricalLocation", back_populates="location")
+    thing = relationship("Thing", secondary=Thing_Location, back_populates="location")
+    historicallocation = relationship("HistoricalLocation", secondary=Location_HistoricalLocation, back_populates="location")
         
     def _serialize_columns(self):
         """Serialize model columns to a dict, applying naming transformations."""
