@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
 
 CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
-    "name" VARCHAR(255) UNIQUE NOT NULL,
+    "name" VARCHAR(255) NOT NULL,
     "definition" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
     "properties" jsonb,

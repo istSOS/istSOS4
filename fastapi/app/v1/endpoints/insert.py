@@ -143,6 +143,12 @@ async def insertSensor(payload, conn):
 
 # OBSERVED PROPERTY
 async def insertObservedProperty(payload, conn):
+    where = ' AND '.join(f'"{key}" = ${i+1}' for i, key in enumerate(payload.keys()))
+    query = f'SELECT id FROM sensorthings."ObservedProperty" WHERE {where}'
+    observedproperty_id = await conn.fetchval(query, *payload.values())
+    if observedproperty_id is not None:
+        return observedproperty_id
+
     for key, value in payload.items():
         if isinstance(value, dict):
             payload[key] = json.dumps(value)
