@@ -9,7 +9,7 @@ CREATE SCHEMA sensorthings;
 
 CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
-    "name" VARCHAR(255) UNIQUE NOT NULL,
+    "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "location" geometry(geometry, 4326) NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
 
 CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
-    "name" VARCHAR(255) UNIQUE NOT NULL,
+    "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
     "properties" jsonb,
     "location_id" BIGINT NOT NULL REFERENCES sensorthings."Location" (id) ON DELETE CASCADE,
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
 
 CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
-    "name" VARCHAR(255) UNIQUE NOT NULL,
+    "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "metadata" VARCHAR(255) NOT NULL,
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
 
 CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
-    "name" VARCHAR(255) UNIQUE NOT NULL,
+    "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
     "unitOfMeasurement" jsonb NOT NULL,
     "observationType" VARCHAR(100) NOT NULL,
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "phenomenonTime" TIMESTAMPTZ NOT NULL,
-    "resultTime" TIMESTAMPTZ,
+    "resultTime" TIMESTAMPTZ DEFAULT NOW(),
     "resultType" INT NOT NULL,
     "resultString" TEXT,
     "resultInteger" INT,
