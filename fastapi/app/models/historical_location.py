@@ -4,7 +4,7 @@ from sqlalchemy.sql.sqltypes import Integer, Text
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
-
+from .location_historicallocation import Location_HistoricalLocation
 class HistoricalLocation(Base):
     __tablename__ = 'HistoricalLocation'
     __table_args__ = {'schema': SCHEMA_NAME}
@@ -16,7 +16,7 @@ class HistoricalLocation(Base):
     time = Column(TIMESTAMP, nullable=False)
     thing_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Thing.id'), nullable=False)
     thing = relationship("Thing", back_populates="historicallocation")
-    location = relationship("Location", back_populates="historicallocation")
+    location = relationship("Location", secondary=Location_HistoricalLocation, back_populates="historicallocation")
 
     def _serialize_columns(self):
         """Serialize model columns to a dict, applying naming transformations."""

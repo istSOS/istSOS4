@@ -1,9 +1,10 @@
 from .database import Base, SCHEMA_NAME
-from sqlalchemy.sql.schema import Column, ForeignKey
+from sqlalchemy.sql.schema import Column
 from sqlalchemy.sql.sqltypes import Integer, Text, String
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql.json import JSON
+from .thing_location import Thing_Location
 
 class Thing(Base):
     __tablename__ = 'Thing'
@@ -17,7 +18,7 @@ class Thing(Base):
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     properties = Column(JSON)
-    location = relationship("Location", back_populates="thing")
+    location = relationship("Location", secondary=Thing_Location, back_populates="thing")
     datastream = relationship("Datastream", back_populates="thing")
     historicallocation = relationship("HistoricalLocation", back_populates="thing")
 
