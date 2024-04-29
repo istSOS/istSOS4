@@ -195,6 +195,9 @@ async def insertDatastream(payload, conn):
         payload.pop("ObservedProperty")
         payload["observedproperty_id"] = observedproperty_id
 
+    if not "thing_id" in payload or not "sensor_id" in payload or not "observedproperty_id" in payload:
+        raise ValueError("Missing required property")
+
     if "Observations" in payload:
         observations = payload.pop("Observations")
 
@@ -286,9 +289,9 @@ async def insertObservation(payload, conn):
     
     keys = ', '.join(f'"{key}"' for key in payload.keys())
     values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-    if "resultTime" not in payload:
-        keys += ', "resultTime"'
-        values_placeholders += ", NULL"
+    # if "resultTime" not in payload:
+    #     keys += ', "resultTime"'
+    #     values_placeholders += ", NULL"
     query = f'INSERT INTO sensorthings."Observation" ({keys}) VALUES ({values_placeholders}) RETURNING id'
     return await conn.fetchval(query, *(value for key, value in payload.items() if key != "resultTime"))
 
