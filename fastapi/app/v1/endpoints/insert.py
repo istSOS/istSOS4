@@ -38,12 +38,8 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
         result = await insert(main_table, body, pgpool)
         # Return okay
         return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "code": 200,
-                "type": "success",
-                "message": result
-            }
+            status_code=status.HTTP_201_CREATED,
+            content={}
         )
         
     except Exception as e:
@@ -100,13 +96,15 @@ async def insertLocation(payload, conn):
 
 # THING
 async def insertThing(payload, conn):
+    location_id = None
+    location_exist = False
     if "Locations" in payload:
         if '@iot.id' in payload["Locations"]:
             location_id = payload["Locations"]["@iot.id"]
+            location_exist = True
         else:
             location_id = await insertLocation(payload["Locations"], conn)
         payload.pop("Locations")
-        payload["location_id"] = location_id
 
     if "Datastreams" in payload:
         datastreams = payload.pop("Datastreams")
@@ -121,9 +119,18 @@ async def insertThing(payload, conn):
 
     thing_id = await conn.fetchval(query, *payload.values())
 
-    values = (thing_id, location_id)
-    queryHistoricalLocations = f'INSERT INTO sensorthings."HistoricalLocation" ("thing_id", "location_id") VALUES ($1, $2) RETURNING id'
-    historicallocations_id = await conn.fetchval(queryHistoricalLocations, *values)
+    queryHistoricalLocations = f'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id'
+    historicallocation_id = await conn.fetchval(queryHistoricalLocations, thing_id)
+
+    if location_id:
+        values = (thing_id, location_id)
+        queryThingLocation = f'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2)'
+        await conn.execute(queryThingLocation, *values)
+
+    if not location_exist:
+        values = (location_id, historicallocation_id)
+        queryLocationHistoricalLocations = f'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)'
+        await conn.execute(queryLocationHistoricalLocations, *values)
 
     for ds in datastreams:
         ds["thing_id"] = thing_id
@@ -240,7 +247,9 @@ async def insertObservation(payload, conn):
             JOIN
                 sensorthings."Thing" t ON d.thing_id = t.id
             JOIN
-                sensorthings."Location" l ON t.location_id = l.id
+                sensorthings."Thing_Location" tl ON tl.thing_id = t.id
+            JOIN
+                sensorthings."Location" l ON l.ID = tl.location_id
             WHERE
                 d.id = {payload["datastream_id"]}
         '''
@@ -289,9 +298,6 @@ async def insertObservation(payload, conn):
     
     keys = ', '.join(f'"{key}"' for key in payload.keys())
     values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-    # if "resultTime" not in payload:
-    #     keys += ', "resultTime"'
-    #     values_placeholders += ", NULL"
     query = f'INSERT INTO sensorthings."Observation" ({keys}) VALUES ({values_placeholders}) RETURNING id'
     return await conn.fetchval(query, *(value for key, value in payload.items() if key != "resultTime"))
 

@@ -127,6 +127,11 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
 
         if result['value']:
             data = data[list(data.keys())[0]]
+            if data is None:
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={}
+                )
 
         if not data or (isinstance(data, Iterable) and "value" in data and len(data["value"]) == 0 and result["single_result"]):
             return JSONResponse(

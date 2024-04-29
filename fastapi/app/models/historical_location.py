@@ -16,7 +16,6 @@ class HistoricalLocation(Base):
     time = Column(TIMESTAMP, nullable=False)
     thing_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Thing.id'), nullable=False)
     thing = relationship("Thing", back_populates="historicallocation")
-    location_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Location.id'), nullable=False)
     location = relationship("Location", back_populates="historicallocation")
 
     def _serialize_columns(self):
