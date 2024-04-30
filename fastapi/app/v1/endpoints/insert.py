@@ -77,7 +77,15 @@ async def insertLocation(payload, conn):
         keys += ', "gen_foi_id"'
         values_placeholders += ", NULL"
         query = f'INSERT INTO sensorthings."Location" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-        return await conn.fetchval(query, *payload.values())
+        try:
+            location_id = await conn.fetchval(query, *payload.values())
+            return location_id
+        except Exception as e:
+            error_message = str(e)
+            column_name_start = error_message.find('"') + 1
+            column_name_end = error_message.find('"', column_name_start)
+            violating_column = error_message[column_name_start:column_name_end]
+            raise ValueError(f"Missing required property '{violating_column}'") from e
     elif isinstance(payload, list):
         for item in payload:
             for key, value in item.items():
@@ -86,7 +94,15 @@ async def insertLocation(payload, conn):
             keys = ', '.join(f'"{key}"' for key in item.keys())
             values_placeholders = ', '.join(f'${i+1}' for i in range(len(item)))
             query = f'INSERT INTO sensorthings."Location" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-            return await conn.fetchval(query, *item.values())
+            try:
+                location_id = await conn.fetchval(query, *payload.values())
+                return location_id
+            except Exception as e:
+                error_message = str(e)
+                column_name_start = error_message.find('"') + 1
+                column_name_end = error_message.find('"', column_name_start)
+                violating_column = error_message[column_name_start:column_name_end]
+                raise ValueError(f"Missing required property '{violating_column}'") from e
     else:
         print("Payload should be a dictionary or a list of dictionaries.")
 
@@ -101,6 +117,8 @@ async def insertThing(payload, conn):
             location_exist = True
         else:
             location_id = await insertLocation(payload["Locations"], conn)
+        if not isinstance(location_id, int):
+            raise ValueError(f"Cannot deserialize value of type `int` from String: {location_id}")
         payload.pop("Locations")
 
     datastreams = payload.pop("Datastreams", {})
@@ -112,7 +130,14 @@ async def insertThing(payload, conn):
     keys = ', '.join(f'"{key}"' for key in payload.keys())
     values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
     query = f'INSERT INTO sensorthings."Thing" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-    thing_id = await conn.fetchval(query, *payload.values())
+    try:
+        thing_id = await conn.fetchval(query, *payload.values())
+    except Exception as e:
+        error_message = str(e)
+        column_name_start = error_message.find('"') + 1
+        column_name_end = error_message.find('"', column_name_start)
+        violating_column = error_message[column_name_start:column_name_end]
+        raise ValueError(f"Missing required property '{violating_column}'") from e
 
     if location_id:
         await conn.execute(
@@ -143,15 +168,23 @@ async def insertSensor(payload, conn):
     keys = ', '.join(f'"{key}"' for key in payload.keys())
     values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
     query = f'INSERT INTO sensorthings."Sensor" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-    return await conn.fetchval(query, *payload.values())
+    try:
+        sensor_id = await conn.fetchval(query, *payload.values())
+        return sensor_id
+    except Exception as e:
+        error_message = str(e)
+        column_name_start = error_message.find('"') + 1
+        column_name_end = error_message.find('"', column_name_start)
+        violating_column = error_message[column_name_start:column_name_end]
+        raise ValueError(f"Missing required property '{violating_column}'") from e
 
 # OBSERVED PROPERTY
 async def insertObservedProperty(payload, conn):
-    where = ' AND '.join(f'"{key}" = ${i+1}' for i, key in enumerate(payload.keys()))
-    query = f'SELECT id FROM sensorthings."ObservedProperty" WHERE {where}'
-    observedproperty_id = await conn.fetchval(query, *payload.values())
-    if observedproperty_id is not None:
-        return observedproperty_id
+    # where = ' AND '.join(f'"{key}" = ${i+1}' for i, key in enumerate(payload.keys()))
+    # query = f'SELECT id FROM sensorthings."ObservedProperty" WHERE {where}'
+    # observedproperty_id = await conn.fetchval(query, *payload.values())
+    # if observedproperty_id is not None:
+    #     return observedproperty_id
 
     for key, value in payload.items():
         if isinstance(value, dict):
@@ -160,7 +193,15 @@ async def insertObservedProperty(payload, conn):
     keys = ', '.join(f'"{key}"' for key in payload.keys())
     values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
     query = f'INSERT INTO sensorthings."ObservedProperty" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-    return await conn.fetchval(query, *payload.values())
+    try:
+        observedproperty_id = await conn.fetchval(query, *payload.values())
+        return observedproperty_id
+    except Exception as e:
+        error_message = str(e)
+        column_name_start = error_message.find('"') + 1
+        column_name_end = error_message.find('"', column_name_start)
+        violating_column = error_message[column_name_start:column_name_end]
+        raise ValueError(f"Missing required property '{violating_column}'") from e
 
 # FEATURE OF INTEREST
 async def insertFeaturesOfInterest(payload, conn):
@@ -220,7 +261,6 @@ async def insertDatastream(payload, conn):
         missing_properties.append("'Sensor'")
     if "observedproperty_id" not in payload:
         missing_properties.append("'ObservedProperty'")
-
     if missing_properties:
         missing_str = ', '.join(missing_properties)
         raise ValueError(f"Missing required properties {missing_str}")
@@ -235,7 +275,14 @@ async def insertDatastream(payload, conn):
     values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
     query = f'INSERT INTO sensorthings."Datastream" ({keys}) VALUES ({values_placeholders}) RETURNING id'
     
-    datastream_id = await conn.fetchval(query, *payload.values())
+    try:
+        datastream_id = await conn.fetchval(query, *payload.values())
+    except Exception as e:
+        error_message = str(e)
+        column_name_start = error_message.find('"') + 1
+        column_name_end = error_message.find('"', column_name_start)
+        violating_column = error_message[column_name_start:column_name_end]
+        raise ValueError(f"Missing required property '{violating_column}'") from e
 
     for obs in observations:
         obs["datastream_id"] = datastream_id
@@ -249,6 +296,8 @@ async def insertObservation(payload, conn):
             datastream_id = payload["Datastream"]["@iot.id"]
         else:
             datastream_id = await insertDatastream(payload["Datastream"], conn)
+        if not isinstance(datastream_id, int):
+            raise ValueError(f"Cannot deserialize value of type `int` from String: {datastream_id}")
         payload.pop("Datastream")
         payload["datastream_id"] = datastream_id
 
@@ -257,6 +306,8 @@ async def insertObservation(payload, conn):
             featuresofinterest_id = payload["FeatureOfInterest"]["@iot.id"]
         else:
             featuresofinterest_id = await insertFeaturesOfInterest(payload["FeatureOfInterest"], conn)
+        if not isinstance(featuresofinterest_id, int):
+            raise ValueError(f"Cannot deserialize value of type `int` from String: {featuresofinterest_id}")
         payload.pop("FeatureOfInterest")
         payload["featuresofinterest_id"] = featuresofinterest_id
     else: 
@@ -312,6 +363,15 @@ async def insertObservation(payload, conn):
                 payload["featuresofinterest_id"] = gen_foi_id
         else:
             raise ValueError("Can not generate foi for Thing with no locations.")
+    
+    missing_properties = []
+    if "datastream_id" not in payload:
+        missing_properties.append("'Datastream'")
+    if "featuresofinterest_id" not in payload:
+        missing_properties.append("'Feature Of Interest'")
+    if missing_properties:
+        missing_str = ', '.join(missing_properties)
+        raise ValueError(f"Missing required properties {missing_str}")
 
     for key in list(payload.keys()):
         if key == "result":
@@ -326,7 +386,15 @@ async def insertObservation(payload, conn):
     keys = ', '.join(f'"{key}"' for key in payload.keys())
     values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
     query = f'INSERT INTO sensorthings."Observation" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-    return await conn.fetchval(query, *payload.values())
+    try:
+        observation_id = await conn.fetchval(query, *payload.values())
+        return observation_id
+    except Exception as e:
+        error_message = str(e)
+        column_name_start = error_message.find('"') + 1
+        column_name_end = error_message.find('"', column_name_start)
+        violating_column = error_message[column_name_start:column_name_end]
+        raise ValueError(f"Missing required property '{violating_column}'") from e
 
 def get_result_type_and_column(input_string):
     try:

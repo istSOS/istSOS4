@@ -39,13 +39,13 @@ async def catch_all_delete(request: Request, path_name: str, pgpool=Depends(get_
 
             if id_deleted is None:
                 return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={
-                    "code": 200,
-                    "type": "error",
-                    "message": "Nothing found."
-                }
-            )
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "code": 404,
+                        "type": "error",
+                        "message": "Nothing found."
+                    }
+                )
 
         # Return okay
         return JSONResponse(
