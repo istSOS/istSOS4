@@ -1,7 +1,7 @@
 import traceback
 import os
 from fastapi import APIRouter, Request, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi import status
 from app.sta2rest import sta2rest
 from app.settings import tables, serverSettings
@@ -128,10 +128,7 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
         if result['value']:
             data = data[list(data.keys())[0]]
             if data is None:
-                return JSONResponse(
-                    status_code=status.HTTP_200_OK,
-                    content={}
-                )
+                return Response(status_code=status.HTTP_200_OK)
 
         if not data or (isinstance(data, Iterable) and "value" in data and len(data["value"]) == 0 and result["single_result"]):
             return JSONResponse(
