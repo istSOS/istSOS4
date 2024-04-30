@@ -3,7 +3,6 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi import status
 from app.sta2rest import sta2rest
-from app.utils.utils import create_entity
 from fastapi import Depends
 from app.db.db import get_pool
 import json
@@ -95,6 +94,7 @@ async def insertLocation(payload, conn):
 async def insertThing(payload, conn):
     location_id = None
     location_exist = False
+    historicallocation_id = None
     if "Locations" in payload:
         if '@iot.id' in payload["Locations"]:
             location_id = payload["Locations"]["@iot.id"]
@@ -114,19 +114,19 @@ async def insertThing(payload, conn):
     query = f'INSERT INTO sensorthings."Thing" ({keys}) VALUES ({values_placeholders}) RETURNING id'
     thing_id = await conn.fetchval(query, *payload.values())
 
-    queryHistoricalLocations = f'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id'
-    historicallocation_id = await conn.fetchval(queryHistoricalLocations, thing_id)
-
     if location_id:
         await conn.execute(
             'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2)',
             thing_id, location_id
         )
         if not location_exist:
-            await conn.execute(
-                'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)',
-                location_id, historicallocation_id
-            )
+            queryHistoricalLocations = f'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id'
+            historicallocation_id = await conn.fetchval(queryHistoricalLocations, thing_id)
+            if historicallocation_id is not None:
+                await conn.execute(
+                    'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)',
+                    location_id, historicallocation_id
+                )
 
     for ds in datastreams:
         ds["thing_id"] = thing_id
@@ -171,15 +171,25 @@ async def insertFeaturesOfInterest(payload, conn):
     keys = ', '.join(f'"{key}"' for key in payload.keys())
     values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
     query = f'INSERT INTO sensorthings."FeaturesOfInterest" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-    return await conn.fetchval(query, *payload.values())
+    try:
+        featureofinterest_id = await conn.fetchval(query, *payload.values())
+        return featureofinterest_id
+    except Exception as e:
+        error_message = str(e)
+        column_name_start = error_message.find('"') + 1
+        column_name_end = error_message.find('"', column_name_start)
+        violating_column = error_message[column_name_start:column_name_end]
+        raise ValueError(f"Missing required property '{violating_column}'") from e
 
 # DATASTREAM
 async def insertDatastream(payload, conn):    
-    if "Thing" in payload:
+    if "Thing" in payload:  
         if '@iot.id' in payload["Thing"]:
             thing_id = payload["Thing"]["@iot.id"]
         else:
             thing_id = await insertThing(payload["Thing"], conn)
+        if not isinstance(thing_id, int):
+            raise ValueError(f"Cannot deserialize value of type `int` from String: {thing_id}")
         payload.pop("Thing")
         payload["thing_id"] = thing_id
     
@@ -188,6 +198,8 @@ async def insertDatastream(payload, conn):
             sensor_id = payload["Sensor"]["@iot.id"]
         else:
             sensor_id = await insertSensor(payload["Sensor"], conn)
+        if not isinstance(sensor_id, int):
+            raise ValueError(f"Cannot deserialize value of type `int` from String: {sensor_id}")
         payload.pop("Sensor")
         payload["sensor_id"] = sensor_id
 
@@ -196,11 +208,22 @@ async def insertDatastream(payload, conn):
             observedproperty_id = payload["ObservedProperty"]["@iot.id"]
         else:
             observedproperty_id = await insertObservedProperty(payload["ObservedProperty"], conn)
+        if not isinstance(observedproperty_id, int):
+            raise ValueError(f"Cannot deserialize value of type `int` from String: {observedproperty_id}")
         payload.pop("ObservedProperty")
         payload["observedproperty_id"] = observedproperty_id
 
-    if not "thing_id" in payload or not "sensor_id" in payload or not "observedproperty_id" in payload:
-        raise ValueError("Missing required property")
+    missing_properties = []
+    if "thing_id" not in payload:
+        missing_properties.append("'Thing'")
+    if "sensor_id" not in payload:
+        missing_properties.append("'Sensor'")
+    if "observedproperty_id" not in payload:
+        missing_properties.append("'ObservedProperty'")
+
+    if missing_properties:
+        missing_str = ', '.join(missing_properties)
+        raise ValueError(f"Missing required properties {missing_str}")
 
     observations = payload.pop("Observations", {})
 
@@ -221,6 +244,14 @@ async def insertDatastream(payload, conn):
 
 # OBSERVATION
 async def insertObservation(payload, conn):
+    if "Datastream" in payload:
+        if '@iot.id' in payload["Datastream"]:
+            datastream_id = payload["Datastream"]["@iot.id"]
+        else:
+            datastream_id = await insertDatastream(payload["Datastream"], conn)
+        payload.pop("Datastream")
+        payload["datastream_id"] = datastream_id
+
     if "FeatureOfInterest" in payload:
         if '@iot.id' in payload["FeatureOfInterest"]:
             featuresofinterest_id = payload["FeatureOfInterest"]["@iot.id"]
@@ -228,7 +259,7 @@ async def insertObservation(payload, conn):
             featuresofinterest_id = await insertFeaturesOfInterest(payload["FeatureOfInterest"], conn)
         payload.pop("FeatureOfInterest")
         payload["featuresofinterest_id"] = featuresofinterest_id
-    else:    
+    else: 
         query_location_from_thing_datastream = f'''
             SELECT
                 l.id,
@@ -252,7 +283,7 @@ async def insertObservation(payload, conn):
 
         result = await conn.fetch(query_location_from_thing_datastream)
 
-        if result:
+        if len(result) > 0:
             location_id, name, description, encoding_type, location, properties, gen_foi_id = result[0]
             if gen_foi_id is None:
                 foi_payload = {
@@ -277,9 +308,10 @@ async def insertObservation(payload, conn):
                 await conn.execute(update_query, foi_id, location_id)
 
                 payload["featuresofinterest_id"] = foi_id
-
             else:
                 payload["featuresofinterest_id"] = gen_foi_id
+        else:
+            raise ValueError("Can not generate foi for Thing with no locations.")
 
     for key in list(payload.keys()):
         if key == "result":
@@ -291,11 +323,10 @@ async def insertObservation(payload, conn):
             payload[key] = parser.parse(payload[key])
         elif isinstance(payload[key], dict):
             payload[key] = json.dumps(payload[key])
-    
     keys = ', '.join(f'"{key}"' for key in payload.keys())
     values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
     query = f'INSERT INTO sensorthings."Observation" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-    return await conn.fetchval(query, *(value for key, value in payload.items() if key != "resultTime"))
+    return await conn.fetchval(query, *payload.values())
 
 def get_result_type_and_column(input_string):
     try:
