@@ -18,7 +18,7 @@ from .sta_parser.visitor import Visitor
 from .sta_parser.parser import Parser
 from sqlalchemy.orm import sessionmaker, load_only, contains_eager
 from sqlalchemy.sql.expression import BooleanClauseList, BinaryExpression
-from sqlalchemy import create_engine, select, func, asc, desc, and_, or_
+from sqlalchemy import create_engine, select, func, asc, desc, and_
 from datetime import datetime, timezone
 from ..models import (
     Location, Thing, HistoricalLocation, ObservedProperty, Sensor,
@@ -487,13 +487,14 @@ class NodeVisitor(Visitor):
                         expand_identifier = node.expand.identifiers[index].identifier
                         subquery = session.query(globals()[expand_identifier])
                         if (index > 0):
-                            subquery = subquery.join(subqueriesNotExpand[index - 1])
+                            previous_expand_identifier = node.expand.identifiers[index - 1].identifier
+                            subquery = subquery.join(getattr(globals()[expand_identifier], previous_expand_identifier.lower())).join(subqueriesNotExpand[index - 1])
                         if result['filter'][index] is not None:
                             filter, join_relationships = result['filter'][index]
                             subquery = subquery.filter(filter)
                         subquery = subquery.subquery()
                         subqueriesNotExpand.append(subquery)
-                main_query_select_pagination = main_query_select_pagination.join(subqueriesNotExpand[-1])
+                main_query_select_pagination = main_query_select_pagination.join(getattr(main_entity, expand_identifier.lower())).join(subqueriesNotExpand[-1])
 
             if not node.select:
                 node.select = SelectNode([])
