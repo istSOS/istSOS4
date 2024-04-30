@@ -95,7 +95,7 @@ async def insertLocation(payload, conn):
             values_placeholders = ', '.join(f'${i+1}' for i in range(len(item)))
             query = f'INSERT INTO sensorthings."Location" ({keys}) VALUES ({values_placeholders}) RETURNING id'
             try:
-                location_id = await conn.fetchval(query, *payload.values())
+                location_id = await conn.fetchval(query, *item.values())
                 return location_id
             except Exception as e:
                 error_message = str(e)
