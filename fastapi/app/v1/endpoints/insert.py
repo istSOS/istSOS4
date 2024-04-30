@@ -202,8 +202,7 @@ async def insertDatastream(payload, conn):
     if not "thing_id" in payload or not "sensor_id" in payload or not "observedproperty_id" in payload:
         raise ValueError("Missing required property")
 
-    if "Observations" in payload:
-        observations = payload.pop("Observations")
+    observations = payload.pop("Observations", {})
 
     for key, value in payload.items():
         if isinstance(value, dict):
