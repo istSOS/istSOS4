@@ -1,6 +1,6 @@
 import traceback
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi import status
 from app.sta2rest import sta2rest
 from app.utils.utils import create_entity
@@ -37,10 +37,7 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
         # result = await create_entity(main_table, body, pgpool)
         result = await insert(main_table, body, pgpool)
         # Return okay
-        return JSONResponse(
-            status_code=status.HTTP_201_CREATED,
-            content={}
-        )
+        return Response(status_code=status.HTTP_201_CREATED)
         
     except Exception as e:
         # print stack trace
@@ -106,8 +103,7 @@ async def insertThing(payload, conn):
             location_id = await insertLocation(payload["Locations"], conn)
         payload.pop("Locations")
 
-    if "Datastreams" in payload:
-        datastreams = payload.pop("Datastreams")
+    datastreams = payload.pop("Datastreams", {})
 
     for key, value in payload.items():
         if isinstance(value, dict):
@@ -116,25 +112,26 @@ async def insertThing(payload, conn):
     keys = ', '.join(f'"{key}"' for key in payload.keys())
     values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
     query = f'INSERT INTO sensorthings."Thing" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-
     thing_id = await conn.fetchval(query, *payload.values())
 
     queryHistoricalLocations = f'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id'
     historicallocation_id = await conn.fetchval(queryHistoricalLocations, thing_id)
 
     if location_id:
-        values = (thing_id, location_id)
-        queryThingLocation = f'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2)'
-        await conn.execute(queryThingLocation, *values)
-
-    if not location_exist:
-        values = (location_id, historicallocation_id)
-        queryLocationHistoricalLocations = f'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)'
-        await conn.execute(queryLocationHistoricalLocations, *values)
+        await conn.execute(
+            'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2)',
+            thing_id, location_id
+        )
+        if not location_exist:
+            await conn.execute(
+                'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)',
+                location_id, historicallocation_id
+            )
 
     for ds in datastreams:
         ds["thing_id"] = thing_id
         datastream_id = await insertDatastream(ds, conn)
+
     return thing_id
 
 # SENSOR
