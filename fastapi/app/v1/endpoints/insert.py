@@ -83,41 +83,32 @@ async def insert(main_table, payload, pgpool):
 
 # LOCATION
 async def insertLocation(payload, conn):
-    if isinstance(payload, dict):
-        for key, value in payload.items():
-            if isinstance(value, dict):
-                payload[key] = json.dumps(value)
-        keys = ', '.join(f'"{key}"' for key in payload.keys())
-        values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-        keys += ', "gen_foi_id"'
-        values_placeholders += ", NULL"
-        query = f'INSERT INTO sensorthings."Location" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-        try:
-            location_id = await conn.fetchval(query, *payload.values())
-            return location_id
-        except Exception as e:
-            error_message = str(e)
-            column_name_start = error_message.find('"') + 1
-            column_name_end = error_message.find('"', column_name_start)
-            violating_column = error_message[column_name_start:column_name_end]
-            raise ValueError(f"Missing required property '{violating_column}'") from e
-    elif isinstance(payload, list):
+    try:
+        if isinstance(payload, dict):
+            payload = [payload]  # Convert dict to list for consistent processing
+        elif not isinstance(payload, list):
+            raise ValueError("Payload must be a dictionary or a list of dictionaries")
+
+        location_ids = []
         for item in payload:
             for key, value in item.items():
                 if isinstance(value, dict):
                     item[key] = json.dumps(value)
+
             keys = ', '.join(f'"{key}"' for key in item.keys())
             values_placeholders = ', '.join(f'${i+1}' for i in range(len(item)))
-            query = f'INSERT INTO sensorthings."Location" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-            try:
-                location_id = await conn.fetchval(query, *item.values())
-                return location_id
-            except Exception as e:
-                error_message = str(e)
-                column_name_start = error_message.find('"') + 1
-                column_name_end = error_message.find('"', column_name_start)
-                violating_column = error_message[column_name_start:column_name_end]
-                raise ValueError(f"Missing required property '{violating_column}'") from e
+            query = f'INSERT INTO sensorthings."Location" ({keys}, "gen_foi_id") VALUES ({values_placeholders}, NULL) RETURNING id'
+            location_id = await conn.fetchval(query, *item.values())
+            location_ids.append(location_id)
+
+        return location_ids if len(location_ids) > 1 else location_ids[0]
+
+    except Exception as e:
+        error_message = str(e)
+        column_name_start = error_message.find('"') + 1
+        column_name_end = error_message.find('"', column_name_start)
+        violating_column = error_message[column_name_start:column_name_end]
+        raise ValueError(f"Missing required property '{violating_column}'") from e
 
 # THING
 async def insertThing(payload, conn):
@@ -136,54 +127,50 @@ async def insertThing(payload, conn):
 
     datastreams = payload.pop("Datastreams", {})
 
-    for key, value in payload.items():
-        if isinstance(value, dict):
-            payload[key] = json.dumps(value)
-
-    keys = ', '.join(f'"{key}"' for key in payload.keys())
-    values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-    query = f'INSERT INTO sensorthings."Thing" ({keys}) VALUES ({values_placeholders}) RETURNING id'
     try:
-        thing_id = await conn.fetchval(query, *payload.values())
-    except Exception as e:
-        error_message = str(e)
-        column_name_start = error_message.find('"') + 1
-        column_name_end = error_message.find('"', column_name_start)
-        violating_column = error_message[column_name_start:column_name_end]
-        raise ValueError(f"Missing required property '{violating_column}'") from e
+        async with conn.transaction():
+            for key, value in payload.items():
+                if isinstance(value, dict):
+                    payload[key] = json.dumps(value)
 
-    if location_id:
-        await conn.execute(
-            'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2)',
-            thing_id, location_id
-        )
-        if not location_exist:
-            queryHistoricalLocations = f'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id'
-            historicallocation_id = await conn.fetchval(queryHistoricalLocations, thing_id)
-            if historicallocation_id is not None:
+            keys = ', '.join(f'"{key}"' for key in payload.keys())
+            values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
+            query = f'INSERT INTO sensorthings."Thing" ({keys}) VALUES ({values_placeholders}) RETURNING id'
+            thing_id = await conn.fetchval(query, *payload.values())
+
+            if location_id:
                 await conn.execute(
-                    'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)',
-                    location_id, historicallocation_id
+                    'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2)',
+                    thing_id, location_id
                 )
+                if not location_exist:
+                    queryHistoricalLocations = f'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id'
+                    historicallocation_id = await conn.fetchval(queryHistoricalLocations, thing_id)
+                    if historicallocation_id is not None:
+                        await conn.execute(
+                            'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)',
+                            location_id, historicallocation_id
+                        )
 
-    for ds in datastreams:
-        ds["thing_id"] = thing_id
-        datastream_id = await insertDatastream(ds, conn)
-
-    return thing_id
+            for ds in datastreams:
+                ds["thing_id"] = thing_id
+                datastream_id = await insertDatastream(ds, conn)
+    except Exception as e:
+        raise ValueError(f"{str(e)}") from e
 
 # SENSOR
 async def insertSensor(payload, conn):
-    for key, value in payload.items():
-        if isinstance(value, dict):
-            payload[key] = json.dumps(value)
-    
-    keys = ', '.join(f'"{key}"' for key in payload.keys())
-    values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-    query = f'INSERT INTO sensorthings."Sensor" ({keys}) VALUES ({values_placeholders}) RETURNING id'
     try:
+        for key, value in payload.items():
+            if isinstance(value, dict):
+                payload[key] = json.dumps(value)
+        
+        keys = ', '.join(f'"{key}"' for key in payload.keys())
+        values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
+        query = f'INSERT INTO sensorthings."Sensor" ({keys}) VALUES ({values_placeholders}) RETURNING id'
         sensor_id = await conn.fetchval(query, *payload.values())
         return sensor_id
+
     except Exception as e:
         error_message = str(e)
         column_name_start = error_message.find('"') + 1
@@ -193,47 +180,45 @@ async def insertSensor(payload, conn):
 
 # OBSERVED PROPERTY
 async def insertObservedProperty(payload, conn):
-    # where = ' AND '.join(f'"{key}" = ${i+1}' for i, key in enumerate(payload.keys()))
-    # query = f'SELECT id FROM sensorthings."ObservedProperty" WHERE {where}'
-    # observedproperty_id = await conn.fetchval(query, *payload.values())
-    # if observedproperty_id is not None:
-    #     return observedproperty_id
-
-    for key, value in payload.items():
-        if isinstance(value, dict):
-            payload[key] = json.dumps(value)
-    
-    keys = ', '.join(f'"{key}"' for key in payload.keys())
-    values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-    query = f'INSERT INTO sensorthings."ObservedProperty" ({keys}) VALUES ({values_placeholders}) RETURNING id'
     try:
+        for key, value in payload.items():
+            if isinstance(value, dict):
+                payload[key] = json.dumps(value)
+        
+        keys = ', '.join(f'"{key}"' for key in payload.keys())
+        values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
+        query = f'INSERT INTO sensorthings."ObservedProperty" ({keys}) VALUES ({values_placeholders}) RETURNING id'
         observedproperty_id = await conn.fetchval(query, *payload.values())
         return observedproperty_id
+
     except Exception as e:
         error_message = str(e)
         column_name_start = error_message.find('"') + 1
         column_name_end = error_message.find('"', column_name_start)
         violating_column = error_message[column_name_start:column_name_end]
         raise ValueError(f"Missing required property '{violating_column}'") from e
+
 
 # FEATURE OF INTEREST
 async def insertFeaturesOfInterest(payload, conn):
-    for key, value in payload.items():
-        if isinstance(value, dict):
-            payload[key] = json.dumps(value)
-    
-    keys = ', '.join(f'"{key}"' for key in payload.keys())
-    values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-    query = f'INSERT INTO sensorthings."FeaturesOfInterest" ({keys}) VALUES ({values_placeholders}) RETURNING id'
     try:
+        for key, value in payload.items():
+            if isinstance(value, dict):
+                payload[key] = json.dumps(value)
+        
+        keys = ', '.join(f'"{key}"' for key in payload.keys())
+        values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
+        query = f'INSERT INTO sensorthings."FeaturesOfInterest" ({keys}) VALUES ({values_placeholders}) RETURNING id'
         featureofinterest_id = await conn.fetchval(query, *payload.values())
         return featureofinterest_id
+
     except Exception as e:
         error_message = str(e)
         column_name_start = error_message.find('"') + 1
         column_name_end = error_message.find('"', column_name_start)
         violating_column = error_message[column_name_start:column_name_end]
         raise ValueError(f"Missing required property '{violating_column}'") from e
+
 
 # DATASTREAM
 async def insertDatastream(payload, conn):    
@@ -280,27 +265,29 @@ async def insertDatastream(payload, conn):
 
     observations = payload.pop("Observations", {})
 
-    for key, value in payload.items():
-        if isinstance(value, dict):
-            payload[key] = json.dumps(value)
-    
-    keys = ', '.join(f'"{key}"' for key in payload.keys())
-    values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-    query = f'INSERT INTO sensorthings."Datastream" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-    
     try:
+        for key, value in payload.items():
+            if isinstance(value, dict):
+                payload[key] = json.dumps(value)
+        
+        keys = ', '.join(f'"{key}"' for key in payload.keys())
+        values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
+        query = f'INSERT INTO sensorthings."Datastream" ({keys}) VALUES ({values_placeholders}) RETURNING id'
+        
         datastream_id = await conn.fetchval(query, *payload.values())
+        
+        for obs in observations:
+            obs["datastream_id"] = datastream_id
+            observation_id = await insertObservation(obs, conn)
+        
+        return datastream_id
+
     except Exception as e:
         error_message = str(e)
         column_name_start = error_message.find('"') + 1
         column_name_end = error_message.find('"', column_name_start)
         violating_column = error_message[column_name_start:column_name_end]
         raise ValueError(f"Missing required property '{violating_column}'") from e
-
-    for obs in observations:
-        obs["datastream_id"] = datastream_id
-        observation_id = await insertObservation(obs, conn)
-    return datastream_id
 
 # OBSERVATION
 async def insertObservation(payload, conn):
@@ -386,22 +373,25 @@ async def insertObservation(payload, conn):
         missing_str = ', '.join(missing_properties)
         raise ValueError(f"Missing required properties {missing_str}")
 
-    for key in list(payload.keys()):
-        if key == "result":
-            result_type, column_name = get_result_type_and_column(payload[key])
-            payload[column_name] = payload[key]
-            payload["resultType"] = result_type
-            payload.pop("result")
-        elif "time" in key.lower():
-            payload[key] = parser.parse(payload[key])
-        elif isinstance(payload[key], dict):
-            payload[key] = json.dumps(payload[key])
-    keys = ', '.join(f'"{key}"' for key in payload.keys())
-    values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-    query = f'INSERT INTO sensorthings."Observation" ({keys}) VALUES ({values_placeholders}) RETURNING id'
     try:
+        for key in list(payload.keys()):
+            if key == "result":
+                result_type, column_name = get_result_type_and_column(payload[key])
+                payload[column_name] = payload[key]
+                payload["resultType"] = result_type
+                payload.pop("result")
+            elif "time" in key.lower():
+                payload[key] = parser.parse(payload[key])
+            elif isinstance(payload[key], dict):
+                payload[key] = json.dumps(payload[key])
+        
+        keys = ', '.join(f'"{key}"' for key in payload.keys())
+        values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
+        query = f'INSERT INTO sensorthings."Observation" ({keys}) VALUES ({values_placeholders}) RETURNING id'
+        
         observation_id = await conn.fetchval(query, *payload.values())
         return observation_id
+
     except Exception as e:
         error_message = str(e)
         column_name_start = error_message.find('"') + 1
