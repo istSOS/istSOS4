@@ -50,17 +50,19 @@ async def insert(main_table, payload, pgpool):
         async with conn.transaction():
             try:
                 if main_table == "Location":
-                    await insertLocation(payload, conn)
+                    location_id, header = await insertLocation(payload, conn)
                 elif main_table == "Thing":
-                    await insertThing(payload, conn)
+                    thing_id, header = await insertThing(payload, conn)
                 elif main_table == "Sensor":
-                    await insertSensor(payload, conn)
+                    sensor_id, header = await insertSensor(payload, conn)
                 elif main_table == "ObservedProperty":
-                    await insertObservedProperty(payload, conn)
+                    observedproperty_id, header = await insertObservedProperty(payload, conn)
+                elif main_table == "FeaturesOfInterest":
+                    featureofinterest_id, header = await insertFeaturesOfInterest(payload, conn)
                 elif main_table == "Datastream":
-                    await insertDatastream(payload, conn)
+                    datastream_id, header = await insertDatastream(payload, conn)
                 elif main_table == "Observation":
-                    await insertObservation(payload, conn)
+                    observation_id, header = await insertObservation(payload, conn)
             except ValueError as e:
                 return JSONResponse(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -79,18 +81,17 @@ async def insert(main_table, payload, pgpool):
                         "message": str(e)
                     }
                 )
-        return Response(status_code=status.HTTP_201_CREATED)
+        return Response(status_code=status.HTTP_201_CREATED, headers={"location": header})
 
 # LOCATION
 async def insertLocation(payload, conn):
     try:
         async with conn.transaction(): 
             if isinstance(payload, dict):
-                payload = [payload]  # Convert dict to list for consistent processing
-            elif not isinstance(payload, list):
-                raise ValueError("Payload must be a dictionary or a list of dictionaries")
+                payload = [payload]
 
             location_ids = []
+            location_selfLinks = []
             for item in payload:
                 for key, value in item.items():
                     if isinstance(value, dict):
@@ -98,11 +99,12 @@ async def insertLocation(payload, conn):
 
                 keys = ', '.join(f'"{key}"' for key in item.keys())
                 values_placeholders = ', '.join(f'${i+1}' for i in range(len(item)))
-                query = f'INSERT INTO sensorthings."Location" ({keys}, "gen_foi_id") VALUES ({values_placeholders}, NULL) RETURNING id'
-                location_id = await conn.fetchval(query, *item.values())
+                query = f'INSERT INTO sensorthings."Location" ({keys}, "gen_foi_id") VALUES ({values_placeholders}, NULL) RETURNING (id, "@iot.selfLink")'
+                location_id, location_selfLink = await conn.fetchval(query, *item.values())
                 location_ids.append(location_id)
+                location_selfLinks.append(location_selfLink)
 
-            return location_ids if len(location_ids) > 1 else location_ids[0]
+            return (location_ids, location_selfLinks) if len(location_ids) > 1 else (location_ids[0], location_selfLinks[0])
 
     except Exception as e:
         error_message = str(e)
@@ -123,7 +125,7 @@ async def insertThing(payload, conn):
                     location_id = payload["Locations"]["@iot.id"]
                     location_exist = True
                 else:
-                    location_id = await insertLocation(payload["Locations"], conn)
+                    location_id, location_selfLink = await insertLocation(payload["Locations"], conn)
                 if not isinstance(location_id, int):
                     raise ValueError(f"Cannot deserialize value of type `int` from String: {location_id}")
                 payload.pop("Locations")
@@ -136,8 +138,8 @@ async def insertThing(payload, conn):
 
             keys = ', '.join(f'"{key}"' for key in payload.keys())
             values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-            query = f'INSERT INTO sensorthings."Thing" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-            thing_id = await conn.fetchval(query, *payload.values())
+            query = f'INSERT INTO sensorthings."Thing" ({keys}) VALUES ({values_placeholders}) RETURNING (id, "@iot.selfLink")'
+            thing_id, thing_selfLink = await conn.fetchval(query, *payload.values())
 
             if location_id:
                 await conn.execute(
@@ -155,7 +157,9 @@ async def insertThing(payload, conn):
 
             for ds in datastreams:
                 ds["thing_id"] = thing_id
-                datastream_id = await insertDatastream(ds, conn)
+                datastream_id, datastream_selfLink = await insertDatastream(ds, conn)
+
+            return (thing_id, thing_selfLink)
     except Exception as e:
         raise ValueError(f"{str(e)}") from e
 
@@ -169,9 +173,9 @@ async def insertSensor(payload, conn):
             
             keys = ', '.join(f'"{key}"' for key in payload.keys())
             values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-            query = f'INSERT INTO sensorthings."Sensor" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-            sensor_id = await conn.fetchval(query, *payload.values())
-            return sensor_id
+            query = f'INSERT INTO sensorthings."Sensor" ({keys}) VALUES ({values_placeholders}) RETURNING (id, "@iot.selfLink")'
+            sensor_id, sensor_selfLink = await conn.fetchval(query, *payload.values())
+            return (sensor_id, sensor_selfLink)
 
     except Exception as e:
         error_message = str(e)
@@ -190,9 +194,9 @@ async def insertObservedProperty(payload, conn):
             
             keys = ', '.join(f'"{key}"' for key in payload.keys())
             values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-            query = f'INSERT INTO sensorthings."ObservedProperty" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-            observedproperty_id = await conn.fetchval(query, *payload.values())
-            return observedproperty_id
+            query = f'INSERT INTO sensorthings."ObservedProperty" ({keys}) VALUES ({values_placeholders}) RETURNING (id, "@iot.selfLink")'
+            observedproperty_id, observedproperty_selfLink = await conn.fetchval(query, *payload.values())
+            return (observedproperty_id, observedproperty_selfLink)
 
     except Exception as e:
         error_message = str(e)
@@ -212,9 +216,9 @@ async def insertFeaturesOfInterest(payload, conn):
             
             keys = ', '.join(f'"{key}"' for key in payload.keys())
             values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-            query = f'INSERT INTO sensorthings."FeaturesOfInterest" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-            featureofinterest_id = await conn.fetchval(query, *payload.values())
-            return featureofinterest_id
+            query = f'INSERT INTO sensorthings."FeaturesOfInterest" ({keys}) VALUES ({values_placeholders}) RETURNING (id, "@iot.selfLink")'
+            featureofinterest_id, featureofinterest_selfLink = await conn.fetchval(query, *payload.values())
+            return (featureofinterest_id, featureofinterest_selfLink)
 
     except Exception as e:
         error_message = str(e)
@@ -231,7 +235,7 @@ async def insertDatastream(payload, conn):
                 if '@iot.id' in payload["Thing"]:
                     thing_id = payload["Thing"]["@iot.id"]
                 else:
-                    thing_id = await insertThing(payload["Thing"], conn)
+                    thing_id, thing_selfLink = await insertThing(payload["Thing"], conn)
                 if not isinstance(thing_id, int):
                     raise ValueError(f"Cannot deserialize value of type `int` from String: {thing_id}")
                 payload.pop("Thing")
@@ -241,7 +245,7 @@ async def insertDatastream(payload, conn):
                 if '@iot.id' in payload["Sensor"]:
                     sensor_id = payload["Sensor"]["@iot.id"]
                 else:
-                    sensor_id = await insertSensor(payload["Sensor"], conn)
+                    sensor_id, sensor_selfLink = await insertSensor(payload["Sensor"], conn)
                 if not isinstance(sensor_id, int):
                     raise ValueError(f"Cannot deserialize value of type `int` from String: {sensor_id}")
                 payload.pop("Sensor")
@@ -251,7 +255,7 @@ async def insertDatastream(payload, conn):
                 if '@iot.id' in payload["ObservedProperty"]:
                     observedproperty_id = payload["ObservedProperty"]["@iot.id"]
                 else:
-                    observedproperty_id = await insertObservedProperty(payload["ObservedProperty"], conn)
+                    observedproperty_id, observedproperty_selfLink = await insertObservedProperty(payload["ObservedProperty"], conn)
                 if not isinstance(observedproperty_id, int):
                     raise ValueError(f"Cannot deserialize value of type `int` from String: {observedproperty_id}")
                 payload.pop("ObservedProperty")
@@ -276,15 +280,15 @@ async def insertDatastream(payload, conn):
             
             keys = ', '.join(f'"{key}"' for key in payload.keys())
             values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-            query = f'INSERT INTO sensorthings."Datastream" ({keys}) VALUES ({values_placeholders}) RETURNING id'
+            query = f'INSERT INTO sensorthings."Datastream" ({keys}) VALUES ({values_placeholders}) RETURNING (id, "@iot.selfLink")'
             
-            datastream_id = await conn.fetchval(query, *payload.values())
+            datastream_id, datastream_selfLink = await conn.fetchval(query, *payload.values())
             
             for obs in observations:
                 obs["datastream_id"] = datastream_id
-                observation_id = await insertObservation(obs, conn)
+                observation_id, observation_selfLink = await insertObservation(obs, conn)
             
-            return datastream_id
+            return (datastream_id, datastream_selfLink)
     except Exception as e:
         error_message = str(e)
         column_name_start = error_message.find('"') + 1
@@ -300,7 +304,7 @@ async def insertObservation(payload, conn):
                 if '@iot.id' in payload["Datastream"]:
                     datastream_id = payload["Datastream"]["@iot.id"]
                 else:
-                    datastream_id = await insertDatastream(payload["Datastream"], conn)
+                    datastream_id, datastream_selfLink = await insertDatastream(payload["Datastream"], conn)
                 if not isinstance(datastream_id, int):
                     raise ValueError(f"Cannot deserialize value of type `int` from String: {datastream_id}")
                 payload.pop("Datastream")
@@ -310,7 +314,7 @@ async def insertObservation(payload, conn):
                 if '@iot.id' in payload["FeatureOfInterest"]:
                     featuresofinterest_id = payload["FeatureOfInterest"]["@iot.id"]
                 else:
-                    featuresofinterest_id = await insertFeaturesOfInterest(payload["FeatureOfInterest"], conn)
+                    featuresofinterest_id, featureofinterest_selfLink = await insertFeaturesOfInterest(payload["FeatureOfInterest"], conn)
                 if not isinstance(featuresofinterest_id, int):
                     raise ValueError(f"Cannot deserialize value of type `int` from String: {featuresofinterest_id}")
                 payload.pop("FeatureOfInterest")
@@ -391,10 +395,10 @@ async def insertObservation(payload, conn):
             
             keys = ', '.join(f'"{key}"' for key in payload.keys())
             values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
-            query = f'INSERT INTO sensorthings."Observation" ({keys}) VALUES ({values_placeholders}) RETURNING id'
+            query = f'INSERT INTO sensorthings."Observation" ({keys}) VALUES ({values_placeholders}) RETURNING (id, "@iot.selfLink")'
             
-            observation_id = await conn.fetchval(query, *payload.values())
-            return observation_id
+            observation_id, observation_selfLink = await conn.fetchval(query, *payload.values())
+            return (observation_id, observation_selfLink)
 
     except Exception as e:
         error_message = str(e)
