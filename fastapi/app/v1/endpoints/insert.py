@@ -33,13 +33,8 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
         main_table = result["entity"][0]
         print("PATH", full_path)
         print("BODY", body)
-        # result = await create_entity(main_table, body, pgpool)
-        result = await insert(main_table, body, pgpool)
-        # Return okay
-        return Response(status_code=status.HTTP_201_CREATED)
-        
+        return await insert(main_table, body, pgpool)
     except Exception as e:
-        # print stack trace
         traceback.print_exc()
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -53,18 +48,38 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
 async def insert(main_table, payload, pgpool):
     async with pgpool.acquire() as conn:
         async with conn.transaction():
-            if main_table == "Location":
-                await insertLocation(payload, conn)
-            elif main_table == "Thing":
-                await insertThing(payload, conn)
-            elif main_table == "Sensor":
-                await insertSensor(payload, conn)
-            elif main_table == "ObservedProperty":
-                await insertObservedProperty(payload, conn)
-            elif main_table == "Datastream":
-                await insertDatastream(payload, conn)
-            elif main_table == "Observation":
-                await insertObservation(payload, conn)
+            try:
+                if main_table == "Location":
+                    await insertLocation(payload, conn)
+                elif main_table == "Thing":
+                    await insertThing(payload, conn)
+                elif main_table == "Sensor":
+                    await insertSensor(payload, conn)
+                elif main_table == "ObservedProperty":
+                    await insertObservedProperty(payload, conn)
+                elif main_table == "Datastream":
+                    await insertDatastream(payload, conn)
+                elif main_table == "Observation":
+                    await insertObservation(payload, conn)
+            except ValueError as e:
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "code": 400,
+                        "type": "error",
+                        "message": str(e)
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "code": 400,
+                        "type": "error",
+                        "message": str(e)
+                    }
+                )
+        return Response(status_code=status.HTTP_201_CREATED)
 
 # LOCATION
 async def insertLocation(payload, conn):
@@ -103,8 +118,6 @@ async def insertLocation(payload, conn):
                 column_name_end = error_message.find('"', column_name_start)
                 violating_column = error_message[column_name_start:column_name_end]
                 raise ValueError(f"Missing required property '{violating_column}'") from e
-    else:
-        print("Payload should be a dictionary or a list of dictionaries.")
 
 # THING
 async def insertThing(payload, conn):
