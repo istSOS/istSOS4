@@ -32,8 +32,6 @@ async def catch_all_delete(request: Request, path_name: str, pgpool=Depends(get_
             # Create delete SQL query
             query = f'DELETE FROM sensorthings."{name}" WHERE id = $1 RETURNING id'
 
-            print(query, id)
-
             # Execute query
             id_deleted = await conn.fetchval(query, int(id))
 

@@ -40,8 +40,7 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
         
 
         body = await request.json()
-        print("PATH", full_path)
-        print("BODY", body)
+        print("BODY PATCH", body)
 
         # Check that the column names (key) contains only alphanumeric characters and underscores
         for key in body.keys():
