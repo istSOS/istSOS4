@@ -31,8 +31,7 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
         # get json body
         body = await request.json()
         main_table = result["entity"][0]
-        print("PATH", full_path)
-        print("BODY", body)
+        print("BODY INSERT", body)
         return await insert(main_table, body, pgpool)
     except Exception as e:
         traceback.print_exc()
