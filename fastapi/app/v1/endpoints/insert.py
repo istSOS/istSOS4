@@ -35,15 +35,6 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
 
         print("BODY INSERT", body)
         
-        if len(result["entities"]) > 0:
-            return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={
-                "code": 404,
-                "type": "error",
-                "message": "Not a valid id: Path is not valid."
-            }
-        )
         return await insert(main_table, body, pgpool)
     except Exception as e:
         traceback.print_exc()
