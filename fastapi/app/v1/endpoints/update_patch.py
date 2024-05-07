@@ -52,13 +52,23 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
 
         async with pgpool.acquire() as conn:
             # Generate the Update SQL query from the body
-            query = f'UPDATE sensorthings."{name}" SET ' + ', '.join([f'"{key}" = ${i+1}' for i, key in enumerate(body.keys())]) + f' WHERE id = ${len(body.keys()) + 1};'
+            query = f'UPDATE sensorthings."{name}" SET ' + ', '.join([f'"{key}" = ${i+1}' for i, key in enumerate(body.keys())]) + f' WHERE id = ${len(body.keys()) + 1} RETURNING ID;'
         
             print(query, body.values(), id)
 
             # Execute query
-            await conn.execute(query, *body.values(), int(id))
+            id_patch = await conn.fetchval(query, *body.values(), int(id))
 
+            if id_patch is None:
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "code": 404,
+                        "type": "error",
+                        "message": "No entity found for path."
+                    }
+                )
+            
             # Return okay
             return JSONResponse(
                 status_code=status.HTTP_200_OK,

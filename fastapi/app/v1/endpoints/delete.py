@@ -24,8 +24,8 @@ async def catch_all_delete(request: Request, path_name: str, pgpool=Depends(get_
         if not name:
             raise Exception("No entity name provided")
         
-        # if not id:
-        #     raise Exception("No entity id provided")
+        if not id:
+            raise Exception("No entity id provided")
         
 
         async with pgpool.acquire() as conn:
@@ -33,7 +33,7 @@ async def catch_all_delete(request: Request, path_name: str, pgpool=Depends(get_
             query = f'DELETE FROM sensorthings."{name}" WHERE id = $1 RETURNING id'
             # Execute query
             id_deleted = await conn.fetchval(query, int(id))
-            print(id_deleted)
+
             if id_deleted is None:
                 return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
