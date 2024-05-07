@@ -139,14 +139,8 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION feature_geojson(sensorthings."FeaturesOfInterest")
 RETURNS jsonb AS $$
-DECLARE
-    geojson jsonb;
 BEGIN
-    geojson := jsonb_build_object(
-        'type', 'Feature',
-        'geometry', ST_AsGeoJSON($1."feature")::jsonb
-    );
-    RETURN geojson;
+    RETURN ST_AsGeoJSON($1."feature")::jsonb;
 END;
 $$ LANGUAGE plpgsql;
 
