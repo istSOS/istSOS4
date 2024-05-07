@@ -24,14 +24,13 @@ async def catch_all_delete(request: Request, path_name: str, pgpool=Depends(get_
         if not name:
             raise Exception("No entity name provided")
         
-        if not id:
-            raise Exception("No entity id provided")
+        # if not id:
+        #     raise Exception("No entity id provided")
         
 
         async with pgpool.acquire() as conn:
             # Create delete SQL query
             query = f'DELETE FROM sensorthings."{name}" WHERE id = $1 RETURNING id'
-            print(query)
             # Execute query
             id_deleted = await conn.fetchval(query, int(id))
             print(id_deleted)
