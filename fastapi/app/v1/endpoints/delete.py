@@ -31,10 +31,10 @@ async def catch_all_delete(request: Request, path_name: str, pgpool=Depends(get_
         async with pgpool.acquire() as conn:
             # Create delete SQL query
             query = f'DELETE FROM sensorthings."{name}" WHERE id = $1 RETURNING id'
-
+            print(query)
             # Execute query
             id_deleted = await conn.fetchval(query, int(id))
-
+            print(id_deleted)
             if id_deleted is None:
                 return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
