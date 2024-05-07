@@ -32,9 +32,10 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
         body = await request.json()
 
         main_table = result["entity"][0]
-        
+
         print("BODY INSERT", body)
-        if result["property_name"] is not None:
+        
+        if len(result["entities"]) > 0:
             return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={
