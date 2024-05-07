@@ -13,15 +13,15 @@ v1 = APIRouter()
 @v1.api_route("/{path_name:path}", methods=["PATCH"])
 async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_pool)):
     # Accept only content-type application/json
-    if not "content-type" in request.headers or request.headers["content-type"] != "application/json":
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": "Only content-type application/json is supported."
-            }
-        )
+    # if not "content-type" in request.headers or request.headers["content-type"] != "application/json":
+    #     return JSONResponse(
+    #         status_code=status.HTTP_400_BAD_REQUEST,
+    #         content={
+    #             "code": 400,
+    #             "type": "error",
+    #             "message": "Only content-type application/json is supported."
+    #         }
+    #     )
 
     try:
         full_path = request.url.path
