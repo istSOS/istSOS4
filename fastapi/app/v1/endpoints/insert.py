@@ -30,8 +30,19 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
         result = sta2rest.STA2REST.parse_uri(full_path)
         # get json body
         body = await request.json()
+
         main_table = result["entity"][0]
+        
         print("BODY INSERT", body)
+        if result["property_name"] is not None:
+            return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "code": 404,
+                "type": "error",
+                "message": "Not a valid id: Path is not valid."
+            }
+        )
         return await insert(main_table, body, pgpool)
     except Exception as e:
         traceback.print_exc()
