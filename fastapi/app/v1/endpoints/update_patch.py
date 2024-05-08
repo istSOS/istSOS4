@@ -1,6 +1,6 @@
 import traceback
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi import status
 from app.sta2rest import sta2rest
 from fastapi import Depends
@@ -53,8 +53,6 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
         
         prepare_entity_body_for_insert(body, {})
         
-        print("BODY PATCH", body)
-
         async with pgpool.acquire() as conn:
             if not body:  # Check if body is empty
                 return JSONResponse(
@@ -65,7 +63,7 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
                         "message": "Not empty body"
                     }
                 )
-          
+
             query = f'UPDATE sensorthings."{name}" SET ' + ', '.join([f'"{key}" = ${i+1}' for i, key in enumerate(body.keys())]) + f' WHERE id = ${len(body.keys()) + 1} RETURNING ID;'
     
             print(query, body.values(), id)
@@ -84,13 +82,7 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
                 )
             
             # Return okay
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,
-                content={
-                    "code": 200,
-                    "type": "success"
-                }
-            )
+            return Response(status_code=status.HTTP_200_OK)
         
     except Exception as e:
         # print stack trace
