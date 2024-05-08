@@ -161,7 +161,7 @@ async def insertThing(payload, conn):
             query = f'INSERT INTO sensorthings."Thing" ({keys}) VALUES ({values_placeholders}) RETURNING (id, "@iot.selfLink")'
             thing_id, thing_selfLink = await conn.fetchval(query, *payload.values())
 
-            if location_id:
+            if location_id is not None:
                 await conn.execute(
                     'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2)',
                     thing_id, location_id
