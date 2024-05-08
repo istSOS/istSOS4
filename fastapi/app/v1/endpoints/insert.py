@@ -35,20 +35,22 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
 
         if len(result["entities"]) == 1:
             [name, id] = result["entities"][0]
-            if main_table == "Location" and name == "Thing":
+            if main_table == "Observation" and name == "Datastream":
                 body[f"{name.lower()}_id"] = int(id)
-            elif main_table == "Datastream" and name == "Thing":
-                body[f"{name.lower()}_id"] = int(id)
-            elif main_table == "Sensor" and name =="Datastream":
-                body[f"{name.lower()}_id"] = int(id)
-            elif main_table == "ObservedProperty" and name == "Datastream":
-                body[f"{name.lower()}_id"] = int(id)
-            elif main_table == "HistoricalLocation" and name == "Thing":
-                body[f"{name.lower()}_id"] = int(id)
-            elif main_table == "Observation" and name == "Datastream":
-                body[f"{name.lower()}_id"] = int(id)
-            elif main_table == "FeaturesOfInterest" and name == "Observation":
-                body[f"{name.lower()}_id"] = int(id)
+            # if main_table == "Location" and name == "Thing":
+            #     body[f"{name.lower()}_id"] = int(id)
+            # elif main_table == "Datastream" and name == "Thing":
+            #     body[f"{name.lower()}_id"] = int(id)
+            # elif main_table == "Sensor" and name =="Datastream":
+            #     body[f"{name.lower()}_id"] = int(id)
+            # elif main_table == "ObservedProperty" and name == "Datastream":
+            #     body[f"{name.lower()}_id"] = int(id)
+            # elif main_table == "HistoricalLocation" and name == "Thing":
+            #     body[f"{name.lower()}_id"] = int(id)
+            # elif main_table == "Observation" and name == "Datastream":
+            #     body[f"{name.lower()}_id"] = int(id)
+            # elif main_table == "FeaturesOfInterest" and name == "Observation":
+            #     body[f"{name.lower()}_id"] = int(id)
         
         print("BODY INSERT", body)
         return await insert(main_table, body, pgpool)
