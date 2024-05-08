@@ -33,8 +33,24 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
 
         main_table = result["entity"][0]
 
-        print("BODY INSERT", body)
+        if len(result["entities"]) == 1:
+            [name, id] = result["entities"][0]
+            if main_table == "Location" and name == "Thing":
+                body[f"{name.lower()}_id"] = id
+            elif main_table == "Datastream" and name == "Thing":
+                body[f"{name.lower()}_id"] = id
+            elif main_table == "Sensor" and name =="Datastream":
+                body[f"{name.lower()}_id"] = id
+            elif main_table == "ObservedProperty" and name == "Datastream":
+                body[f"{name.lower()}_id"] = id
+            elif main_table == "HistoricalLocation" and name == "Thing":
+                body[f"{name.lower()}_id"] = id
+            elif main_table == "Observation" and name == "Datastream":
+                body[f"{name.lower()}_id"] = id
+            elif main_table == "FeaturesOfInterest" and name == "Observation":
+                body[f"{name.lower()}_id"] = id
         
+        print("BODY INSERT", body)
         return await insert(main_table, body, pgpool)
     except Exception as e:
         traceback.print_exc()
