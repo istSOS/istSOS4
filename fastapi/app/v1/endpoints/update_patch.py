@@ -51,8 +51,11 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
         print("BODY PATCH", body)
 
         async with pgpool.acquire() as conn:
-            query = f'UPDATE sensorthings."{name}" SET ' + ', '.join([f'"{key}" = ${i+1}' for i, key in enumerate(body.keys())]) + f' WHERE id = ${len(body.keys()) + 1} RETURNING ID;'
-        
+            if not body:  # Check if body is empty
+                query = f'UPDATE sensorthings."{name}" SET id = id WHERE id = ${len(body.keys()) + 1} RETURNING ID;'
+            else:
+                query = f'UPDATE sensorthings."{name}" SET ' + ', '.join([f'"{key}" = ${i+1}' for i, key in enumerate(body.keys())]) + f' WHERE id = ${len(body.keys()) + 1} RETURNING ID;'
+    
             print(query, body.values(), id)
 
             # Execute query
