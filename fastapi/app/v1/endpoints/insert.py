@@ -138,14 +138,14 @@ async def insertThing(payload, conn):
     try:
         async with conn.transaction():
             location_id = None
-            location_exist = False
+            new_location = False
             historicallocation_id = None
             if "Locations" in payload:
                 if '@iot.id' in payload["Locations"]:
                     location_id = payload["Locations"]["@iot.id"]
-                    location_exist = True
                 else:
                     location_id, location_selfLink = await insertLocation(payload["Locations"], conn)
+                    new_location = True
                 if not isinstance(location_id, int):
                     raise ValueError(f"Cannot deserialize value of type `int` from String: {location_id}")
                 payload.pop("Locations")
@@ -166,7 +166,7 @@ async def insertThing(payload, conn):
                     'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2)',
                     thing_id, location_id
                 )
-                if not location_exist:
+                if new_location:
                     queryHistoricalLocations = f'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id'
                     historicallocation_id = await conn.fetchval(queryHistoricalLocations, thing_id)
                     if historicallocation_id is not None:
