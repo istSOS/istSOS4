@@ -52,7 +52,7 @@ async def catch_all_post(request: Request, path_name: str, pgpool=Depends(get_po
             # elif main_table == "FeaturesOfInterest" and name == "Observation":
             #     body[f"{name.lower()}_id"] = int(id)
         
-        print("BODY INSERT", body)
+        print(f"BODY INSERT {main_table}", body)
         return await insert(main_table, body, pgpool)
     except Exception as e:
         traceback.print_exc()
