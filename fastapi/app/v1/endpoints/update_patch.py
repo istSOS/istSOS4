@@ -47,6 +47,9 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
 
         print("BODY PATCH", body)
 
+        if not body:
+            return Response(status_code=status.HTTP_200_OK)
+        
         body = format_entity_body(body)
         
         print("BODY PATCH", body)
