@@ -30,10 +30,6 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
 
         # Get main entity
         [name, id] = result["entity"]
-        
-        body = await request.json()
-        
-        print("BODY PATCH", body)
 
         # Get the name and id
         if not name:
@@ -42,6 +38,8 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
         if not id:
             raise Exception("No entity id provided")
 
+        body = await request.json()
+        
         # Check that the column names (key) contains only alphanumeric characters and underscores
         for key in body.keys():
             if not key.isalnum():
@@ -49,6 +47,8 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
             
         body = format_entity_body(body)
         prepare_entity_body_for_insert(body, {})
+        
+        print("BODY PATCH", body)
 
         async with pgpool.acquire() as conn:
             query = f'UPDATE sensorthings."{name}" SET ' + ', '.join([f'"{key}" = ${i+1}' for i, key in enumerate(body.keys())]) + f' WHERE id = ${len(body.keys()) + 1} RETURNING ID;'
