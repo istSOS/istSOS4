@@ -117,7 +117,6 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "parameters" jsonb,
     "datastream_id" BIGINT NOT NULL REFERENCES sensorthings."Datastream"(id) ON DELETE CASCADE,
     "featuresofinterest_id" BIGINT NOT NULL REFERENCES sensorthings."FeaturesOfInterest"(id) ON DELETE CASCADE,
-    UNIQUE ("datastream_id", "phenomenonTime"),
     "@iot.selfLink" TEXT,
     "FeatureOfInterest@iot.navigationLink" TEXT,
     "Datastream@iot.navigationLink" TEXT
