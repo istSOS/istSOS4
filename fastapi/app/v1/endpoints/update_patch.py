@@ -56,6 +56,7 @@ ALLOWED_KEYS = {
         "Thing",
         "Sensor",
         "ObservedProperty",
+        "Observations",
     },
     "Observation": {
         "phenomenonTime",
@@ -260,6 +261,14 @@ async def updateFeaturesOfInterest(payload, conn, featuresofinterest_id):
 async def updateDatastream(payload, conn, datastream_id):
     handle_datetime_fields(payload)
     handle_associations(payload, ["Thing", "Sensor", "ObservedProperty"])
+    await handle_nested_entities(
+        payload,
+        conn,
+        datastream_id,
+        "Observations",
+        "datastream_id",
+        "Observation",
+    )
     return await update_record(payload, conn, "Datastream", datastream_id)
 
 
