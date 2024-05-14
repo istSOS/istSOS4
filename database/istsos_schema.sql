@@ -358,3 +358,24 @@ CREATE TRIGGER update_observation_navigation_links_trigger
 BEFORE INSERT OR UPDATE ON sensorthings."Observation"
 FOR EACH ROW
 EXECUTE FUNCTION update_observation_navigation_links();
+
+-- Create the trigger function
+CREATE OR REPLACE FUNCTION delete_related_historical_locations() RETURNS TRIGGER AS $$
+BEGIN
+    -- Delete HistoricalLocations where the thing_id matches the deleted Location's thing_id
+    DELETE FROM sensorthings."HistoricalLocation"
+    WHERE thing_id = (
+        SELECT tl.thing_id
+        FROM sensorthings."Thing_Location" tl
+        WHERE tl.location_id = OLD.id
+    );
+
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create the trigger
+CREATE TRIGGER before_location_delete
+BEFORE DELETE ON sensorthings."Location"
+FOR EACH ROW
+EXECUTE FUNCTION delete_related_historical_locations();
