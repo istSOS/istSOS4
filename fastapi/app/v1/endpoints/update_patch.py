@@ -85,6 +85,8 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
 
         body = await request.json()
 
+        print(f"BODY PATCH {name}", body)
+
         if name in ALLOWED_KEYS:
             allowed_keys = ALLOWED_KEYS[name]
             invalid_keys = [key for key in body.keys() if key not in allowed_keys]
