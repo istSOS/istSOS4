@@ -295,9 +295,10 @@ def handle_datetime_fields(payload):
 def handle_associations(payload, keys):
     for key in keys:
         if key in payload:
-            if "@iot.id" in payload[key]:
-                id_field = f"{key.lower()}_id"
-                payload[id_field] = payload[key]["@iot.id"]
+            if list(payload[key].keys()) != ['@iot.id']:
+                raise Exception("Invalid format: Each thing dictionary should contain only the '@iot.id' key.")
+            id_field = f"{key.lower()}_id"
+            payload[id_field] = payload[key]["@iot.id"]
             payload.pop(key)
 
 
