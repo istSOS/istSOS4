@@ -12,13 +12,61 @@ v1 = APIRouter()
 
 # Define allowed keys for each main table
 ALLOWED_KEYS = {
-    "Location": {"name", "description", "encodingType", "location", "properties"},
-    "Thing": {"name", "description", "properties", "Locations"},
-    "Sensor": {"name", "description", "encodingType", "metadata", "properties"},
-    "ObservedProperty": {"name", "definition", "description", "properties"},
-    "FeaturesOfInterest": {"name", "description", "encodingType", "feature", "properties"},
-    "Datastream": {"name", "description", "unitOfMeasurement", "observationType", "observedArea", "phenomenonTime", "resultTime", "properties", "Thing", "Sensor", "ObservedProperty"},
-    "Observation": {"phenomenonTime", "result", "resultTime", "resultQuality", "validTime", "parameters"}
+    "Location": {
+        "name",
+        "description",
+        "encodingType",
+        "location",
+        "properties",
+        "Things",
+    },
+    "Thing": {"name", "description", "properties", "Locations", "Datastreams"},
+    "Sensor": {
+        "name",
+        "description",
+        "encodingType",
+        "metadata",
+        "properties",
+        "Datastreams",
+    },
+    "ObservedProperty": {
+        "name",
+        "definition",
+        "description",
+        "properties",
+        "Datastreams",
+    },
+    "FeaturesOfInterest": {
+        "name",
+        "description",
+        "encodingType",
+        "feature",
+        "properties",
+        "Observations",
+    },
+    "Datastream": {
+        "name",
+        "description",
+        "unitOfMeasurement",
+        "observationType",
+        "observedArea",
+        "phenomenonTime",
+        "resultTime",
+        "properties",
+        "Thing",
+        "Sensor",
+        "ObservedProperty",
+    },
+    "Observation": {
+        "phenomenonTime",
+        "result",
+        "resultTime",
+        "resultQuality",
+        "validTime",
+        "parameters",
+        "Datastream",
+        "FeatureOfInterest",
+    },
 }
 
 # Handle UPDATE requests
@@ -26,193 +74,239 @@ ALLOWED_KEYS = {
 async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_pool)):
     try:
         full_path = request.url.path
-        # Parse URI
         result = sta2rest.STA2REST.parse_uri(full_path)
 
-        # Get main entity
-        [name, id] = result["entity"]
-
-        # Validate name and id
-        if not name:
-            raise Exception("No entity name provided")
-    
-        if not id:
-            raise Exception("No entity id provided")
+        # Validate entity name and id
+        name, id = result["entity"]
+        if not name or not id:
+            raise Exception(
+                f"No {'entity name' if not name else 'entity id'} provided"
+            )
 
         body = await request.json()
-        
-        # Ensure only allowed keys are in the payload
+
         if name in ALLOWED_KEYS:
             allowed_keys = ALLOWED_KEYS[name]
-            for key in body.keys():
-                if key not in allowed_keys:
-                    raise ValueError(f"Invalid key in payload for {name}: {key}")
-
-        print("BODY PATCH", body)
+            invalid_keys = [key for key in body.keys() if key not in allowed_keys]
+            if invalid_keys:
+                raise Exception(
+                    f"Invalid keys in payload for {name}: {', '.join(invalid_keys)}"
+                )
 
         if not body:
             return Response(status_code=status.HTTP_200_OK)
-        
-        return await update(name, id, body, pgpool)
 
+        return await update(name, int(id), body, pgpool)
     except Exception as e:
-        # print stack trace
         traceback.print_exc()
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e)
-            }
+            content={"code": 400, "type": "error", "message": str(e)},
         )
-    
+
+
 async def update(main_table, record_id, payload, pgpool):
+    update_funcs = {
+        "Location": updateLocation,
+        "Thing": updateThing,
+        "Sensor": updateSensor,
+        "ObservedProperty": updateObservedProperty,
+        "FeaturesOfInterest": updateFeaturesOfInterest,
+        "Datastream": updateDatastream,
+        "Observation": updateObservation,
+    }
+
     async with pgpool.acquire() as conn:
         async with conn.transaction():
             try:
-                if main_table == "Location":
-                    await updateLocation(payload, conn, record_id)
-                elif main_table == "Thing":
-                    await updateThing(payload, conn, record_id)
-                elif main_table == "Sensor":
-                    await updateSensor(payload, conn, record_id)
-                elif main_table == "ObservedProperty":
-                    await updateObservedProperty(payload, conn, record_id)
-                elif main_table == "FeaturesOfInterest":
-                    await updateFeaturesOfInterest(payload, conn, record_id)
-                elif main_table == "Datastream":
-                    await updateDatastream(payload, conn, record_id)
-                elif main_table == "Observation":
-                    await updateObservation(payload, conn, record_id)
+                await update_funcs[main_table](payload, conn, record_id)
                 return Response(status_code=status.HTTP_200_OK)
             except Exception as e:
                 return JSONResponse(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    content={
-                        "code": 400,
-                        "type": "error",
-                        "message": str(e)
-                    }
+                    content={"code": 400, "type": "error", "message": str(e)},
                 )
+
 
 async def update_record(payload, conn, table, record_id):
     try:
         async with conn.transaction():
-            # Convert dictionary values to JSON strings
-            payload = {key: json.dumps(value) if isinstance(value, dict) else value for key, value in payload.items()}
-            
-            # Prepare query dynamically
-            set_clause = ', '.join([f'"{key}" = ${i + 1}' for i, key in enumerate(payload.keys())])
+            payload = {
+                key: json.dumps(value) if isinstance(value, dict) else value
+                for key, value in payload.items()
+            }
+            set_clause = ", ".join(
+                [f'"{key}" = ${i + 1}' for i, key in enumerate(payload.keys())]
+            )
             query = f'UPDATE sensorthings."{table}" SET {set_clause} WHERE id = ${len(payload) + 1} RETURNING ID;'
-            
-            # Execute the query
             updated_id = await conn.fetchval(query, *payload.values(), int(record_id))
-            
-            # Check if the update was successful
-            if updated_id is None:
+
+            if not updated_id:
                 return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
                     content={
                         "code": 404,
                         "type": "error",
-                        "message": "No entity found for the given id."
-                    }
+                        "message": "No entity found for the given id.",
+                    },
                 )
-            
+
             return updated_id
-    except Exception as e:
+    except Exception:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
                 "code": 500,
                 "type": "error",
-                "message": "An internal server error occurred."
-            }
+                "message": "An internal server error occurred.",
+            },
         )
 
+
 async def updateLocation(payload, conn, location_id):
+    if "Things" in payload:
+        if isinstance(payload["Things"], dict):
+            payload["Things"] = [payload["Things"]]
+        for thing in payload["Things"]:
+            if not isinstance(thing, dict) or list(thing.keys()) != ["@iot.id"]:
+                raise Exception(
+                    "Invalid format: Each thing should be a dictionary with a single key '@iot.id'."
+                )
+            thing_id = thing["@iot.id"]
+            await conn.execute(
+                'UPDATE sensorthings."Thing_Location" SET location_id = $1 WHERE thing_id = $2',
+                location_id,
+                thing_id,
+            )
+            historicallocation_id = await conn.fetchval(
+                'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id',
+                thing_id,
+            )
+            await conn.execute(
+                'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)',
+                location_id,
+                historicallocation_id,
+            )
+        payload.pop("Things")
     return await update_record(payload, conn, "Location", location_id)
-    
+
+
 async def updateThing(payload, conn, thing_id):
     if "Locations" in payload:
-        # Ensure "Locations" is a list
-        if not isinstance(payload["Locations"], list):
-            raise ValueError("Invalid format: 'Locations' should be a list.")
-
-        # Validate each item in the "Locations" list
+        if isinstance(payload["Locations"], dict):
+            payload["Locations"] = [payload["Locations"]]
         for location in payload["Locations"]:
-            if not isinstance(location, dict):
-                raise ValueError("Invalid format: Each location should be a dictionary.")
-            
-            # Check that the only key is '@iot.id'
-            if list(location.keys()) != ['@iot.id']:
-                raise ValueError("Invalid format: Each location dictionary should contain only the '@iot.id' key.")
-
-            location_id = location['@iot.id']
-            query = f'UPDATE sensorthings."Thing_Location" SET location_id = {location_id} WHERE thing_id = {thing_id};'
-            await conn.execute(query)
+            if not isinstance(location, dict) or list(location.keys()) != ["@iot.id"]:
+                raise Exception(
+                    "Invalid format: Each location should be a dictionary with a single key '@iot.id'."
+                )
+            location_id = location["@iot.id"]
+            await conn.execute(
+                'UPDATE sensorthings."Thing_Location" SET location_id = $1 WHERE thing_id = $2',
+                location_id,
+                thing_id,
+            )
+            historicallocation_id = await conn.fetchval(
+                'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id',
+                thing_id,
+            )
+            await conn.execute(
+                'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)',
+                location_id,
+                historicallocation_id,
+            )
         payload.pop("Locations")
-
+    await handle_nested_entities(
+        payload, conn, thing_id, "Datastreams", "thing_id", "Datastream"
+    )
     return await update_record(payload, conn, "Thing", thing_id)
 
+
 async def updateSensor(payload, conn, sensor_id):
+    await handle_nested_entities(
+        payload, conn, sensor_id, "Datastreams", "sensor_id", "Datastream"
+    )
     return await update_record(payload, conn, "Sensor", sensor_id)
 
+
 async def updateObservedProperty(payload, conn, observedproperty_id):
+    await handle_nested_entities(
+        payload,
+        conn,
+        observedproperty_id,
+        "Datastreams",
+        "observedproperty_id",
+        "Datastream",
+    )
     return await update_record(payload, conn, "ObservedProperty", observedproperty_id)
 
+
 async def updateFeaturesOfInterest(payload, conn, featuresofinterest_id):
-    return await update_record(payload, conn, "FeaturesOfInterest", featuresofinterest_id)
+    await handle_nested_entities(
+        payload,
+        conn,
+        featuresofinterest_id,
+        "Observations",
+        "featuresofinterest_id",
+        "Observation",
+    )
+    return await update_record(
+        payload, conn, "FeaturesOfInterest", featuresofinterest_id
+    )
+
 
 async def updateDatastream(payload, conn, datastream_id):
+    handle_datetime_fields(payload)
+    handle_associations(payload, ["Thing", "Sensor", "ObservedProperty"])
+    return await update_record(payload, conn, "Datastream", datastream_id)
+
+
+async def updateObservation(payload, conn, observation_id):
+    handle_datetime_fields(payload)
+    handle_result_field(payload)
+    handle_associations(payload, ["Datastream", "FeatureOfInterest"])
+    return await update_record(payload, conn, "Observation", observation_id)
+
+
+async def handle_nested_entities(payload, conn, entity_id, key, field, update_table):
+    if key in payload:
+        if isinstance(payload[key], dict):
+            payload[key] = [payload[key]]
+        for item in payload[key]:
+            if not isinstance(item, dict) or list(item.keys()) != ["@iot.id"]:
+                raise Exception(
+                    f"Invalid format: Each item in '{key}' should be a dictionary with a single key '@iot.id'."
+                )
+            related_id = item["@iot.id"]
+            await conn.execute(
+                f'UPDATE sensorthings."{update_table}" SET {field} = {entity_id} WHERE id = {related_id};'
+            )
+        payload.pop(key)
+
+
+def handle_datetime_fields(payload):
     for key in list(payload.keys()):
         if "time" in key.lower():
             payload[key] = parser.parse(payload[key])
 
-    if "Thing" in payload:  
-        if '@iot.id' in payload["Thing"]:
-            thing_id = payload["Thing"]["@iot.id"]
-        payload.pop("Thing")
-        payload["thing_id"] = thing_id
 
-    if "Sensor" in payload:
-        if '@iot.id' in payload["Sensor"]:
-            sensor_id = payload["Sensor"]["@iot.id"]
-        payload.pop("Sensor")
-        payload["sensor_id"] = sensor_id
+def handle_associations(payload, keys):
+    for key in keys:
+        if key in payload:
+            if "@iot.id" in payload[key]:
+                id_field = f"{key.lower()}_id"
+                payload[id_field] = payload[key]["@iot.id"]
+            payload.pop(key)
 
-    if "ObservedProperty" in payload:
-        if '@iot.id' in payload["ObservedProperty"]:
-            observedproperty_id = payload["ObservedProperty"]["@iot.id"]
-        payload.pop("ObservedProperty")
-        payload["observedproperty_id"] = observedproperty_id
 
-    return await update_record(payload, conn, "Datastream", datastream_id)
-
-async def updateObservation(payload, conn, observation_id):
+def handle_result_field(payload):
     for key in list(payload.keys()):
         if key == "result":
             result_type, column_name = get_result_type_and_column(payload[key])
             payload[column_name] = payload[key]
             payload["resultType"] = result_type
             payload.pop("result")
-        elif "time" in key.lower():
-            payload[key] = parser.parse(payload[key])
 
-    if "Datastream" in payload:
-        if '@iot.id' in payload["Datastream"]:
-            datastream_id = payload["Datastream"]["@iot.id"]
-        payload.pop("Datastream")
-        payload["datastream_id"] = datastream_id
-
-    if "FeatureOfInterest" in payload:
-        if '@iot.id' in payload["FeatureOfInterest"]:
-            featuresofinterest_id = payload["FeatureOfInterest"]["@iot.id"]
-        payload.pop("FeatureOfInterest")
-        payload["featuresofinterest_id"] = featuresofinterest_id
-
-    return await update_record(payload, conn, "Observation", observation_id)
 
 def get_result_type_and_column(input_string):
     try:
@@ -234,7 +328,7 @@ def get_result_type_and_column(input_string):
             result_type = None
             column_name = None
 
-    if input_string == "true" or input_string == "false":
+    if input_string in ["true", "false"]:
         result_type = 3
         column_name = "resultBoolean"
 
