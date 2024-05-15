@@ -176,17 +176,23 @@ async def updateLocation(payload, conn, location_id):
                     "Invalid format: Each thing should be a dictionary with a single key '@iot.id'."
                 )
             thing_id = thing["@iot.id"]
-            await conn.execute(
-                'UPDATE sensorthings."Thing_Location" SET location_id = $1 WHERE thing_id = $2',
+            check = await conn.fetchval(
+                'UPDATE sensorthings."Thing_Location" SET thing_id = $1 WHERE location_id = $2',
                 location_id,
                 thing_id,
             )
+            if check is None:
+                await conn.execute(
+                    'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2) ON CONFLICT ("thing_id", "location_id") DO NOTHING',
+                    thing_id,
+                    location_id
+                )
             historicallocation_id = await conn.fetchval(
                 'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id',
                 thing_id,
             )
             await conn.execute(
-                'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)',
+                'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)  ON CONFLICT ("location_id", "historicallocation_id") DO NOTHING',
                 location_id,
                 historicallocation_id,
             )
@@ -204,17 +210,23 @@ async def updateThing(payload, conn, thing_id):
                     "Invalid format: Each location should be a dictionary with a single key '@iot.id'."
                 )
             location_id = location["@iot.id"]
-            await conn.execute(
+            check = await conn.fetchval(
                 'UPDATE sensorthings."Thing_Location" SET location_id = $1 WHERE thing_id = $2',
                 location_id,
                 thing_id,
             )
+            if check is None:
+                await conn.execute(
+                    'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2) ON CONFLICT ("thing_id", "location_id") DO NOTHING',
+                    thing_id,
+                    location_id
+                )
             historicallocation_id = await conn.fetchval(
                 'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id',
                 thing_id,
             )
             await conn.execute(
-                'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)',
+                'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2) ON CONFLICT ("location_id", "historicallocation_id") DO NOTHING',
                 location_id,
                 historicallocation_id,
             )
