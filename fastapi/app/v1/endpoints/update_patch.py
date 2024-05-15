@@ -21,6 +21,7 @@ ALLOWED_KEYS = {
         "Things",
     },
     "Thing": {"name", "description", "properties", "Locations", "Datastreams"},
+    "HistoricalLocation": {"time", "Thing", "Locations"},
     "Sensor": {
         "name",
         "description",
@@ -80,9 +81,7 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
         # Validate entity name and id
         name, id = result["entity"]
         if not name or not id:
-            raise Exception(
-                f"No {'entity name' if not name else 'entity id'} provided"
-            )
+            raise Exception(f"No {'entity name' if not name else 'entity id'} provided")
 
         body = await request.json()
 
@@ -112,6 +111,7 @@ async def update(main_table, record_id, payload, pgpool):
     update_funcs = {
         "Location": updateLocation,
         "Thing": updateThing,
+        "HistoricalLocation": updateHistoricalLocation,
         "Sensor": updateSensor,
         "ObservedProperty": updateObservedProperty,
         "FeaturesOfInterest": updateFeaturesOfInterest,
@@ -143,7 +143,6 @@ async def update_record(payload, conn, table, record_id):
             )
             query = f'UPDATE sensorthings."{table}" SET {set_clause} WHERE id = ${len(payload) + 1} RETURNING ID;'
             updated_id = await conn.fetchval(query, *payload.values(), int(record_id))
-
             if not updated_id:
                 return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -185,7 +184,7 @@ async def updateLocation(payload, conn, location_id):
                 await conn.execute(
                     'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2) ON CONFLICT ("thing_id", "location_id") DO NOTHING',
                     thing_id,
-                    location_id
+                    location_id,
                 )
             historicallocation_id = await conn.fetchval(
                 'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id',
@@ -219,7 +218,7 @@ async def updateThing(payload, conn, thing_id):
                 await conn.execute(
                     'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2) ON CONFLICT ("thing_id", "location_id") DO NOTHING',
                     thing_id,
-                    location_id
+                    location_id,
                 )
             historicallocation_id = await conn.fetchval(
                 'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id',
@@ -235,6 +234,35 @@ async def updateThing(payload, conn, thing_id):
         payload, conn, thing_id, "Datastreams", "thing_id", "Datastream"
     )
     return await update_record(payload, conn, "Thing", thing_id)
+
+
+async def updateHistoricalLocation(payload, conn, historicallocation_id):
+    if "Locations" in payload:
+        if isinstance(payload["Locations"], dict):
+            payload["Locations"] = [payload["Locations"]]
+        for location in payload["Locations"]:
+            if not isinstance(location, dict) or list(location.keys()) != ["@iot.id"]:
+                raise Exception(
+                    "Invalid format: Each location should be a dictionary with a single key '@iot.id'."
+                )
+            location_id = location["@iot.id"]
+            check = await conn.fetchval(
+                'UPDATE sensorthings."Location_HistoricalLocation" SET location_id = $1 WHERE historicallocation_id = $2',
+                location_id,
+                historicallocation_id,
+            )
+            if check is None:
+                await conn.execute(
+                    'INSERT INTO sensorthings."Location_HistoricalLocation" ("historicallocation_id", "location_id") VALUES ($1, $2) ON CONFLICT ("historicallocation_id", "location_id") DO NOTHING',
+                    historicallocation_id,
+                    location_id,
+                )
+        payload.pop("Locations")
+    handle_datetime_fields(payload)
+    handle_associations(payload, ["Thing"])
+    return await update_record(
+        payload, conn, "HistoricalLocation", historicallocation_id
+    )
 
 
 async def updateSensor(payload, conn, sensor_id):
@@ -316,8 +344,10 @@ def handle_datetime_fields(payload):
 def handle_associations(payload, keys):
     for key in keys:
         if key in payload:
-            if list(payload[key].keys()) != ['@iot.id']:
-                raise Exception("Invalid format: Each thing dictionary should contain only the '@iot.id' key.")
+            if list(payload[key].keys()) != ["@iot.id"]:
+                raise Exception(
+                    "Invalid format: Each thing dictionary should contain only the '@iot.id' key."
+                )
             id_field = f"{key.lower()}_id"
             payload[id_field] = payload[key]["@iot.id"]
             payload.pop(key)
