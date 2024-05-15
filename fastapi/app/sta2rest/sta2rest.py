@@ -1005,6 +1005,9 @@ class STA2REST:
             if not entities:
                 single_result = True
 
+        if uri['single']:
+            single_result = True
+
         # Check if query has an expand but not a select and does not have sub entities
         if query_ast.expand and not query_ast.select and not entities:
             # Add default columns to the select node
@@ -1063,6 +1066,14 @@ class STA2REST:
         # Remove the first part
         parts.pop(0)
 
+        entity_name = parts[-1]
+        single = False
+        keys_list = list(STA2REST.ENTITY_MAPPING.keys())
+        if entity_name in keys_list:
+            index = keys_list.index(entity_name)
+            if index > 7:
+                single = True
+
         # Parse first entity
         main_entity = STA2REST.parse_entity(parts.pop(0))
         if not main_entity:
@@ -1104,7 +1115,8 @@ class STA2REST:
             'entities': entities,
             'property_name': property_name,
             'ref': ref,
-            'value': value
+            'value': value,
+            'single': single
         }
 
 if __name__ == "__main__":
