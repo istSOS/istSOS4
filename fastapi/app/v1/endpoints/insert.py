@@ -73,6 +73,8 @@ async def insert(main_table, payload, pgpool):
                     location_id, header = await insertLocation(payload, conn)
                 elif main_table == "Thing":
                     thing_id, header = await insertThing(payload, conn)
+                elif main_table == "HistoricalLocation":
+                    historicallocation_id, header = await insertHistoricalLocation(payload, conn)
                 elif main_table == "Sensor":
                     sensor_id, header = await insertSensor(payload, conn)
                 elif main_table == "ObservedProperty":
@@ -182,6 +184,57 @@ async def insertThing(payload, conn):
             return (thing_id, thing_selfLink)
     except Exception as e:
         raise ValueError(f"{str(e)}") from e
+
+# HISTORICAL LOCATION
+async def insertHistoricalLocation(payload, conn):
+    try:
+        async with conn.transaction():
+            location_id = None
+            if "Locations" in payload:
+                for location in payload["Locations"]:
+                    if '@iot.id' in location:
+                        location_id = location["@iot.id"]
+                    else:
+                        location_id, location_selfLink = await insertLocation(location, conn)
+                    if not isinstance(location_id, int):
+                        raise ValueError(f"Cannot deserialize value of type `int` from String: {location_id}")
+                payload.pop("Locations")
+
+            if "Thing" in payload:
+                if '@iot.id' in payload["Thing"]:
+                    thing_id = payload["Thing"]["@iot.id"]
+                else:
+                    thing_id, thing_selfLink = await insertThing(payload["Thing"], conn)
+                if not isinstance(thing_id, int):
+                    raise ValueError(f"Cannot deserialize value of type `int` from String: {thing_id}")
+                payload.pop("Thing")
+                payload["thing_id"] = thing_id
+
+            for key in list(payload.keys()):
+                if "time" in key.lower():
+                    payload[key] = parser.parse(payload[key])
+                elif isinstance(payload[key], dict):
+                    payload[key] = json.dumps(payload[key])
+            
+            keys = ', '.join(f'"{key}"' for key in payload.keys())
+            values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
+            query = f'INSERT INTO sensorthings."HistoricalLocation" ({keys}) VALUES ({values_placeholders}) RETURNING (id, "@iot.selfLink")'
+            historicallocation_id, historicallocation_selfLink = await conn.fetchval(query, *payload.values())
+            
+            if location_id is not None and historicallocation_id is not None:
+                await conn.execute(
+                    'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)',
+                    location_id, historicallocation_id
+                )
+
+            return (historicallocation_id, historicallocation_selfLink)
+
+    except Exception as e:
+        error_message = str(e)
+        column_name_start = error_message.find('"') + 1
+        column_name_end = error_message.find('"', column_name_start)
+        violating_column = error_message[column_name_start:column_name_end]
+        raise ValueError(f"Missing required property '{violating_column}'") from e
 
 # SENSOR
 async def insertSensor(payload, conn):
@@ -294,9 +347,11 @@ async def insertDatastream(payload, conn):
 
             observations = payload.pop("Observations", {})
 
-            for key, value in payload.items():
-                if isinstance(value, dict):
-                    payload[key] = json.dumps(value)
+            for key in list(payload.keys()):
+                if "time" in key.lower():
+                    payload[key] = parser.parse(payload[key])
+                elif isinstance(payload[key], dict):
+                    payload[key] = json.dumps(payload[key])
             
             keys = ', '.join(f'"{key}"' for key in payload.keys())
             values_placeholders = ', '.join(f'${i+1}' for i in range(len(payload)))
