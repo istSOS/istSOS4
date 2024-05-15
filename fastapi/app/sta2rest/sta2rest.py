@@ -605,7 +605,10 @@ class NodeVisitor(Visitor):
             if not node.count:
                 count_query.append(False)
             else:
-                count_query.append(True)
+                if node.count.value:
+                    count_query.append(True)
+                else:
+                    count_query.append(False)
 
             return main_query, subqueries, count_query
 
@@ -920,14 +923,17 @@ class STA2REST:
         entities = uri['entities']
 
         if query_ast.as_of:
-            main_entity += "TravelTime"
-            as_of_filter = f"system_time_validity eq {query_ast.as_of.value}"
-            query_ast.filter = FilterNode(query_ast.filter.filter + f" and {as_of_filter}" if query_ast.filter else as_of_filter)
-            if query_ast.expand:
-                for identifier in query_ast.expand.identifiers:
-                    identifier.identifier = identifier.identifier + "TravelTime"
-                    identifier.subquery = QueryNode(None, None, None, None, None, None, None, None, None, True) if identifier.subquery is None else identifier.subquery
-                    identifier.subquery.filter = FilterNode(identifier.subquery.filter + f" and {as_of_filter}" if identifier.subquery.filter else as_of_filter)
+            if len(entities) == 0 and not query_ast.expand:
+                main_entity += "TravelTime"
+                as_of_filter = f"system_time_validity eq {query_ast.as_of.value}"
+                query_ast.filter = FilterNode(query_ast.filter.filter + f" and {as_of_filter}" if query_ast.filter else as_of_filter)
+            else:
+                raise Exception("AS_OF function available only for single entity")
+            # if query_ast.expand:
+            #     for identifier in query_ast.expand.identifiers:
+            #         identifier.identifier = identifier.identifier + "TravelTime"
+            #         identifier.subquery = QueryNode(None, None, None, None, None, None, None, None, None, True) if identifier.subquery is None else identifier.subquery
+            #         identifier.subquery.filter = FilterNode(identifier.subquery.filter + f" and {as_of_filter}" if identifier.subquery.filter else as_of_filter)
 
         if query_ast.from_to:
             if len(entities) == 0 and not query_ast.expand:
@@ -965,25 +971,25 @@ class STA2REST:
                             query_ast.select.identifiers.append(IdentifierNode(uri['property_name']))
 
                     # Merge the query with the subquery
-                    if query_ast.filter:
-                        sub_query.filter = query_ast.filter
-                        query_ast.filter = None
+                    # if query_ast.filter:
+                    #     sub_query.filter = query_ast.filter
+                    #     query_ast.filter = None
 
-                    if query_ast.orderby:
-                        sub_query.orderby = query_ast.orderby
-                        query_ast.orderby = None
+                    # if query_ast.orderby:
+                    #     sub_query.orderby = query_ast.orderby
+                    #     query_ast.orderby = None
 
-                    if query_ast.skip:
-                        sub_query.skip = query_ast.skip
-                        query_ast.skip = None
+                    # if query_ast.skip:
+                    #     sub_query.skip = query_ast.skip
+                    #     query_ast.skip = None
 
-                    if query_ast.top:
-                        sub_query.top = query_ast.top
-                        query_ast.top = None
+                    # if query_ast.top:
+                    #     sub_query.top = query_ast.top
+                    #     query_ast.top = None
 
-                    if query_ast.count:
-                        sub_query.count = query_ast.count
-                        query_ast.count = None
+                    # if query_ast.count:
+                    #     sub_query.count = query_ast.count
+                    #     query_ast.count = None
 
                 query_ast.expand.identifiers.append(ExpandNodeIdentifier(entity_name, sub_query, False))
                 index += 1
