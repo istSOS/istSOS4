@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
 
 CREATE TABLE IF NOT EXISTS sensorthings."Thing_Location" (
     "thing_id" BIGINT NOT NULL REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
-    "location_id" BIGINT NOT NULL REFERENCES sensorthings."Location"(id) ON DELETE CASCADE
+    "location_id" BIGINT NOT NULL REFERENCES sensorthings."Location"(id) ON DELETE CASCADE,
+    CONSTRAINT thing_location_unique UNIQUE ("thing_id", "location_id")
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
@@ -47,7 +48,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
 
 CREATE TABLE IF NOT EXISTS sensorthings."Location_HistoricalLocation" (
     "location_id" BIGINT NOT NULL REFERENCES sensorthings."Location"(id) ON DELETE CASCADE,
-    "historicallocation_id" BIGINT NOT NULL REFERENCES sensorthings."HistoricalLocation"(id) ON DELETE CASCADE
+    "historicallocation_id" BIGINT NOT NULL REFERENCES sensorthings."HistoricalLocation"(id) ON DELETE CASCADE,
+    CONSTRAINT location_historical_location_unique UNIQUE ("location_id", "historicallocation_id")
 );
 
 CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
