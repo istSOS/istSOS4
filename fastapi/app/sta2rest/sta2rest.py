@@ -964,6 +964,7 @@ class STA2REST:
                 if index == len(entities) - 1:
                     # Check if we have a property name
                     if uri['property_name']:
+                        single_result = True
                         # Add the property name to the select node
                         if not query_ast.select:
                             query_ast.select = SelectNode([])

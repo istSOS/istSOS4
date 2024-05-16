@@ -117,11 +117,18 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
 
         if result['ref']:
             if 'value' in data:
-                data["value"] = [{'@iot.selfLink': item.get('@iot.selfLink')} for item in data["value"] if '@iot.selfLink' in item]
+                if len(data["value"]) > 1:
+                    data["value"] = [{'@iot.selfLink': item.get('@iot.selfLink')} for item in data["value"] if '@iot.selfLink' in item]
+                else:
+                    if '@iot.selfLink' in data["value"][0]:
+                        data['@iot.selfLink'] = data["value"][0]['@iot.selfLink']
+                    del data["value"]
             else:
                 data = {'@iot.selfLink': data.get('@iot.selfLink')} if '@iot.selfLink' in data else {}
 
         if result['value']:
+            if 'value' in data:
+                data = data[list(data.keys())[0]][0]   
             data = data[list(data.keys())[0]]
             if data is None:
                 return Response(status_code=status.HTTP_200_OK)
