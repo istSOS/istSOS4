@@ -37,8 +37,9 @@ class LocationTravelTime(Base):
             for column in self.__class__.__mapper__.column_attrs
             if column.key not in inspect(self).unloaded
         }
-        if 'location' in serialized_data and self.location is not None:
-            serialized_data['location'] = self.location_geojson
+        if 'location' in serialized_data:
+            if self.location is not None:
+                serialized_data['location'] = self.location_geojson
             serialized_data.pop('location_geojson', None)
         if 'system_time_validity' in serialized_data and self.system_time_validity is not None:
             serialized_data['system_time_validity'] = self._format_datetime_range(self.system_time_validity)

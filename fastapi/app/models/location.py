@@ -38,8 +38,9 @@ class Location(Base):
             for column in self.__class__.__mapper__.column_attrs
             if column.key not in inspect(self).unloaded
         }
-        if 'location' in serialized_data and self.location is not None:
-            serialized_data['location'] = self.location_geojson
+        if 'location' in serialized_data:
+            if self.location is not None:
+                serialized_data['location'] = self.location_geojson
             serialized_data.pop('location_geojson', None)
         return serialized_data
 
