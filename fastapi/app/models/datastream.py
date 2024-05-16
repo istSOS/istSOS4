@@ -73,7 +73,8 @@ class Datastream(Base):
             if relationship not in inspect(self).unloaded:
                 related_obj = getattr(self, relationship, None)
                 if related_obj is not None:
-                    data[relationship.capitalize()] = related_obj.to_dict_expand()
+                    relationship_key = relationship.capitalize() if relationship != 'observedproperty' else 'ObservedProperty'
+                    data[relationship_key] = related_obj.to_dict_expand()
         return data
 
     def to_dict(self):

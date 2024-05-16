@@ -68,11 +68,11 @@ class Observation(Base):
         """Serialize the Observation model to a dict, including expanded relationships and handling result fields."""
         data = self._serialize_columns()
         self._handle_result_fields(data)
-        for relationships in ['datastream', 'featuresofinterest']:
-            if relationships not in inspect(self).unloaded:
-                related_obj = getattr(self, relationships, None)
+        for relationship in ['datastream', 'featuresofinterest']:
+            if relationship not in inspect(self).unloaded:
+                related_obj = getattr(self, relationship, None)
                 if related_obj is not None:
-                    relationship_key = relationships[0].upper() + relationships[1:]
+                    relationship_key = relationship.capitalize() if relationship != 'featuresofinterest' else 'FeatureOfInterest'
                     data[relationship_key] = related_obj.to_dict_expand()
         return data
 
