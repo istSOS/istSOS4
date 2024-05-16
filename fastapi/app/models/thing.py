@@ -3,7 +3,7 @@ from sqlalchemy.sql.schema import Column
 from sqlalchemy.sql.sqltypes import Integer, Text, String
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql.json import JSON
+from sqlalchemy.dialects.postgresql.json import JSONB
 from .thing_location import Thing_Location
 
 class Thing(Base):
@@ -17,7 +17,7 @@ class Thing(Base):
     datastreams_locations_navigation_link = Column("Datastreams@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
-    properties = Column(JSON)
+    properties = Column(JSONB)
     location = relationship("Location", secondary=Thing_Location, back_populates="thing")
     datastream = relationship("Datastream", back_populates="thing")
     historicallocation = relationship("HistoricalLocation", back_populates="thing")

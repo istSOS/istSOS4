@@ -34,8 +34,9 @@ class FeaturesOfInterest(Base):
             for column in self.__class__.__mapper__.column_attrs
             if column.key not in inspect(self).unloaded
         }
-        if 'feature' in serialized_data and self.feature is not None:
-            serialized_data['feature'] = self.feature_geojson
+        if 'feature' in serialized_data:
+            if self.feature is not None:
+                serialized_data['feature'] = self.feature_geojson
             serialized_data.pop('feature_geojson', None)
         return serialized_data
 

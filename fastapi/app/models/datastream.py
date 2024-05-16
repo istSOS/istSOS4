@@ -54,8 +54,9 @@ class Datastream(Base):
             for column in self.__class__.__mapper__.column_attrs
             if column.key not in inspect(self).unloaded
         }
-        if 'observedArea' in serialized_data and self.observed_area is not None:
-            serialized_data['observedArea'] = self.observed_area_geojson
+        if 'observedArea' in serialized_data:
+            if self.observed_area is not None:
+                serialized_data['observedArea'] = self.observed_area_geojson
             serialized_data.pop('observed_area_geojson', None)
         if 'phenomenonTime' in serialized_data and self.phenomenon_time is not None:
             serialized_data['phenomenonTime'] = self._format_datetime_range(self.phenomenon_time)

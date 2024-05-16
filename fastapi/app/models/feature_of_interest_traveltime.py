@@ -35,8 +35,9 @@ class FeaturesOfInterestTravelTime(Base):
             for attr in self.__class__.__mapper__.column_attrs
             if attr.key not in inspect(self).unloaded
         }
-        if 'feature' in serialized_data and self.feature is not None:
-            serialized_data['feature'] = self.feature_geojson
+        if 'feature' in serialized_data:
+            if self.feature is not None:
+                serialized_data['feature'] = self.feature_geojson
             serialized_data.pop('feature_geojson', None)
         if 'system_time_validity' in serialized_data and self.system_time_validity is not None:
             serialized_data['system_time_validity'] = self._format_datetime_range(self.system_time_validity)
