@@ -3,6 +3,7 @@ from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, Text
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
+from sqlalchemy.orm.collections import InstrumentedList
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from .location_historicallocation import Location_HistoricalLocation
 class HistoricalLocation(Base):
@@ -38,12 +39,15 @@ class HistoricalLocation(Base):
     def to_dict_expand(self):
         """Serialize the HistoricalLocation model to a dict, including expanded relationships."""
         data = self._serialize_columns()
-        for relationship_key in ['thing', 'location']:
-            if relationship_key not in inspect(self).unloaded:
-                related_obj = getattr(self, relationship_key, None)
+        for relationship in ['thing', 'location']:
+            if relationship not in inspect(self).unloaded:
+                related_obj = getattr(self, relationship, None)
                 if related_obj is not None:
-                    formatted_key = relationship_key.capitalize()
-                    data[formatted_key] = related_obj.to_dict_expand()
+                    relationship_key = relationship.capitalize() if relationship != 'location' else 'Locations'
+                    if isinstance(related_obj, InstrumentedList):
+                        data[relationship_key] = [obj.to_dict() for obj in related_obj]
+                    else:
+                        data[relationship_key] = related_obj.to_dict_expand()
         return data
         
     def to_dict(self):
