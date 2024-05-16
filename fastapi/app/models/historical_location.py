@@ -39,15 +39,14 @@ class HistoricalLocation(Base):
     def to_dict_expand(self):
         """Serialize the HistoricalLocation model to a dict, including expanded relationships."""
         data = self._serialize_columns()
-        for relationship in ['thing', 'location']:
+        if 'location' not in inspect(self).unloaded:
+            data['Locations'] = [l.to_dict_expand() for l in self.location]
+        for relationship in ['thing']:
             if relationship not in inspect(self).unloaded:
                 related_obj = getattr(self, relationship, None)
                 if related_obj is not None:
                     relationship_key = relationship.capitalize() if relationship != 'location' else 'Locations'
-                    if isinstance(related_obj, InstrumentedList):
-                        data[relationship_key] = [obj.to_dict() for obj in related_obj]
-                    else:
-                        data[relationship_key] = related_obj.to_dict_expand()
+                    data[relationship_key] = related_obj.to_dict_expand()
         return data
         
     def to_dict(self):
