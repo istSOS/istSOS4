@@ -366,6 +366,7 @@ class NodeVisitor(Visitor):
             if node.expand:
                 # Visit the expand node
                 result = self.visit(node.expand)
+                indexNoExpand = 0
                 for index, expand_identifier in enumerate(node.expand.identifiers):
                     if (node.expand.identifiers[index].expand):
                         expand_identifier = node.expand.identifiers[index].identifier
@@ -452,29 +453,34 @@ class NodeVisitor(Visitor):
                         limited_skipped_subqueries.append([subquery_parts, skip_subquery_value, limit_subquery_value])
 
                         # Determine foreign key attribute name
-                        foreign_key_attr_name = f"{node.expand.identifiers[index].identifier.lower()}_id"
-
-                        # Check if the main entity has a foreign key attribute
-                        if hasattr(main_entity, foreign_key_attr_name):
-                            foreign_key_value = getattr(main_entity, foreign_key_attr_name, None)
+                        foreign_key_attr_name = node.expand.identifiers[index].identifier.lower()
+                        
+                        main_query = main_query.join(getattr(main_entity, foreign_key_attr_name))
+                        count_query[0] = count_query[0].join(getattr(main_entity, foreign_key_attr_name))
+                        main_query = main_query.join(subqueries[index])
+                        count_query[0] = count_query[0].join(subqueries[index])
+                        
+                        # # Check if the main entity has a foreign key attribute
+                        # if hasattr(main_entity, foreign_key_attr_name):
+                        #     foreign_key_value = getattr(main_entity, foreign_key_attr_name, None)
                             
-                            # Join main query with subquery using foreign key value
-                            main_query = main_query.join(
-                                subqueries[index], 
-                                foreign_key_value == subqueries[index].c.id
-                            )
+                        #     # Join main query with subquery using foreign key value
+                        #     main_query = main_query.join(
+                        #         subqueries[index], 
+                        #         foreign_key_value == subqueries[index].c.id
+                        #     )
                             
-                            count_query[0] = count_query[0].join(
-                                subqueries[index], 
-                                foreign_key_value == subqueries[index].c.id
-                            )
-                        else:
-                            # Define default join condition
-                            default_join_condition = getattr(main_entity, 'id') == subqueries[index].c.get(f"{self.main_entity.lower()}_id", None)
+                        #     count_query[0] = count_query[0].join(
+                        #         subqueries[index], 
+                        #         foreign_key_value == subqueries[index].c.id
+                        #     )
+                        # else:
+                        #     # Define default join condition
+                        #     default_join_condition = getattr(main_entity, 'id') == subqueries[index].c.get(f"{self.main_entity.lower()}_id", None)
                             
-                            # Join main query with subquery using default join condition
-                            main_query = main_query.join(subqueries[index], default_join_condition)
-                            count_query[0] = count_query[0].join(subqueries[index], default_join_condition)
+                        #     # Join main query with subquery using default join condition
+                        #     main_query = main_query.join(subqueries[index], default_join_condition)
+                        #     count_query[0] = count_query[0].join(subqueries[index], default_join_condition)
 
                         # Configure options for main query
                         main_query = main_query.options(
@@ -486,16 +492,18 @@ class NodeVisitor(Visitor):
                     else:
                         expand_identifier = node.expand.identifiers[index].identifier
                         subquery = session.query(globals()[expand_identifier])
-                        if (index > 0):
+                        if (indexNoExpand > 0):
                             previous_expand_identifier = node.expand.identifiers[index - 1].identifier
                             if hasattr(globals()[expand_identifier], previous_expand_identifier.lower()):
-                                subquery = subquery.join(getattr(globals()[expand_identifier], previous_expand_identifier.lower())).join(subqueriesNotExpand[index - 1])
+                                subquery = subquery.join(getattr(globals()[expand_identifier], previous_expand_identifier.lower())).join(subqueriesNotExpand[indexNoExpand - 1])
                         if result['filter'][index] is not None:
                             filter, join_relationships = result['filter'][index]
                             subquery = subquery.filter(filter)
                         subquery = subquery.subquery()
                         subqueriesNotExpand.append(subquery)
-                        main_query_select_pagination = main_query_select_pagination.join(getattr(main_entity, expand_identifier.lower())).join(subqueriesNotExpand[-1])
+                        indexNoExpand = indexNoExpand + 1
+                main_query_select_pagination = main_query_select_pagination.join(getattr(main_entity, expand_identifier.lower()))
+                main_query_select_pagination = main_query_select_pagination.join(subqueriesNotExpand[-1]) if subqueriesNotExpand else main_query_select_pagination
 
             if not node.select:
                 node.select = SelectNode([])
