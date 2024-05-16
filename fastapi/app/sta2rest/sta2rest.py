@@ -368,6 +368,7 @@ class NodeVisitor(Visitor):
                 result = self.visit(node.expand)
                 for index, expand_identifier in enumerate(node.expand.identifiers):
                     if (node.expand.identifiers[index].expand):
+                        expand_identifier = node.expand.identifiers[index].identifier
                         sub_entity = globals()[node.expand.identifiers[index].identifier]
                         foreign_key_attr_name = f"{self.main_entity.lower()}_id"
                         if hasattr(sub_entity, foreign_key_attr_name):
@@ -405,20 +406,19 @@ class NodeVisitor(Visitor):
 
                         if result['filter'][index] is not None:
                             filter, join_relationships = result['filter'][index]
-                            expand_identifier = node.expand.identifiers[index].identifier
-                            main_entity_has_expand_attribute = hasattr(globals()[self.main_entity], f"{expand_identifier.lower()}_id")
-                            expand_entity_has_main_entity_attribute = hasattr(globals()[expand_identifier], f"{self.main_entity.lower()}_id")
+                            main_entity_has_expand_attribute = hasattr(globals()[self.main_entity], f"{node.expand.identifiers[index].identifier.lower()}_id")
+                            expand_entity_has_main_entity_attribute = hasattr(globals()[node.expand.identifiers[index].identifier], f"{self.main_entity.lower()}_id")
 
                             # Check if the main entity has an attribute based on the expand
                             if main_entity_has_expand_attribute:
-                                main_query_select_pagination = main_query_select_pagination.join(globals()[expand_identifier])
+                                main_query_select_pagination = main_query_select_pagination.join(globals()[node.expand.identifiers[index].identifier])
                                 for rel in join_relationships:
                                     main_query_select_pagination = main_query_select_pagination.join(rel)
                                 main_query_select_pagination = main_query_select_pagination.filter(filter)
 
                             # Check if the expand entity has an attribute based on the main entity
                             if expand_entity_has_main_entity_attribute:
-                                main_query_select_pagination = main_query_select_pagination.join(globals()[expand_identifier])
+                                main_query_select_pagination = main_query_select_pagination.join(globals()[node.expand.identifiers[index].identifier])
                                 for rel in join_relationships:
                                     main_query_select_pagination = main_query_select_pagination.join(rel)
                                     subquery_parts = subquery_parts.join(rel)
@@ -494,7 +494,8 @@ class NodeVisitor(Visitor):
                             subquery = subquery.filter(filter)
                         subquery = subquery.subquery()
                         subqueriesNotExpand.append(subquery)
-                main_query_select_pagination = main_query_select_pagination.join(getattr(main_entity, expand_identifier.lower())).join(subqueriesNotExpand[-1])
+                main_query_select_pagination = main_query_select_pagination.join(getattr(main_entity, expand_identifier.lower()))
+                main_query_select_pagination = main_query_select_pagination.join(subqueriesNotExpand[-1]) if subqueriesNotExpand else main_query_select_pagination
 
             if not node.select:
                 node.select = SelectNode([])
