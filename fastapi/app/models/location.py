@@ -48,9 +48,9 @@ class Location(Base):
         """Serialize the Location model to a dict, including expanded relationships."""
         data = self._serialize_columns()
         if 'thing' not in inspect(self).unloaded:
-            data['Things'] = [thing.to_dict_expand() for thing in self.thing]
+            data['Things'] = [t.to_dict_expand() for t in self.thing]
         if 'historicallocation' not in inspect(self).unloaded:
-            data['Historicallocations'] = [hl.to_dict_expand() for hl in self.historicallocation]
+            data['HistoricalLocations'] = [hl.to_dict_expand() for hl in self.historicallocation]
         return data
 
     def to_dict(self):

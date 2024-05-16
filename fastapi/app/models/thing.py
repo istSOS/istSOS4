@@ -45,7 +45,7 @@ class Thing(Base):
         if 'historicallocation' not in inspect(self).unloaded:
             data['HistoricalLocations'] = [hl.to_dict_expand() for hl in self.historicallocation]
         if 'location' not in inspect(self).unloaded and self.location is not None:
-            data['Location'] = self.location.to_dict_expand()
+            data['Locations'] = [l.to_dict_expand() for l in self.location]
         return data
 
     def to_dict(self):
