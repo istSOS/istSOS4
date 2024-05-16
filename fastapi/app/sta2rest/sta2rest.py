@@ -488,14 +488,14 @@ class NodeVisitor(Visitor):
                         subquery = session.query(globals()[expand_identifier])
                         if (index > 0):
                             previous_expand_identifier = node.expand.identifiers[index - 1].identifier
-                            subquery = subquery.join(getattr(globals()[expand_identifier], previous_expand_identifier.lower())).join(subqueriesNotExpand[index - 1])
+                            if hasattr(globals()[expand_identifier], previous_expand_identifier.lower()):
+                                subquery = subquery.join(getattr(globals()[expand_identifier], previous_expand_identifier.lower())).join(subqueriesNotExpand[index - 1])
                         if result['filter'][index] is not None:
                             filter, join_relationships = result['filter'][index]
                             subquery = subquery.filter(filter)
                         subquery = subquery.subquery()
                         subqueriesNotExpand.append(subquery)
-                main_query_select_pagination = main_query_select_pagination.join(getattr(main_entity, expand_identifier.lower()))
-                main_query_select_pagination = main_query_select_pagination.join(subqueriesNotExpand[-1]) if subqueriesNotExpand else main_query_select_pagination
+                        main_query_select_pagination = main_query_select_pagination.join(getattr(main_entity, expand_identifier.lower())).join(subqueriesNotExpand[-1])
 
             if not node.select:
                 node.select = SelectNode([])
@@ -1009,6 +1009,9 @@ class STA2REST:
 
         if uri['single']:
             single_result = True
+
+        if query_ast.expand:
+            dict_expand = True
 
         # Check if query has an expand but not a select and does not have sub entities
         if query_ast.expand and not query_ast.select and not entities:
