@@ -117,7 +117,7 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
 
         if result['ref']:
             if 'value' in data:
-                if len(data['value']) > 1 and not result['single_result']:
+                if not result['single_result']:
                     data["value"] = [{'@iot.selfLink': item.get('@iot.selfLink')} for item in data["value"] if '@iot.selfLink' in item]
                 else:
                     if '@iot.selfLink' in data["value"][0]:

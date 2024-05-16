@@ -1067,14 +1067,18 @@ class STA2REST:
         # Remove the first part
         parts.pop(0)
 
-        entity_name = parts[-1]
+        if(parts[-1] == "$ref"):
+            entity_name = parts[-2]
+        elif parts[-1] == "$value":
+            entity_name = parts[-3]
+        else:
+            entity_name = parts[-1]
         single = False
         keys_list = list(STA2REST.ENTITY_MAPPING.keys())
         if entity_name in keys_list:
             index = keys_list.index(entity_name)
             if index > 7:
                 single = True
-
         # Parse first entity
         main_entity = STA2REST.parse_entity(parts.pop(0))
         if not main_entity:
