@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "location" geometry(geometry, 4326) NOT NULL,
-    "properties" jsonb,
+    "properties" jsonb DEFAULT '{}'::jsonb,
     "@iot.selfLink" TEXT,
     "Things@iot.navigationLink" TEXT,
     "HistoricalLocations@iot.navigationLink" TEXT,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
-    "properties" jsonb,
+    "properties" jsonb DEFAULT '{}'::jsonb,
     "@iot.selfLink" TEXT,
     "Locations@iot.navigationLink" TEXT,
     "HistoricalLocations@iot.navigationLink" TEXT,
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
     "name" VARCHAR(255) NOT NULL,
     "definition" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
-    "properties" jsonb,
+    "properties" jsonb DEFAULT '{}'::jsonb,
     "@iot.selfLink" TEXT,
     "Datastreams@iot.navigationLink" TEXT
 );
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "metadata" VARCHAR(255) NOT NULL,
-    "properties" jsonb,
+    "properties" jsonb DEFAULT '{}'::jsonb,
     "@iot.selfLink" TEXT,
     "Datastreams@iot.navigationLink" TEXT
 );
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "observedArea" geometry(Polygon, 4326),
     "phenomenonTime" tstzrange,
     "resultTime" tstzrange,
-    "properties" jsonb,
+    "properties" jsonb DEFAULT '{}'::jsonb,
     "thing_id" BIGINT NOT NULL REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
     "sensor_id" BIGINT NOT NULL REFERENCES sensorthings."Sensor"(id) ON DELETE CASCADE,
     "observedproperty_id" BIGINT NOT NULL REFERENCES sensorthings."ObservedProperty"(id) ON DELETE CASCADE,
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "feature" geometry(geometry, 4326) NOT NULL,
-    "properties" jsonb,
+    "properties" jsonb DEFAULT '{}'::jsonb,
     "@iot.selfLink" TEXT,
     "Observations@iot.navigationLink" TEXT
 );
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "resultJSON" jsonb,
     "resultQuality" jsonb,
     "validTime" tstzrange DEFAULT NULL,
-    "parameters" jsonb,
+    "parameters" jsonb DEFAULT '{}'::jsonb,
     "datastream_id" BIGINT NOT NULL REFERENCES sensorthings."Datastream"(id) ON DELETE CASCADE,
     "featuresofinterest_id" BIGINT NOT NULL REFERENCES sensorthings."FeaturesOfInterest"(id) ON DELETE CASCADE,
     "@iot.selfLink" TEXT,
