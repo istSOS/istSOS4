@@ -586,7 +586,7 @@ class NodeVisitor(Visitor):
             top_value = self.visit(node.top) if node.top else 100
 
             # Create subquery for pagination
-            main_query_select = main_query_select_pagination.subquery()
+            main_query_select = main_query_select_pagination.offset(skip_value).limit(top_value).subquery()
             main_query_select_pagination = main_query_select_pagination.offset(skip_value).limit(top_value).subquery()
 
             # Apply filters based on limited_skipped_subqueries
