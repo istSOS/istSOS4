@@ -132,6 +132,8 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
             data = data[list(data.keys())[0]]
             if data is None:
                 return Response(status_code=status.HTTP_200_OK)
+            
+        data = remove_empty_dicts(data)
 
         if not data or (isinstance(data, Iterable) and "value" in data and len(data["value"]) == 0 and result["single_result"]):
             return JSONResponse(
@@ -153,3 +155,11 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
                 "message": str(e)
             }
         )
+
+def remove_empty_dicts(obj):
+    if isinstance(obj, dict):
+        return {k: remove_empty_dicts(v) for k, v in obj.items() if v != {}}
+    elif isinstance(obj, list):
+        return [remove_empty_dicts(item) for item in obj]
+    else:
+        return obj

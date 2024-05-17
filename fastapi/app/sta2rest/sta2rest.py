@@ -629,7 +629,7 @@ class NodeVisitor(Visitor):
                     count_query.append(True)
                 else:
                     count_query.append(False)
-            print(count_query[0])
+
             return main_query, subqueries, count_query
 
 class STA2REST:
