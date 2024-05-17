@@ -6,10 +6,10 @@ Author: Filippo Finke
 This module provides a visitor for the filter AST.
 """
 import operator
-from typing import Type, Any, Callable, List, Optional, Union
+from typing import Any, Callable, List, Optional, Union
 from sqlalchemy.inspection import inspect
+from sqlalchemy import cast, Text, Integer, String, Float, DateTime
 from sqlalchemy.orm.attributes import InstrumentedAttribute
-from sqlalchemy.orm.decl_api import DeclarativeMeta
 from sqlalchemy.orm.relationships import RelationshipProperty
 from sqlalchemy.sql import functions
 from sqlalchemy.sql.expression import (
@@ -83,10 +83,10 @@ class FilterVisitor(visitor.NodeVisitor):
       return any_
    
    def visit_Integer(self, node: ast.Integer) -> BindParameter:
-      return node.val
+      return literal(node.val, type_=Integer())
    
    def visit_Float(self, node: ast.Float) -> BindParameter:
-      return node.val
+      return literal(node.val, type_=Float())
 
    def visit_Boolean(self, node: ast.Boolean) -> Union[True_, False_]:
       if node.val == "true":
@@ -94,10 +94,10 @@ class FilterVisitor(visitor.NodeVisitor):
       return false()
 
    def visit_String(self, node: ast.String) -> BindParameter:
-      return node.val
+      return literal(node.val, type_=String())
 
    def visit_DateTime(self, node: ast.DateTime)-> BindParameter:
-      return node.val
+      return literal(node.val, type_=DateTime())
 
    ####################################################################################
    # Comparison Operators
@@ -375,15 +375,16 @@ class FilterVisitor(visitor.NodeVisitor):
 
    @staticmethod
    def handle_observation_result(entity, list, operator, value):
-      value = str(value)
       result_conditions = []
       operator_name = f"__{getattr(operator, '__name__')}__"
       if operator_name in ['__eq__', '__ne__', '__gt__', '__lt__', '__ge__', '__le__']:
          try:
-            float_value = float(str(value))
             for result_type in ['result_integer', 'result_double']:
-               filter_query = getattr(globals()[entity], result_type)
-               result_conditions.append(getattr(filter_query, operator_name)(float_value))
+               if isinstance(value.type, String):
+                  filter_query = cast(getattr(globals()[entity], result_type), Text)
+               else:
+                  filter_query = getattr(globals()[entity], result_type)
+               result_conditions.append(getattr(filter_query, operator_name)(value))
          except ValueError:
             pass
       if operator_name in ['__eq__', '__ne__']:
