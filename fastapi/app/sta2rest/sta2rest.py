@@ -457,8 +457,19 @@ class NodeVisitor(Visitor):
                         
                         main_query = main_query.join(getattr(main_entity, foreign_key_attr_name))
                         count_query[0] = count_query[0].join(getattr(main_entity, foreign_key_attr_name))
-                        main_query = main_query.join(subqueries[index])
-                        count_query[0] = count_query[0].join(subqueries[index])
+                        if (self.main_entity == "Location" and index > 0):
+                            new_expand_identifier = globals()[node.expand.identifiers[index].identifier]
+                            old_expand_identifier = globals()[node.expand.identifiers[index - 1].identifier]
+                            default_join_condition = None
+                            if (node.expand.identifiers[index].identifier == "HistoricalLocation" and node.expand.identifiers[index - 1].identifier == "Thing"):
+                                default_join_condition = getattr(new_expand_identifier, 'thing_id') == getattr(old_expand_identifier, 'id')
+                            elif (node.expand.identifiers[index - 1].identifier == "HistoricalLocation" and node.expand.identifiers[index].identifier == "Thing"):
+                                default_join_condition = getattr(old_expand_identifier, 'thing_id') == getattr(new_expand_identifier, 'id')
+                            main_query = main_query.join(subqueries[index], default_join_condition)
+                            count_query[0] = count_query[0].join(subqueries[index], default_join_condition)
+                        else:
+                            main_query = main_query.join(subqueries[index])
+                            count_query[0] = count_query[0].join(subqueries[index])
                         
                         # # Check if the main entity has a foreign key attribute
                         # if hasattr(main_entity, foreign_key_attr_name):
