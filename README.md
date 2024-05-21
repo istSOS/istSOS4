@@ -1,3 +1,15 @@
+# Quick start
+
+## Start docker service
+
+```
+docker compose up -d
+```
+
+## Use Sensor Things API's
+
+http://127.0.0.1:8018/istsos-miu/v1.1
+
 # CREATE FASTAPI
 
 ```
