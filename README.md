@@ -6,7 +6,7 @@
 docker compose up -d
 ```
 
-## Use Sensor Things API's
+## Use Sensor Things APIs
 
 http://127.0.0.1:8018/istsos-miu/v1.1
 
@@ -55,65 +55,6 @@ docker compose kill -s SIGUSR1 postgrest
 ## See the automatic interactive API documentation
 
 http://127.0.0.1:8018/v1.1/docs
-
-
-## USE STA APIs (proof of concept)
-
-http://127.0.0.1:8018/v1.1/Observations?as_of_system_time=2023-04-23T15:56:16.123000%2B02:00
-http://127.0.0.1:8018/v1.1/Observations
-
-http://localhost:3000/Thing?select=id,name,Location(*),Datastream(id,name,unitOfMeasurement,ObservedProperty(name),Observation(result,phenomenonTime))&limit=1000&properties-%3E%3Emodel=eq.TS-100&Datastream.Observation.order=phenomenonTime.desc&Datastream.Observation.limit=1
-
-http://localhost:3000/Thing?
-    select=
-        id,
-        name,
-        Location(*),
-        Datastream(
-            id,
-            name,
-            unitOfMeasurement,
-            ObservedProperty(
-                name
-            ),
-            Observation(
-                result,phenomenonTime
-            )
-        )
-    &limit=1000
-    &properties-%3E%3Emodel=eq.TS-100
-    &Datastream.Observation.order=phenomenonTime.desc
-    &Datastream.Observation.limit=1
-
-/v1.1/Things?
-    $select=id,name,description,properties
-    &$top=1000
-    &$filter=properties/type eq 'station'
-    &$expand=
-    Locations,
-        Datastreams(
-            $select=
-                id,name,unitOfMeasurement
-            ;$expand=
-                ObservedProperty($select=name),
-                Observations(
-                    $select=result,phenomenonTime
-                    ;$orderby=phenomenonTime desc
-        ;$top=1
-        )
-    )
-
-## Fast API connection to data base
-
-Run the following commands:
-`cd fastapi/app/v1`
-`uvicorn get_datastream:app --reload`
-
-In the browser type "IP:port"//datastreams/1
-
-You can also check using : http://127.0.0.1:8000/docs
-
-> Change the host IP address in the script as per your docker IP in get_datastream.py file.
     
 ## Adding dummy data to database
 
