@@ -1,4 +1,4 @@
-## istSOSm Database
+# istSOSm Database
 
 The database follows the SensorThings API (STA) standard data model.
 Additionally, other SOS-specific metadata may be considered as an extension.
