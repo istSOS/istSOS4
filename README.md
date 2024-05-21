@@ -25,14 +25,3 @@ When you build the docker the script will automatically clear the database and a
 To disabling addtion of the synthetic data to database, inside the ```/dummy_data/config.yaml``` file change the variable  **dummy_data** to **False**.
 
 To disabling clean of the synthetic data, inside the /dummy_data/config.yaml file change the variable  **clear_data** to **False**
-
->
-## importing hoppscotch files
-
- - open hoppscotch.io 
- - login
- - import json file from `API_test` folder
- > for CORS error download the browser plugin of hoppscotch </br>
- for more details refer [here](https://docs.hoppscotch.io/documentation/features/interceptor).
- 
- 
