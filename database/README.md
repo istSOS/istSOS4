@@ -1,26 +1,26 @@
-# =============================
-# THIS IS THE istSOSm DATABASE
-# =============================
+## istSOSm Database
 
-# This database should reflect the STA standard data model
-# additionally other SOS specific metadata could be considered as 
-#  and extension
+The database follows the SensorThings API (STA) standard data model.
+Additionally, other SOS-specific metadata may be considered as an extension.
 
+### Database versioning
 
+You can enable or disable database versioning by setting the VERSIONING environment variable in the `.env` file.
+    
+### Database fake data
 
+When you build the Docker image, the script will automatically clear the database and add static and dynamic values. 
 
-phenomenonTime (timePeriod): period in time for which the mesaurment applies
-resultTime ()
+To disable the addition of these data, set **dummy_data** to *False* in the `/dummy_data/config.yaml` file.
 
-phenomenonTime:	The time instant or period of when the Observation happens
-result:	The Estimated value of Sensor reading for the ObservedProperty
-resultTime:	The Time when the observations result was generated
-resultQuality:	Describes the quality of the result
-validTime:	The time period during which the result may be used.
-parameters:	Key-Value pairs describing the environmental conditions during measurement
-Datastream:	The navigationLink to the Datastream of this Observation.
-FeatureOfInterest:	The navigationLink to the FeatureOfInterest of this Observation.
+To prevent clearing the database, set **clear_data** to *False* in the `/dummy_data/config.yaml` file.
 
+### Connect to database in DBeaver
 
-ATTENZIONE:
-phenomenonTime, salviamo nella tabella osservazioni solo l'istante, poi nella tabella datastream definiamo un timelag (positivo, zero o negativo) che identifica il preriodo (range) a cui si riferisce la misura.
+To create a new database connection in DBeaver using PostgreSQL as the driver, use the following settings:
+
+- **Host**: 127.0.0.1
+- **Port**: 45432
+- **Database**: istsos (controlled by the **POSTGRES_DB** variable in the `.env` file)
+- **Username**: admin (controlled by the **POSTGRES_USER** variable in the `.env` file)
+- **Password**: admin (controlled by the **POSTGRES_PASSWORD** variable in the `.env` file)
