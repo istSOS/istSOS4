@@ -18,7 +18,7 @@ The database should reflect the STA standard data model additionally other SOS s
 
 Activate/disactivate versioning by set **VERSIONING** environment variable inside ```.env``` file
     
-## Database fake data
+### Database fake data
 
 When you build the docker the script will automatically clear the database and add the static and dynamic values. 
 
