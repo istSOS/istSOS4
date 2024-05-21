@@ -1,11 +1,14 @@
 # istSOSm Database
 
 The database follows the SensorThings API (STA) standard data model.
+
 Additionally, other SOS-specific metadata may be considered as an extension.
 
 ### Database versioning
 
 You can enable or disable database versioning by setting the **VERSIONING** environment variable in the `.env` file.
+
+For more information about the database versioning, refer to the [Database Versioning Documentation](https://github.com/istSOS/istsos-miu/blob/traveltime/database/README_VERSIONING.md)
     
 ### Database fake data
 
