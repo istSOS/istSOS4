@@ -10,13 +10,12 @@ docker compose up -d
 
 ## Use Sensor Things APIs
 
-Access the SensorThings API at:
-
-http://127.0.0.1:8018/istsos-miu/v1.1
+Access the SensorThings API at: http://127.0.0.1:8018/istsos-miu/v1.1
 
 ## Database
 
-The database follows the SensorThings API (STA) standard data model. Additionally, other SOS-specific metadata may be considered as an extension.
+The database follows the SensorThings API (STA) standard data model.
+Additionally, other SOS-specific metadata may be considered as an extension.
 
 ### Database versioning
 
