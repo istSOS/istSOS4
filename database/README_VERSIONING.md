@@ -1,4 +1,4 @@
-# QUICK START
+# istSOSm Database versioning
 
 This will show how to add versioning at a PostgreSQL schema (and its tables).
 If you have a schema with some related tables, the following actions will create a second schema 
