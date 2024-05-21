@@ -5,7 +5,7 @@ Additionally, other SOS-specific metadata may be considered as an extension.
 
 ### Database versioning
 
-You can enable or disable database versioning by setting the VERSIONING environment variable in the `.env` file.
+You can enable or disable database versioning by setting the **VERSIONING** environment variable in the `.env` file.
     
 ### Database fake data
 
