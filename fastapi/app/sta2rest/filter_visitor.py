@@ -383,22 +383,22 @@ class FilterVisitor(visitor.NodeVisitor):
          try:
             value_type = value.type
             entity_class = globals()[entity]
-
             if isinstance(value_type, String):
-               filter_query = cast(getattr(entity_class, 'result_string'), Text)
+               filter_query = getattr(entity_class, 'result_string')
+               result_conditions.append(getattr(filter_query, operator_name)(value))
+               for result_type in ['result_integer', 'result_double']:
+                  filter_query = cast(getattr(globals()[entity], result_type), Text)
+                  result_conditions.append(getattr(filter_query, operator_name)(value))
             elif isinstance(value_type, (Integer, Float)):
                filter_query = getattr(entity_class, 'result_integer')
                result_conditions.append(getattr(filter_query, operator_name)(value))
                filter_query = getattr(entity_class, 'result_double')
-            elif isinstance(value_type, Boolean):
-               filter_query = getattr(entity_class, 'result_boolean')
-            else:
-               filter_query = None
-
-            if filter_query:
                result_conditions.append(getattr(filter_query, operator_name)(value))
-
-         except (ValueError, AttributeError) as e:
-               print(f"Error handling observation result: {e}")
+            elif value == "true" or value == "false":
+               bool_value = value == "true"
+               filter_query = getattr(entity_class, 'result_boolean')
+               result_conditions.append(getattr(filter_query, operator_name)(bool_value))
+         except TypeError:
+               pass
       
       return result_conditions
