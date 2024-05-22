@@ -180,13 +180,17 @@ class NodeVisitor(Visitor):
             str: The converted orderby node.
         """
         identifiers = [self.visit(identifier) for identifier in node.identifiers]
-        attribute_name, *_, order = identifiers[0].split('.')
-        if self.main_entity == 'Observation' and 'result' in identifiers[0]:
-            results_attrs = ['result_double', 'result_integer', 'result_boolean', 'result_string', 'result_json']
-            attributes = [getattr(globals()[self.main_entity], attr) for attr in results_attrs]
-        else:
-            attributes = [getattr(globals()[self.main_entity], attribute_name)]
-        return attributes, order
+        attributes = []
+        orders = []
+        for identifier in identifiers:
+            attribute_name, *_, order = identifier.split('.')
+            if self.main_entity == 'Observation' and 'result' in identifier:
+                results_attrs = ['result_double', 'result_integer', 'result_boolean', 'result_string', 'result_json']
+                attributes.append([getattr(globals()[self.main_entity], attr) for attr in results_attrs])
+            else:
+                attributes.append([getattr(globals()[self.main_entity], attribute_name)])
+            orders.append(order)
+        return attributes, orders
 
     def visit_SkipNode(self, node: SkipNode):
         """
@@ -559,11 +563,11 @@ class NodeVisitor(Visitor):
                 main_query_select_pagination = main_query_select_pagination.filter(filter)
 
             if node.orderby:
-                attrs, order = self.visit(node.orderby)
-                ordering = [asc(attribute) if order == 'asc' else desc(attribute) for attribute in attrs]
+                attrs, orders = self.visit(node.orderby)
+                for attr, order in zip(attrs, orders):
+                    ordering = [asc(a) if order == 'asc' else desc(a) for a in attr]
             else:
                 ordering = [desc(getattr(main_entity, 'id'))]
-
             # Apply ordering to main_query_select_pagination
             main_query_select_pagination = main_query_select_pagination.order_by(*ordering)
 

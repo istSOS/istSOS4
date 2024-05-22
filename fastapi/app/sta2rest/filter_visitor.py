@@ -8,7 +8,7 @@ This module provides a visitor for the filter AST.
 import operator
 from typing import Any, Callable, List, Optional, Union
 from sqlalchemy.inspection import inspect
-from sqlalchemy import cast, Text, Integer, String, Float, DateTime
+from sqlalchemy import cast, Text, Integer, String, Float, DateTime, Boolean
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm.relationships import RelationshipProperty
 from sqlalchemy.sql import functions
@@ -376,26 +376,29 @@ class FilterVisitor(visitor.NodeVisitor):
    @staticmethod
    def handle_observation_result(entity, list, operator, value):
       result_conditions = []
-      operator_name = f"__{getattr(operator, '__name__')}__"
-      if operator_name in ['__eq__', '__ne__', '__gt__', '__lt__', '__ge__', '__le__']:
+      operator_name = f"__{operator.__name__}__"
+      valid_operators = {'__eq__', '__ne__', '__gt__', '__lt__', '__ge__', '__le__'}
+
+      if operator_name in valid_operators:
          try:
-            for result_type in ['result_integer', 'result_double']:
-               if isinstance(value.type, String):
-                  filter_query = cast(getattr(globals()[entity], result_type), Text)
-               else:
-                  filter_query = getattr(globals()[entity], result_type)
+            value_type = value.type
+            entity_class = globals()[entity]
+
+            if isinstance(value_type, String):
+               filter_query = cast(getattr(entity_class, 'result_string'), Text)
+            elif isinstance(value_type, (Integer, Float)):
+               filter_query = getattr(entity_class, 'result_integer')
                result_conditions.append(getattr(filter_query, operator_name)(value))
-         except ValueError:
-            pass
-      if operator_name in ['__eq__', '__ne__']:
-         if value == "true" or value == "false":
-            bool_value = value == "true"
-            filter_query = getattr(globals()[entity], 'result_boolean')
-            result_conditions.append(getattr(filter_query, operator_name)(bool_value))
-         else:
-            try:
-               filter_query = getattr(globals()[entity], 'result_string')
+               filter_query = getattr(entity_class, 'result_double')
+            elif isinstance(value_type, Boolean):
+               filter_query = getattr(entity_class, 'result_boolean')
+            else:
+               filter_query = None
+
+            if filter_query:
                result_conditions.append(getattr(filter_query, operator_name)(value))
-            except TypeError:
-               pass
+
+         except (ValueError, AttributeError) as e:
+               print(f"Error handling observation result: {e}")
+      
       return result_conditions
