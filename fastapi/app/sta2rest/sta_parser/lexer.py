@@ -19,6 +19,7 @@ TOKEN_TYPES = {
     'ORDERBY': r'\$orderby=',
     'ASOF': r'\$asof=',
     'FROMTO': r'\$fromto=',
+    'RESULT_FORMAT': r'\$resultFormat=',
     'SUBQUERY_SEPARATOR': r';',
     'VALUE_SEPARATOR': r',',
     'OPTIONS_SEPARATOR': r'&',
