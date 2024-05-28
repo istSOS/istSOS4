@@ -20,6 +20,7 @@ TOKEN_TYPES = {
     'ASOF': r'\$asof=',
     'FROMTO': r'\$fromto=',
     'RESULT_FORMAT': r'\$resultFormat=',
+    'RESULT_FORMAT_VALUE': r'\bdataArray\b',
     'SUBQUERY_SEPARATOR': r';',
     'VALUE_SEPARATOR': r',',
     'OPTIONS_SEPARATOR': r'&',
