@@ -288,6 +288,25 @@ class FromToNode(Node):
         self.value1 = value1
         self.value2 = value2
 
+class ResultFormatNode(Node):
+    """
+    A class representing a result format node.
+
+    Inherits from Node.
+
+    Attributes:
+    value (str): The value string.
+    """
+
+    def __init__(self, value):
+        """
+        Initializes a ResultFormatNode object.
+
+        Args:
+        value (str): The value string.
+        """
+        self.value = value
+
 class QueryNode(Node):
     """
     A class representing a query node.
@@ -306,7 +325,7 @@ class QueryNode(Node):
     """
 
     def __init__(self, select=None, filter=None, expand=None, orderby=None, skip=None, top=None, count=None,
-                 as_of=None, from_to=None, is_subquery=False):
+                 as_of=None, from_to=None, result_format=None, is_subquery=False):
         """
         Initializes a QueryNode object.
 
@@ -328,5 +347,6 @@ class QueryNode(Node):
         self.top = top
         self.count = count
         self.as_of = as_of
-        self. from_to = from_to
+        self.from_to = from_to
+        self.result_format = result_format
         self.is_subquery = is_subquery
