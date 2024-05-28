@@ -1050,6 +1050,10 @@ class STA2REST:
         visitor = NodeVisitor(main_entity, db)
         query_converted = visitor.visit(query_ast)
 
+        # Result format is allowed only for Observations
+        if query_ast.result_format and main_entity != 'Observation':
+            raise Exception("Illegal operation: ResultFormat=dataArray is only valid for /Observations")
+
         subqueries = [subquery for subquery in query_converted[1]]
         global ID_QUERY_RESULT, ID_SUBQUERY_RESULT
         return {
