@@ -144,6 +144,11 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
                     "message": "Not Found"
                 }
             )
+        
+        if result["result_format"]:
+            # TODO: Handle formatting for dataArray result
+            pass
+
         return data
     except Exception as e:
         traceback.print_exc()
