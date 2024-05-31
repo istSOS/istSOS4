@@ -146,8 +146,17 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
             )
         
         if result["result_format"]:
-            # TODO: Handle formatting for dataArray result
-            pass
+            new_data = []
+            # Iterate over all the data['value'] and format the data
+            for i in range(len(data['value'])):
+                # remove all the keys that have a @
+                observation = data['value'][i]
+
+                # TODO: Format the data for dataArray here
+
+                new_data.append(observation)
+            
+            data['value'] = new_data
 
         return data
     except Exception as e:
