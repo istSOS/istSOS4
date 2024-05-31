@@ -1068,7 +1068,8 @@ class STA2REST:
             'single_result': single_result,
             'id_query_result': ID_QUERY_RESULT,
             'id_subquery_result': ID_SUBQUERY_RESULT,
-            'dict_expand' : dict_expand
+            'dict_expand' : dict_expand,
+            'result_format': query_ast.result_format.value if query_ast.result_format else None,
         }
 
     @staticmethod
