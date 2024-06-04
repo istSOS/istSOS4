@@ -28,6 +28,7 @@ from ..models import (
     ObservedPropertyTravelTime, SensorTravelTime, DatastreamTravelTime,
     FeaturesOfInterestTravelTime, ObservationTravelTime
 )
+from sqlalchemy.dialects.postgresql.json import JSONB
 from geoalchemy2 import Geometry, WKTElement
 
 ODATA_FUNCTIONS = {
@@ -327,7 +328,7 @@ class NodeVisitor(Visitor):
                 for attr in subquery_ranked.columns:
                     if fk_attr is None or (fk_attr is not None and attr.name != fk_attr.name):
                         json_build_object_args.append(literal(attr.name)) if attr.name != 'id' else  json_build_object_args.append(text("'@iot.id'"))
-                        json_build_object_args.append(attr)
+                        json_build_object_args.append(func.ST_AsGeoJSON(attr).cast(JSONB)) if (type(attr.type) == Geometry) else json_build_object_args.append(attr)
 
                 # Check for nested expand
                 if expand_identifier.subquery and expand_identifier.subquery.expand:
@@ -406,7 +407,7 @@ class NodeVisitor(Visitor):
             json_build_object_args = []
             for attr in select_query:
                 json_build_object_args.append(literal(attr.name)) if attr.name != 'id' else  json_build_object_args.append(text("'@iot.id'"))
-                json_build_object_args.append(attr)
+                json_build_object_args.append(func.ST_AsGeoJSON(attr).cast(JSONB)) if (type(attr.type) == Geometry) else json_build_object_args.append(attr)
 
             # Check if we have an expand node before the other parts of the query
             if node.expand:
