@@ -15,8 +15,8 @@ class Datastream(Base):
     self_link = Column("@iot.selfLink", Text)
     thing_navigation_link = Column("Thing@iot.navigationLink", Text)
     sensor_navigation_link = Column("Sensor@iot.navigationLink", Text)
-    observed_property_navigation_link = Column("ObservedProperty@iot.navigationLink", Text)
-    observations_navigation_link = Column("Observations@iot.navigationLink", Text)
+    observedproperty_navigation_link = Column("ObservedProperty@iot.navigationLink", Text)
+    observation_navigation_link = Column("Observations@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     unit_of_measurement = Column("unitOfMeasurement", JSON, nullable=False)
@@ -41,8 +41,8 @@ class Datastream(Base):
             "self_link": "@iot.selfLink",
             "thing_navigation_link": "Thing@iot.navigationLink",
             "sensor_navigation_link": "Sensor@iot.navigationLink",
-            "observed_property_navigation_link": "ObservedProperty@iot.navigationLink",
-            "observations_navigation_link": "Observations@iot.navigationLink",
+            "observedproperty_navigation_link": "ObservedProperty@iot.navigationLink",
+            "observation_navigation_link": "Observations@iot.navigationLink",
             "unit_of_measurement": "unitOfMeasurement",
             "observation_type": "observationType",
             "observed_area": "observedArea",

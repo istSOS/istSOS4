@@ -10,7 +10,7 @@ class HistoricalLocationTravelTime(Base):
     
     id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
-    locations_navigation_link = Column("Locations@iot.navigationLink", Text)
+    location_navigation_link = Column("Locations@iot.navigationLink", Text)
     thing_navigation_link = Column("Thing@iot.navigationLink", Text)
     time = Column(TIMESTAMP, nullable=False)
     thing_id = Column(Integer, ForeignKey(f'{SCHEMA_NAME}.Thing.id'), nullable=False)
@@ -23,7 +23,7 @@ class HistoricalLocationTravelTime(Base):
         rename_map = {
             "id": "@iot.id",
             "self_link": "@iot.selfLink",
-            "locations_navigation_link": "Locations@iot.navigationLink",
+            "location_navigation_link": "Locations@iot.navigationLink",
             "thing_navigation_link": "Thing@iot.navigationLink",
         }
         serialized_data = {

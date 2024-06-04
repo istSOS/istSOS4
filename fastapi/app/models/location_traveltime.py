@@ -11,8 +11,8 @@ class LocationTravelTime(Base):
     
     id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
-    things_navigation_link = Column("Things@iot.navigationLink", Text)
-    historical_locations_navigation_link = Column("HistoricalLocations@iot.navigationLink", Text)
+    thing_navigation_link = Column("Things@iot.navigationLink", Text)
+    historicallocation_navigation_link = Column("HistoricalLocations@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
@@ -28,8 +28,8 @@ class LocationTravelTime(Base):
         rename_map = {
             "id": "@iot.id",
             "self_link": "@iot.selfLink",
-            "things_navigation_link": "Things@iot.navigationLink",
-            "historical_locations_navigation_link": "HistoricalLocations@iot.navigationLink",
+            "thing_navigation_link": "Things@iot.navigationLink",
+            "historicallocation_navigation_link": "HistoricalLocations@iot.navigationLink",
             "encoding_type": "encodingType",
         }
         serialized_data = {

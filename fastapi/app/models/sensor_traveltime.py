@@ -10,7 +10,7 @@ class SensorTravelTime(Base):
 
     id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
-    datastreams_navigation_link = Column("Datastreams@iot.navigationLink", Text)
+    datastream_navigation_link = Column("Datastreams@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
     description = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
@@ -25,7 +25,7 @@ class SensorTravelTime(Base):
         rename_map = {
             "id": "@iot.id",
             "self_link": "@iot.selfLink",
-            "datastreams_navigation_link": "Datastreams@iot.navigationLink",
+            "datastream_navigation_link": "Datastreams@iot.navigationLink",
             "encoding_type": "encodingType",
             "sensor_metadata": "metadata",
         }
