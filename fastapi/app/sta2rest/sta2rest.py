@@ -433,11 +433,11 @@ class NodeVisitor(Visitor):
                         sub_query, alias = sq
                         if hasattr(main_entity, f"{alias.lower()}_id"):
                             fk_attr = getattr(main_entity, f"{alias.lower()}_id")
-                            main_query = main_query.join(sub_query, fk_attr == sub_query.c.id)
+                            main_query = main_query.join(sub_query, fk_attr == sub_query.c.id).group_by(getattr(main_entity, 'id'))
                         else:
-                            main_query = main_query.join(sub_query)
+                            main_query = main_query.join(sub_query).group_by(getattr(main_entity, 'id'))
                 else:
-                    main_query = select(func.json_build_object(*json_build_object_args)).select_from(main_entity)
+                    main_query = select(func.json_build_object(*json_build_object_args)).group_by(getattr(main_entity, 'id'))
 
                 sub_queries = []
                 current = None
@@ -454,11 +454,10 @@ class NodeVisitor(Visitor):
                     sub_query = sub_query.subquery()
                     sub_queries.append(sub_query)
                 if len(sub_queries) > 0:
-                    main_query = main_query.join(getattr(main_entity, current.lower())).join(sub_queries[-1])
-
+                    main_query = main_query.join(getattr(main_entity, current.lower())).join(sub_queries[-1]).group_by(getattr(main_entity, 'id'))
             else:
                 # Set options for main_query if select_query is not empty
-                main_query = select(func.json_build_object(*json_build_object_args))
+                main_query = select(func.json_build_object(*json_build_object_args)).group_by(getattr(main_entity, 'id'))
 
             if node.filter:
                 filter, join_relationships = self.visit_FilterNode(node.filter, self.main_entity)
