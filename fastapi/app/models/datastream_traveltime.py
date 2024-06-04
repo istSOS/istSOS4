@@ -20,7 +20,6 @@ class DatastreamTravelTime(Base):
     unit_of_measurement = Column("unitOfMeasurement", JSON, nullable=False)
     observation_type = Column("observationType", String(100), nullable=False)
     observed_area = Column("observedArea", Geometry(geometry_type='POLYGON', srid=4326))
-    observed_area_geojson = Column(JSON)
     phenomenon_time = Column("phenomenonTime", TSTZRANGE)
     result_time = Column("resultTime", TSTZRANGE)
     properties = Column(JSON)
@@ -51,9 +50,6 @@ class DatastreamTravelTime(Base):
             for attr in self.__class__.__mapper__.column_attrs
             if attr.key not in inspect(self).unloaded
         }
-        if 'observedArea' in serialized_data and self.observed_area is not None:
-            serialized_data['observedArea'] = self.observed_area_geojson
-            serialized_data.pop('observed_area_geojson', None)
         if 'phenomenonTime' in serialized_data and self.phenomenon_time is not None:
             serialized_data['phenomenonTime'] = self._format_datetime_range(self.phenomenon_time)
         if 'resultTime' in serialized_data and self.result_time is not None:

@@ -19,7 +19,6 @@ class Location(Base):
     description = Column(Text, nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
     location = Column(Geometry(geometry_type='GEOMETRY', srid=4326), nullable=False)
-    location_geojson = Column(JSON)
     properties = Column(JSON)
     thing = relationship("Thing", secondary=Thing_Location, back_populates="location")
     historicallocation = relationship("HistoricalLocation", secondary=Location_HistoricalLocation, back_populates="location")
@@ -38,10 +37,6 @@ class Location(Base):
             for column in self.__class__.__mapper__.column_attrs
             if column.key not in inspect(self).unloaded
         }
-        if 'location' in serialized_data:
-            if self.location is not None:
-                serialized_data['location'] = self.location_geojson
-            serialized_data.pop('location_geojson', None)
         return serialized_data
 
     def to_dict_expand(self):
