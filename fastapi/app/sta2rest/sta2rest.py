@@ -438,13 +438,21 @@ class NodeVisitor(Visitor):
                 else:
                     main_query = select(func.json_build_object(*json_build_object_args)).select_from(main_entity)
 
-                for _, e in enumerate(new_node['expand']['identifiers']):
-                    main_query = main_query.join(getattr(main_entity, e.identifier.lower()))
+                sub_queries = []
+                for i, e in enumerate(new_node['expand']['identifiers']):
+                    sub_query = session.query(globals()[e.identifier])
+                    if i > 0:
+                        sub_query = sub_query.join(sub_queries[i - 1])
                     if e.subquery and e.subquery.filter:
                         filter, join_relationships = self.visit_FilterNode(e.subquery.filter, e.identifier)
                         for rel in join_relationships:
-                            main_query = main_query.join(rel)
-                        main_query = main_query.filter(filter)
+                            sub_query = sub_query.join(rel)
+                        sub_query = sub_query.filter(filter)
+                    sub_query = sub_query.subquery()
+                    sub_queries.append(sub_query)
+                if len(sub_queries) > 0:
+                    main_query = main_query.join(sub_queries[-1])
+
             else:
                 # Set options for main_query if select_query is not empty
                 main_query = select(func.json_build_object(*json_build_object_args))
