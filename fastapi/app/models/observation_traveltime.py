@@ -11,10 +11,11 @@ class ObservationTravelTime(Base):
 
     id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
-    feature_of_interest_navigation_link = Column("FeatureOfInterest@iot.navigationLink", Text)
+    featuresofinterest_navigation_link = Column("FeatureOfInterest@iot.navigationLink", Text)
     datastream_navigation_link = Column("Datastream@iot.navigationLink", Text)
     phenomenon_time = Column("phenomenonTime", TIMESTAMP, nullable=False)
     result_time = Column("resultTime", TIMESTAMP, nullable=False)
+    result = Column(JSON)
     result_string = Column("resultString", Text)
     result_integer = Column("resultInteger", Integer)
     result_double = Column("resultDouble", Float)
@@ -34,7 +35,7 @@ class ObservationTravelTime(Base):
         rename_map = {
             'id': '@iot.id',
             'self_link': '@iot.selfLink',
-            'feature_of_interest_navigation_link': 'FeatureOfInterest@iot.navigationLink',
+            'featuresofinterest_navigation_link': 'FeatureOfInterest@iot.navigationLink',
             'datastream_navigation_link': 'Datastream@iot.navigationLink',
             "phenomenon_time": "phenomenonTime",
             "result_time": "resultTime",

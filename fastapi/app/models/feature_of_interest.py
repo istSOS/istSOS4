@@ -12,7 +12,7 @@ class FeaturesOfInterest(Base):
 
     id = Column(Integer, primary_key=True)
     self_link = Column("@iot.selfLink", Text)
-    observations_navigation_link = Column("Observations@iot.navigationLink", Text)
+    observation_navigation_link = Column("Observations@iot.navigationLink", Text)
     name = Column(String(255), nullable=False)
     description = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
@@ -26,7 +26,7 @@ class FeaturesOfInterest(Base):
         rename_map = {
             "id": "@iot.id",
             "self_link": "@iot.selfLink",
-            "observations_navigation_link": "Observations@iot.navigationLink",
+            "observation_navigation_link": "Observations@iot.navigationLink",
             "encoding_type": "encodingType",
         }
         serialized_data = {
