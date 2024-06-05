@@ -472,7 +472,7 @@ class NodeVisitor(Visitor):
                     sub_query = sub_query.subquery()
                     sub_queries.append(sub_query)
                 if len(sub_queries) > 0:
-                    main_query = main_query.join(getattr(main_entity, current.lower())).join(sub_queries[-1]).group_by(getattr(main_entity, 'id'))
+                    main_query = main_query.join(getattr(main_entity, current.lower())).join(sub_queries[-1]).distinct(getattr(main_entity, 'id'))
             else:
                 # Set options for main_query if select_query is not empty
                 main_query = select(func.json_build_object(*json_build_object_args))
