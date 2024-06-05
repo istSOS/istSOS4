@@ -441,8 +441,14 @@ class NodeVisitor(Visitor):
                         else:
                             json_build_object_args.append(func.coalesce(sub_query.columns[alias.lower()], text("'[]'")))
                     main_query = select(func.json_build_object(*json_build_object_args)).select_from(main_entity)
+
+                    if (self.main_entity == 'Location' and sub_queries[0][1] == 'HistoricalLocation'):
+                        sub_queries = list(reversed(sub_queries))
+
                     for sq in sub_queries:
                         sub_query, alias = sq
+                        if getattr(main_entity, alias.lower()).property.direction.name == "MANYTOMANY":
+                            main_query = main_query.join(getattr(main_entity, alias.lower()))
                         if hasattr(main_entity, f"{alias.lower()}_id"):
                             fk_attr = getattr(main_entity, f"{alias.lower()}_id")
                             main_query = main_query.join(sub_query, fk_attr == sub_query.c.id)
