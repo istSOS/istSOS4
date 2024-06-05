@@ -427,6 +427,25 @@ class NodeVisitor(Visitor):
                 for e in node.expand.identifiers:
                     if not e.expand:
                         new_node['expand']['identifiers'].append(e)
+                
+                if len( new_node['expand']['identifiers']) > 0:
+                    main_query = select(func.json_build_object(*json_build_object_args))
+                    sub_queries = []
+                    current = None
+                    previous = None
+                    for i, e in enumerate(new_node['expand']['identifiers']):
+                        current = e.identifier
+                        sub_query = session.query(globals()[current])
+                        if i > 0:
+                            previous = new_node['expand']['identifiers'][i - 1].identifier
+                            sub_query = sub_query.join(getattr(globals()[current], previous.lower())).join(sub_queries[i - 1])
+                        if e.subquery and e.subquery.filter:
+                            filter, join_relationships = self.visit_FilterNode(e.subquery.filter, current)
+                            sub_query = sub_query.filter(filter)
+                        sub_query = sub_query.subquery()
+                        sub_queries.append(sub_query)
+                    if len(sub_queries) > 0:
+                        main_query = main_query.join(getattr(main_entity, current.lower())).join(sub_queries[-1]).distinct(getattr(main_entity, 'id'))
 
                 node.expand.identifiers = [e for e in node.expand.identifiers if e.expand]
                 if len(node.expand.identifiers) > 0:
@@ -456,23 +475,6 @@ class NodeVisitor(Visitor):
                             main_query = main_query.join(sub_query)
                 else:
                     main_query = select(func.json_build_object(*json_build_object_args))
-
-                sub_queries = []
-                current = None
-                previous = None
-                for i, e in enumerate(new_node['expand']['identifiers']):
-                    current = e.identifier
-                    sub_query = session.query(globals()[current])
-                    if i > 0:
-                        previous = new_node['expand']['identifiers'][i - 1].identifier
-                        sub_query = sub_query.join(getattr(globals()[current], previous.lower())).join(sub_queries[i - 1])
-                    if e.subquery and e.subquery.filter:
-                        filter, join_relationships = self.visit_FilterNode(e.subquery.filter, current)
-                        sub_query = sub_query.filter(filter)
-                    sub_query = sub_query.subquery()
-                    sub_queries.append(sub_query)
-                if len(sub_queries) > 0:
-                    main_query = main_query.join(getattr(main_entity, current.lower())).join(sub_queries[-1]).distinct(getattr(main_entity, 'id'))
             else:
                 # Set options for main_query if select_query is not empty
                 main_query = select(func.json_build_object(*json_build_object_args))
