@@ -102,17 +102,17 @@ class Parser:
         Returns:
             ast.ExpandNode: The parsed expand expression.
         """
-        self.match('EXPAND')
+
+        if self.check_token('EXPAND'):
+            self.match('EXPAND')
 
         identifiers = []
         while self.current_token.type != 'OPTIONS_SEPARATOR':
             identifier = ast.ExpandNodeIdentifier(self.current_token.value)
-            self.match('IDENTIFIER')
-
+            self.match('EXPAND_IDENTIFIER')
             # Check if there is a subquery
-            if self.check_token('LEFT_PAREN'):
+            if self.check_token('LEFT_PAREN') or self.check_token('EXPAND_SEPARATOR'):
                 identifier.subquery = self.parse_subquery()
-            
             identifiers.append(identifier)
 
             # Check if there is another option
@@ -240,7 +240,9 @@ class Parser:
         Returns:
             ast.QueryNode: The parsed subquery.
         """
-        self.match('LEFT_PAREN')
+        if self.check_token('LEFT_PAREN'):
+            self.match('LEFT_PAREN')
+        
         select = None
         filter = None
         expand = None
@@ -258,6 +260,9 @@ class Parser:
             elif self.current_token.type == 'FILTER':
                 filter = self.parse_filter(True)
             elif self.current_token.type == 'EXPAND':
+                expand = self.parse_expand()
+            elif self.current_token.type == 'EXPAND_SEPARATOR':
+                self.match('EXPAND_SEPARATOR')
                 expand = self.parse_expand()
             elif self.current_token.type == 'ORDERBY':
                 orderby = self.parse_orderby()
@@ -279,8 +284,9 @@ class Parser:
                 self.match('SUBQUERY_SEPARATOR')
             else:
                 break
-        
-        self.match('RIGHT_PAREN')
+
+        if (self.check_token('RIGHT_PAREN')):
+            self.match('RIGHT_PAREN')
 
         return ast.QueryNode(select, filter, expand, orderby, skip, top, count, asof, fromto, True)
 

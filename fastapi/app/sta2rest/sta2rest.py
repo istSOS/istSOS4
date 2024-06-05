@@ -336,16 +336,28 @@ class NodeVisitor(Visitor):
                     for nested_sub_query, nested_identifier in nested_expand_queries:
                         json_build_object_args.append(f"{nested_identifier}")
                         json_build_object_args.append(nested_sub_query.columns[nested_identifier.lower()])
-                        sub_query_json_agg = (
-                            select(
-                                subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id,  
-                                func.json_agg(func.json_build_object(*json_build_object_args)).label(expand_identifier.identifier.lower()),
+                        if getattr(globals()[expand_identifier.identifier], nested_identifier.lower()).property.direction.name == "MANYTOONE":
+                            sub_query_json_agg = (
+                                select(
+                                    subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id,  
+                                    func.array_agg(func.json_build_object(*json_build_object_args))[1].label(expand_identifier.identifier.lower()),
+                                )
+                                .select_from(sub_entity)
+                                .join(nested_sub_query)
+                                .group_by(subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id)
+                                .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
                             )
-                            .select_from(sub_entity)
-                            .join(nested_sub_query)
-                            .group_by(subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id)
-                            .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
-                        )
+                        else:
+                            sub_query_json_agg = (
+                                select(
+                                    subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id,  
+                                    func.json_agg(func.json_build_object(*json_build_object_args)).label(expand_identifier.identifier.lower()),
+                                )
+                                .select_from(sub_entity)
+                                .join(nested_sub_query)
+                                .group_by(subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id)
+                                .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
+                            )
                 else:
                     if getattr(globals()[parent], expand_identifier.identifier.lower()).property.direction.name == "MANYTOONE":
                         sub_query_json_agg = (
@@ -365,7 +377,7 @@ class NodeVisitor(Visitor):
                             .group_by(subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id)
                             .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
                         )
-                # sub_query_json_agg_new = select(sub_query_json_agg.c[expand_identifier.identifier.lower()]).alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}_new")
+
                 expand_queries.append((sub_query_json_agg, expand_identifier.identifier))
 
             return expand_queries
@@ -433,11 +445,11 @@ class NodeVisitor(Visitor):
                         sub_query, alias = sq
                         if hasattr(main_entity, f"{alias.lower()}_id"):
                             fk_attr = getattr(main_entity, f"{alias.lower()}_id")
-                            main_query = main_query.join(sub_query, fk_attr == sub_query.c.id).group_by(getattr(main_entity, 'id'))
+                            main_query = main_query.join(sub_query, fk_attr == sub_query.c.id)
                         else:
-                            main_query = main_query.join(sub_query).group_by(getattr(main_entity, 'id'))
+                            main_query = main_query.join(sub_query)
                 else:
-                    main_query = select(func.json_build_object(*json_build_object_args)).group_by(getattr(main_entity, 'id'))
+                    main_query = select(func.json_build_object(*json_build_object_args))
 
                 sub_queries = []
                 current = None
@@ -457,7 +469,7 @@ class NodeVisitor(Visitor):
                     main_query = main_query.join(getattr(main_entity, current.lower())).join(sub_queries[-1]).group_by(getattr(main_entity, 'id'))
             else:
                 # Set options for main_query if select_query is not empty
-                main_query = select(func.json_build_object(*json_build_object_args)).group_by(getattr(main_entity, 'id'))
+                main_query = select(func.json_build_object(*json_build_object_args))
 
             if node.filter:
                 filter, join_relationships = self.visit_FilterNode(node.filter, self.main_entity)
