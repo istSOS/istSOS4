@@ -69,11 +69,17 @@ class Parser:
         """
         identifiers = []
         identifiers.append(ast.IdentifierNode(self.current_token.value))
-        self.match('IDENTIFIER')
+        if self.check_token('EXPAND_IDENTIFIER'):
+            self.match('EXPAND_IDENTIFIER')
+        else:
+            self.match('IDENTIFIER')
         while self.check_token('VALUE_SEPARATOR'):
             self.match('VALUE_SEPARATOR')
             identifiers.append(ast.IdentifierNode(self.current_token.value))
-            self.match('IDENTIFIER')
+            if self.check_token('EXPAND_IDENTIFIER'):
+                self.match('EXPAND_IDENTIFIER')
+            else:
+                self.match('IDENTIFIER')
         return identifiers
 
     def parse_filter(self, is_in_subquery=False):
@@ -146,7 +152,10 @@ class Parser:
         identifiers = []
         while True:
             identifier = self.current_token.value
-            self.match('IDENTIFIER')
+            if self.check_token('EXPAND_IDENTIFIER'):
+                self.match('EXPAND_IDENTIFIER')
+            else:
+                self.match('IDENTIFIER')
             order = 'asc'
             if self.check_token('WHITESPACE'):
                 self.match('WHITESPACE')
