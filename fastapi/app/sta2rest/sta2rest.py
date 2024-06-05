@@ -473,8 +473,6 @@ class NodeVisitor(Visitor):
                             main_query = main_query.join(sub_query, fk_attr == sub_query.c.id)
                         else:
                             main_query = main_query.join(sub_query)
-                else:
-                    main_query = select(func.json_build_object(*json_build_object_args))
             else:
                 # Set options for main_query if select_query is not empty
                 main_query = select(func.json_build_object(*json_build_object_args))
