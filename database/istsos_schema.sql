@@ -124,24 +124,17 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "Datastream@iot.navigationLink" TEXT
 );
 
-CREATE OR REPLACE FUNCTION location_geojson(sensorthings."Location")
-RETURNS jsonb AS $$
-BEGIN
-    RETURN ST_AsGeoJSON($1."location")::jsonb;
-END;
-$$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION observed_area_geojson(sensorthings."Datastream")
-RETURNS jsonb AS $$
+CREATE OR REPLACE FUNCTION result(sensorthings."Observation") RETURNS jsonb AS $$
 BEGIN
-    RETURN ST_AsGeoJSON($1."observedArea")::jsonb;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION feature_geojson(sensorthings."FeaturesOfInterest")
-RETURNS jsonb AS $$
-BEGIN
-    RETURN ST_AsGeoJSON($1."feature")::jsonb;
+    RETURN CASE 
+        WHEN $1."resultType" = 0 THEN to_jsonb($1."resultString")
+        WHEN $1."resultType" = 1 THEN to_jsonb($1."resultInteger")
+        WHEN $1."resultType" = 2 THEN to_jsonb($1."resultDouble")
+        WHEN $1."resultType" = 3 THEN to_jsonb($1."resultBoolean")
+        WHEN $1."resultType" = 4 THEN $1."resultJSON"
+        ELSE NULL::jsonb
+    END;
 END;
 $$ LANGUAGE plpgsql;
 

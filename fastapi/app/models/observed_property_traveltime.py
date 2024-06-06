@@ -10,7 +10,7 @@ class ObservedPropertyTravelTime(Base):
 
     id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
-    datastreams_navigation_link = Column("Datastreams@iot.navigationLink", Text)
+    datastream_navigation_link = Column("Datastreams@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
     definition = Column(String(255), nullable=False)
     description = Column(String(255), nullable=False)
@@ -24,7 +24,7 @@ class ObservedPropertyTravelTime(Base):
         rename_map = {
             "id": "@iot.id",
             "self_link": "@iot.selfLink",
-            "datastreams_navigation_link": "Datastreams@iot.navigationLink",
+            "datastream_navigation_link": "Datastreams@iot.navigationLink",
         }
         serialized_data = {
             rename_map.get(column.key, column.key): getattr(self, column.key)

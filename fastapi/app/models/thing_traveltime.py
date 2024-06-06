@@ -10,9 +10,9 @@ class ThingTravelTime(Base):
     
     id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
-    locations_navigation_link = Column("Locations@iot.navigationLink", Text)
-    historical_locations_navigation_link = Column("HistoricalLocations@iot.navigationLink", Text)
-    datastreams_locations_navigation_link = Column("Datastreams@iot.navigationLink", Text)
+    location_navigation_link = Column("Locations@iot.navigationLink", Text)
+    historicallocation_navigation_link = Column("HistoricalLocations@iot.navigationLink", Text)
+    datastream_navigation_link = Column("Datastreams@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     properties = Column(JSON)
@@ -25,9 +25,9 @@ class ThingTravelTime(Base):
         rename_map = {
             "id": "@iot.id",
             "self_link": "@iot.selfLink",
-            "locations_navigation_link": "Locations@iot.navigationLink",
-            "historical_locations_navigation_link": "HistoricalLocations@iot.navigationLink",
-            "datastreams_locations_navigation_link": "Datastreams@iot.navigationLink",
+            "location_navigation_link": "Locations@iot.navigationLink",
+            "historicallocation_navigation_link": "HistoricalLocations@iot.navigationLink",
+            "datastream_navigation_link": "Datastreams@iot.navigationLink",
         }
         serialized_data = {
             rename_map.get(column.key, column.key): getattr(self, column.key)

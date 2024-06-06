@@ -13,14 +13,13 @@ class DatastreamTravelTime(Base):
     self_link = Column("@iot.selfLink", Text)
     thing_navigation_link = Column("Thing@iot.navigationLink", Text)
     sensor_navigation_link = Column("Sensor@iot.navigationLink", Text)
-    observed_property_navigation_link = Column("ObservedProperty@iot.navigationLink", Text)
-    observations_navigation_link = Column("Observations@iot.navigationLink", Text)
+    observedproperty_navigation_link = Column("ObservedProperty@iot.navigationLink", Text)
+    observation_navigation_link = Column("Observations@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     unit_of_measurement = Column("unitOfMeasurement", JSON, nullable=False)
     observation_type = Column("observationType", String(100), nullable=False)
     observed_area = Column("observedArea", Geometry(geometry_type='POLYGON', srid=4326))
-    observed_area_geojson = Column(JSON)
     phenomenon_time = Column("phenomenonTime", TSTZRANGE)
     result_time = Column("resultTime", TSTZRANGE)
     properties = Column(JSON)
@@ -38,8 +37,8 @@ class DatastreamTravelTime(Base):
             "self_link": "@iot.selfLink",
             "thing_navigation_link": "Thing@iot.navigationLink",
             "sensor_navigation_link": "Sensor@iot.navigationLink",
-            "observed_property_navigation_link": "ObservedProperty@iot.navigationLink",
-            "observations_navigation_link": "Observations@iot.navigationLink",
+            "observedproperty_navigation_link": "ObservedProperty@iot.navigationLink",
+            "observation_navigation_link": "Observations@iot.navigationLink",
             "unit_of_measurement": "unitOfMeasurement",
             "observation_type": "observationType",
             "observed_area": "observedArea",
@@ -51,9 +50,6 @@ class DatastreamTravelTime(Base):
             for attr in self.__class__.__mapper__.column_attrs
             if attr.key not in inspect(self).unloaded
         }
-        if 'observedArea' in serialized_data and self.observed_area is not None:
-            serialized_data['observedArea'] = self.observed_area_geojson
-            serialized_data.pop('observed_area_geojson', None)
         if 'phenomenonTime' in serialized_data and self.phenomenon_time is not None:
             serialized_data['phenomenonTime'] = self._format_datetime_range(self.phenomenon_time)
         if 'resultTime' in serialized_data and self.result_time is not None:
