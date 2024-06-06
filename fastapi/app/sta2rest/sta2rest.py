@@ -340,7 +340,7 @@ class NodeVisitor(Visitor):
                             sub_query_json_agg = (
                                 select(
                                     subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id,  
-                                    func.array_agg(func.json_build_object(*json_build_object_args))[1].label(expand_identifier.identifier.lower()),
+                                    func.json_agg(func.json_build_object(*json_build_object_args)).label(expand_identifier.identifier.lower()),
                                 )
                                 .select_from(sub_entity)
                                 .join(nested_sub_query)
@@ -351,7 +351,7 @@ class NodeVisitor(Visitor):
                             sub_query_json_agg = (
                                 select(
                                     subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id,  
-                                    func.json_agg(func.json_build_object(*json_build_object_args)).label(expand_identifier.identifier.lower()),
+                                    func.array_agg(func.json_build_object(*json_build_object_args))[1].label(expand_identifier.identifier.lower()),
                                 )
                                 .select_from(sub_entity)
                                 .join(nested_sub_query)
