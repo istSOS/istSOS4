@@ -330,12 +330,31 @@ class NodeVisitor(Visitor):
                         json_build_object_args.append(literal(attr.name)) if attr.name != 'id' else  json_build_object_args.append(text("'@iot.id'"))
                         json_build_object_args.append(func.ST_AsGeoJSON(attr).cast(JSONB)) if (type(attr.type) == Geometry) else json_build_object_args.append(attr)
 
+                if getattr(globals()[parent], expand_identifier.identifier.lower()).property.direction.name == "MANYTOONE":
+                    sub_query_json_agg = (
+                        select(
+                            subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id,  
+                            func.array_agg(func.json_build_object(*json_build_object_args))[1].label(expand_identifier.identifier.lower()),
+                        )
+                        .group_by(subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id)
+                        .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
+                    )
+                else:
+                    sub_query_json_agg = (
+                        select(
+                            subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id,  
+                            func.json_agg(func.json_build_object(*json_build_object_args)).label(expand_identifier.identifier.lower()),
+                        )
+                        .group_by(subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id)
+                        .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
+                    )
+
                 # Check for nested expand
                 if expand_identifier.subquery and expand_identifier.subquery.expand:
                     nested_expand_queries = self.visit_ExpandNode(expand_identifier.subquery.expand, expand_identifier.identifier)
-                    for nested_sub_query, nested_identifier in nested_expand_queries:
+                    for nested_expand_query, nested_identifier in nested_expand_queries:
                         json_build_object_args.append(f"{nested_identifier}")
-                        json_build_object_args.append(nested_sub_query.columns[nested_identifier.lower()])
+                        json_build_object_args.append(nested_expand_query.columns[nested_identifier.lower()])
                         if getattr(globals()[expand_identifier.identifier], nested_identifier.lower()).property.direction.name == "MANYTOONE":
                             sub_query_json_agg = (
                                 select(
@@ -343,7 +362,7 @@ class NodeVisitor(Visitor):
                                     func.json_agg(func.json_build_object(*json_build_object_args)).label(expand_identifier.identifier.lower()),
                                 )
                                 .select_from(sub_entity)
-                                .join(nested_sub_query)
+                                .join(nested_expand_query)
                                 .group_by(subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id)
                                 .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
                             )
@@ -354,30 +373,10 @@ class NodeVisitor(Visitor):
                                     func.array_agg(func.json_build_object(*json_build_object_args))[1].label(expand_identifier.identifier.lower()),
                                 )
                                 .select_from(sub_entity)
-                                .join(nested_sub_query)
+                                .join(nested_expand_query)
                                 .group_by(subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id)
                                 .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
                             )
-                else:
-                    if getattr(globals()[parent], expand_identifier.identifier.lower()).property.direction.name == "MANYTOONE":
-                        sub_query_json_agg = (
-                            select(
-                                subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id,  
-                                func.array_agg(func.json_build_object(*json_build_object_args))[1].label(expand_identifier.identifier.lower()),
-                            )
-                            .group_by(subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id)
-                            .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
-                        )
-                    else:
-                        sub_query_json_agg = (
-                            select(
-                                subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id,  
-                                func.json_agg(func.json_build_object(*json_build_object_args)).label(expand_identifier.identifier.lower()),
-                            )
-                            .group_by(subquery_ranked.c[f"{parent.lower()}_id"] if fk_attr is not None else subquery_ranked.c.id)
-                            .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
-                        )
-
                 expand_queries.append((sub_query_json_agg, expand_identifier.identifier))
 
             return expand_queries
