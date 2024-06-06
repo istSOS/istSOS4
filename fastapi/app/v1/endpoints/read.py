@@ -52,30 +52,13 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
         result = sta2rest.STA2REST.convert_query(full_path, db)
         items = result["query"]
         query_count = result["query_count"]
-        item_dicts = [item.to_dict_expand() if result["dict_expand"] else item.to_dict() for item in items]
+        item_dicts = []
+        for item in items:
+            item_dicts.append(item[0])
         data = {}
         if len(item_dicts) == 1 and result["single_result"]:
             data = item_dicts[0]
-            if not result["id_query_result"] and "@iot.id" in data:
-                del data["@iot.id"]
         else:
-            if not result["id_query_result"]:
-                for item in item_dicts:
-                    if "@iot.id" in item:
-                        del item["@iot.id"]
-
-            keys_to_check = {tp[0] for tp in result["id_subquery_result"] if not tp[1]}
-            for item in item_dicts:
-                for key in keys_to_check:
-                    if (key in item and isinstance(item[key], (list, dict))) or (f"{key}s" in item and isinstance(item[f"{key}s"], (list, dict))):
-                        val = item[key] if key in item else item[f"{key}s"]
-                        if isinstance(val, list):
-                            for v in val:
-                                if isinstance(v, dict) and "@iot.id" in v:
-                                    del v["@iot.id"]
-                        elif isinstance(val, dict) and "@iot.id" in val:
-                            del val["@iot.id"]
-
             nextLink = f"{os.getenv('HOSTNAME')}{full_path}"
             new_top_value = 100
             if '$top' in nextLink:
@@ -106,7 +89,7 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
             else:
                 new_skip_value = new_top_value
                 nextLink = nextLink + f"&$skip={new_skip_value}"
-            if result["count_query"][1]:
+            if result["count_query"]:
                 data["@iot.count"] = query_count
 
             if new_skip_value < query_count:
@@ -133,7 +116,7 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
             if data is None:
                 return Response(status_code=status.HTTP_200_OK)
             
-        data = remove_empty_dicts(data)
+        # data = remove_empty_dicts(data)
 
         if not data or (isinstance(data, Iterable) and "value" in data and len(data["value"]) == 0 and result["single_result"]):
             return JSONResponse(

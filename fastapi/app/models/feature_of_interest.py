@@ -12,12 +12,11 @@ class FeaturesOfInterest(Base):
 
     id = Column(Integer, primary_key=True)
     self_link = Column("@iot.selfLink", Text)
-    observations_navigation_link = Column("Observations@iot.navigationLink", Text)
+    observation_navigation_link = Column("Observations@iot.navigationLink", Text)
     name = Column(String(255), nullable=False)
     description = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
     feature = Column(Geometry(geometry_type='GEOMETRY', srid=4326), nullable=False)
-    feature_geojson = Column(JSON)
     properties = Column(JSON)
     observation = relationship("Observation", back_populates="featuresofinterest")
 
@@ -26,7 +25,7 @@ class FeaturesOfInterest(Base):
         rename_map = {
             "id": "@iot.id",
             "self_link": "@iot.selfLink",
-            "observations_navigation_link": "Observations@iot.navigationLink",
+            "observation_navigation_link": "Observations@iot.navigationLink",
             "encoding_type": "encodingType",
         }
         serialized_data = {
@@ -34,10 +33,6 @@ class FeaturesOfInterest(Base):
             for column in self.__class__.__mapper__.column_attrs
             if column.key not in inspect(self).unloaded
         }
-        if 'feature' in serialized_data:
-            if self.feature is not None:
-                serialized_data['feature'] = self.feature_geojson
-            serialized_data.pop('feature_geojson', None)
         return serialized_data
 
     def to_dict_expand(self):
