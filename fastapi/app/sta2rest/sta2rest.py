@@ -331,7 +331,7 @@ class NodeVisitor(Visitor):
                         json_build_object_args.append(literal(attr.name) if attr.name != 'id' else text("'@iot.id'"))
                         json_build_object_args.append(func.ST_AsGeoJSON(attr).cast(JSONB) if isinstance(attr.type, Geometry) else attr)
 
-                aggregation_type = func.array_agg(func.json_build_object(*json_build_object_args))[1] if relationship.direction.name in ["MANYTOONE", "MANYTOMANY"] else func.json_agg(func.json_build_object(*json_build_object_args))
+                aggregation_type = func.array_agg(func.json_build_object(*json_build_object_args))[1] if relationship.direction.name in ["MANYTOONE"] else func.json_agg(func.json_build_object(*json_build_object_args))
 
                 # Build sub-query JSON aggregation
                 if relationship.direction.name in ["MANYTOONE", "ONETOMANY"]:
@@ -364,7 +364,7 @@ class NodeVisitor(Visitor):
                         else:
                             json_build_object_args.append(func.coalesce(nested_expand_query.columns[nested_identifier.lower()], text("'[]'")))
 
-                        aggregation_type = func.array_agg(func.json_build_object(*json_build_object_args))[1] if relationship.direction.name in ["MANYTOONE", "MANYTOMANY"] else func.json_agg(func.json_build_object(*json_build_object_args))
+                        aggregation_type = func.array_agg(func.json_build_object(*json_build_object_args))[1] if relationship.direction.name in ["MANYTOONE"] else func.json_agg(func.json_build_object(*json_build_object_args))
 
                         if relationship.direction.name != "MANYTOMANY":
                             sub_query_json_agg = (
