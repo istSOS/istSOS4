@@ -121,15 +121,15 @@ class Parser:
             self.match('EXPAND_SEPARATOR')
         identifiers = []
         while self.current_token.type != 'OPTIONS_SEPARATOR':
-            self.expand_identifiers.append(self.current_token.value)
+            tmp = self.current_token.value
             identifier = ast.ExpandNodeIdentifier(
                 self.current_token.value)
             self.match('EXPAND_IDENTIFIER')
             # Check if there is a subquery
-            self.identifiers.append(identifier)
             if self.check_token('LEFT_PAREN'):
                 identifier.subquery = self.parse_subquery()
             elif self.check_token('EXPAND_SEPARATOR'):
+                self.expand_identifiers.append(tmp)
                 identifier.subquery = self.parse_subquery()
 
             identifiers.append(identifier)
