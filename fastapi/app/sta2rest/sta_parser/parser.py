@@ -7,6 +7,7 @@ Author: Filippo Finke
 from .lexer import Lexer
 from . import ast
 
+
 class Parser:
     def __init__(self, tokens):
         """
@@ -18,6 +19,8 @@ class Parser:
         self.tokens = tokens
         self.current_token = None
         self.next_token()
+        self.expand_identifiers = []
+        self.identifiers = []
 
     def next_token(self):
         """
@@ -46,7 +49,8 @@ class Parser:
         if self.current_token and self.current_token.type == token_type:
             self.next_token()
         else:
-            raise Exception(f"Expected '{token_type}', but found '{self.current_token.type}' ('{self.current_token.value}')")
+            raise Exception(
+                f"Expected '{token_type}', but found '{self.current_token.type}' ('{self.current_token.value}')")
 
     def check_token(self, token_type):
         """
@@ -94,7 +98,7 @@ class Parser:
         """
         self.match('FILTER')
         filter = ""
-        
+
         while not self.check_token('OPTIONS_SEPARATOR') and not self.check_token('SUBQUERY_SEPARATOR') and self.current_token != None and not (is_in_subquery and self.check_token('RIGHT_PAREN')):
             filter += self.current_token.value
             self.next_token()
@@ -114,21 +118,42 @@ class Parser:
 
         identifiers = []
         while self.current_token.type != 'OPTIONS_SEPARATOR':
+            tmp_identifier = self.current_token.value
+            test = False
+            if tmp_identifier in self.expand_identifiers:
+                for e in self.identifiers:
+                    if tmp_identifier == e.identifier:
+                        self.match('EXPAND_IDENTIFIER')
+                        self.match('EXPAND_SEPARATOR')
+                        tmp_idt = ast.ExpandNodeIdentifier(
+                            self.current_token.value)
+                        e.subquery.expand.identifiers.append(tmp_idt)
+                        self.match('EXPAND_IDENTIFIER')
+                # print(self.current_token.value)
+                if self.current_token is None:
+                    break
+                else:
+                    self.match('EXPAND_IDENTIFIER')
+                    self.match('EXPAND_SEPARATOR')
+                    test = True
             identifier = ast.ExpandNodeIdentifier(self.current_token.value)
             self.match('EXPAND_IDENTIFIER')
             # Check if there is a subquery
-            if self.check_token('LEFT_PAREN') or self.check_token('EXPAND_SEPARATOR'):
+            if self.check_token('LEFT_PAREN'):
+                identifier.subquery = self.parse_subquery()
+            elif self.check_token('EXPAND_SEPARATOR'):
+                if tmp_identifier not in self.expand_identifiers:
+                    self.expand_identifiers.append(tmp_identifier)
                 identifier.subquery = self.parse_subquery()
             identifiers.append(identifier)
-
+            self.identifiers.append(identifier)
             # Check if there is another option
-            if self.check_token('VALUE_SEPARATOR'):
+            if self.check_token('VALUE_SEPARATOR') and not test:
                 self.match('VALUE_SEPARATOR')
             else:
                 break
-
         return ast.ExpandNode(identifiers)
-    
+
     def parse_select(self):
         """
         Parse a select expression.
@@ -189,7 +214,7 @@ class Parser:
 
         Returns:
             ast.TopNode: The parsed top expression.
-        
+
         Raises:
             Exception: If an integer value is expected but not found.
         """
@@ -199,7 +224,8 @@ class Parser:
             self.match('INTEGER')
             return ast.TopNode(count)
         else:
-            raise Exception(f"Expected integer, but found '{self.current_token.type}' ('{self.current_token.value}')")
+            raise Exception(
+                f"Expected integer, but found '{self.current_token.type}' ('{self.current_token.value}')")
 
     def parse_count(self):
         """
@@ -212,7 +238,7 @@ class Parser:
         value = self.current_token.value.lower() == 'true'
         self.match('BOOL')
         return ast.CountNode(value)
-    
+
     def parse_asof(self):
         """
         Parse a asof expression.
@@ -241,7 +267,7 @@ class Parser:
         value2 = self.current_token.value
         self.match('TIMESTAMP')
         return ast.FromToNode(value1, value2)
-    
+
     def parse_subquery(self):
         """
         Parse a subquery.
@@ -251,7 +277,7 @@ class Parser:
         """
         if self.check_token('LEFT_PAREN'):
             self.match('LEFT_PAREN')
-        
+
         select = None
         filter = None
         expand = None
@@ -287,7 +313,7 @@ class Parser:
                 fromto = self.parse_fromto()
             else:
                 raise Exception(f"Unexpected token: {self.current_token.type}")
-            
+
             # check for other options
             if self.check_token('SUBQUERY_SEPARATOR'):
                 self.match('SUBQUERY_SEPARATOR')
@@ -338,7 +364,7 @@ class Parser:
                 fromto = self.parse_fromto()
             else:
                 raise Exception(f"Unexpected token: {self.current_token.type}")
-            
+
             if self.current_token != None:
                 self.match('OPTIONS_SEPARATOR')
 
@@ -352,6 +378,7 @@ class Parser:
             ast.QueryNode: The parsed query.
         """
         return self.parse_query()
+
 
 # Example usage
 if __name__ == '__main__':
