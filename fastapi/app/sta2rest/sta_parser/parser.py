@@ -112,10 +112,8 @@ class Parser:
         Returns:
             ast.ExpandNode: The parsed expand expression.
         """
-
         if self.check_token('EXPAND'):
             self.match('EXPAND')
-
         identifiers = []
         while self.current_token.type != 'OPTIONS_SEPARATOR':
             tmp_identifier = self.current_token.value
@@ -133,21 +131,23 @@ class Parser:
                 if self.current_token is None:
                     break
                 else:
-                    self.match('EXPAND_IDENTIFIER')
-                    self.match('EXPAND_SEPARATOR')
-                    test = True
+                    if self.check_token('EXPAND_IDENTIFIER'):
+                        self.match('EXPAND_IDENTIFIER')
+                        self.match('EXPAND_SEPARATOR')
+                        test = True
             identifier = ast.ExpandNodeIdentifier(self.current_token.value)
-            self.match('EXPAND_IDENTIFIER')
-            # Check if there is a subquery
-            if self.check_token('LEFT_PAREN'):
-                identifier.subquery = self.parse_subquery()
-            elif self.check_token('EXPAND_SEPARATOR'):
-                if tmp_identifier not in self.expand_identifiers:
-                    self.expand_identifiers.append(tmp_identifier)
-                identifier.subquery = self.parse_subquery()
-            identifiers.append(identifier)
-            self.identifiers.append(identifier)
-            # Check if there is another option
+            if self.check_token('EXPAND_IDENTIFIER'):
+                self.match('EXPAND_IDENTIFIER')
+                # Check if there is a subquery
+                if self.check_token('LEFT_PAREN'):
+                    identifier.subquery = self.parse_subquery()
+                elif self.check_token('EXPAND_SEPARATOR'):
+                    if tmp_identifier not in self.expand_identifiers:
+                        self.expand_identifiers.append(tmp_identifier)
+                    identifier.subquery = self.parse_subquery()
+                identifiers.append(identifier)
+                self.identifiers.append(identifier)
+
             if self.check_token('VALUE_SEPARATOR') and not test:
                 self.match('VALUE_SEPARATOR')
             else:
