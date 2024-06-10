@@ -22,9 +22,6 @@ class Parser:
         self.expand_identifiers = []
         self.identifiers = []
         self.expands = []
-        # for i in tokens:
-        #     print(i)
-        #     if i.type == "EXPAND_SEPARATOR"
 
     def next_token(self):
         """
@@ -124,6 +121,7 @@ class Parser:
             self.match('EXPAND_SEPARATOR')
         identifiers = []
         while self.current_token.type != 'OPTIONS_SEPARATOR':
+            self.expand_identifiers.append(self.current_token.value)
             identifier = ast.ExpandNodeIdentifier(
                 self.current_token.value)
             self.match('EXPAND_IDENTIFIER')
@@ -133,6 +131,7 @@ class Parser:
                 identifier.subquery = self.parse_subquery()
             elif self.check_token('EXPAND_SEPARATOR'):
                 identifier.subquery = self.parse_subquery()
+
             identifiers.append(identifier)
             if dollar_expand:
                 if self.check_token('VALUE_SEPARATOR'):
@@ -140,7 +139,16 @@ class Parser:
                 else:
                     break
             else:
-                break
+                if self.check_token('VALUE_SEPARATOR'):
+                    if self.tokens[0].value in self.expand_identifiers:
+                        self.match('VALUE_SEPARATOR')
+                        self.match('EXPAND_IDENTIFIER')
+                        self.match('EXPAND_SEPARATOR')
+                    else:
+                        self.expand_identifiers = []
+                        break
+                else:
+                    break
         return ast.ExpandNode(identifiers)
 
     def parse_select(self):
@@ -264,8 +272,6 @@ class Parser:
         Returns:
             ast.QueryNode: The parsed subquery.
         """
-        print("self.current_token.value")
-        print(self.current_token.value)
         if self.check_token('LEFT_PAREN'):
             self.match('LEFT_PAREN')
 
@@ -287,8 +293,6 @@ class Parser:
                 filter = self.parse_filter(True)
             elif self.current_token.type == 'EXPAND':
                 expand = self.parse_expand()
-                print("EXPAND")
-                print(expand)
             elif self.current_token.type == 'EXPAND_SEPARATOR':
                 expand = self.parse_expand()
                 print("EXPAND")
@@ -381,4 +385,3 @@ if __name__ == '__main__':
 
     parser = Parser(tokens)
     ast = parser.parse()
-    print(ast)
