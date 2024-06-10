@@ -21,6 +21,10 @@ class Parser:
         self.next_token()
         self.expand_identifiers = []
         self.identifiers = []
+        self.expands = []
+        # for i in tokens:
+        #     print(i)
+        #     if i.type == "EXPAND_SEPARATOR"
 
     def next_token(self):
         """
@@ -112,44 +116,29 @@ class Parser:
         Returns:
             ast.ExpandNode: The parsed expand expression.
         """
+        dollar_expand = False
         if self.check_token('EXPAND'):
             self.match('EXPAND')
+            dollar_expand = True
+        if self.check_token('EXPAND_SEPARATOR'):
+            self.match('EXPAND_SEPARATOR')
         identifiers = []
         while self.current_token.type != 'OPTIONS_SEPARATOR':
-            tmp_identifier = self.current_token.value
-            test = False
-            if tmp_identifier in self.expand_identifiers:
-                for e in self.identifiers:
-                    if tmp_identifier == e.identifier:
-                        self.match('EXPAND_IDENTIFIER')
-                        self.match('EXPAND_SEPARATOR')
-                        tmp_idt = ast.ExpandNodeIdentifier(
-                            self.current_token.value)
-                        e.subquery.expand.identifiers.append(tmp_idt)
-                        self.match('EXPAND_IDENTIFIER')
-                # print(self.current_token.value)
-                if self.current_token is None:
-                    break
+            identifier = ast.ExpandNodeIdentifier(
+                self.current_token.value)
+            self.match('EXPAND_IDENTIFIER')
+            # Check if there is a subquery
+            self.identifiers.append(identifier)
+            if self.check_token('LEFT_PAREN'):
+                identifier.subquery = self.parse_subquery()
+            elif self.check_token('EXPAND_SEPARATOR'):
+                identifier.subquery = self.parse_subquery()
+            identifiers.append(identifier)
+            if dollar_expand:
+                if self.check_token('VALUE_SEPARATOR'):
+                    self.match('VALUE_SEPARATOR')
                 else:
-                    if self.check_token('EXPAND_IDENTIFIER'):
-                        self.match('EXPAND_IDENTIFIER')
-                        self.match('EXPAND_SEPARATOR')
-                        test = True
-            identifier = ast.ExpandNodeIdentifier(self.current_token.value)
-            if self.check_token('EXPAND_IDENTIFIER'):
-                self.match('EXPAND_IDENTIFIER')
-                # Check if there is a subquery
-                if self.check_token('LEFT_PAREN'):
-                    identifier.subquery = self.parse_subquery()
-                elif self.check_token('EXPAND_SEPARATOR'):
-                    if tmp_identifier not in self.expand_identifiers:
-                        self.expand_identifiers.append(tmp_identifier)
-                    identifier.subquery = self.parse_subquery()
-                identifiers.append(identifier)
-                self.identifiers.append(identifier)
-
-            if self.check_token('VALUE_SEPARATOR') and not test:
-                self.match('VALUE_SEPARATOR')
+                    break
             else:
                 break
         return ast.ExpandNode(identifiers)
@@ -275,6 +264,8 @@ class Parser:
         Returns:
             ast.QueryNode: The parsed subquery.
         """
+        print("self.current_token.value")
+        print(self.current_token.value)
         if self.check_token('LEFT_PAREN'):
             self.match('LEFT_PAREN')
 
@@ -296,9 +287,12 @@ class Parser:
                 filter = self.parse_filter(True)
             elif self.current_token.type == 'EXPAND':
                 expand = self.parse_expand()
+                print("EXPAND")
+                print(expand)
             elif self.current_token.type == 'EXPAND_SEPARATOR':
-                self.match('EXPAND_SEPARATOR')
                 expand = self.parse_expand()
+                print("EXPAND")
+                print(expand)
             elif self.current_token.type == 'ORDERBY':
                 orderby = self.parse_orderby()
             elif self.current_token.type == 'SKIP':
@@ -322,7 +316,6 @@ class Parser:
 
         if (self.check_token('RIGHT_PAREN')):
             self.match('RIGHT_PAREN')
-
         return ast.QueryNode(select, filter, expand, orderby, skip, top, count, asof, fromto, True)
 
     def parse_query(self):
