@@ -366,28 +366,16 @@ class NodeVisitor(Visitor):
 
                         aggregation_type = func.array_agg(func.json_build_object(*json_build_object_args))[1] if relationship.direction.name in ["MANYTOONE"] else func.json_agg(func.json_build_object(*json_build_object_args))
 
-                        if relationship.direction.name != "MANYTOMANY":
-                            sub_query_json_agg = (
-                                select(
-                                    subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id,
-                                    aggregation_type.label(expand_identifier.identifier.lower()),
-                                )
-                                .select_from(sub_entity)
-                                .join(nested_expand_query)
-                                .group_by(subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id)
-                                .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
+                        sub_query_json_agg = (
+                            select(
+                                subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id,
+                                aggregation_type.label(expand_identifier.identifier.lower()),
                             )
-                        else:
-                            sub_query_json_agg = (
-                                select(
-                                    subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id,
-                                    aggregation_type.label(expand_identifier.identifier.lower()),
-                                )
-                                .select_from(sub_entity)
-                                .join(nested_expand_query)
-                                .group_by(subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id)
-                                .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
-                            )
+                            .select_from(sub_entity)
+                            .join(nested_expand_query)
+                            .group_by(subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id)
+                            .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
+                        )
 
                 expand_queries.append((sub_query_json_agg, expand_identifier.identifier))
 
@@ -456,6 +444,7 @@ class NodeVisitor(Visitor):
                         sub_queries.append(sub_query)
                     if len(sub_queries) > 0:
                         main_query = main_query.join(getattr(main_entity, current.lower())).join(sub_queries[-1]).distinct(getattr(main_entity, 'id'))
+                        query_count = query_count.join(getattr(main_entity, current.lower())).join(sub_queries[-1])
 
                 node.expand.identifiers = [e for e in node.expand.identifiers if e.expand]
                 if len(node.expand.identifiers) > 0:
