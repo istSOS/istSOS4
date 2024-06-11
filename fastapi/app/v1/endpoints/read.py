@@ -8,6 +8,7 @@ from app.settings import tables, serverSettings
 from sqlalchemy.orm import Session
 from app.models.database import SessionLocal
 from collections.abc import Iterable
+from ...models import Thing
 
 v1 = APIRouter()
 
@@ -128,6 +129,11 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
                 }
             )
         print('DATA', full_path.split('/')[-1], data)
+        if full_path == "/istsos-miu/v1.1/Things?$orderby=name":
+            test = db.query(Thing).all()
+            print('*****')
+            for e in test:
+                print(e.to_dict())
         return data
     except Exception as e:
         traceback.print_exc()
