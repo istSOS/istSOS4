@@ -295,8 +295,6 @@ class Parser:
                 expand = self.parse_expand()
             elif self.current_token.type == 'EXPAND_SEPARATOR':
                 expand = self.parse_expand()
-                print("EXPAND")
-                print(expand)
             elif self.current_token.type == 'ORDERBY':
                 orderby = self.parse_orderby()
             elif self.current_token.type == 'SKIP':
