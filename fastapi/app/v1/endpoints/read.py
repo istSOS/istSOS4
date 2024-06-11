@@ -8,6 +8,7 @@ from app.settings import tables, serverSettings
 from sqlalchemy.orm import Session
 from app.models.database import SessionLocal
 from collections.abc import Iterable
+from ...models import Thing
 
 v1 = APIRouter()
 
@@ -155,7 +156,7 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
 
 def remove_empty_dicts(obj):
     if isinstance(obj, dict):
-        return {k: remove_empty_dicts(v) for k, v in obj.items() if v != {}}
+        return {k: remove_empty_dicts(v) for k, v in obj.items() if v != {} and v is not None}
     elif isinstance(obj, list):
         return [remove_empty_dicts(item) for item in obj]
     else:
