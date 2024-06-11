@@ -116,7 +116,7 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
             if data is None:
                 return Response(status_code=status.HTTP_200_OK)
             
-        data = remove_empty_dicts(data)
+        # data = remove_empty_dicts(data)
 
         if not data or (isinstance(data, Iterable) and "value" in data and len(data["value"]) == 0 and result["single_result"]):
             return JSONResponse(
@@ -127,6 +127,7 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
                     "message": "Not Found"
                 }
             )
+        print('DATA', full_path.split('/')[-1], data)
         return data
     except Exception as e:
         traceback.print_exc()
