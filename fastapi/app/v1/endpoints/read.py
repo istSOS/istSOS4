@@ -117,7 +117,6 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
             if data is None:
                 return Response(status_code=status.HTTP_200_OK)
             
-        # data = remove_empty_dicts(data)
 
         if not data or (isinstance(data, Iterable) and "value" in data and len(data["value"]) == 0 and result["single_result"]):
             return JSONResponse(
@@ -128,12 +127,6 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
                     "message": "Not Found"
                 }
             )
-        print('DATA', full_path.split('/')[-1], data)
-        if full_path == "/istsos-miu/v1.1/Things?$orderby=name":
-            test = db.query(Thing).all()
-            print('*****')
-            for e in test:
-                print(e.to_dict())
         return data
     except Exception as e:
         traceback.print_exc()
@@ -145,11 +138,3 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
                 "message": str(e)
             }
         )
-
-def remove_empty_dicts(obj):
-    if isinstance(obj, dict):
-        return {k: remove_empty_dicts(v) for k, v in obj.items() if v != {} and v is not None}
-    elif isinstance(obj, list):
-        return [remove_empty_dicts(item) for item in obj]
-    else:
-        return obj
