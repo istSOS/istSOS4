@@ -482,8 +482,12 @@ class NodeVisitor(Visitor):
                         sub_query = sub_query.subquery()
                         sub_queries.append(sub_query)
                     if len(sub_queries) > 0:
-                        main_query = main_query.join(getattr(main_entity, current.lower())).join(
-                            sub_queries[-1]).distinct(getattr(main_entity, 'id'))
+                        relationship = getattr(main_entity, current.lower()).property.direction.name
+                        main_query = (
+                            main_query.join(getattr(main_entity, current.lower())).join(sub_queries[-1])
+                            if relationship == "MANYTOMANY"
+                            else main_query.join(sub_queries[-1])
+                        )
                         query_count = query_count.join(
                             getattr(main_entity, current.lower())).join(sub_queries[-1])
 
