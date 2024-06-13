@@ -913,7 +913,6 @@ class STA2REST:
                 sub_query = QueryNode(
                     None, None, None, None, None, None, None, None, None, True)
                 if entity[1]:
-                    single_result = True
                     sub_query.filter = FilterNode(f"id eq {entity[1]}")
                 # Check if we are the last entity
                 if index == len(entities) - 1:
@@ -941,8 +940,7 @@ class STA2REST:
             query_ast.filter = FilterNode(
                 query_ast.filter.filter + f" and id eq {main_entity_id}" if query_ast.filter else f"id eq {main_entity_id}")
 
-            if not entities:
-                single_result = True
+            single_result = True
 
         if uri['single']:
             single_result = True
