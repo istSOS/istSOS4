@@ -509,9 +509,15 @@ class NodeVisitor(Visitor):
                         else:
                             json_build_object_args.append(func.coalesce(
                                 sub_query.columns[alias.lower()], text("'[]'")))
-                    main_query = select(func.json_build_object(
-                        *json_build_object_args)).select_from(main_entity)
-
+                    main_query = (
+                        main_query.add_columns(func.json_build_object(*json_build_object_args)).select_from(
+                            main_entity
+                        )
+                        if len(new_node["expand"]["identifiers"]) > 0
+                        else select(func.json_build_object(*json_build_object_args)).select_from(
+                            main_entity
+                        )
+                    )
                     if (self.main_entity == 'Location' and sub_queries[0][1] == 'HistoricalLocation'):
                         sub_queries = list(reversed(sub_queries))
 
