@@ -19,6 +19,7 @@ from .sta_parser.parser import Parser
 from sqlalchemy.orm import sessionmaker, load_only, contains_eager, joinedload
 from sqlalchemy.sql.expression import BooleanClauseList, BinaryExpression
 from sqlalchemy import create_engine, select, func, asc, desc, and_, literal, text
+from sqlalchemy.sql.sqltypes import Integer, Text, String
 from sqlalchemy.inspection import inspect
 from datetime import datetime, timezone
 from ..models import (
@@ -319,8 +320,11 @@ class NodeVisitor(Visitor):
                     ]
                     for field in identifiers:
                         attr, order = field.split(".")
-                        ordering.append(asc(attr.collate('C'))
-                                        if order == "asc" else desc(attr.collate('C')))
+                        collation = 'C' if isinstance(attr.type, (String, Text)) else None
+                        if order == 'asc':
+                            ordering.append(asc(attr.collate(collation)) if collation else asc(attr))
+                        else:
+                            ordering.append(desc(attr.collate(collation)) if collation else desc(attr))
                 else:
                     ordering = [desc(getattr(sub_entity, "id"))]
                 sub_query = sub_query.order_by(*ordering)
@@ -532,11 +536,16 @@ class NodeVisitor(Visitor):
                 main_query = main_query.filter(filter)
                 query_count = query_count.filter(filter)
 
+            ordering = []
             if node.orderby:
                 attrs, orders = self.visit(node.orderby)
                 for attr, order in zip(attrs, orders):
-                    ordering = [asc(a.collate('C')) if order == 'asc' else desc(a.collate('C'))
-                                for a in attr]
+                    for a in attr:
+                        collation = 'C' if isinstance(a.type, (String, Text)) else None
+                        if order == 'asc':
+                            ordering.append(asc(a.collate(collation)) if collation else asc(a))
+                        else:
+                            ordering.append(desc(a.collate(collation)) if collation else desc(a))
             else:
                 ordering = [desc(getattr(main_entity, 'id'))]
 
