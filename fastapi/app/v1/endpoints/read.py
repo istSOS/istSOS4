@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session
 from app.models.database import SessionLocal
 from collections.abc import Iterable
 from ...models import Thing
+import json
 
 v1 = APIRouter()
+
 
 def get_db():
     db = SessionLocal()
@@ -18,6 +20,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 def __handle_root(request: Request):
     # Handle the root path
@@ -27,7 +30,7 @@ def __handle_root(request: Request):
         value.append(
             {
                 "name": table,
-                "url": 
+                "url":
                 f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}" + "/" + table,
             }
         )
@@ -35,8 +38,9 @@ def __handle_root(request: Request):
     response = {
         "value": value,
         "serverSettings": serverSettings,
-    } 
+    }
     return response
+
 
 @v1.api_route("/{path_name:path}", methods=["GET"])
 async def catch_all_get(request: Request, path_name: str, db: Session = Depends(get_db)):
@@ -44,11 +48,33 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
         # Handle the root path
         return __handle_root(request)
 
-    try:    
+    try:
         # get full path from request
         full_path = request.url.path
         if request.url.query:
             full_path += "?" + request.url.query
+
+        ##############################################
+        ##############################################
+        # Definisci il percorso del file JSON
+        file_json = 'requests.json'
+
+        # Leggi il file JSON e salva il contenuto in una variabile
+        try:
+            with open(file_json, 'r') as file:
+                dati = json.load(file)
+        except:
+            dati = []
+        dati.append({
+            "path": full_path,
+            "method": "GET",
+            "body": ""
+        })
+        # Risalva i dati JSON modificati nello stesso file
+        with open(file_json, 'w') as file:
+            json.dump(dati, file, indent=4)
+        ##############################################
+        ##############################################
 
         result = sta2rest.STA2REST.convert_query(full_path, db)
         items = result["query"]
@@ -71,7 +97,8 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
                         end_index = char_index
                 top_value = int(nextLink[start_index:end_index])
                 new_top_value = top_value
-                nextLink = nextLink[:start_index] + str(new_top_value) + nextLink[end_index:]
+                nextLink = nextLink[:start_index] + \
+                    str(new_top_value) + nextLink[end_index:]
             else:
                 if '?' in nextLink:
                     nextLink = nextLink + f"&$top={new_top_value}"
@@ -86,7 +113,8 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
                         end_index = char_index
                 skip_value = int(nextLink[start_index:end_index])
                 new_skip_value = skip_value + new_top_value
-                nextLink = nextLink[:start_index] + str(new_skip_value) + nextLink[end_index:]
+                nextLink = nextLink[:start_index] + \
+                    str(new_skip_value) + nextLink[end_index:]
             else:
                 new_skip_value = new_top_value
                 nextLink = nextLink + f"&$skip={new_skip_value}"
@@ -102,21 +130,22 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
         if result['ref']:
             if 'value' in data:
                 if not result['single_result']:
-                    data["value"] = [{'@iot.selfLink': item.get('@iot.selfLink')} for item in data["value"] if '@iot.selfLink' in item]
+                    data["value"] = [
+                        {'@iot.selfLink': item.get('@iot.selfLink')} for item in data["value"] if '@iot.selfLink' in item]
                 else:
                     if '@iot.selfLink' in data["value"][0]:
                         data['@iot.selfLink'] = data["value"][0]['@iot.selfLink']
                     del data["value"]
             else:
-                data = {'@iot.selfLink': data.get('@iot.selfLink')} if '@iot.selfLink' in data else {}
+                data = {
+                    '@iot.selfLink': data.get('@iot.selfLink')} if '@iot.selfLink' in data else {}
 
         if result['value']:
             if 'value' in data:
-                data = data[list(data.keys())[0]][0]   
+                data = data[list(data.keys())[0]][0]
             data = data[list(data.keys())[0]]
             if data is None:
                 return Response(status_code=status.HTTP_200_OK)
-            
 
         if not data or (isinstance(data, Iterable) and "value" in data and len(data["value"]) == 0 and result["single_result"]):
             return JSONResponse(
