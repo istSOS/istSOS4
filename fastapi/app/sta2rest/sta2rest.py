@@ -474,8 +474,12 @@ class NodeVisitor(Visitor):
                         sub_query = session.query(globals()[current])
                         if i > 0:
                             previous = new_node['expand']['identifiers'][i - 1].identifier
-                            sub_query = sub_query.join(
-                                getattr(globals()[current], previous.lower())).join(sub_queries_no_expand[i - 1])
+                            relationship = getattr(globals()[current], previous.lower()).property.direction.name
+                            sub_query = (
+                                sub_query.join(getattr(globals()[current], previous.lower())).join(sub_queries_no_expand[i - 1])
+                                if relationship == "MANYTOMANY"
+                                else sub_query.join(sub_queries_no_expand[i - 1])
+                            )
                         if e.subquery and e.subquery.filter:
                             filter, join_relationships = self.visit_FilterNode(
                                 e.subquery.filter, current)
