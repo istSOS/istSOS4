@@ -72,6 +72,8 @@ ALLOWED_KEYS = {
 }
 
 # Handle UPDATE requests
+
+
 @v1.api_route("/{path_name:path}", methods=["PATCH"])
 async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_pool)):
     try:
@@ -81,15 +83,39 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
         # Validate entity name and id
         name, id = result["entity"]
         if not name or not id:
-            raise Exception(f"No {'entity name' if not name else 'entity id'} provided")
+            raise Exception(
+                f"No {'entity name' if not name else 'entity id'} provided")
 
         body = await request.json()
 
         print(f"BODY PATCH {name}", body)
 
+        ##############################################
+        ##############################################
+        # Definisci il percorso del file JSON
+        file_json = 'requests.json'
+
+        # Leggi il file JSON e salva il contenuto in una variabile
+        try:
+            with open(file_json, 'r') as file:
+                dati = json.load(file)
+        except:
+            dati = []
+        dati.append({
+            "path": full_path,
+            "method": "PATCH",
+            "body": body
+        })
+        # Risalva i dati JSON modificati nello stesso file
+        with open(file_json, 'w') as file:
+            json.dump(dati, file, indent=4)
+        ##############################################
+        ##############################################
+
         if name in ALLOWED_KEYS:
             allowed_keys = ALLOWED_KEYS[name]
-            invalid_keys = [key for key in body.keys() if key not in allowed_keys]
+            invalid_keys = [
+                key for key in body.keys() if key not in allowed_keys]
             if invalid_keys:
                 raise Exception(
                     f"Invalid keys in payload for {name}: {', '.join(invalid_keys)}"
