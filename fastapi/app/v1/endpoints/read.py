@@ -127,6 +127,7 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
                     "message": "Not Found"
                 }
             )
+        print("Data: ", data)
         return data
     except Exception as e:
         traceback.print_exc()
