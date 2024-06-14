@@ -461,11 +461,12 @@ class NodeVisitor(Visitor):
                 for e in node.expand.identifiers:
                     if not e.expand:
                         new_node['expand']['identifiers'].append(e)
-
+                node.expand.identifiers = [
+                    e for e in node.expand.identifiers if e.expand]
+                sub_queries_no_expand = []
                 if len(new_node['expand']['identifiers']) > 0:
                     main_query = select(
                         func.json_build_object(*json_build_object_args))
-                    sub_queries = []
                     current = None
                     previous = None
                     for i, e in enumerate(new_node['expand']['identifiers']):
@@ -474,25 +475,23 @@ class NodeVisitor(Visitor):
                         if i > 0:
                             previous = new_node['expand']['identifiers'][i - 1].identifier
                             sub_query = sub_query.join(
-                                getattr(globals()[current], previous.lower())).join(sub_queries[i - 1])
+                                getattr(globals()[current], previous.lower())).join(sub_queries_no_expand[i - 1])
                         if e.subquery and e.subquery.filter:
                             filter, join_relationships = self.visit_FilterNode(
                                 e.subquery.filter, current)
                             sub_query = sub_query.filter(filter)
                         sub_query = sub_query.subquery()
-                        sub_queries.append(sub_query)
-                    if len(sub_queries) > 0:
+                        sub_queries_no_expand.append(sub_query)
+                    if len(sub_queries_no_expand) > 0 and len(node.expand.identifiers) == 0:
                         relationship = getattr(main_entity, current.lower()).property.direction.name
                         main_query = (
-                            main_query.join(getattr(main_entity, current.lower())).join(sub_queries[-1])
+                            main_query.join(getattr(main_entity, current.lower())).join(sub_queries_no_expand[-1])
                             if relationship == "MANYTOMANY"
-                            else main_query.join(sub_queries[-1])
+                            else main_query.join(sub_queries_no_expand[-1])
                         )
                         query_count = query_count.join(
-                            getattr(main_entity, current.lower())).join(sub_queries[-1])
+                            getattr(main_entity, current.lower())).join(sub_queries_no_expand[-1])
 
-                node.expand.identifiers = [
-                    e for e in node.expand.identifiers if e.expand]
                 if len(node.expand.identifiers) > 0:
                     # Visit the expand node
                     sub_queries = self.visit_ExpandNode(
@@ -509,15 +508,16 @@ class NodeVisitor(Visitor):
                         else:
                             json_build_object_args.append(func.coalesce(
                                 sub_query.columns[alias.lower()], text("'[]'")))
-                    main_query = (
-                        main_query.add_columns(func.json_build_object(*json_build_object_args)).select_from(
-                            main_entity
+                    main_query = select(func.json_build_object(*json_build_object_args)).select_from(main_entity)
+                    if len(sub_queries_no_expand) > 0:
+                        relationship = getattr(main_entity, current.lower()).property.direction.name
+                        main_query = (
+                            main_query.join(getattr(main_entity, current.lower())).join(sub_queries_no_expand[-1])
+                            if relationship == "MANYTOMANY"
+                            else main_query.join(sub_queries_no_expand[-1])
                         )
-                        if len(new_node["expand"]["identifiers"]) > 0
-                        else select(func.json_build_object(*json_build_object_args)).select_from(
-                            main_entity
-                        )
-                    )
+                        query_count = query_count.join(
+                            getattr(main_entity, current.lower())).join(sub_queries_no_expand[-1])
                     if (self.main_entity == 'Location' and sub_queries[0][1] == 'HistoricalLocation'):
                         sub_queries = list(reversed(sub_queries))
 
