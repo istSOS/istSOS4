@@ -20,28 +20,6 @@ async def catch_all_delete(request: Request, path_name: str, pgpool=Depends(get_
         # parse uri
         result = sta2rest.STA2REST.parse_uri(full_path)
 
-        ##############################################
-        ##############################################
-        # Definisci il percorso del file JSON
-        file_json = 'requests.json'
-
-        # Leggi il file JSON e salva il contenuto in una variabile
-        try:
-            with open(file_json, 'r') as file:
-                dati = json.load(file)
-        except:
-            dati = []
-        dati.append({
-            "path": full_path,
-            "method": "DELETE",
-            "body": ""
-        })
-        # Risalva i dati JSON modificati nello stesso file
-        with open(file_json, 'w') as file:
-            json.dump(dati, file, indent=4)
-        ##############################################
-        ##############################################
-
         # Get main entity
         [name, id] = result["entity"]
 

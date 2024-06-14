@@ -54,28 +54,6 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
         if request.url.query:
             full_path += "?" + request.url.query
 
-        ##############################################
-        ##############################################
-        # Definisci il percorso del file JSON
-        file_json = 'requests.json'
-
-        # Leggi il file JSON e salva il contenuto in una variabile
-        try:
-            with open(file_json, 'r') as file:
-                dati = json.load(file)
-        except:
-            dati = []
-        dati.append({
-            "path": full_path,
-            "method": "GET",
-            "body": ""
-        })
-        # Risalva i dati JSON modificati nello stesso file
-        with open(file_json, 'w') as file:
-            json.dump(dati, file, indent=4)
-        ##############################################
-        ##############################################
-
         result = sta2rest.STA2REST.convert_query(full_path, db)
         items = result["query"]
         query_count = result["query_count"]

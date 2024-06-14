@@ -90,28 +90,6 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
 
         print(f"BODY PATCH {name}", body)
 
-        ##############################################
-        ##############################################
-        # Definisci il percorso del file JSON
-        file_json = 'requests.json'
-
-        # Leggi il file JSON e salva il contenuto in una variabile
-        try:
-            with open(file_json, 'r') as file:
-                dati = json.load(file)
-        except:
-            dati = []
-        dati.append({
-            "path": full_path,
-            "method": "PATCH",
-            "body": body
-        })
-        # Risalva i dati JSON modificati nello stesso file
-        with open(file_json, 'w') as file:
-            json.dump(dati, file, indent=4)
-        ##############################################
-        ##############################################
-
         if name in ALLOWED_KEYS:
             allowed_keys = ALLOWED_KEYS[name]
             invalid_keys = [
