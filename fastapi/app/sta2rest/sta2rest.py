@@ -290,9 +290,9 @@ class NodeVisitor(Visitor):
                 if expand_identifier.subquery and expand_identifier.subquery.expand:
                     for e in expand_identifier.subquery.expand.identifiers:
                         if hasattr(globals()[expand_identifier.identifier], e.identifier.lower()):
-                            relationship = getattr(
+                            relationship_nested = getattr(
                                 globals()[expand_identifier.identifier], e.identifier.lower()).property
-                            if relationship.direction.name == "MANYTOONE":
+                            if relationship_nested.direction.name == "MANYTOONE":
                                 fk = getattr(sub_entity, f"{e.identifier.lower()}_id")
                                 select_fields.insert(0, fk)
                                 fk_arr.append(fk)
