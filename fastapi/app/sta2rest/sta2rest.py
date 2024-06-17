@@ -286,6 +286,7 @@ class NodeVisitor(Visitor):
                         select_fields.insert(0, fk_attr)
                         select_from = True
 
+                fk_arr = []
                 if expand_identifier.subquery and expand_identifier.subquery.expand:
                     for e in expand_identifier.subquery.expand.identifiers:
                         if hasattr(globals()[expand_identifier.identifier], e.identifier.lower()):
@@ -294,6 +295,7 @@ class NodeVisitor(Visitor):
                             if relationship.direction.name == "MANYTOONE":
                                 fk = getattr(sub_entity, f"{e.identifier.lower()}_id")
                                 select_fields.insert(0, fk)
+                                fk_arr.append(fk)
 
                 # Build sub-query with row number
                 sub_query = select(
@@ -353,8 +355,9 @@ class NodeVisitor(Visitor):
 
                 # Construct JSON object arguments
                 json_build_object_args = []
+                fk_names = [fk.name for fk in fk_arr]
                 for attr in subquery_ranked.columns:
-                    if fk_attr is None or (fk_attr is not None and attr.name != fk_attr.name):
+                    if (str(attr.name) not in fk_names) and (fk_attr is None or (fk_attr is not None and attr.name != fk_attr.name)):
                         json_build_object_args.append(
                             literal(attr.name) if attr.name != 'id' else text("'@iot.id'"))
                         json_build_object_args.append(func.ST_AsGeoJSON(attr).cast(
@@ -393,12 +396,11 @@ class NodeVisitor(Visitor):
                         json_build_object_args.append(func.coalesce(
                             nested_expand_query.columns[nested_identifier.lower()], text(coalesce_text)))
 
-                        aggregation_type = func.array_agg(func.json_build_object(*json_build_object_args))[1] if relationship.direction.name == "MANYTOONE" else func.json_agg(func.json_build_object(*json_build_object_args))
-                            
+                        # aggregation_type = func.array_agg(func.json_build_object(*json_build_object_args))[1] if relationship.direction.name == "MANYTOONE" else func.json_agg(func.json_build_object(*json_build_object_args))   
                         sub_query_json_agg = (
                             select(
                                 subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id,
-                                aggregation_type.label(
+                                func.json_agg(func.json_build_object(*json_build_object_args)).label(
                                     expand_identifier.identifier.lower()),
                             )
                             .select_from(subquery_ranked.outerjoin(nested_expand_query))
