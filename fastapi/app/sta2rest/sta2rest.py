@@ -289,11 +289,12 @@ class NodeVisitor(Visitor):
                 fk_arr = []
                 if expand_identifier.subquery and expand_identifier.subquery.expand:
                     for e in expand_identifier.subquery.expand.identifiers:
-                        if hasattr(globals()[expand_identifier.identifier], e.identifier.lower()):
+                        identifier = STA2REST.ENTITY_MAPPING.get(e.identifier, e.identifier)
+                        if hasattr(globals()[expand_identifier.identifier], identifier.lower()):
                             relationship_nested = getattr(
-                                globals()[expand_identifier.identifier], e.identifier.lower()).property
+                                globals()[expand_identifier.identifier], identifier.lower()).property
                             if relationship_nested.direction.name == "MANYTOONE":
-                                fk = getattr(sub_entity, f"{e.identifier.lower()}_id")
+                                fk = getattr(sub_entity, f"{identifier.lower()}_id")
                                 if fk not in select_fields:
                                     select_fields.insert(0, fk)
                                     fk_arr.append(fk)
