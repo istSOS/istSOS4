@@ -387,6 +387,7 @@ class NodeVisitor(Visitor):
                 if expand_identifier.subquery and expand_identifier.subquery.expand:
                     nested_expand_queries = self.visit_ExpandNode(
                         expand_identifier.subquery.expand, expand_identifier.identifier)
+                    select_from_clause = subquery_ranked
                     for nested_expand_query, nested_identifier in nested_expand_queries:
                         value = getattr(
                             sub_entity, f"{nested_identifier.lower()}_navigation_link")
@@ -398,17 +399,22 @@ class NodeVisitor(Visitor):
                         json_build_object_args.append(func.coalesce(
                             nested_expand_query.columns[nested_identifier.lower()], text(coalesce_text)))
 
-                        aggregation_type = func.array_agg(func.json_build_object(*json_build_object_args))[1] if relationship.direction.name == "MANYTOONE" else func.json_agg(func.json_build_object(*json_build_object_args))   
-                        sub_query_json_agg = (
-                            select(
-                                subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id,
-                                aggregation_type.label(
-                                    expand_identifier.identifier.lower()),
-                            )
-                            .select_from(subquery_ranked.outerjoin(nested_expand_query))
-                            .group_by(subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id)
-                            .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
+                        aggregation_type = (func.array_agg(
+                            func.json_build_object(*json_build_object_args))[1]
+                            if relationship.direction.name == "MANYTOONE"
+                            else func.json_agg(func.json_build_object(*json_build_object_args))
                         )
+                        select_from_clause = select_from_clause.outerjoin(nested_expand_query)
+
+                    sub_query_json_agg = (
+                        select(
+                            subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id,
+                            aggregation_type.label(expand_identifier.identifier.lower()),
+                        )
+                        .select_from(select_from_clause)
+                        .group_by(subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id)
+                        .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
+                    )
 
                 expand_queries.append(
                     (sub_query_json_agg, expand_identifier.identifier))
