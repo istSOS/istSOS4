@@ -533,7 +533,7 @@ class NodeVisitor(Visitor):
                         # Handle different relationship types
                         if relationship.direction.name == "MANYTOMANY":
                             fk_name = f"{self.main_entity.lower()}_id"
-                            main_query = main_query.outerjoin(relationship.secondary).outerjoin(sub_query, getattr(main_entity, "id") == relationship.secondary.c[fk_name])
+                            main_query = main_query.outerjoin(sub_query, getattr(main_entity, "id") == sub_query.c[fk_name])
                         elif relationship.direction.name == "MANYTOONE":
                             fk_attr = getattr(main_entity, f"{alias.lower()}_id")
                             main_query = main_query.outerjoin(sub_query, fk_attr == sub_query.c.id)
