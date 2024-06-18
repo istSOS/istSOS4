@@ -1,13 +1,13 @@
-import traceback
-import os
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response
-from fastapi import status
-from app.sta2rest import sta2rest
-from fastapi import Depends
-from app.db.db import get_pool
-from dateutil import parser
 import json
+import os
+import traceback
+
+from app.db.db import get_pool
+from app.sta2rest import sta2rest
+from dateutil import parser
+from fastapi.responses import JSONResponse, Response
+
+from fastapi import APIRouter, Depends, Request, status
 
 v1 = APIRouter()
 
@@ -100,8 +100,6 @@ async def catch_all_update(
         body = await request.json()
 
         print(f"BODY PATCH {name}", body)
-        if DEBUG:
-            b = body.copy()
 
         if name in ALLOWED_KEYS:
             allowed_keys = ALLOWED_KEYS[name]
@@ -118,6 +116,7 @@ async def catch_all_update(
                 response2jsonfile(request, "", "requests.json", "")
             return Response(status_code=status.HTTP_200_OK)
         if DEBUG:
+            b = body.copy()
             r = await update(name, int(id), body, pgpool)
             response2jsonfile(request, "", "requests.json", b, r.status_code)
             return r
