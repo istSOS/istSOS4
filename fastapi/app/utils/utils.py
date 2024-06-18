@@ -1,6 +1,7 @@
-from app.sta2rest import sta2rest
 import datetime
 import json
+
+from app.sta2rest import sta2rest
 
 
 class PostgRESTError(Exception):
@@ -221,7 +222,6 @@ async def create_entity(entity_name, body, pgpool):
                         existing_id = await conn.fetchval(
                             query, *formatted_body.values()
                         )
-                        print(query, existing_id)
                         if existing_id:
                             created_ids[
                                 sta2rest.STA2REST.convert_to_database_id(
@@ -232,7 +232,6 @@ async def create_entity(entity_name, body, pgpool):
 
                     query = f'INSERT INTO sensorthings."{entity_name}" ({keys}) VALUES ({values_placeholders}) RETURNING id'
 
-                    print(query, formatted_body)
                     new_id = await conn.fetchval(
                         query, *formatted_body.values()
                     )
@@ -351,7 +350,6 @@ def response2jsonfile(request, response, filename, body="", status_code=200):
     except Exception:
         r = []
         pass
-    print(r)
     with open(filename, "w") as f:
         r.append(
             {
