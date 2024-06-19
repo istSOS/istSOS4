@@ -48,6 +48,7 @@ async def catch_all_post(
         if DEBUG:
             try:
                 b = body.copy()
+                json.dumps(b, indent=4)
             except:
                 b = ""
 
