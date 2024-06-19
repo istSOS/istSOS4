@@ -45,6 +45,8 @@ async def catch_all_post(
         result = sta2rest.STA2REST.parse_uri(full_path)
         # get json body
         body = await request.json()
+        if DEBUG:
+            b = body
 
         main_table = result["entity"][0]
 
@@ -69,10 +71,6 @@ async def catch_all_post(
 
         if DEBUG:
             print(f"BODY INSERT {main_table}", body)
-            if body:
-                b = body.copy()
-            else:
-                b = ""
             res = await insert(main_table, body, pgpool)
             response2jsonfile(request, "", "requests.json", b, res.status_code)
             return res
