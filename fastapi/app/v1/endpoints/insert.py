@@ -1,13 +1,13 @@
-import traceback
-import os
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response
-from fastapi import status
-from app.sta2rest import sta2rest
-from fastapi import Depends
-from app.db.db import get_pool
 import json
+import os
+import traceback
+
+from app.db.db import get_pool
+from app.sta2rest import sta2rest
 from dateutil import parser
+from fastapi.responses import JSONResponse, Response
+
+from fastapi import APIRouter, Depends, Request, status
 
 v1 = APIRouter()
 
@@ -69,7 +69,10 @@ async def catch_all_post(
 
         if DEBUG:
             print(f"BODY INSERT {main_table}", body)
-            b = body.copy()
+            if body:
+                b = body.copy()
+            else:
+                b = ""
             res = await insert(main_table, body, pgpool)
             response2jsonfile(request, "", "requests.json", b, res.status_code)
             return res
