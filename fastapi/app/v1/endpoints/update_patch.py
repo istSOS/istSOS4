@@ -99,6 +99,9 @@ async def catch_all_update(
 
         body = await request.json()
 
+        if DEBUG:
+            b = body
+
         print(f"BODY PATCH {name}", body)
 
         if name in ALLOWED_KEYS:
@@ -116,7 +119,6 @@ async def catch_all_update(
                 response2jsonfile(request, "", "requests.json", "")
             return Response(status_code=status.HTTP_200_OK)
         if DEBUG:
-            b = body.copy()
             r = await update(name, int(id), body, pgpool)
             response2jsonfile(request, "", "requests.json", b, r.status_code)
             return r
