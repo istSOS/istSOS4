@@ -46,7 +46,7 @@ async def catch_all_post(
         # get json body
         body = await request.json()
         if DEBUG:
-            b = body
+            b = await request.json()
 
         main_table = result["entity"][0]
 
