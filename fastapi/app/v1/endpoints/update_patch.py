@@ -100,7 +100,7 @@ async def catch_all_update(
         body = await request.json()
 
         if DEBUG:
-            b = body
+            b = await request.json()
 
         print(f"BODY PATCH {name}", body)
 
