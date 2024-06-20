@@ -471,10 +471,6 @@ class NodeVisitor(Visitor):
                 json_build_object_args.append(literal('components'))
                 json_build_object_args.append(selected_fields)
 
-                # iot.count will always be 1 with a single datastream
-                json_build_object_args.append(literal('dataArray@iot.count'))
-                json_build_object_args.append(1)
-
                 json_build_object_args.append(literal('dataArray'))
                 # TODO: Populate dataArray with actual data
                 json_build_object_args.append([[1,2,3]])
