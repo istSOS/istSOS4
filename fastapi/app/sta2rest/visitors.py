@@ -220,7 +220,7 @@ class NodeVisitor(Visitor):
                     ]
                     select_from = True
 
-                if fk_parent:
+                if fk_parent is not None:
                     select_fields.insert(0, fk_parent)
 
             fk_child_arr = []
