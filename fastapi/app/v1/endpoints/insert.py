@@ -47,8 +47,8 @@ async def catch_all_post(
         body = await request.json()
         if DEBUG:
             try:
-                b = body.copy()
-                json.dumps(b, indent=4)
+                import copy
+                b = copy.deepcopy(body)
             except:
                 b = ""
 

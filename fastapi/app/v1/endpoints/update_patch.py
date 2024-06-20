@@ -101,8 +101,8 @@ async def catch_all_update(
 
         if DEBUG:
             try:
-                b = body.copy()
-                json.dumps(b, indent=4)
+                import copy
+                b = copy.deepcopy(body)
             except:
                 b = ""
 
