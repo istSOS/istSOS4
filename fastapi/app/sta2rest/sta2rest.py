@@ -466,15 +466,7 @@ class NodeVisitor(Visitor):
                     attr.name)) if attr.name != 'id' else json_build_object_args.append(text("'@iot.id'"))
                 json_build_object_args.append(func.ST_AsGeoJSON(attr).cast(JSONB)) if (
                     type(attr.type) == Geometry) else json_build_object_args.append(attr)
-                
-            if node.result_format:
-                json_build_object_args.append(literal('components'))
-                json_build_object_args.append(selected_fields)
-
-                json_build_object_args.append(literal('dataArray'))
-                # TODO: Populate dataArray with actual data
-                json_build_object_args.append([[1,2,3]])
-
+                                
             # Check if we have an expand node before the other parts of the query
             if node.expand:
                 new_node = {'expand': {'identifiers': []}}
@@ -843,6 +835,8 @@ class STA2REST:
         'validTime': 'valid_time'
     }
 
+    REVERSE_SELECT_MAPPING = {v: k for k, v in SELECT_MAPPING.items()}
+
     @staticmethod
     def get_default_column_names(entity: str) -> list:
         """
@@ -997,6 +991,11 @@ class STA2REST:
 
         print(query_ast)
 
+        # Check if query has a result_format and is Observation
+        if query_ast.result_format and len(entities) == 0:
+            query_ast.expand = ExpandNode([ExpandNodeIdentifier("Datastream")])
+
+
         # Visit the query ast to convert it
         visitor = NodeVisitor(main_entity, db)
         query_converted = visitor.visit(query_ast)
@@ -1005,10 +1004,63 @@ class STA2REST:
         if query_ast.result_format and main_entity != 'Observation':
             raise Exception("Illegal operation: $resultFormat is only valid for /Observations")
 
+        result = db.execute(query_converted[0]).all()
+        count = query_converted[2].scalar()
+        query_result = result
+
+        if query_ast.result_format:
+            selected_fields = [
+                STA2REST.REVERSE_SELECT_MAPPING.get(identifier.name, identifier.name)
+                for identifier in query_ast.select.identifiers
+            ]
+
+            if len(entities) == 0:
+                datastreams = {}
+
+                for row in result:
+                    row = row[0]
+                    datastream_id = row["Datastream"]["@iot.id"]
+                    link = f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}/Datastreams({datastream_id})"
+
+                    if link not in datastreams:
+                        datastreams[link] = []
+
+                    dataArray = [
+                        row["@iot.id"] if field == "id" else row[field]
+                        for field in selected_fields
+                    ]
+                    datastreams[link].append(dataArray)
+
+                query_result = [
+                    ({
+                        "Datastream@iot.navigationLink": link,
+                        "components": selected_fields,
+                        "dataArray@iot.count": len(dataArray),
+                        "dataArray": dataArray
+                    },)
+                    for link, dataArray in datastreams.items()
+                ]
+            else:
+                entity, entity_id = entities[0]
+                dataArray = [
+                    [row[0][field] for field in row[0]]
+                    for row in result
+                ]
+
+                query_result = [
+                    ({
+                        "Datastream@iot.navigationLink": f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}/Datastreams({entity_id})",
+                        "components": selected_fields,
+                        "dataArray@iot.count": len(result),
+                        "dataArray": dataArray
+                    },)
+                ]
+
+        
         return {
-            'query': db.execute(query_converted[0]).all(),
+            'query': query_result,
             'count_query': query_converted[1],
-            'query_count': query_converted[2].scalar(),
+            'query_count': count,
             'ref': uri['ref'],
             'value': uri['value'],
             'single_result': single_result,

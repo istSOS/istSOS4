@@ -70,6 +70,7 @@ async def catch_all_get(
         item_dicts = []
         for item in items:
             item_dicts.append(item[0])
+
         data = {}
         if len(item_dicts) == 1 and result["single_result"]:
             data = item_dicts[0]
