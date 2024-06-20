@@ -461,6 +461,7 @@ class NodeVisitor(Visitor):
             selected_fields = []
             for attr in select_query:
                 selected_fields.append(attr.name)
+
                 json_build_object_args.append(literal(
                     attr.name)) if attr.name != 'id' else json_build_object_args.append(text("'@iot.id'"))
                 json_build_object_args.append(func.ST_AsGeoJSON(attr).cast(JSONB)) if (
@@ -469,6 +470,14 @@ class NodeVisitor(Visitor):
             if node.result_format:
                 json_build_object_args.append(literal('components'))
                 json_build_object_args.append(selected_fields)
+
+                # iot.count will always be 1 with a single datastream
+                json_build_object_args.append(literal('dataArray@iot.count'))
+                json_build_object_args.append(1)
+
+                json_build_object_args.append(literal('dataArray'))
+                # TODO: Populate dataArray with actual data
+                json_build_object_args.append([[1,2,3]])
 
             # Check if we have an expand node before the other parts of the query
             if node.expand:
