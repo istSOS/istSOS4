@@ -1,13 +1,14 @@
-import traceback
 import os
-from fastapi import APIRouter, Request, Depends
-from fastapi.responses import JSONResponse, Response
-from fastapi import status
-from app.sta2rest import sta2rest
-from app.settings import tables, serverSettings
-from sqlalchemy.orm import Session
-from app.models.database import SessionLocal
+import traceback
 from collections.abc import Iterable
+
+from app.models.database import SessionLocal
+from app.settings import serverSettings, tables
+from app.sta2rest import sta2rest
+from fastapi.responses import JSONResponse, Response
+from sqlalchemy.orm import Session
+
+from fastapi import APIRouter, Depends, Request, status
 
 v1 = APIRouter()
 
@@ -28,7 +29,15 @@ def get_db():
 
 
 def __handle_root(request: Request):
-    # Handle the root path
+    """
+    Handle the root path.
+
+    Args:
+        request (Request): The incoming request object.
+
+    Returns:
+        dict: The response containing the value and server settings.
+    """
     value = []
     # append the domain to the path for each table
     for table in tables:
@@ -54,6 +63,21 @@ def __handle_root(request: Request):
 async def catch_all_get(
     request: Request, path_name: str, db: Session = Depends(get_db)
 ):
+    """
+    Handle GET requests for all paths.
+
+    Args:
+        request (Request): The incoming request object.
+        path_name (str): The path name extracted from the URL.
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+
+    Returns:
+        dict: The response data.
+
+    Raises:
+        JSONResponse: If the requested resource is not found.
+        JSONResponse: If there is a bad request.
+    """
     if not path_name:
         # Handle the root path
         return __handle_root(request)
@@ -162,6 +186,7 @@ async def catch_all_get(
                 content={"code": 404, "type": "error", "message": "Not Found"},
             )
         if DEBUG:
+            print(f"GET data", data)
             response2jsonfile(request, data, "requests.json")
         return data
     except Exception as e:

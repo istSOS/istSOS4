@@ -1,13 +1,15 @@
-from .database import Base, SCHEMA_NAME
-from sqlalchemy.sql.schema import Column
-from sqlalchemy.sql.sqltypes import Integer, Text, String
+from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql.json import JSON
+from sqlalchemy.sql.schema import Column
+from sqlalchemy.sql.sqltypes import Integer, String, Text
+
+from .database import SCHEMA_NAME, Base
+
 
 class Sensor(Base):
-    __tablename__ = 'Sensor'
-    __table_args__ = {'schema': SCHEMA_NAME}
+    __tablename__ = "Sensor"
+    __table_args__ = {"schema": SCHEMA_NAME}
 
     id = Column(Integer, primary_key=True)
     self_link = Column("@iot.selfLink", Text)
@@ -37,8 +39,10 @@ class Sensor(Base):
     def to_dict_expand(self):
         """Serialize the Sensor model to a dict, including expanded relationships."""
         data = self._serialize_columns()
-        if 'datastream' not in inspect(self).unloaded:
-            data['Datastreams'] = [datastream.to_dict_expand() for datastream in self.datastream]
+        if "datastream" not in inspect(self).unloaded:
+            data["Datastreams"] = [
+                datastream.to_dict_expand() for datastream in self.datastream
+            ]
         return data
 
     def to_dict(self):

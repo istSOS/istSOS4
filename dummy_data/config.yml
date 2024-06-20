@@ -1,28 +1,7 @@
-# config.yml content
 version: 2.1
 
-dummy_data: False #True/False  When True database table will be cleared and populated with synthetic data
-clear_data: False #True/False  True: clearing database False: Not clearing
-
-# dummy_data, clear_data | Table Data Status
-# _______________________|____________________________________
-# True      ,True        | Previous data cleared and new data added
-# True      ,False       | Dummy_data added over previous data
-# False     ,True        | All data cleared
-# False     ,False       | Previous data retained
-
-start_datetime: 2020-01-01T12:00:00.000+01:00
-timestep: PT10M
-
-static_datastreams:
-  observedProperties: 10
-  quantity: 10
-  observations_each: 1000
-
-dynamic_datastreams:
-  observedProperties: 10
-  quantity: 8
-  observations_each: 500
+dummy_data: False
+clear_data: False
 
 n_things: 20
 n_observed_properties: 4

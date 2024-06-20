@@ -47,7 +47,9 @@ async def catch_all_post(
         body = await request.json()
         if DEBUG:
             try:
+                print(f"POST body {main_table}", body)
                 import copy
+
                 b = copy.deepcopy(body)
             except:
                 b = ""
@@ -74,7 +76,6 @@ async def catch_all_post(
             #     body[f"{name.lower()}_id"] = int(id)
 
         if DEBUG:
-            print(f"BODY INSERT {main_table}", body)
             res = await insert(main_table, body, pgpool)
             response2jsonfile(request, "", "requests.json", b, res.status_code)
             return res
@@ -134,8 +135,6 @@ async def insert(main_table, payload, pgpool, request=None):
 
 
 # LOCATION
-
-
 async def insertLocation(payload, conn):
     try:
         async with conn.transaction():
@@ -401,8 +400,6 @@ async def insertFeaturesOfInterest(payload, conn):
 
 
 # DATASTREAM
-
-
 async def insertDatastream(payload, conn):
     try:
         async with conn.transaction():
