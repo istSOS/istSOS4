@@ -433,6 +433,7 @@ class NodeVisitor(Visitor):
         """
 
         # list to store the converted parts of the query node
+
         with self.db as session:
             main_entity = globals()[self.main_entity]
             main_query = None
@@ -457,11 +458,17 @@ class NodeVisitor(Visitor):
                     select_query.append(getattr(main_entity, field_name))
 
             json_build_object_args = []
+            selected_fields = []
             for attr in select_query:
+                selected_fields.append(attr.name)
                 json_build_object_args.append(literal(
                     attr.name)) if attr.name != 'id' else json_build_object_args.append(text("'@iot.id'"))
                 json_build_object_args.append(func.ST_AsGeoJSON(attr).cast(JSONB)) if (
                     type(attr.type) == Geometry) else json_build_object_args.append(attr)
+                
+            if node.result_format:
+                json_build_object_args.append(literal('components'))
+                json_build_object_args.append(selected_fields)
 
             # Check if we have an expand node before the other parts of the query
             if node.expand:
@@ -554,7 +561,7 @@ class NodeVisitor(Visitor):
                 # Set options for main_query if select_query is not empty
                 main_query = select(
                     func.json_build_object(*json_build_object_args))
-
+                
             if node.filter:
                 filter, join_relationships = self.visit_FilterNode(
                     node.filter, self.main_entity)
@@ -932,7 +939,7 @@ class STA2REST:
             # Merge the entities with the query
             for entity in entities:
                 entity_name = entity[0]
-                sub_query = QueryNode(None, None, None, None, None, None, None, None, None, None, True)
+                sub_query = QueryNode(None, None, None, None, None, None, None, None, None, True)
                 if entity[1]:
                     sub_query.filter = FilterNode(f"id eq {entity[1]}")
                 # Check if we are the last entity
