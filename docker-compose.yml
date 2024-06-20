@@ -51,7 +51,7 @@ services:
     volumes:
       - ./dummy_data:/dummy_data
     working_dir: /dummy_data
-    command: python3 gen_data.py
+    command: python3 generator.py
     depends_on:
       database:
         condition: service_healthy
