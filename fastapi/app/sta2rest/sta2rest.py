@@ -1008,9 +1008,6 @@ class STA2REST:
         # Result format is allowed only for Observations
         if query_ast.result_format and main_entity != 'Observation':
             raise Exception("Illegal operation: $resultFormat is only valid for /Observations")
-        
-        if query_ast.result_format and query_ast.expand:
-            raise Exception("Illegal operation: $expand is not allowed with $resultFormat")
 
         return {
             'query': db.execute(query_converted[0]).all(),
