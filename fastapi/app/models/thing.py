@@ -1,26 +1,34 @@
-from .database import Base, SCHEMA_NAME
-from sqlalchemy.sql.schema import Column
-from sqlalchemy.sql.sqltypes import Integer, Text, String
+from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql.json import JSON
+from sqlalchemy.sql.schema import Column
+from sqlalchemy.sql.sqltypes import Integer, String, Text
+
+from .database import SCHEMA_NAME, Base
 from .thing_location import Thing_Location
 
+
 class Thing(Base):
-    __tablename__ = 'Thing'
-    __table_args__ = {'schema': SCHEMA_NAME}
-    
+    __tablename__ = "Thing"
+    __table_args__ = {"schema": SCHEMA_NAME}
+
     id = Column(Integer, primary_key=True)
     self_link = Column("@iot.selfLink", Text)
     location_navigation_link = Column("Locations@iot.navigationLink", Text)
-    historicallocation_navigation_link = Column("HistoricalLocations@iot.navigationLink", Text)
+    historicallocation_navigation_link = Column(
+        "HistoricalLocations@iot.navigationLink", Text
+    )
     datastream_navigation_link = Column("Datastreams@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     properties = Column(JSON)
-    location = relationship("Location", secondary=Thing_Location, back_populates="thing")
+    location = relationship(
+        "Location", secondary=Thing_Location, back_populates="thing"
+    )
     datastream = relationship("Datastream", back_populates="thing")
-    historicallocation = relationship("HistoricalLocation", back_populates="thing")
+    historicallocation = relationship(
+        "HistoricalLocation", back_populates="thing"
+    )
 
     def _serialize_columns(self):
         """Serialize model columns to a dict, applying naming transformations."""
@@ -40,12 +48,19 @@ class Thing(Base):
     def to_dict_expand(self):
         """Serialize the Thing model to a dict, including expanded relationships."""
         data = self._serialize_columns()
-        if 'datastream' not in inspect(self).unloaded:
-            data['Datastreams'] = [ds.to_dict_expand() for ds in self.datastream]
-        if 'historicallocation' not in inspect(self).unloaded:
-            data['HistoricalLocations'] = [hl.to_dict_expand() for hl in self.historicallocation]
-        if 'location' not in inspect(self).unloaded and self.location is not None:
-            data['Locations'] = [l.to_dict_expand() for l in self.location]
+        if "datastream" not in inspect(self).unloaded:
+            data["Datastreams"] = [
+                ds.to_dict_expand() for ds in self.datastream
+            ]
+        if "historicallocation" not in inspect(self).unloaded:
+            data["HistoricalLocations"] = [
+                hl.to_dict_expand() for hl in self.historicallocation
+            ]
+        if (
+            "location" not in inspect(self).unloaded
+            and self.location is not None
+        ):
+            data["Locations"] = [l.to_dict_expand() for l in self.location]
         return data
 
     def to_dict(self):

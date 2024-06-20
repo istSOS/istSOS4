@@ -3,7 +3,9 @@ Visitor for the SensorThings API.
 
 Author: Filippo Finke
 """
+
 import ast as ast
+
 
 class Visitor:
     """
@@ -21,6 +23,7 @@ class Visitor:
         visit(node): Traverse the AST by visiting each node in a depth-first manner.
         generic_visit(node): Default visit method called when no specific visit method is available for a node type.
     """
+
     def visit(self, node):
         """
         Traverse the AST by visiting each node in a depth-first manner.
@@ -36,10 +39,10 @@ class Visitor:
         Raises:
             None
         """
-        method_name = 'visit_' + type(node).__name__
+        method_name = "visit_" + type(node).__name__
         visitor = getattr(self, method_name, self.generic_visit)
         return visitor(node)
-    
+
     def generic_visit(self, node):
         """
         Default visit method called when no specific visit method is available for a node type.

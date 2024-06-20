@@ -4,6 +4,7 @@ AST for the SensorThings API.
 Author: Filippo Finke
 """
 
+
 class PrettyPrinter(object):
     """
     A class used to pretty print objects.
@@ -25,12 +26,14 @@ class PrettyPrinter(object):
                 continue
 
             if isinstance(val, list):
-                lines += ['\n  {}:'.format(key)]
+                lines += ["\n  {}:".format(key)]
                 for item in val:
-                    lines += ['   {}'.format(line) for line in str(item).split('\n')]
+                    lines += [
+                        "   {}".format(line) for line in str(item).split("\n")
+                    ]
             else:
-                lines += '{}: {}'.format(key, val).split('\n')
-        return '\n'.join(lines)
+                lines += "{}: {}".format(key, val).split("\n")
+        return "\n".join(lines)
 
 
 class Node(PrettyPrinter):
@@ -250,15 +253,17 @@ class CountNode(Node):
         """
         self.value = value
 
+
 class AsOfNode(Node):
     """
     A class representing a travel time node.
 
     Inherits from Node.
-    
+
     Attributes:
     value (str): The travel time string.
     """
+
     def __init__(self, value):
         """
         Initializes a AsOfNode object.
@@ -268,16 +273,18 @@ class AsOfNode(Node):
         """
         self.value = value
 
+
 class FromToNode(Node):
     """
     A class representing a travel time node.
 
     Inherits from Node.
-    
+
     Attributes:
     value1 (str): The travel time string.
     value2 (str): The travel time string.
     """
+
     def __init__(self, value1, value2):
         """
         Initializes a FromToNode object.
@@ -287,6 +294,7 @@ class FromToNode(Node):
         """
         self.value1 = value1
         self.value2 = value2
+
 
 class QueryNode(Node):
     """
@@ -305,8 +313,19 @@ class QueryNode(Node):
     is_subquery (bool): Indicates if the query is a subquery.
     """
 
-    def __init__(self, select=None, filter=None, expand=None, orderby=None, skip=None, top=None, count=None,
-                 as_of=None, from_to=None, is_subquery=False):
+    def __init__(
+        self,
+        select=None,
+        filter=None,
+        expand=None,
+        orderby=None,
+        skip=None,
+        top=None,
+        count=None,
+        as_of=None,
+        from_to=None,
+        is_subquery=False,
+    ):
         """
         Initializes a QueryNode object.
 
@@ -328,5 +347,5 @@ class QueryNode(Node):
         self.top = top
         self.count = count
         self.as_of = as_of
-        self. from_to = from_to
+        self.from_to = from_to
         self.is_subquery = is_subquery

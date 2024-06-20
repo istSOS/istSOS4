@@ -4,8 +4,8 @@ Parser for the SensorThings API query language.
 Author: Filippo Finke
 """
 
-from .lexer import Lexer
 from . import ast
+from .lexer import Lexer
 
 
 class Parser:
@@ -51,7 +51,8 @@ class Parser:
             self.next_token()
         else:
             raise Exception(
-                f"Expected '{token_type}', but found '{self.current_token.type}' ('{self.current_token.value}')")
+                f"Expected '{token_type}', but found '{self.current_token.type}' ('{self.current_token.value}')"
+            )
 
     def check_token(self, token_type):
         """
@@ -74,17 +75,17 @@ class Parser:
         """
         identifiers = []
         identifiers.append(ast.IdentifierNode(self.current_token.value))
-        if self.check_token('EXPAND_IDENTIFIER'):
-            self.match('EXPAND_IDENTIFIER')
+        if self.check_token("EXPAND_IDENTIFIER"):
+            self.match("EXPAND_IDENTIFIER")
         else:
-            self.match('IDENTIFIER')
-        while self.check_token('VALUE_SEPARATOR'):
-            self.match('VALUE_SEPARATOR')
+            self.match("IDENTIFIER")
+        while self.check_token("VALUE_SEPARATOR"):
+            self.match("VALUE_SEPARATOR")
             identifiers.append(ast.IdentifierNode(self.current_token.value))
-            if self.check_token('EXPAND_IDENTIFIER'):
-                self.match('EXPAND_IDENTIFIER')
+            if self.check_token("EXPAND_IDENTIFIER"):
+                self.match("EXPAND_IDENTIFIER")
             else:
-                self.match('IDENTIFIER')
+                self.match("IDENTIFIER")
         return identifiers
 
     def parse_filter(self, is_in_subquery=False):
@@ -97,10 +98,15 @@ class Parser:
         Returns:
             ast.FilterNode: The parsed filter expression.
         """
-        self.match('FILTER')
+        self.match("FILTER")
         filter = ""
 
-        while not self.check_token('OPTIONS_SEPARATOR') and not self.check_token('SUBQUERY_SEPARATOR') and self.current_token != None and not (is_in_subquery and self.check_token('RIGHT_PAREN')):
+        while (
+            not self.check_token("OPTIONS_SEPARATOR")
+            and not self.check_token("SUBQUERY_SEPARATOR")
+            and self.current_token != None
+            and not (is_in_subquery and self.check_token("RIGHT_PAREN"))
+        ):
             filter += self.current_token.value
             self.next_token()
 
@@ -114,36 +120,35 @@ class Parser:
             ast.ExpandNode: The parsed expand expression.
         """
         dollar_expand = False
-        if self.check_token('EXPAND'):
-            self.match('EXPAND')
+        if self.check_token("EXPAND"):
+            self.match("EXPAND")
             dollar_expand = True
-        if self.check_token('EXPAND_SEPARATOR'):
-            self.match('EXPAND_SEPARATOR')
+        if self.check_token("EXPAND_SEPARATOR"):
+            self.match("EXPAND_SEPARATOR")
         identifiers = []
-        while self.current_token.type != 'OPTIONS_SEPARATOR':
+        while self.current_token.type != "OPTIONS_SEPARATOR":
             tmp = self.current_token.value
-            identifier = ast.ExpandNodeIdentifier(
-                self.current_token.value)
-            self.match('EXPAND_IDENTIFIER')
+            identifier = ast.ExpandNodeIdentifier(self.current_token.value)
+            self.match("EXPAND_IDENTIFIER")
             # Check if there is a subquery
-            if self.check_token('LEFT_PAREN'):
+            if self.check_token("LEFT_PAREN"):
                 identifier.subquery = self.parse_subquery()
-            elif self.check_token('EXPAND_SEPARATOR'):
+            elif self.check_token("EXPAND_SEPARATOR"):
                 self.expand_identifiers.append(tmp)
                 identifier.subquery = self.parse_subquery()
 
             identifiers.append(identifier)
             if dollar_expand:
-                if self.check_token('VALUE_SEPARATOR'):
-                    self.match('VALUE_SEPARATOR')
+                if self.check_token("VALUE_SEPARATOR"):
+                    self.match("VALUE_SEPARATOR")
                 else:
                     break
             else:
-                if self.check_token('VALUE_SEPARATOR'):
+                if self.check_token("VALUE_SEPARATOR"):
                     if self.tokens[0].value in self.expand_identifiers:
-                        self.match('VALUE_SEPARATOR')
-                        self.match('EXPAND_IDENTIFIER')
-                        self.match('EXPAND_SEPARATOR')
+                        self.match("VALUE_SEPARATOR")
+                        self.match("EXPAND_IDENTIFIER")
+                        self.match("EXPAND_SEPARATOR")
                     else:
                         self.expand_identifiers = []
                         break
@@ -158,7 +163,7 @@ class Parser:
         Returns:
             ast.SelectNode: The parsed select expression.
         """
-        self.match('SELECT')
+        self.match("SELECT")
         identifiers = self.parse_identifier_list()
         return ast.SelectNode(identifiers)
 
@@ -169,27 +174,27 @@ class Parser:
         Returns:
             ast.OrderByNode: The parsed orderby expression.
         """
-        self.match('ORDERBY')
+        self.match("ORDERBY")
         # match identifiers separated by commas and check if there is a space and order
         identifiers = []
         while True:
             identifier = self.current_token.value
-            if self.check_token('EXPAND_IDENTIFIER'):
-                self.match('EXPAND_IDENTIFIER')
+            if self.check_token("EXPAND_IDENTIFIER"):
+                self.match("EXPAND_IDENTIFIER")
             else:
-                self.match('IDENTIFIER')
-            order = 'asc'
-            if self.check_token('WHITESPACE'):
-                self.match('WHITESPACE')
+                self.match("IDENTIFIER")
+            order = "asc"
+            if self.check_token("WHITESPACE"):
+                self.match("WHITESPACE")
                 order = self.current_token.value
-                self.match('ORDER')
+                self.match("ORDER")
 
             identifiers.append(ast.OrderByNodeIdentifier(identifier, order))
 
-            if not self.check_token('VALUE_SEPARATOR'):
+            if not self.check_token("VALUE_SEPARATOR"):
                 break
 
-            self.match('VALUE_SEPARATOR')
+            self.match("VALUE_SEPARATOR")
 
         return ast.OrderByNode(identifiers)
 
@@ -200,9 +205,9 @@ class Parser:
         Returns:
             ast.SkipNode: The parsed skip expression.
         """
-        self.match('SKIP')
+        self.match("SKIP")
         count = int(self.current_token.value)
-        self.match('INTEGER')
+        self.match("INTEGER")
         return ast.SkipNode(count)
 
     def parse_top(self):
@@ -215,14 +220,15 @@ class Parser:
         Raises:
             Exception: If an integer value is expected but not found.
         """
-        self.match('TOP')
+        self.match("TOP")
         if self.check_token("INTEGER"):
             count = int(self.current_token.value)
-            self.match('INTEGER')
+            self.match("INTEGER")
             return ast.TopNode(count)
         else:
             raise Exception(
-                f"Expected integer, but found '{self.current_token.type}' ('{self.current_token.value}')")
+                f"Expected integer, but found '{self.current_token.type}' ('{self.current_token.value}')"
+            )
 
     def parse_count(self):
         """
@@ -231,9 +237,9 @@ class Parser:
         Returns:
             ast.CountNode: The parsed count expression.
         """
-        self.match('COUNT')
-        value = self.current_token.value.lower() == 'true'
-        self.match('BOOL')
+        self.match("COUNT")
+        value = self.current_token.value.lower() == "true"
+        self.match("BOOL")
         return ast.CountNode(value)
 
     def parse_asof(self):
@@ -243,9 +249,9 @@ class Parser:
         Returns:
             ast.AsOfNode: The parsed asof expression.
         """
-        self.match('ASOF')
+        self.match("ASOF")
         value = self.current_token.value
-        self.match('TIMESTAMP')
+        self.match("TIMESTAMP")
 
         return ast.AsOfNode(value)
 
@@ -256,13 +262,13 @@ class Parser:
         Returns:
             ast.FromToNode: The parsed fromto expression.
         """
-        self.match('FROMTO')
+        self.match("FROMTO")
         value1 = self.current_token.value
-        self.match('TIMESTAMP')
-        self.match('VALUE_SEPARATOR')
-        self.match('WHITESPACE')
+        self.match("TIMESTAMP")
+        self.match("VALUE_SEPARATOR")
+        self.match("WHITESPACE")
         value2 = self.current_token.value
-        self.match('TIMESTAMP')
+        self.match("TIMESTAMP")
         return ast.FromToNode(value1, value2)
 
     def parse_subquery(self):
@@ -272,8 +278,8 @@ class Parser:
         Returns:
             ast.QueryNode: The parsed subquery.
         """
-        if self.check_token('LEFT_PAREN'):
-            self.match('LEFT_PAREN')
+        if self.check_token("LEFT_PAREN"):
+            self.match("LEFT_PAREN")
 
         select = None
         filter = None
@@ -287,38 +293,49 @@ class Parser:
 
         # continue parsing until we reach the end of the query
         while True:
-            if self.current_token.type == 'SELECT':
+            if self.current_token.type == "SELECT":
                 select = self.parse_select()
-            elif self.current_token.type == 'FILTER':
+            elif self.current_token.type == "FILTER":
                 filter = self.parse_filter(True)
-            elif self.current_token.type == 'EXPAND':
+            elif self.current_token.type == "EXPAND":
                 expand = self.parse_expand()
-            elif self.current_token.type == 'EXPAND_SEPARATOR':
+            elif self.current_token.type == "EXPAND_SEPARATOR":
                 expand = self.parse_expand()
-            elif self.current_token.type == 'ORDERBY':
+            elif self.current_token.type == "ORDERBY":
                 orderby = self.parse_orderby()
-            elif self.current_token.type == 'SKIP':
+            elif self.current_token.type == "SKIP":
                 skip = self.parse_skip()
-            elif self.current_token.type == 'TOP':
+            elif self.current_token.type == "TOP":
                 top = self.parse_top()
-            elif self.current_token.type == 'COUNT':
+            elif self.current_token.type == "COUNT":
                 count = self.parse_count()
-            elif self.current_token.type == 'ASOF':
+            elif self.current_token.type == "ASOF":
                 asof = self.parse_asof()
-            elif self.current_token.type == 'FROMTO':
+            elif self.current_token.type == "FROMTO":
                 fromto = self.parse_fromto()
             else:
                 raise Exception(f"Unexpected token: {self.current_token.type}")
 
             # check for other options
-            if self.check_token('SUBQUERY_SEPARATOR'):
-                self.match('SUBQUERY_SEPARATOR')
+            if self.check_token("SUBQUERY_SEPARATOR"):
+                self.match("SUBQUERY_SEPARATOR")
             else:
                 break
 
-        if (self.check_token('RIGHT_PAREN')):
-            self.match('RIGHT_PAREN')
-        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, asof, fromto, True)
+        if self.check_token("RIGHT_PAREN"):
+            self.match("RIGHT_PAREN")
+        return ast.QueryNode(
+            select,
+            filter,
+            expand,
+            orderby,
+            skip,
+            top,
+            count,
+            asof,
+            fromto,
+            True,
+        )
 
     def parse_query(self):
         """
@@ -339,31 +356,33 @@ class Parser:
 
         # continue parsing until we reach the end of the query
         while self.current_token != None:
-            if self.current_token.type == 'SELECT':
+            if self.current_token.type == "SELECT":
                 select = self.parse_select()
-            elif self.current_token.type == 'FILTER':
+            elif self.current_token.type == "FILTER":
                 filter = self.parse_filter()
-            elif self.current_token.type == 'EXPAND':
+            elif self.current_token.type == "EXPAND":
                 expand = self.parse_expand()
-            elif self.current_token.type == 'ORDERBY':
+            elif self.current_token.type == "ORDERBY":
                 orderby = self.parse_orderby()
-            elif self.current_token.type == 'SKIP':
+            elif self.current_token.type == "SKIP":
                 skip = self.parse_skip()
-            elif self.current_token.type == 'TOP':
+            elif self.current_token.type == "TOP":
                 top = self.parse_top()
-            elif self.current_token.type == 'COUNT':
+            elif self.current_token.type == "COUNT":
                 count = self.parse_count()
-            elif self.current_token.type == 'ASOF':
+            elif self.current_token.type == "ASOF":
                 asof = self.parse_asof()
-            elif self.current_token.type == 'FROMTO':
+            elif self.current_token.type == "FROMTO":
                 fromto = self.parse_fromto()
             else:
                 raise Exception(f"Unexpected token: {self.current_token.type}")
 
             if self.current_token != None:
-                self.match('OPTIONS_SEPARATOR')
+                self.match("OPTIONS_SEPARATOR")
 
-        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, asof, fromto)
+        return ast.QueryNode(
+            select, filter, expand, orderby, skip, top, count, asof, fromto
+        )
 
     def parse(self):
         """
@@ -376,8 +395,8 @@ class Parser:
 
 
 # Example usage
-if __name__ == '__main__':
-    text = '''$select=id,name,description,properties&$top=1000&$filter=properties/type eq 'station'&$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))'''
+if __name__ == "__main__":
+    text = """$select=id,name,description,properties&$top=1000&$filter=properties/type eq 'station'&$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))"""
     lexer = Lexer(text)
     tokens = lexer.tokens
 

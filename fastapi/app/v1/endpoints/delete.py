@@ -1,11 +1,11 @@
-import traceback
 import os
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response
-from fastapi import status
-from app.sta2rest import sta2rest
-from fastapi import Depends
+import traceback
+
 from app.db.db import get_pool
+from app.sta2rest import sta2rest
+from fastapi.responses import JSONResponse, Response
+
+from fastapi import APIRouter, Depends, Request, status
 
 v1 = APIRouter()
 
@@ -23,7 +23,21 @@ except:
 async def catch_all_delete(
     request: Request, path_name: str, pgpool=Depends(get_pool)
 ):
+    """
+    Delete endpoint for catching all DELETE requests.
 
+    Args:
+        request (Request): The incoming request object.
+        path_name (str): The path name extracted from the URL.
+        pgpool: The connection pool to the database.
+
+    Returns:
+        Response: The response object indicating the status of the delete operation.
+
+    Raises:
+        Exception: If no entity name or id is provided.
+
+    """
     try:
         full_path = request.url.path
         # parse uri
