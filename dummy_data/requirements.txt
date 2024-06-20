@@ -2,5 +2,3 @@ psycopg2
 PyYAML
 python-dotenv
 isodate
-iso8601
-isoduration
