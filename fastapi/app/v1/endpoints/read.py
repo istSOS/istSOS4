@@ -8,9 +8,16 @@ from app.settings import tables, serverSettings
 from sqlalchemy.orm import Session
 from app.models.database import SessionLocal
 from collections.abc import Iterable
-from ...models import Thing
 
 v1 = APIRouter()
+
+try:
+    DEBUG = int(os.getenv("DEBUG"))
+    if DEBUG:
+        from app.utils.utils import response2jsonfile
+except:
+    DEBUG = 0
+
 
 def get_db():
     db = SessionLocal()
@@ -18,6 +25,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 def __handle_root(request: Request):
     # Handle the root path
@@ -27,24 +35,30 @@ def __handle_root(request: Request):
         value.append(
             {
                 "name": table,
-                "url": 
-                f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}" + "/" + table,
+                "url": f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}"
+                + "/"
+                + table,
             }
         )
 
     response = {
         "value": value,
         "serverSettings": serverSettings,
-    } 
+    }
+    if DEBUG:
+        response2jsonfile(request, response, "requests.json")
     return response
 
+
 @v1.api_route("/{path_name:path}", methods=["GET"])
-async def catch_all_get(request: Request, path_name: str, db: Session = Depends(get_db)):
+async def catch_all_get(
+    request: Request, path_name: str, db: Session = Depends(get_db)
+):
     if not path_name:
         # Handle the root path
         return __handle_root(request)
 
-    try:    
+    try:
         # get full path from request
         full_path = request.url.path
         if request.url.query:
@@ -62,31 +76,39 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
         else:
             nextLink = f"{os.getenv('HOSTNAME')}{full_path}"
             new_top_value = 100
-            if '$top' in nextLink:
-                start_index = nextLink.find('$top=') + 5
+            if "$top" in nextLink:
+                start_index = nextLink.find("$top=") + 5
                 end_index = len(nextLink)
-                for char in ('&', ';', ')'):
+                for char in ("&", ";", ")"):
                     char_index = nextLink.find(char, start_index)
                     if char_index != -1 and char_index < end_index:
                         end_index = char_index
                 top_value = int(nextLink[start_index:end_index])
                 new_top_value = top_value
-                nextLink = nextLink[:start_index] + str(new_top_value) + nextLink[end_index:]
+                nextLink = (
+                    nextLink[:start_index]
+                    + str(new_top_value)
+                    + nextLink[end_index:]
+                )
             else:
-                if '?' in nextLink:
+                if "?" in nextLink:
                     nextLink = nextLink + f"&$top={new_top_value}"
                 else:
                     nextLink = nextLink + f"?$top={new_top_value}"
-            if '$skip' in nextLink:
-                start_index = nextLink.find('$skip=') + 6
+            if "$skip" in nextLink:
+                start_index = nextLink.find("$skip=") + 6
                 end_index = len(nextLink)
-                for char in ('&', ';', ')'):
+                for char in ("&", ";", ")"):
                     char_index = nextLink.find(char, start_index)
                     if char_index != -1 and char_index < end_index:
                         end_index = char_index
                 skip_value = int(nextLink[start_index:end_index])
                 new_skip_value = skip_value + new_top_value
-                nextLink = nextLink[:start_index] + str(new_skip_value) + nextLink[end_index:]
+                nextLink = (
+                    nextLink[:start_index]
+                    + str(new_skip_value)
+                    + nextLink[end_index:]
+                )
             else:
                 new_skip_value = new_top_value
                 nextLink = nextLink + f"&$skip={new_skip_value}"
@@ -99,65 +121,52 @@ async def catch_all_get(request: Request, path_name: str, db: Session = Depends(
             # Always included
             data["value"] = item_dicts
 
-        if result['ref']:
-            if 'value' in data:
-                if not result['single_result']:
-                    data["value"] = [{'@iot.selfLink': item.get('@iot.selfLink')} for item in data["value"] if '@iot.selfLink' in item]
+        if result["ref"]:
+            if "value" in data:
+                if not result["single_result"]:
+                    data["value"] = [
+                        {"@iot.selfLink": item.get("@iot.selfLink")}
+                        for item in data["value"]
+                        if "@iot.selfLink" in item
+                    ]
                 else:
-                    if '@iot.selfLink' in data["value"][0]:
-                        data['@iot.selfLink'] = data["value"][0]['@iot.selfLink']
+                    if "@iot.selfLink" in data["value"][0]:
+                        data["@iot.selfLink"] = data["value"][0][
+                            "@iot.selfLink"
+                        ]
                     del data["value"]
             else:
-                data = {'@iot.selfLink': data.get('@iot.selfLink')} if '@iot.selfLink' in data else {}
+                data = (
+                    {"@iot.selfLink": data.get("@iot.selfLink")}
+                    if "@iot.selfLink" in data
+                    else {}
+                )
 
-        if result['value']:
-            if 'value' in data:
-                data = data[list(data.keys())[0]][0]   
+        if result["value"]:
+            if "value" in data:
+                data = data[list(data.keys())[0]][0]
             data = data[list(data.keys())[0]]
             if data is None:
+                if DEBUG:
+                    response2jsonfile(request, "", "requests.json")
                 return Response(status_code=status.HTTP_200_OK)
-            
-        # data = remove_empty_dicts(data)
 
-        if not data or (isinstance(data, Iterable) and "value" in data and len(data["value"]) == 0 and result["single_result"]):
+        if not data or (
+            isinstance(data, Iterable)
+            and "value" in data
+            and len(data["value"]) == 0
+            and result["single_result"]
+        ):
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={
-                    "code": 404,
-                    "type": "error",
-                    "message": "Not Found"
-                }
+                content={"code": 404, "type": "error", "message": "Not Found"},
             )
-        
-        if result["result_format"]:
-            new_data = []
-            # Iterate over all the data['value'] and format the data
-            for i in range(len(data['value'])):
-                # remove all the keys that have a @
-                observation = data['value'][i]
-
-                # TODO: Format the data for dataArray here
-
-                new_data.append(observation)
-            
-            data['value'] = new_data
-
+        if DEBUG:
+            response2jsonfile(request, data, "requests.json")
         return data
     except Exception as e:
         traceback.print_exc()
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e)
-            }
+            content={"code": 400, "type": "error", "message": str(e)},
         )
-
-def remove_empty_dicts(obj):
-    if isinstance(obj, dict):
-        return {k: remove_empty_dicts(v) for k, v in obj.items() if v != {} and v is not None}
-    elif isinstance(obj, list):
-        return [remove_empty_dicts(item) for item in obj]
-    else:
-        return obj

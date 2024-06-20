@@ -8,28 +8,20 @@ representations in a REST API.
 """
 import re
 import os
-from .filter_visitor import FilterVisitor
 from odata_query import grammar
 from odata_query.grammar import ODataLexer
 from odata_query.grammar import ODataParser
+from .filter_visitor import FilterVisitor
 from .sta_parser.ast import *
 from .sta_parser.lexer import Lexer
 from .sta_parser.visitor import Visitor
 from .sta_parser.parser import Parser
-from sqlalchemy.orm import sessionmaker, load_only, contains_eager, joinedload
-from sqlalchemy.sql.expression import BooleanClauseList, BinaryExpression
-from sqlalchemy import create_engine, select, func, asc, desc, and_, literal, text
-from sqlalchemy.inspection import inspect
-from datetime import datetime, timezone
-from ..models import (
-    Location, Thing, HistoricalLocation, ObservedProperty, Sensor,
-    Datastream, FeaturesOfInterest, Observation,
-    LocationTravelTime, ThingTravelTime, HistoricalLocationTravelTime,
-    ObservedPropertyTravelTime, SensorTravelTime, DatastreamTravelTime,
-    FeaturesOfInterestTravelTime, ObservationTravelTime
-)
+from ..models import *
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql.sqltypes import Text, String
+from sqlalchemy import create_engine, select, func, asc, desc, literal, text
 from sqlalchemy.dialects.postgresql.json import JSONB
-from geoalchemy2 import Geometry, WKTElement
+from geoalchemy2 import Geometry
 
 ODATA_FUNCTIONS = {
     # String functions
@@ -85,6 +77,7 @@ engine = create_engine(os.getenv('DATABASE_URL'))
 
 Session = sessionmaker(bind=engine)
 
+
 class NodeVisitor(Visitor):
 
     main_entity = None
@@ -93,6 +86,7 @@ class NodeVisitor(Visitor):
     """ 
     Constructor for the NodeVisitor class that accepts the main entity name
     """
+
     def __init__(self, main_entity=None, db=None):
         super().__init__()
         self.main_entity = main_entity
@@ -101,7 +95,7 @@ class NodeVisitor(Visitor):
     """
     This class provides a visitor to convert a STA query to a PostgREST query.
     """
-    
+
     def visit_IdentifierNode(self, node: IdentifierNode):
         """
         Visit an identifier node.
@@ -131,7 +125,8 @@ class NodeVisitor(Visitor):
             str: The converted select node.
         """
 
-        identifiers = [f'{self.main_entity}.{self.visit(identifier)}' for identifier in node.identifiers]
+        identifiers = [
+            f'{self.main_entity}.{self.visit(identifier)}' for identifier in node.identifiers]
         return identifiers
 
     def visit_FilterNode(self, node: FilterNode, entity: str):
@@ -140,13 +135,14 @@ class NodeVisitor(Visitor):
 
         Args:
             node (ast.FilterNode): The filter node to visit.
-        
+
         Returns:
             str: The converted filter node.
         """
 
         # Parse the filter using the OData lexer and parser
-        ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(node.filter))
+        ast = odata_filter_parser.parse(
+            odata_filter_lexer.tokenize(node.filter))
         # Visit the tree to convert the filter
         transformer = FilterVisitor(entity)
         res = transformer.visit(ast)
@@ -174,20 +170,24 @@ class NodeVisitor(Visitor):
 
         Args:
             node (ast.OrderByNode): The orderby node to visit.
-        
+
         Returns:
             str: The converted orderby node.
         """
-        identifiers = [self.visit(identifier) for identifier in node.identifiers]
+        identifiers = [self.visit(identifier)
+                       for identifier in node.identifiers]
         attributes = []
         orders = []
         for identifier in identifiers:
             attribute_name, *_, order = identifier.split('.')
             if self.main_entity == 'Observation' and 'result' in identifier:
-                results_attrs = ['result_double', 'result_integer', 'result_boolean', 'result_string', 'result_json']
-                attributes.append([getattr(globals()[self.main_entity], attr) for attr in results_attrs])
+                results_attrs = ['result_double', 'result_integer',
+                                 'result_boolean', 'result_string', 'result_json']
+                attributes.append(
+                    [getattr(globals()[self.main_entity], attr) for attr in results_attrs])
             else:
-                attributes.append([getattr(globals()[self.main_entity], attribute_name)])
+                attributes.append(
+                    [getattr(globals()[self.main_entity], attribute_name)])
             orders.append(order)
         return attributes, orders
 
@@ -197,7 +197,7 @@ class NodeVisitor(Visitor):
 
         Args:
             node (ast.SkipNode): The skip node to visit.
-        
+
         Returns:
             str: The converted skip node.
         """
@@ -209,7 +209,7 @@ class NodeVisitor(Visitor):
 
         Args:
             node (ast.TopNode): The top node to visit.
-        
+
         Returns:
             str: The converted top node.
         """
@@ -221,12 +221,12 @@ class NodeVisitor(Visitor):
 
         Args:
             node (ast.CountNode): The count node to visit.
-        
+
         Returns:
             str: The converted count node.
         """
         return node.value
-    
+
     def visit_ExpandNode(self, node: ExpandNode, parent=None):
         """
         Visit an expand node.
@@ -245,7 +245,8 @@ class NodeVisitor(Visitor):
             # Process each identifier in the expand node
             for expand_identifier in node.identifiers:
                 # Convert the table name
-                expand_identifier.identifier = STA2REST.convert_entity(expand_identifier.identifier)
+                expand_identifier.identifier = STA2REST.convert_entity(
+                    expand_identifier.identifier)
                 sub_entity = globals()[expand_identifier.identifier]
 
                 sub_query = None
@@ -259,8 +260,10 @@ class NodeVisitor(Visitor):
                         for identifier in expand_identifier.subquery.select.identifiers
                     ]
                 else:
-                    identifiers = STA2REST.get_default_column_names(expand_identifier.identifier)
-                    identifiers = [item for item in identifiers if "navigation_link" not in item]
+                    identifiers = STA2REST.get_default_column_names(
+                        expand_identifier.identifier)
+                    identifiers = [
+                        item for item in identifiers if "navigation_link" not in item]
 
                 for field in identifiers:
                     select_fields.append(getattr(sub_entity, field))
@@ -268,8 +271,11 @@ class NodeVisitor(Visitor):
                 relationship = None
                 fk_name = None
                 fk_attr = None
+                select_from = False
+
                 if parent:
-                    relationship = getattr(globals()[parent], expand_identifier.identifier.lower()).property
+                    relationship = getattr(
+                        globals()[parent], expand_identifier.identifier.lower()).property
                     if relationship.direction.name == "ONETOMANY":
                         fk_name = f"{parent.lower()}_id"
                         fk_attr = getattr(sub_entity, fk_name)
@@ -278,12 +284,27 @@ class NodeVisitor(Visitor):
                         fk_name = f"{parent.lower()}_id"
                         fk_attr = relationship.secondary.c[fk_name]
                         select_fields.insert(0, fk_attr)
+                        select_from = True
+
+                fk_arr = []
+                if expand_identifier.subquery and expand_identifier.subquery.expand:
+                    for e in expand_identifier.subquery.expand.identifiers:
+                        identifier = STA2REST.ENTITY_MAPPING.get(e.identifier, e.identifier)
+                        if hasattr(globals()[expand_identifier.identifier], identifier.lower()):
+                            relationship_nested = getattr(
+                                globals()[expand_identifier.identifier], identifier.lower()).property
+                            if relationship_nested.direction.name == "MANYTOONE":
+                                fk = getattr(sub_entity, f"{identifier.lower()}_id")
+                                if fk not in select_fields:
+                                    select_fields.insert(0, fk)
+                                    fk_arr.append(fk)
 
                 # Build sub-query with row number
                 sub_query = select(
                     *select_fields,
                     func.row_number().over(
-                        partition_by=getattr(sub_entity, "id") if fk_attr is None else fk_attr,
+                        partition_by=getattr(
+                            sub_entity, "id") if fk_attr is None else fk_attr,
                         order_by=getattr(sub_entity, "id")
                     ).label("rank")
                 )
@@ -306,7 +327,11 @@ class NodeVisitor(Visitor):
                     ]
                     for field in identifiers:
                         attr, order = field.split(".")
-                        ordering.append(asc(attr) if order == "asc" else desc(attr))
+                        collation = 'C' if isinstance(attr.type, (String, Text)) else None
+                        if order == 'asc':
+                            ordering.append(asc(attr.collate(collation)) if collation else asc(attr))
+                        else:
+                            ordering.append(desc(attr.collate(collation)) if collation else desc(attr))
                 else:
                     ordering = [desc(getattr(sub_entity, "id"))]
                 sub_query = sub_query.order_by(*ordering)
@@ -317,67 +342,82 @@ class NodeVisitor(Visitor):
                 # Process top clause
                 top_value = expand_identifier.subquery.top.count if expand_identifier.subquery and expand_identifier.subquery.top else 100
 
+                if select_from:
+                    sub_query = sub_query.select_from(relationship.secondary.outerjoin(sub_entity))
+                    
+                sub_query.alias(f"sub_query_{expand_identifier.identifier.lower()}")
+
                 # Build the ranked subquery
-                subquery_ranked = select(*[col for col in sub_query.columns if col.name != 'rank'])
-                subquery_ranked = subquery_ranked.filter(
+                subquery_ranked = select(
+                    *[col for col in sub_query.columns if col.name != 'rank']
+                ).filter(
                     sub_query.c.rank > skip_value,
                     sub_query.c.rank <= (top_value + skip_value),
                 ).alias(f"subquery_ranked_{expand_identifier.identifier.lower()}")
 
                 # Construct JSON object arguments
                 json_build_object_args = []
+                fk_names = [fk.name for fk in fk_arr]
                 for attr in subquery_ranked.columns:
-                    if fk_attr is None or (fk_attr is not None and attr.name != fk_attr.name):
-                        json_build_object_args.append(literal(attr.name) if attr.name != 'id' else text("'@iot.id'"))
-                        json_build_object_args.append(func.ST_AsGeoJSON(attr).cast(JSONB) if isinstance(attr.type, Geometry) else attr)
+                    if (str(attr.name) not in fk_names) and (fk_attr is None or (fk_attr is not None and attr.name != fk_attr.name)):
+                        json_build_object_args.append(
+                            literal(attr.name) if attr.name != 'id' else text("'@iot.id'"))
+                        json_build_object_args.append(func.ST_AsGeoJSON(attr).cast(
+                            JSONB) if isinstance(attr.type, Geometry) else attr)
 
-                aggregation_type = func.array_agg(func.json_build_object(*json_build_object_args))[1] if relationship.direction.name in ["MANYTOONE"] else func.json_agg(func.json_build_object(*json_build_object_args))
+                aggregation_type = func.array_agg(func.json_build_object(*json_build_object_args))[1] if relationship.direction.name == "MANYTOONE" else func.json_agg(func.json_build_object(*json_build_object_args))
 
                 # Build sub-query JSON aggregation
                 if relationship.direction.name in ["MANYTOONE", "ONETOMANY"]:
-                    sub_query_json_agg = (
-                        select(
-                            subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id,
-                            aggregation_type.label(expand_identifier.identifier.lower()),
-                        )
-                        .group_by(subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id)
-                        .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
-                    )
+                    select_from_clause = subquery_ranked
                 else:
-                    sub_query_json_agg = (
-                        select(
-                            subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id,
-                            aggregation_type.label(expand_identifier.identifier.lower()),
-                        )
-                        .join(relationship.secondary)
-                        .group_by(subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id)
-                        .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
+                    select_from_clause = subquery_ranked.outerjoin(relationship.secondary)
+
+                sub_query_json_agg = (
+                    select(
+                        subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id,
+                        aggregation_type.label(expand_identifier.identifier.lower()),
                     )
+                    .select_from(select_from_clause)
+                    .group_by(subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id)
+                    .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
+                )
+
                 # Handle nested expand
                 if expand_identifier.subquery and expand_identifier.subquery.expand:
-                    nested_expand_queries = self.visit_ExpandNode(expand_identifier.subquery.expand, expand_identifier.identifier)
+                    nested_expand_queries = self.visit_ExpandNode(
+                        expand_identifier.subquery.expand, expand_identifier.identifier)
+                    select_from_clause = subquery_ranked
                     for nested_expand_query, nested_identifier in nested_expand_queries:
-                        value = getattr(sub_entity, f"{nested_identifier.lower()}_navigation_link")
-                        json_build_object_args.append(f"{value.name.split('@')[0]}")
-                        if relationship.direction.name == "MANYTOONE":
-                            json_build_object_args.append(func.coalesce(nested_expand_query.columns[nested_identifier.lower()], text("'{}'")))
-                        else:
-                            json_build_object_args.append(func.coalesce(nested_expand_query.columns[nested_identifier.lower()], text("'[]'")))
+                        value = getattr(
+                            sub_entity, f"{nested_identifier.lower()}_navigation_link")
+                        json_build_object_args.append(
+                            f"{value.name.split('@')[0]}")
+                        relationship_nested = getattr(
+                            globals()[expand_identifier.identifier], nested_identifier.lower()).property
+                        coalesce_text = "'{}'" if relationship_nested.direction.name == "MANYTOONE" else "'[]'"
+                        json_build_object_args.append(func.coalesce(
+                            nested_expand_query.columns[nested_identifier.lower()], text(coalesce_text)))
 
-                        aggregation_type = func.array_agg(func.json_build_object(*json_build_object_args))[1] if relationship.direction.name in ["MANYTOONE"] else func.json_agg(func.json_build_object(*json_build_object_args))
-
-                        sub_query_json_agg = (
-                            select(
-                                subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id,
-                                aggregation_type.label(expand_identifier.identifier.lower()),
-                            )
-                            .select_from(sub_entity)
-                            .join(nested_expand_query)
-                            .group_by(subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id)
-                            .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
+                        aggregation_type = (func.array_agg(
+                            func.json_build_object(*json_build_object_args))[1]
+                            if relationship.direction.name == "MANYTOONE"
+                            else func.json_agg(func.json_build_object(*json_build_object_args))
                         )
+                        select_from_clause = select_from_clause.outerjoin(nested_expand_query)
 
-                expand_queries.append((sub_query_json_agg, expand_identifier.identifier))
+                    sub_query_json_agg = (
+                        select(
+                            subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id,
+                            aggregation_type.label(expand_identifier.identifier.lower()),
+                        )
+                        .select_from(select_from_clause)
+                        .group_by(subquery_ranked.c[fk_name] if fk_attr is not None else subquery_ranked.c.id)
+                        .alias(f"sub_query_json_agg_{expand_identifier.identifier.lower()}")
+                    )
+
+                expand_queries.append(
+                    (sub_query_json_agg, expand_identifier.identifier))
 
             return expand_queries
 
@@ -387,7 +427,7 @@ class NodeVisitor(Visitor):
 
         Args:
             node (ast.QueryNode): The query node to visit.
-        
+
         Returns:
             str: The converted query node.
         """
@@ -396,28 +436,32 @@ class NodeVisitor(Visitor):
         with self.db as session:
             main_entity = globals()[self.main_entity]
             main_query = None
-            query_count = session.query(func.count(getattr(main_entity, 'id').distinct())) if not 'TravelTime' in self.main_entity else session.query(func.count(func.distinct(getattr(main_entity, 'id'), getattr(main_entity, 'system_time_validity'))))
+            query_count = session.query(func.count(getattr(main_entity, 'id').distinct())) if not 'TravelTime' in self.main_entity else session.query(
+                func.count(func.distinct(getattr(main_entity, 'id'), getattr(main_entity, 'system_time_validity'))))
 
             if not node.select:
                 node.select = SelectNode([])
                 # get default columns for main entity
-                default_columns = STA2REST.get_default_column_names(self.main_entity)
+                default_columns = STA2REST.get_default_column_names(
+                    self.main_entity)
                 for column in default_columns:
                     node.select.identifiers.append(IdentifierNode(column))
 
             # Check if we have a select, filter, orderby, skip, top or count in the query
             if node.select:
                 select_query = []
-                
+
                 # Iterate over fields in node.select
                 for field in self.visit(node.select):
                     field_name = field.split('.')[-1]
                     select_query.append(getattr(main_entity, field_name))
-            
+
             json_build_object_args = []
             for attr in select_query:
-                json_build_object_args.append(literal(attr.name)) if attr.name != 'id' else  json_build_object_args.append(text("'@iot.id'"))
-                json_build_object_args.append(func.ST_AsGeoJSON(attr).cast(JSONB)) if (type(attr.type) == Geometry) else json_build_object_args.append(attr)
+                json_build_object_args.append(literal(
+                    attr.name)) if attr.name != 'id' else json_build_object_args.append(text("'@iot.id'"))
+                json_build_object_args.append(func.ST_AsGeoJSON(attr).cast(JSONB)) if (
+                    type(attr.type) == Geometry) else json_build_object_args.append(attr)
 
             # Check if we have an expand node before the other parts of the query
             if node.expand:
@@ -425,10 +469,12 @@ class NodeVisitor(Visitor):
                 for e in node.expand.identifiers:
                     if not e.expand:
                         new_node['expand']['identifiers'].append(e)
-                
-                if len( new_node['expand']['identifiers']) > 0:
-                    main_query = select(func.json_build_object(*json_build_object_args))
-                    sub_queries = []
+                node.expand.identifiers = [
+                    e for e in node.expand.identifiers if e.expand]
+                sub_queries_no_expand = []
+                if len(new_node['expand']['identifiers']) > 0:
+                    main_query = select(
+                        func.json_build_object(*json_build_object_args))
                     current = None
                     previous = None
                     for i, e in enumerate(new_node['expand']['identifiers']):
@@ -436,57 +482,97 @@ class NodeVisitor(Visitor):
                         sub_query = session.query(globals()[current])
                         if i > 0:
                             previous = new_node['expand']['identifiers'][i - 1].identifier
-                            sub_query = sub_query.join(getattr(globals()[current], previous.lower())).join(sub_queries[i - 1])
+                            relationship = getattr(globals()[current], previous.lower()).property.direction.name
+                            sub_query = (
+                                sub_query.join(getattr(globals()[current], previous.lower())).join(sub_queries_no_expand[i - 1])
+                                if relationship == "MANYTOMANY"
+                                else sub_query.join(sub_queries_no_expand[i - 1])
+                            )
                         if e.subquery and e.subquery.filter:
-                            filter, join_relationships = self.visit_FilterNode(e.subquery.filter, current)
+                            filter, join_relationships = self.visit_FilterNode(
+                                e.subquery.filter, current)
                             sub_query = sub_query.filter(filter)
                         sub_query = sub_query.subquery()
-                        sub_queries.append(sub_query)
-                    if len(sub_queries) > 0:
-                        main_query = main_query.join(getattr(main_entity, current.lower())).join(sub_queries[-1]).distinct(getattr(main_entity, 'id'))
-                        query_count = query_count.join(getattr(main_entity, current.lower())).join(sub_queries[-1])
+                        sub_queries_no_expand.append(sub_query)
+                    if len(sub_queries_no_expand) > 0 and len(node.expand.identifiers) == 0:
+                        relationship = getattr(main_entity, current.lower()).property.direction.name
+                        main_query = (
+                            main_query.join(getattr(main_entity, current.lower())).join(sub_queries_no_expand[-1])
+                            if relationship == "MANYTOMANY"
+                            else main_query.join(sub_queries_no_expand[-1])
+                        )
+                        query_count = query_count.join(
+                            getattr(main_entity, current.lower())).join(sub_queries_no_expand[-1])
 
-                node.expand.identifiers = [e for e in node.expand.identifiers if e.expand]
                 if len(node.expand.identifiers) > 0:
                     # Visit the expand node
-                    sub_queries = self.visit_ExpandNode(node.expand, self.main_entity)
-                    for sq in sub_queries:
-                        sub_query, alias = sq
-                        value = getattr(main_entity, f"{alias.lower()}_navigation_link")
-                        json_build_object_args.append(f"{value.name.split('@')[0]}")
-                        if getattr(main_entity, alias.lower()).property.direction.name == "MANYTOONE":
-                            json_build_object_args.append(func.coalesce(sub_query.columns[alias.lower()], text("'{}'")))
-                        else:
-                            json_build_object_args.append(func.coalesce(sub_query.columns[alias.lower()], text("'[]'")))
-                    main_query = select(func.json_build_object(*json_build_object_args)).select_from(main_entity)
+                    sub_queries = self.visit_ExpandNode(
+                        node.expand, self.main_entity)
+                    for sub_query, alias in sub_queries:
+                        value = getattr(
+                            main_entity, f"{alias.lower()}_navigation_link")
+                        json_build_object_args.append(
+                            f"{value.name.split('@')[0]}")
+                        
+                        # Determine the JSON structure based on the relationship type
+                        relationship = getattr(main_entity, alias.lower()).property.direction.name
+                        coalesce_text = "'{}'" if relationship == "MANYTOONE" else "'[]'"
+                        json_build_object_args.append(func.coalesce(
+                            sub_query.columns[alias.lower()], text(coalesce_text)))
 
+                    # Build the main query
+                    main_query = select(func.json_build_object(*json_build_object_args))
+                    if len(sub_queries_no_expand) > 0:
+                        relationship = getattr(main_entity, current.lower()).property.direction.name
+                        main_query = (
+                            main_query.join(getattr(main_entity, current.lower())).join(sub_queries_no_expand[-1])
+                            if relationship == "MANYTOMANY"
+                            else main_query.join(sub_queries_no_expand[-1])
+                        )
+                        query_count = query_count.join(
+                            getattr(main_entity, current.lower())).join(sub_queries_no_expand[-1])
+
+                    # Reverse the sub_queries order for specific case
                     if (self.main_entity == 'Location' and sub_queries[0][1] == 'HistoricalLocation'):
                         sub_queries = list(reversed(sub_queries))
 
-                    for sq in sub_queries:
-                        sub_query, alias = sq
-                        if getattr(main_entity, alias.lower()).property.direction.name == "MANYTOMANY":
-                            main_query = main_query.join(getattr(main_entity, alias.lower()))
-                        if hasattr(main_entity, f"{alias.lower()}_id"):
+                    # Join the main query with subqueries
+                    for sub_query, alias in sub_queries:
+                        relationship = getattr(main_entity, alias.lower()).property
+                        
+                        # Handle different relationship types
+                        if relationship.direction.name == "MANYTOMANY":
+                            fk_name = f"{self.main_entity.lower()}_id"
+                            main_query = main_query.outerjoin(sub_query, getattr(main_entity, "id") == sub_query.c[fk_name])
+                        elif relationship.direction.name == "MANYTOONE":
                             fk_attr = getattr(main_entity, f"{alias.lower()}_id")
-                            main_query = main_query.join(sub_query, fk_attr == sub_query.c.id)
-                        else:
-                            main_query = main_query.join(sub_query)
+                            main_query = main_query.outerjoin(sub_query, fk_attr == sub_query.c.id)
+                        else:  # Assumes relationship is ONE_TO_MANY
+                            fk_name = f"{self.main_entity.lower()}_id"
+                            main_query = main_query.outerjoin(sub_query, getattr(main_entity, "id") == sub_query.c[fk_name])
             else:
                 # Set options for main_query if select_query is not empty
-                main_query = select(func.json_build_object(*json_build_object_args))
+                main_query = select(
+                    func.json_build_object(*json_build_object_args))
 
             if node.filter:
-                filter, join_relationships = self.visit_FilterNode(node.filter, self.main_entity)
+                filter, join_relationships = self.visit_FilterNode(
+                    node.filter, self.main_entity)
                 for rel in join_relationships:
                     main_query = main_query.join(rel)
                 main_query = main_query.filter(filter)
                 query_count = query_count.filter(filter)
 
+            ordering = []
             if node.orderby:
                 attrs, orders = self.visit(node.orderby)
                 for attr, order in zip(attrs, orders):
-                    ordering = [asc(a) if order == 'asc' else desc(a) for a in attr]
+                    for a in attr:
+                        collation = 'C' if isinstance(a.type, (String, Text)) else None
+                        if order == 'asc':
+                            ordering.append(asc(a.collate(collation)) if collation else asc(a))
+                        else:
+                            ordering.append(desc(a.collate(collation)) if collation else desc(a))
             else:
                 ordering = [desc(getattr(main_entity, 'id'))]
 
@@ -510,6 +596,7 @@ class NodeVisitor(Visitor):
 
             return main_query, count_query, query_count
 
+
 class STA2REST:
     """
     This class provides utility functions to convert various elements used in SensorThings queries to their corresponding
@@ -532,7 +619,7 @@ class STA2REST:
         "Sensor": "Sensor",
         "ObservedProperty": "ObservedProperty",
         "Datastream": "Datastream",
-        "Observation": "Observation",  
+        "Observation": "Observation",
         "FeatureOfInterest": "FeaturesOfInterest",
         "HistoricalLocation": "HistoricalLocation",
     }
@@ -588,14 +675,14 @@ class STA2REST:
             'self_link',
             'location_navigation_link',
             'thing_navigation_link',
-            'time',  
+            'time',
         ],
         "HistoricalLocationTravelTime": [
             'id',
             'self_link',
             'location_navigation_link',
             'thing_navigation_link',
-            'time',  
+            'time',
             'system_time_validity',
         ],
         "ObservedProperty": [
@@ -765,7 +852,7 @@ class STA2REST:
             str: The converted entity name in REST format.
         """
         return STA2REST.ENTITY_MAPPING.get(entity, entity)
-    
+
     @staticmethod
     def convert_to_database_id(entity: str) -> str:
         # First we convert the entity to lower case
@@ -779,7 +866,7 @@ class STA2REST:
 
         Args:
             sta_query (str): The STA query.
-        
+
         Returns:
             str: The converted PostgREST query.
         """
@@ -794,7 +881,7 @@ class STA2REST:
 
         # Parse the uri
         uri = STA2REST.parse_uri(path)
-        
+
         if not uri:
             raise Exception("Error parsing uri")
 
@@ -813,9 +900,11 @@ class STA2REST:
             if len(entities) == 0 and not query_ast.expand:
                 main_entity += "TravelTime"
                 as_of_filter = f"system_time_validity eq {query_ast.as_of.value}"
-                query_ast.filter = FilterNode(query_ast.filter.filter + f" and {as_of_filter}" if query_ast.filter else as_of_filter)
+                query_ast.filter = FilterNode(
+                    query_ast.filter.filter + f" and {as_of_filter}" if query_ast.filter else as_of_filter)
             else:
-                raise Exception("AS_OF function available only for single entity")
+                raise Exception(
+                    "AS_OF function available only for single entity")
             # if query_ast.expand:
             #     for identifier in query_ast.expand.identifiers:
             #         identifier.identifier = identifier.identifier + "TravelTime"
@@ -826,17 +915,18 @@ class STA2REST:
             if len(entities) == 0 and not query_ast.expand:
                 main_entity += "TravelTime"
                 from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
-                query_ast.filter = FilterNode(query_ast.filter.filter + f" and {from_to_filter}" if query_ast.filter else from_to_filter)
+                query_ast.filter = FilterNode(
+                    query_ast.filter.filter + f" and {from_to_filter}" if query_ast.filter else from_to_filter)
             else:
-                raise Exception("FROM_TO function available only for single entity")
-        
+                raise Exception(
+                    "FROM_TO function available only for single entity")
 
         print(f"Main entity: {main_entity}")
-        
+
         if entities:
             if not query_ast.expand:
                 query_ast.expand = ExpandNode([])
-            
+
             index = 0
 
             # Merge the entities with the query
@@ -853,22 +943,25 @@ class STA2REST:
                         # Add the property name to the select node
                         if not query_ast.select:
                             query_ast.select = SelectNode([])
-                            query_ast.select.identifiers.append(IdentifierNode(uri['property_name']))
+                            query_ast.select.identifiers.append(
+                                IdentifierNode(uri['property_name']))
 
-                query_ast.expand.identifiers.append(ExpandNodeIdentifier(entity_name, sub_query, False))
+                query_ast.expand.identifiers.append(
+                    ExpandNodeIdentifier(entity_name, sub_query, False))
                 index += 1
         else:
             if uri['property_name']:
                 if not query_ast.select:
                     query_ast.select = SelectNode([])
-                query_ast.select.identifiers.append(IdentifierNode(uri['property_name']))
+                query_ast.select.identifiers.append(
+                    IdentifierNode(uri['property_name']))
 
         # Check if we have a filter in the query
         if main_entity_id:
-            query_ast.filter = FilterNode(query_ast.filter.filter + f" and id eq {main_entity_id}" if query_ast.filter else f"id eq {main_entity_id}")
+            query_ast.filter = FilterNode(
+                query_ast.filter.filter + f" and id eq {main_entity_id}" if query_ast.filter else f"id eq {main_entity_id}")
 
-            if not entities:
-                single_result = True
+            single_result = True
 
         if uri['single']:
             single_result = True
@@ -922,7 +1015,7 @@ class STA2REST:
             return None
 
         return (entity, id)
-    
+
     @staticmethod
     def parse_uri(uri: str) -> str:
         # Split the uri by the '/' character
@@ -934,7 +1027,7 @@ class STA2REST:
         # Remove the first part
         parts.pop(0)
 
-        if(parts[-1] == "$ref"):
+        if (parts[-1] == "$ref"):
             entity_name = parts[-2]
         elif parts[-1] == "$value":
             entity_name = parts[-3]
@@ -963,13 +1056,15 @@ class STA2REST:
                 entities.append(result)
             elif entity == "$ref":
                 if property_name:
-                    raise Exception("Error parsing uri: $ref after property name")
+                    raise Exception(
+                        "Error parsing uri: $ref after property name")
                 ref = True
             elif entity == "$value":
                 if property_name:
                     value = True
                 else:
-                    raise Exception("Error parsing uri: $value without property name")
+                    raise Exception(
+                        "Error parsing uri: $value without property name")
             else:
                 property_name = entity
 
@@ -990,6 +1085,7 @@ class STA2REST:
             'value': value,
             'single': single
         }
+
 
 if __name__ == "__main__":
     """
