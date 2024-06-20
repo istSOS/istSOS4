@@ -444,7 +444,7 @@ class NodeVisitor(Visitor):
                 node.select = SelectNode([])
                 # get default columns for main entity
                 default_columns = STA2REST.get_default_column_names(
-                    self.main_entity)
+                    self.main_entity if not node.result_format else self.main_entity+"DataArray")
                 for column in default_columns:
                     node.select.identifiers.append(IdentifierNode(column))
 
@@ -803,6 +803,15 @@ class STA2REST:
             'phenomenon_time',
             'result_time',
             'result',
+            'result_quality',
+            'valid_time',
+            'parameters',
+        ],
+        "ObservationDataArray": [
+            'id',
+            'phenomenon_time',
+            'result',
+            'result_time',
             'result_quality',
             'valid_time',
             'parameters',
