@@ -1,4 +1,5 @@
 import traceback
+import os
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi import status
@@ -8,9 +9,20 @@ from app.db.db import get_pool
 
 v1 = APIRouter()
 
+try:
+    DEBUG = int(os.getenv("DEBUG"))
+    if DEBUG:
+        from app.utils.utils import response2jsonfile
+except:
+    DEBUG = 0
+
 # Handle DELETE requests
+
+
 @v1.api_route("/{path_name:path}", methods=["DELETE"])
-async def catch_all_delete(request: Request, path_name: str, pgpool=Depends(get_pool)):
+async def catch_all_delete(
+    request: Request, path_name: str, pgpool=Depends(get_pool)
+):
 
     try:
         full_path = request.url.path
@@ -19,18 +31,19 @@ async def catch_all_delete(request: Request, path_name: str, pgpool=Depends(get_
 
         # Get main entity
         [name, id] = result["entity"]
-        
+
         # Get the name and id
         if not name:
             raise Exception("No entity name provided")
-        
+
         if not id:
             raise Exception("No entity id provided")
-        
 
         async with pgpool.acquire() as conn:
             # Create delete SQL query
-            query = f'DELETE FROM sensorthings."{name}" WHERE id = $1 RETURNING id'
+            query = (
+                f'DELETE FROM sensorthings."{name}" WHERE id = $1 RETURNING id'
+            )
             # Execute query
             id_deleted = await conn.fetchval(query, int(id))
 
@@ -40,21 +53,18 @@ async def catch_all_delete(request: Request, path_name: str, pgpool=Depends(get_
                     content={
                         "code": 404,
                         "type": "error",
-                        "message": "Nothing found."
-                    }
+                        "message": "Nothing found.",
+                    },
                 )
-
+        if DEBUG:
+            response2jsonfile(request, "", "requests.json")
         # Return okay
         return Response(status_code=status.HTTP_200_OK)
-        
+
     except Exception as e:
         # print stack trace
         traceback.print_exc()
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e)
-            }
+            content={"code": 400, "type": "error", "message": str(e)},
         )

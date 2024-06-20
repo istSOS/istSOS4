@@ -1,11 +1,16 @@
-from app.sta2rest import sta2rest
 import datetime
 import json
+
+from app.sta2rest import sta2rest
+
+
 class PostgRESTError(Exception):
     """
     Exception raised for errors in the PostgREST response.
     """
+
     pass
+
 
 def get_result_type_and_column(input_string):
     """
@@ -45,8 +50,9 @@ def get_result_type_and_column(input_string):
         return result_type, column_name
     else:
         raise Exception("Cannot cast result to a valid type")
-    
-def flatten_entity_body(entity, body, name = None):
+
+
+def flatten_entity_body(entity, body, name=None):
     """
     Flatten the entity body
 
@@ -71,23 +77,32 @@ def flatten_entity_body(entity, body, name = None):
         if isinstance(key, str) and key in sta2rest.STA2REST.ENTITY_MAPPING:
             converted_key = sta2rest.STA2REST.convert_entity(key)
             body[converted_key] = entity[key]
-            
+
             flatten_entity_body(entity[key], body, converted_key)
-            
+
             if name:
                 if isinstance(body[name], list):
                     for item in body[name]:
                         item[converted_key] = {
-                            "@iot.id": entity[key]["@iot.id"] if "@iot.id" in entity[key] else None
+                            "@iot.id": (
+                                entity[key]["@iot.id"]
+                                if "@iot.id" in entity[key]
+                                else None
+                            )
                         }
                 else:
                     body[name][converted_key] = {
-                        "@iot.id": entity[key]["@iot.id"] if "@iot.id" in entity[key] else None
+                        "@iot.id": (
+                            entity[key]["@iot.id"]
+                            if "@iot.id" in entity[key]
+                            else None
+                        )
                     }
 
     return body
 
-def format_entity_body(entity_body): 
+
+def format_entity_body(entity_body):
     """
     Format the entity body
 
@@ -123,13 +138,16 @@ def format_entity_body(entity_body):
 
     return formatted_body
 
+
 def prepare_entity_body_for_insert(entity_body, created_ids):
     for key in entity_body:
         # check if key is present in created_ids
         if key in created_ids:
             entity_body[key] = created_ids[key]
         elif "time" in key.lower():
-            entity_body[key] = datetime.datetime.fromisoformat(entity_body[key])
+            entity_body[key] = datetime.datetime.fromisoformat(
+                entity_body[key]
+            )
         # check if value is a dict and convert it to a str
         elif isinstance(entity_body[key], dict):
             entity_body[key] = json.dumps(entity_body[key])
@@ -149,22 +167,27 @@ async def create_entity(entity_name, body, pgpool):
 
     """
 
-    entity_body = {
-        entity_name: body
-    }
+    entity_body = {entity_name: body}
 
     body = flatten_entity_body(entity_body, entity_body)
 
-
     # Creation order
     created_ids = {}
-    creation_order = ["Location", "Thing", "Sensor", "ObservedProperty", "FeaturesOfInterest", "Datastream", "Observation"]
+    creation_order = [
+        "Location",
+        "Thing",
+        "Sensor",
+        "ObservedProperty",
+        "FeaturesOfInterest",
+        "Datastream",
+        "Observation",
+    ]
 
     async with pgpool.acquire() as conn:
         async with conn.transaction():
             for entity_name in creation_order:
                 if entity_name in body:
-                    
+
                     formatted_body = format_entity_body(body[entity_name])
 
                     if "@iot.id" in formatted_body:
@@ -175,31 +198,48 @@ async def create_entity(entity_name, body, pgpool):
                         for item in formatted_body:
                             prepare_entity_body_for_insert(item, created_ids)
                     else:
-                        prepare_entity_body_for_insert(formatted_body, created_ids)
-                    
+                        prepare_entity_body_for_insert(
+                            formatted_body, created_ids
+                        )
+
                     # Generate SQL from the body
-                    keys = ', '.join(f'"{key}"' for key in formatted_body.keys())
-                    values_placeholders = ', '.join(f'${i+1}' for i in range(len(formatted_body)))
+                    keys = ", ".join(
+                        f'"{key}"' for key in formatted_body.keys()
+                    )
+                    values_placeholders = ", ".join(
+                        f"${i+1}" for i in range(len(formatted_body))
+                    )
 
                     # Prevent duplicates of the same entity
                     if entity_name in ["ObservedProperty"]:
                         # Check if the entity already exists with all the same values
                         # Generate WHERE clause from the body
-                        where = ' AND '.join(f'"{key}" = ${i+1}' for i, key in enumerate(formatted_body.keys()))
+                        where = " AND ".join(
+                            f'"{key}" = ${i+1}'
+                            for i, key in enumerate(formatted_body.keys())
+                        )
                         query = f'SELECT id FROM sensorthings."{entity_name}" WHERE {where}'
-                        existing_id = await conn.fetchval(query, *formatted_body.values())
-                        print(query, existing_id)
+                        existing_id = await conn.fetchval(
+                            query, *formatted_body.values()
+                        )
                         if existing_id:
-                            created_ids[sta2rest.STA2REST.convert_to_database_id(entity_name)] = existing_id
+                            created_ids[
+                                sta2rest.STA2REST.convert_to_database_id(
+                                    entity_name
+                                )
+                            ] = existing_id
                             continue
 
                     query = f'INSERT INTO sensorthings."{entity_name}" ({keys}) VALUES ({values_placeholders}) RETURNING id'
 
-                    print(query, formatted_body)
-                    new_id = await conn.fetchval(query, *formatted_body.values())
-                    
-                    id_key = sta2rest.STA2REST.convert_to_database_id(entity_name)
-                    created_ids[id_key] = new_id            
+                    new_id = await conn.fetchval(
+                        query, *formatted_body.values()
+                    )
+
+                    id_key = sta2rest.STA2REST.convert_to_database_id(
+                        entity_name
+                    )
+                    created_ids[id_key] = new_id
 
     return None
 
@@ -223,6 +263,7 @@ def __flatten_navigation_links(row):
         if "skip@iot.navigationLink" in row:
             del row["skip@iot.navigationLink"]
 
+
 def __flatten_expand_entity(data):
     """
     Flatten the entity
@@ -242,14 +283,18 @@ def __flatten_expand_entity(data):
     # check if data is empty
     if not data:
         return data
-    
+
     # Check if there is only one key and it is in an ENTITY_MAPPING from the sta2rest module
-    if len(data[0].keys()) == 1 and list(data[0].keys())[0] in sta2rest.STA2REST.ENTITY_MAPPING:
+    if (
+        len(data[0].keys()) == 1
+        and list(data[0].keys())[0] in sta2rest.STA2REST.ENTITY_MAPPING
+    ):
         # Get the value of the first key
         key_name = list(data[0].keys())[0]
         data = data[0][key_name]
 
     return data
+
 
 def __create_ref_format(data):
     """
@@ -275,13 +320,44 @@ def __create_ref_format(data):
         else:
             rows = data
 
-    data = {
-        "value": []
-    }
+    data = {"value": []}
 
     for row in rows:
-        data["value"].append({
-            "@iot.selfLink": row["@iot.selfLink"]
-        })
-    
+        data["value"].append({"@iot.selfLink": row["@iot.selfLink"]})
+
     return data
+
+
+def response2jsonfile(request, response, filename, body="", status_code=200):
+    """
+    Writes the response details to a JSON file.
+
+    Args:
+        request (Request): The request object.
+        response (str): The response message.
+        filename (str): The path to the JSON file.
+        body (str, optional): The request body. Defaults to "".
+        status_code (int, optional): The HTTP status code. Defaults to 200.
+    """
+    full_path = request.url.path
+    r = None
+    if request.url.query:
+        full_path += "?" + request.url.query
+    try:
+        with open(filename, "r") as f:
+            r = json.load(f)
+
+    except Exception:
+        r = []
+        pass
+    with open(filename, "w") as f:
+        r.append(
+            {
+                "path": full_path,
+                "method": request.method,
+                "response": response,
+                "body": body,
+                "status_code": status_code,
+            }
+        )
+        f.write(json.dumps(r, indent=4))

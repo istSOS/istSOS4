@@ -1,14 +1,22 @@
-import traceback
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response
-from fastapi import status
-from app.sta2rest import sta2rest
-from fastapi import Depends
-from app.db.db import get_pool
-from dateutil import parser
 import json
+import os
+import traceback
+
+from app.db.db import get_pool
+from app.sta2rest import sta2rest
+from dateutil import parser
+from fastapi.responses import JSONResponse, Response
+
+from fastapi import APIRouter, Depends, Request, status
 
 v1 = APIRouter()
+
+try:
+    DEBUG = int(os.getenv("DEBUG"))
+    if DEBUG:
+        from app.utils.utils import response2jsonfile
+except:
+    DEBUG = 0
 
 # Define allowed keys for each main table
 ALLOWED_KEYS = {
@@ -72,8 +80,12 @@ ALLOWED_KEYS = {
 }
 
 # Handle UPDATE requests
+
+
 @v1.api_route("/{path_name:path}", methods=["PATCH"])
-async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_pool)):
+async def catch_all_update(
+    request: Request, path_name: str, pgpool=Depends(get_pool)
+):
     try:
         full_path = request.url.path
         result = sta2rest.STA2REST.parse_uri(full_path)
@@ -81,24 +93,41 @@ async def catch_all_update(request: Request, path_name: str, pgpool=Depends(get_
         # Validate entity name and id
         name, id = result["entity"]
         if not name or not id:
-            raise Exception(f"No {'entity name' if not name else 'entity id'} provided")
+            raise Exception(
+                f"No {'entity name' if not name else 'entity id'} provided"
+            )
 
         body = await request.json()
+
+        if DEBUG:
+            try:
+                b = body.copy()
+                json.dumps(b, indent=4)
+            except:
+                b = ""
 
         print(f"BODY PATCH {name}", body)
 
         if name in ALLOWED_KEYS:
             allowed_keys = ALLOWED_KEYS[name]
-            invalid_keys = [key for key in body.keys() if key not in allowed_keys]
+            invalid_keys = [
+                key for key in body.keys() if key not in allowed_keys
+            ]
             if invalid_keys:
                 raise Exception(
                     f"Invalid keys in payload for {name}: {', '.join(invalid_keys)}"
                 )
 
         if not body:
+            if DEBUG:
+                response2jsonfile(request, "", "requests.json", "")
             return Response(status_code=status.HTTP_200_OK)
-
-        return await update(name, int(id), body, pgpool)
+        if DEBUG:
+            r = await update(name, int(id), body, pgpool)
+            response2jsonfile(request, "", "requests.json", b, r.status_code)
+            return r
+        else:
+            return await update(name, int(id), body, pgpool)
     except Exception as e:
         traceback.print_exc()
         return JSONResponse(
@@ -142,7 +171,9 @@ async def update_record(payload, conn, table, record_id):
                 [f'"{key}" = ${i + 1}' for i, key in enumerate(payload.keys())]
             )
             query = f'UPDATE sensorthings."{table}" SET {set_clause} WHERE id = ${len(payload) + 1} RETURNING ID;'
-            updated_id = await conn.fetchval(query, *payload.values(), int(record_id))
+            updated_id = await conn.fetchval(
+                query, *payload.values(), int(record_id)
+            )
             if not updated_id:
                 return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -170,7 +201,9 @@ async def updateLocation(payload, conn, location_id):
         if isinstance(payload["Things"], dict):
             payload["Things"] = [payload["Things"]]
         for thing in payload["Things"]:
-            if not isinstance(thing, dict) or list(thing.keys()) != ["@iot.id"]:
+            if not isinstance(thing, dict) or list(thing.keys()) != [
+                "@iot.id"
+            ]:
                 raise Exception(
                     "Invalid format: Each thing should be a dictionary with a single key '@iot.id'."
                 )
@@ -204,7 +237,9 @@ async def updateThing(payload, conn, thing_id):
         if isinstance(payload["Locations"], dict):
             payload["Locations"] = [payload["Locations"]]
         for location in payload["Locations"]:
-            if not isinstance(location, dict) or list(location.keys()) != ["@iot.id"]:
+            if not isinstance(location, dict) or list(location.keys()) != [
+                "@iot.id"
+            ]:
                 raise Exception(
                     "Invalid format: Each location should be a dictionary with a single key '@iot.id'."
                 )
@@ -241,7 +276,9 @@ async def updateHistoricalLocation(payload, conn, historicallocation_id):
         if isinstance(payload["Locations"], dict):
             payload["Locations"] = [payload["Locations"]]
         for location in payload["Locations"]:
-            if not isinstance(location, dict) or list(location.keys()) != ["@iot.id"]:
+            if not isinstance(location, dict) or list(location.keys()) != [
+                "@iot.id"
+            ]:
                 raise Exception(
                     "Invalid format: Each location should be a dictionary with a single key '@iot.id'."
                 )
@@ -281,7 +318,9 @@ async def updateObservedProperty(payload, conn, observedproperty_id):
         "observedproperty_id",
         "Datastream",
     )
-    return await update_record(payload, conn, "ObservedProperty", observedproperty_id)
+    return await update_record(
+        payload, conn, "ObservedProperty", observedproperty_id
+    )
 
 
 async def updateFeaturesOfInterest(payload, conn, featuresofinterest_id):
@@ -319,7 +358,9 @@ async def updateObservation(payload, conn, observation_id):
     return await update_record(payload, conn, "Observation", observation_id)
 
 
-async def handle_nested_entities(payload, conn, entity_id, key, field, update_table):
+async def handle_nested_entities(
+    payload, conn, entity_id, key, field, update_table
+):
     if key in payload:
         if isinstance(payload[key], dict):
             payload[key] = [payload[key]]
