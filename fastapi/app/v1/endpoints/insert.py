@@ -203,7 +203,6 @@ async def insertLocation(payload, conn):
         format_exception(e)
 
 
-# THING
 async def insertThing(payload, conn):
     """
     Inserts a Thing record into the database.
@@ -286,7 +285,6 @@ async def insertHistoricalLocation(payload, conn):
     """
     try:
         async with conn.transaction():
-            handle_datetime_fields(payload)
             location_id = None
             if "Locations" in payload:
                 for location in payload["Locations"]:
@@ -303,7 +301,7 @@ async def insertHistoricalLocation(payload, conn):
                 payload.pop("Locations")
 
             await handle_associations(payload, ["Thing"], conn)
-
+            handle_datetime_fields(payload)
             historicallocation_id, historicallocation_selfLink = (
                 await insert_record(payload, conn, "HistoricalLocation")
             )
@@ -412,7 +410,6 @@ async def insertDatastream(payload, conn):
     """
     try:
         async with conn.transaction():
-            handle_datetime_fields(payload)
             await handle_associations(
                 payload, ["Thing", "Sensor", "ObservedProperty"], conn
             )
@@ -420,6 +417,7 @@ async def insertDatastream(payload, conn):
                 payload, ["Thing", "Sensor", "ObservedProperty"]
             )
             observations = payload.pop("Observations", {})
+            handle_datetime_fields(payload)
             datastream_id, datastream_selfLink = await insert_record(
                 payload, conn, "Datastream"
             )
@@ -449,14 +447,14 @@ async def insertObservation(payload, conn):
     """
     try:
         async with conn.transaction():
-            handle_datetime_fields(payload)
-            handle_result_field(payload)
             await handle_associations(
                 payload, ["Datastream", "FeatureOfInterest"], conn
             )
             check_missing_properties(
                 payload, ["Datastream", "FeaturesOfInterest"]
             )
+            handle_datetime_fields(payload)
+            handle_result_field(payload)
             observation_id, observation_selfLink = await insert_record(
                 payload, conn, "Observation"
             )
@@ -569,6 +567,12 @@ async def handle_associations(payload, keys, conn):
             if "@iot.id" in payload[key]:
                 entity_id = payload[key]["@iot.id"]
             else:
+                if key == "FeatureOfInterest":
+                    entity_id, _ = await insert_funcs["FeaturesOfInterest"](
+                        payload[key], conn
+                    )
+                else:
+                    entity_id, _ = await insert_funcs[key](payload[key], conn)
                 entity_id, _ = await insert_funcs[key](payload[key], conn)
             if not isinstance(entity_id, int):
                 raise ValueError(
@@ -620,4 +624,4 @@ def format_exception(e):
     column_name_start = error_message.find('"') + 1
     column_name_end = error_message.find('"', column_name_start)
     violating_column = error_message[column_name_start:column_name_end]
-    return ValueError(f"Missing required property '{violating_column}'")
+    raise ValueError(f"Missing required property '{violating_column}'") from e
