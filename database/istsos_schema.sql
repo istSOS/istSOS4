@@ -223,7 +223,7 @@ EXECUTE FUNCTION update_historical_location_navigation_links();
 CREATE OR REPLACE FUNCTION update_observed_property_self_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, 's(', NEW.id, ')');
+    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', substring(TG_TABLE_NAME from 1 for char_length(TG_TABLE_NAME) - 1), 'ies(', NEW.id, ')');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -304,7 +304,7 @@ EXECUTE FUNCTION update_datastream_navigation_links();
 CREATE OR REPLACE FUNCTION update_feature_of_interest_self_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, 's(', NEW.id, ')');
+    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, '(', NEW.id, ')');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

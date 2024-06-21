@@ -4,7 +4,7 @@ import traceback
 
 from app.db.db import get_pool
 from app.sta2rest import sta2rest
-from dateutil import parser
+from app.utils.utils import handle_datetime_fields, handle_result_field
 from fastapi.responses import JSONResponse, Response
 
 from fastapi import APIRouter, Depends, Request, status
@@ -543,21 +543,6 @@ async def handle_nested_entities(
         payload.pop(key)
 
 
-def handle_datetime_fields(payload):
-    """
-    Converts datetime fields in the payload to datetime objects.
-
-    Args:
-        payload (dict): The payload containing the data.
-
-    Returns:
-        None
-    """
-    for key in list(payload.keys()):
-        if "time" in key.lower():
-            payload[key] = parser.parse(payload[key])
-
-
 def handle_associations(payload, keys):
     """
     Handle associations in the payload dictionary.
@@ -581,63 +566,3 @@ def handle_associations(payload, keys):
             id_field = f"{key.lower()}_id"
             payload[id_field] = payload[key]["@iot.id"]
             payload.pop(key)
-
-
-def handle_result_field(payload):
-    """
-    Updates the payload dictionary by handling the 'result' field.
-
-    Args:
-        payload (dict): The dictionary containing the payload.
-
-    Returns:
-        None
-    """
-    for key in list(payload.keys()):
-        if key == "result":
-            result_type, column_name = get_result_type_and_column(payload[key])
-            payload[column_name] = payload[key]
-            payload["resultType"] = result_type
-            payload.pop("result")
-
-
-def get_result_type_and_column(input_string):
-    """
-    Determines the result type and column name based on the input string.
-
-    Args:
-        input_string (str): The input string to evaluate.
-
-    Returns:
-        tuple: A tuple containing the result type and column name.
-
-    Raises:
-        Exception: If the result cannot be cast to a valid type.
-    """
-    try:
-        value = eval(str(input_string))
-    except (SyntaxError, NameError):
-        result_type = 0
-        column_name = "resultString"
-    else:
-        if isinstance(value, int):
-            result_type = 1
-            column_name = "resultInteger"
-        elif isinstance(value, float):
-            result_type = 2
-            column_name = "resultDouble"
-        elif isinstance(value, dict):
-            result_type = 4
-            column_name = "resultJSON"
-        else:
-            result_type = None
-            column_name = None
-
-    if input_string in ["true", "false"]:
-        result_type = 3
-        column_name = "resultBoolean"
-
-    if result_type is not None:
-        return result_type, column_name
-    else:
-        raise Exception("Cannot cast result to a valid type")
