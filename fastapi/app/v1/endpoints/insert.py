@@ -57,6 +57,9 @@ async def catch_all_post(
         result = sta2rest.STA2REST.parse_uri(full_path)
         # get json body
         body = await request.json()
+
+        main_table = result["entity"][0]
+
         if DEBUG:
             try:
                 print(f"POST body {main_table}", body)
@@ -65,8 +68,6 @@ async def catch_all_post(
                 b = copy.deepcopy(body)
             except:
                 b = ""
-
-        main_table = result["entity"][0]
 
         if len(result["entities"]) == 1:
             [name, id] = result["entities"][0]
