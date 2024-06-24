@@ -590,7 +590,11 @@ async def handle_associations(payload, keys, conn):
                     f"Cannot deserialize value of type `int` from String: {entity_id}"
                 )
             payload.pop(key)
-            payload[f"{key.lower()}_id"] = entity_id
+            if key != "FeatureOfInterest":
+                payload[f"{key.lower()}_id"] = entity_id
+            else:
+                payload["featuresofinterest_id"] = entity_id
+
         else:
             if key == "FeatureOfInterest":
                 await generate_feature_of_interest(payload, conn)
