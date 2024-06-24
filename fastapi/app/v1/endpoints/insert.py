@@ -585,7 +585,6 @@ async def handle_associations(payload, keys, conn):
                     )
                 else:
                     entity_id, _ = await insert_funcs[key](payload[key], conn)
-                entity_id, _ = await insert_funcs[key](payload[key], conn)
             if not isinstance(entity_id, int):
                 raise ValueError(
                     f"Cannot deserialize value of type `int` from String: {entity_id}"
