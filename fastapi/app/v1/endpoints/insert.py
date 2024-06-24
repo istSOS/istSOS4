@@ -260,8 +260,8 @@ async def insertThing(payload, conn):
                             location_id,
                             historicallocation_id,
                         )
-
-            await insertDatastream(datastreams, conn, thing_id)
+            if datastreams:
+                await insertDatastream(datastreams, conn, thing_id)
 
             return (thing_id, thing_selfLink)
     except Exception as e:
