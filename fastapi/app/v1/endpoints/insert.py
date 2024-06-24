@@ -423,7 +423,8 @@ async def insertDatastream(payload, conn, thing_id=None):
                 check_missing_properties(
                     ds, ["Thing", "Sensor", "ObservedProperty"]
                 )
-                observations.append(ds.pop("Observations", {}))
+                if "Observations" in ds:
+                    observations.append(ds.pop("Observations", {}))
                 handle_datetime_fields(ds)
                 for key in list(ds.keys()):
                     if isinstance(ds[key], dict):
