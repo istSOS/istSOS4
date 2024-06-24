@@ -3,7 +3,7 @@ version: 2.1
 dummy_data: False
 clear_data: False
 
-n_things: 20
-n_observed_properties: 4
-interval: P25Y
-frequency: PT10M
+n_things: 10
+n_observed_properties: 2
+interval: P1Y
+frequency: PT30M
