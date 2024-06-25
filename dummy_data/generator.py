@@ -1,24 +1,27 @@
 import json
+import os
 import random
 from datetime import datetime, time
 
 import isodate
 import psycopg2
-import yaml
 
-with open("config.yml", "r") as config_file:
-    config_data = yaml.safe_load(config_file)
+create_dummy_data = int(os.getenv("DUMMY_DATA"))
+delete_dummy_data = int(os.getenv("CLEAR_DATA"))
+n_things = int(os.getenv("N_THINGS"))
+n_observed_properties = int(os.getenv("N_OBSERVED_PROPERTIES"))
+interval = isodate.parse_duration(os.getenv("INTERVAL"))
+frequency = isodate.parse_duration(os.getenv("FREQUENCY"))
+date = (
+    datetime.strptime(os.getenv("START_DATETIME"), "%Y-%m-%dT%H:%M:%S.%f%z")
+    if os.getenv("START_DATETIME")
+    else datetime.combine(datetime.now().today(), time.min)
+)
 
-create_dummy_data = config_data["dummy_data"]
-delete_dummy_data = config_data["clear_data"]
-n_things = config_data["n_things"]
-n_observed_properties = config_data["n_observed_properties"]
-interval = isodate.parse_duration(config_data["interval"])
-frequency = isodate.parse_duration(config_data["frequency"])
-date = datetime.combine(datetime.now().today(), time.min)
-
-connection_url = (
-    "dbname='istsos' user='admin' password='admin' host='database' port='5432'"
+connection_url = "dbname={db} user={user} password={password} host='database' port='5432'".format(
+    db=os.getenv("POSTGRES_DB"),
+    user=os.getenv("POSTGRES_USER"),
+    password=os.getenv("POSTGRES_PASSWORD"),
 )
 
 
