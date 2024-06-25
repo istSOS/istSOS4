@@ -1,24 +1,32 @@
-from .database import Base, SCHEMA_NAME
-from sqlalchemy.sql.schema import Column
-from sqlalchemy.sql.sqltypes import Integer, Text, String
+from geoalchemy2 import Geometry
+from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql.json import JSON
-from geoalchemy2 import Geometry
+from sqlalchemy.sql.schema import Column
+from sqlalchemy.sql.sqltypes import Integer, String, Text
+
+from .database import SCHEMA_NAME, Base
+
 
 class FeaturesOfInterest(Base):
-    __tablename__ = 'FeaturesOfInterest'
-    __table_args__ = {'schema': SCHEMA_NAME}
+    __tablename__ = "FeaturesOfInterest"
+    __table_args__ = {"schema": SCHEMA_NAME}
 
     id = Column(Integer, primary_key=True)
     self_link = Column("@iot.selfLink", Text)
-    observation_navigation_link = Column("Observations@iot.navigationLink", Text)
+    observation_navigation_link = Column(
+        "Observations@iot.navigationLink", Text
+    )
     name = Column(String(255), nullable=False)
     description = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
-    feature = Column(Geometry(geometry_type='GEOMETRY', srid=4326), nullable=False)
+    feature = Column(
+        Geometry(geometry_type="GEOMETRY", srid=4326), nullable=False
+    )
     properties = Column(JSON)
-    observation = relationship("Observation", back_populates="featuresofinterest")
+    observation = relationship(
+        "Observation", back_populates="featuresofinterest"
+    )
 
     def _serialize_columns(self):
         """Serialize model columns to a dict, applying naming transformations."""
@@ -38,8 +46,11 @@ class FeaturesOfInterest(Base):
     def to_dict_expand(self):
         """Serialize the FeaturesOfInterest model to a dict, including expanded relationships."""
         data = self._serialize_columns()
-        if 'observation' not in inspect(self).unloaded:
-            data['Observations'] = [observation.to_dict_expand() for observation in self.observation]
+        if "observation" not in inspect(self).unloaded:
+            data["Observations"] = [
+                observation.to_dict_expand()
+                for observation in self.observation
+            ]
         return data
 
     def to_dict(self):

@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "location" geometry(geometry, 4326) NOT NULL,
-    "properties" jsonb DEFAULT '{}'::jsonb,
+    "properties" jsonb DEFAULT NULL,
     "@iot.selfLink" TEXT,
     "Things@iot.navigationLink" TEXT,
     "HistoricalLocations@iot.navigationLink" TEXT,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
-    "properties" jsonb DEFAULT '{}'::jsonb,
+    "properties" jsonb DEFAULT NULL,
     "@iot.selfLink" TEXT,
     "Locations@iot.navigationLink" TEXT,
     "HistoricalLocations@iot.navigationLink" TEXT,
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
     "name" VARCHAR(255) NOT NULL,
     "definition" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
-    "properties" jsonb DEFAULT '{}'::jsonb,
+    "properties" jsonb DEFAULT NULL,
     "@iot.selfLink" TEXT,
     "Datastreams@iot.navigationLink" TEXT
 );
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "metadata" VARCHAR(255) NOT NULL,
-    "properties" jsonb DEFAULT '{}'::jsonb,
+    "properties" jsonb DEFAULT NULL,
     "@iot.selfLink" TEXT,
     "Datastreams@iot.navigationLink" TEXT
 );
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "observedArea" geometry(Polygon, 4326),
     "phenomenonTime" tstzrange,
     "resultTime" tstzrange,
-    "properties" jsonb DEFAULT '{}'::jsonb,
+    "properties" jsonb DEFAULT NULL,
     "thing_id" BIGINT NOT NULL REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
     "sensor_id" BIGINT NOT NULL REFERENCES sensorthings."Sensor"(id) ON DELETE CASCADE,
     "observedproperty_id" BIGINT NOT NULL REFERENCES sensorthings."ObservedProperty"(id) ON DELETE CASCADE,
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
     "feature" geometry(geometry, 4326) NOT NULL,
-    "properties" jsonb DEFAULT '{}'::jsonb,
+    "properties" jsonb DEFAULT NULL,
     "@iot.selfLink" TEXT,
     "Observations@iot.navigationLink" TEXT
 );
@@ -114,9 +114,9 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "resultDouble" DOUBLE PRECISION,
     "resultBoolean" BOOLEAN,
     "resultJSON" jsonb,
-    "resultQuality" jsonb DEFAULT '{}'::jsonb,
+    "resultQuality" jsonb DEFAULT NULL,
     "validTime" tstzrange DEFAULT NULL,
-    "parameters" jsonb DEFAULT '{}'::jsonb,
+    "parameters" jsonb DEFAULT NULL,
     "datastream_id" BIGINT NOT NULL REFERENCES sensorthings."Datastream"(id) ON DELETE CASCADE,
     "featuresofinterest_id" BIGINT NOT NULL REFERENCES sensorthings."FeaturesOfInterest"(id) ON DELETE CASCADE,
     "@iot.selfLink" TEXT,
@@ -223,7 +223,7 @@ EXECUTE FUNCTION update_historical_location_navigation_links();
 CREATE OR REPLACE FUNCTION update_observed_property_self_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, 's(', NEW.id, ')');
+    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', substring(TG_TABLE_NAME from 1 for char_length(TG_TABLE_NAME) - 1), 'ies(', NEW.id, ')');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -304,7 +304,7 @@ EXECUTE FUNCTION update_datastream_navigation_links();
 CREATE OR REPLACE FUNCTION update_feature_of_interest_self_link()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, 's(', NEW.id, ')');
+    NEW."@iot.selfLink" := concat(current_setting('custom.hostname'), current_setting('custom.subpath'), current_setting('custom.version'), '/', TG_TABLE_NAME, '(', NEW.id, ')');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

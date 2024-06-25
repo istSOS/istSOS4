@@ -7,7 +7,6 @@ Author: Filippo Finke
 import re
 import urllib.parse
 
-
 # Define the token types
 TOKEN_TYPES = {
     'COUNT': r'\$count=',
@@ -59,7 +58,7 @@ class Token:
         Returns:
             str: The string representation of the token.
         """
-        return f'Token({self.type}, {self.value})'
+        return f"Token({self.type}, {self.value})"
 
 
 class Lexer:
@@ -100,7 +99,9 @@ class Lexer:
                     break
 
             if not match:
-                raise Exception(f'Invalid character at position {position}: {self.text[position]}')
+                raise Exception(
+                    f"Invalid character at position {position}: {self.text[position]}"
+                )
 
         return tokens
 
@@ -111,11 +112,11 @@ class Lexer:
         Returns:
             str: The string representation of the lexer.
         """
-        return '\n'.join(str(token) for token in self.tokens)
+        return "\n".join(str(token) for token in self.tokens)
 
 
 # Example usage
-if __name__ == '__main__':
-    text = '''$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))'''
+if __name__ == "__main__":
+    text = """$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))"""
     lexer = Lexer(text)
     print(lexer)
