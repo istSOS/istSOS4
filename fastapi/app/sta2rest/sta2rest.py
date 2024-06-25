@@ -486,9 +486,7 @@ class STA2REST:
             raise Exception("Illegal operation: $resultFormat is only valid for /Observations")
 
         result = db.execute(query_converted[0]).all()
-        count = query_converted[2].scalar()
-        query_result = result
-
+        """
         if query_ast.result_format:
             selected_fields = [
                 STA2REST.REVERSE_SELECT_MAPPING.get(identifier.name, identifier.name)
@@ -536,10 +534,10 @@ class STA2REST:
                         "dataArray": dataArray
                     },)
                 ]
-
+        """
         
         return {
-            "query": db.execute(query_converted[0]).all(),
+            "query": result,
             "count_query": query_converted[1],
             "query_count": query_converted[2].scalar(),
             "ref": uri["ref"],
