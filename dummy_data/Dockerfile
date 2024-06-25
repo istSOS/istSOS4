@@ -10,7 +10,4 @@ COPY . /dummy_data
 # Run the command to install any necessary dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Run hello.py when the container launches
-# CMD ["python3", "gen_data.py"]
-
 
