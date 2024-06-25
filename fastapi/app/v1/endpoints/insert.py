@@ -416,6 +416,7 @@ async def insertDatastream(payload, conn, thing_id=None):
 
             datastreams = []
             observations = []
+            all_keys = set()
 
             for ds in payload:
                 if thing_id:
@@ -436,20 +437,27 @@ async def insertDatastream(payload, conn, thing_id=None):
                 for key, value in ds.items():
                     if isinstance(value, dict):
                         ds[key] = json.dumps(value)
+                    all_keys.add(key)
 
-                datastreams.append(tuple(ds.values()))
+            all_keys = list(all_keys)
 
-            keys = ", ".join(f'"{key}"' for key in ds.keys())
+            for ds in payload:
+                ds_tuple = []
+                for key in all_keys:
+                    ds_tuple.append(ds.get(key))
+                datastreams.append(tuple(ds_tuple))
+
+            keys = ", ".join(f'"{key}"' for key in all_keys)
             values_placeholders = ", ".join(
-                f"({', '.join(f'${i * len(ds) + j + 1}' for j in range(len(ds)))})"
+                f"({', '.join(f'${i * len(all_keys) + j + 1}' for j in range(len(all_keys)))})"
                 for i in range(len(datastreams))
             )
+
             insert_sql = f"""
             INSERT INTO sensorthings."Datastream" ({keys})
             VALUES {values_placeholders}
             RETURNING id, "@iot.selfLink"
             """
-
             values = [
                 value for datastream in datastreams for value in datastream
             ]
@@ -493,6 +501,8 @@ async def insertObservation(payload, conn, datastream_id=None):
 
             observations = []
 
+            all_keys = set()
+
             for obs in payload:
                 if datastream_id:
                     obs["datastream_id"] = datastream_id
@@ -509,12 +519,19 @@ async def insertObservation(payload, conn, datastream_id=None):
                 for key, value in obs.items():
                     if isinstance(value, dict):
                         obs[key] = json.dumps(value)
+                    all_keys.add(key)
 
-                observations.append(tuple(obs.values()))
+            all_keys = list(all_keys)
 
-            keys = ", ".join(f'"{key}"' for key in obs.keys())
+            for obs in payload:
+                obs_tuple = []
+                for key in all_keys:
+                    obs_tuple.append(obs.get(key))
+                observations.append(tuple(obs_tuple))
+
+            keys = ", ".join(f'"{key}"' for key in all_keys)
             values_placeholders = ", ".join(
-                f"({', '.join(f'${i * len(obs) + j + 1}' for j in range(len(obs)))})"
+                f"({', '.join(f'${i * len(all_keys) + j + 1}' for j in range(len(all_keys)))})"
                 for i in range(len(observations))
             )
 

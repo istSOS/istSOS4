@@ -378,7 +378,7 @@ def delete_data():
 
 
 if __name__ == "__main__":
-    if create_dummy_data:
-        create_data()
     if delete_dummy_data:
         delete_data()
+    if create_dummy_data:
+        create_data()
