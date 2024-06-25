@@ -396,39 +396,47 @@ async def insertFeaturesOfInterest(payload, conn):
 
 async def insertDatastream(payload, conn, thing_id=None):
     """
-    Inserts a datastream record into the database.
+    Inserts datastream(s) into the database.
 
     Args:
-        payload (dict): The payload containing the datastream information.
-        conn: The database connection object.
+        payload (dict or list): The payload containing the datastream(s) to be inserted.
+        conn (connection): The database connection object.
+        thing_id (int, optional): The ID of the thing associated with the datastream. Defaults to None.
 
     Returns:
-        tuple: A tuple containing the datastream ID and selfLink.
+        tuple: A tuple containing the ID and selfLink of the inserted datastream.
 
     Raises:
         Exception: If an error occurs during the insertion process.
     """
     try:
         async with conn.transaction():
-            datastreams = []
-            observations = []
             if isinstance(payload, dict):
                 payload = [payload]
+
+            datastreams = []
+            observations = []
+
             for ds in payload:
                 if thing_id:
                     ds["thing_id"] = thing_id
+
                 await handle_associations(
                     ds, ["Thing", "Sensor", "ObservedProperty"], conn
                 )
                 check_missing_properties(
                     ds, ["Thing", "Sensor", "ObservedProperty"]
                 )
+
                 if "Observations" in ds:
                     observations.append(ds.pop("Observations", {}))
+
                 handle_datetime_fields(ds)
-                for key in list(ds.keys()):
-                    if isinstance(ds[key], dict):
-                        ds[key] = json.dumps(ds[key])
+
+                for key, value in ds.items():
+                    if isinstance(value, dict):
+                        ds[key] = json.dumps(value)
+
                 datastreams.append(tuple(ds.values()))
 
             keys = ", ".join(f'"{key}"' for key in ds.keys())
@@ -442,46 +450,53 @@ async def insertDatastream(payload, conn, thing_id=None):
             RETURNING id, "@iot.selfLink"
             """
 
-            values = [item for sublist in datastreams for item in sublist]
+            values = [
+                value for datastream in datastreams for value in datastream
+            ]
             result = await conn.fetch(insert_sql, *values)
-            for index, row in enumerate(result):
-                datastream_id = row["id"]
-                if observations:
+            if observations:
+                for index, row in enumerate(result):
+                    datastream_id = row["id"]
                     await insertObservation(
                         observations[index], conn, datastream_id
                     )
+
             datastream_id, datastream_selfLink = (
                 result[0]["id"],
                 result[0]["@iot.selfLink"],
             )
             return (datastream_id, datastream_selfLink)
+
     except Exception as e:
         format_exception(e)
 
 
 async def insertObservation(payload, conn, datastream_id=None):
     """
-    Inserts an observation record into the database.
+    Inserts observation data into the database.
 
     Args:
-        payload (dict): The payload containing the observation data.
-        conn (asyncpg.Connection): The database connection.
+        payload (dict or list): The payload containing the observation(s) to be inserted.
+        conn (connection): The database connection object.
+        datastream_id (int, optional): The ID of the datastream associated with the observation. Defaults to None.
 
     Returns:
-        tuple: A tuple containing the observation ID and self-link.
+        tuple: A tuple containing the ID and selfLink of the inserted observation.
 
     Raises:
         Exception: If an error occurs during the insertion process.
     """
     try:
         async with conn.transaction():
-            observations = []
             if isinstance(payload, dict):
                 payload = [payload]
+
+            observations = []
 
             for obs in payload:
                 if datastream_id:
                     obs["datastream_id"] = datastream_id
+
                 await handle_associations(
                     obs, ["Datastream", "FeatureOfInterest"], conn
                 )
@@ -490,9 +505,11 @@ async def insertObservation(payload, conn, datastream_id=None):
                 )
                 handle_datetime_fields(obs)
                 handle_result_field(obs)
-                for key in list(obs.keys()):
-                    if isinstance(obs[key], dict):
-                        obs[key] = json.dumps(obs[key])
+
+                for key, value in obs.items():
+                    if isinstance(value, dict):
+                        obs[key] = json.dumps(value)
+
                 observations.append(tuple(obs.values()))
 
             keys = ", ".join(f'"{key}"' for key in obs.keys())
@@ -507,13 +524,15 @@ async def insertObservation(payload, conn, datastream_id=None):
             RETURNING id, "@iot.selfLink"
             """
 
-            values = [item for sublist in observations for item in sublist]
+            values = [
+                value for observation in observations for value in observation
+            ]
             result = await conn.fetch(insert_sql, *values)
-            if result:
-                observation_id, observation_selfLink = (
-                    result[0]["id"],
-                    result[0]["@iot.selfLink"],
-                )
+
+            observation_id, observation_selfLink = (
+                result[0]["id"],
+                result[0]["@iot.selfLink"],
+            )
             return (observation_id, observation_selfLink)
 
     except Exception as e:
