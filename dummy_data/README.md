@@ -1,8 +1,8 @@
 # Dummy data
 
-The dataset consists of observed properties for a specified number of entities ("things") over a defined time interval with a given frequency. Additionally, it includes information about locations, historical locations, features of interest, sensors, datastreams, and observations associated with the things.
+This container create a random dataset to mimik real case monitoring network. It allows to create a specified number of entities ("things") for each observed properties with observations over a defined time interval with a given frequency. Additionally, it includes information about locations, historical locations, features of interest, sensors, datastreams, and observations associated with the things.
 
-## Parameters
+## Input Parameters
 
 - `n_things` (int): Specifies the number of things being observed in the dataset.
 - `n_observed_properties` (int): Denotes the number of different properties or features being recorded for each item.
