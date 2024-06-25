@@ -595,9 +595,14 @@ class NodeVisitor(Visitor):
 
                 sub_queries_no_expand = []
                 if expand_identifiers_path["expand"]["identifiers"]:
-                    main_query = select(
-                        func.json_build_object(*json_build_object_args)
-                    )
+                    if node.result_format and node.result_format.value == "dataArray":
+                        main_query = select(
+                            func.json_build_array(*json_build_object_args)
+                        )
+                    else:
+                        main_query = select(
+                            func.json_build_object(*json_build_object_args)
+                        )
                     current = None
                     previous = None
 
