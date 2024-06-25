@@ -552,11 +552,12 @@ class NodeVisitor(Visitor):
 
             json_build_object_args = []
             for attr in select_query:
-                (
-                    json_build_object_args.append(literal(attr.name))
-                    if attr.name != "id"
-                    else json_build_object_args.append(text("'@iot.id'"))
-                )
+                if not node.result_format:
+                    (
+                        json_build_object_args.append((attr.name))
+                        if attr.name != "id"
+                        else json_build_object_args.append(text("'@iot.id'"))
+                    )
                 if isinstance(attr.type, Geometry):
                     json_build_object_args.append(
                         func.ST_AsGeoJSON(attr).cast(JSONB)
@@ -723,9 +724,14 @@ class NodeVisitor(Visitor):
                         )
             else:
                 # Set options for main_query if select_query is not empty
-                main_query = select(
-                    func.json_build_object(*json_build_object_args)
-                )
+                if node.result_format and node.result_format.value == "dataArray":
+                    main_query = select(
+                        func.json_build_array(*json_build_object_args)
+                    ) 
+                else:
+                    main_query = select(
+                        func.json_build_object(*json_build_object_args)
+                    )
 
             if node.filter:
                 filter, join_relationships = self.visit_FilterNode(
