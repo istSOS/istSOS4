@@ -366,7 +366,7 @@ class STA2REST:
 
         # Check if we have a query
         query_ast = QueryNode(
-            None, None, None, None, None, None, None, None, None, False
+            None, None, None, None, None, None, None, None, None, None, False
         )
         if query:
             lexer = Lexer(query)
@@ -425,7 +425,7 @@ class STA2REST:
             for entity in entities:
                 entity_name = entity[0]
                 sub_query = QueryNode(
-                    None, None, None, None, None, None, None, None, None, True
+                    None, None, None, None, None, None, None, None, None, None, True
                 )
                 if entity[1]:
                     sub_query.filter = FilterNode(f"id eq {entity[1]}")
