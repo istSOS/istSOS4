@@ -1,5 +1,6 @@
 import json
 
+from asyncpg.types import Range
 from dateutil import parser
 
 
@@ -15,7 +16,13 @@ def handle_datetime_fields(payload):
     """
     for key in list(payload.keys()):
         if "time" in key.lower():
-            payload[key] = parser.parse(payload[key])
+            if "/" in payload[key]:
+                start_time, end_time = payload[key].split("/")
+                payload[key] = Range(
+                    parser.parse(start_time), parser.parse(end_time)
+                )
+            else:
+                payload[key] = parser.parse(payload[key])
 
 
 def handle_result_field(payload):

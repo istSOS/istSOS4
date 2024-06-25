@@ -1,8 +1,9 @@
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
 from odata_query.grammar import ODataLexer, ODataParser
-from sqlalchemy import asc, desc, func, literal, select, text
+from sqlalchemy import asc, case, desc, func, literal, select, text
 from sqlalchemy.dialects.postgresql.json import JSONB
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.sql.sqltypes import String, Text
 
 from ..models import *
@@ -359,11 +360,27 @@ class NodeVisitor(Visitor):
                         if attr.name != "id"
                         else text("'@iot.id'")
                     )
-                    json_build_object_args.append(
-                        func.ST_AsGeoJSON(attr).cast(JSONB)
-                        if isinstance(attr.type, Geometry)
-                        else attr
-                    )
+                    if isinstance(attr.type, Geometry):
+                        json_build_object_args.append(
+                            func.ST_AsGeoJSON(attr).cast(JSONB)
+                        )
+                    elif isinstance(attr.type, TSTZRANGE):
+                        json_build_object_args.append(
+                            case(
+                                (
+                                    func.lower(attr).isnot(None)
+                                    & func.upper(attr).isnot(None),
+                                    func.concat(
+                                        func.lower(attr),
+                                        "/",
+                                        func.upper(attr),
+                                    ),
+                                ),
+                                else_=None,
+                            )
+                        )
+                    else:
+                        json_build_object_args.append(attr)
 
             aggregation_type = (
                 func.array_agg(
@@ -540,13 +557,27 @@ class NodeVisitor(Visitor):
                     if attr.name != "id"
                     else json_build_object_args.append(text("'@iot.id'"))
                 )
-                (
+                if isinstance(attr.type, Geometry):
                     json_build_object_args.append(
                         func.ST_AsGeoJSON(attr).cast(JSONB)
                     )
-                    if (type(attr.type) == Geometry)
-                    else json_build_object_args.append(attr)
-                )
+                elif isinstance(attr.type, TSTZRANGE):
+                    json_build_object_args.append(
+                        case(
+                            (
+                                func.lower(attr).isnot(None)
+                                & func.upper(attr).isnot(None),
+                                func.concat(
+                                    func.lower(attr),
+                                    "/",
+                                    func.upper(attr),
+                                ),
+                            ),
+                            else_=None,
+                        )
+                    )
+                else:
+                    json_build_object_args.append(attr)
 
             # Check if we have an expand node before the other parts of the query
             if node.expand:
