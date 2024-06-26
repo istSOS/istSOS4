@@ -486,56 +486,21 @@ class STA2REST:
             raise Exception("Illegal operation: $resultFormat is only valid for /Observations")
 
         result = db.execute(query_converted[0]).all()
-        """
-        if query_ast.result_format:
-            selected_fields = [
-                STA2REST.REVERSE_SELECT_MAPPING.get(identifier.name, identifier.name)
-                for identifier in query_ast.select.identifiers
-            ]
 
-            if len(entities) == 0:
-                datastreams = {}
+        if query_ast.result_format and query_ast.result_format.value == 'dataArray':
+            items = [item[0] for item in result]
+            components = [identifier.name for identifier in query_ast.select.identifiers]
 
-                for row in result:
-                    row = row[0]
-                    datastream_id = row["Datastream"]["@iot.id"]
-                    link = f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}/Datastreams({datastream_id})"
+            entity_id = entities[0][1]
+            link = f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}/Datastreams({entity_id})"
 
-                    if link not in datastreams:
-                        datastreams[link] = []
+            result = [({
+                "Datastream@iot.navigationLink": link,
+                "components": components,
+                "dataArray@iot.count": len(result),
+                "dataArray": items
+            },)]
 
-                    dataArray = [
-                        row["@iot.id"] if field == "id" else row[field]
-                        for field in selected_fields
-                    ]
-                    datastreams[link].append(dataArray)
-
-                query_result = [
-                    ({
-                        "Datastream@iot.navigationLink": link,
-                        "components": selected_fields,
-                        "dataArray@iot.count": len(dataArray),
-                        "dataArray": dataArray
-                    },)
-                    for link, dataArray in datastreams.items()
-                ]
-            else:
-                entity, entity_id = entities[0]
-                dataArray = [
-                    [row[0][field] for field in row[0]]
-                    for row in result
-                ]
-
-                query_result = [
-                    ({
-                        "Datastream@iot.navigationLink": f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}/Datastreams({entity_id})",
-                        "components": selected_fields,
-                        "dataArray@iot.count": len(result),
-                        "dataArray": dataArray
-                    },)
-                ]
-        """
-        
         return {
             "query": result,
             "count_query": query_converted[1],
