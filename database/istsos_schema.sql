@@ -1,9 +1,5 @@
---CREATE EXTENSION IF NOT exists pg_graphql;
 CREATE EXTENSION IF NOT exists postgis;
-CREATE EXTENSION IF NOT exists unit;
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS btree_gist;
---CREATE EXTENSION IF NOT exists uri;
 
 CREATE SCHEMA sensorthings;
 
