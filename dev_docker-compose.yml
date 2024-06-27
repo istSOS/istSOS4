@@ -2,7 +2,9 @@ version: "3.7"
 services:
 
   database:
-    image: gitlab-edu.supsi.ch:5050/dacd-ist/geomatica/iststa/istsos-miu-database:0.0.1
+    build:
+      context: ./database
+      dockerfile: Dockerfile
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -23,7 +25,9 @@ services:
       retries: 5
 
   api:
-    image: gitlab-edu.supsi.ch:5050/dacd-ist/geomatica/iststa/istsos-miu-fastapi:0.0.1
+    build:
+      context: ./fastapi
+      dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
       HOSTNAME: ${HOSTNAME}
@@ -38,10 +42,11 @@ services:
     working_dir: /code
     env_file:
     - .env 
-    
 
   dummy_data:
-    image: gitlab-edu.supsi.ch:5050/dacd-ist/geomatica/iststa/istsos-miu-dummy-data:0.0.1
+    build:
+      context: ./dummy_data
+      dockerfile: Dockerfile
     command: python3 generator.py
     volumes:
       - ./dummy_data:/dummy_data
@@ -50,7 +55,7 @@ services:
       database:
         condition: service_healthy
     env_file:
-    - .env 
+      - .env
 
 volumes:
   v-istsos-miu-database-data:
