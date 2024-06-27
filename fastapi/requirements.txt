@@ -2,13 +2,6 @@ fastapi>=0.68.0,<0.69.0
 pydantic>=1.8.0,<2.0.0
 uvicorn>=0.15.0,<0.16.0
 asyncpg
-ujson
-pypika
-httpx
-asyncio
-postgrest
 odata-query==0.10.0b1
 sqlalchemy>=1.4.0
 geoalchemy2
-geoalchemy2[shapely]
-psycopg2-binary

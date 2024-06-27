@@ -11,8 +11,6 @@ import os
 import re
 
 from odata_query import grammar
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from .sta_parser.ast import *
 from .sta_parser.lexer import Lexer
@@ -65,9 +63,6 @@ ODATA_FUNCTIONS = {
 }
 grammar.ODATA_FUNCTIONS = ODATA_FUNCTIONS
 
-engine = create_engine(os.getenv("DATABASE_URL"))
-
-Session = sessionmaker(bind=engine)
 
 try:
     DEBUG = int(os.getenv("DEBUG"))
@@ -337,7 +332,7 @@ class STA2REST:
         return entity + "_id"
 
     @staticmethod
-    def convert_query(full_path: str, db: Session) -> str:
+    async def convert_query(full_path: str, db) -> str:
         """
         Converts a STA query to a PostgREST query.
 
@@ -477,10 +472,10 @@ class STA2REST:
 
         # Visit the query ast to convert it
         visitor = NodeVisitor(main_entity, db)
-        query_converted = visitor.visit(query_ast)
+        query_converted = await visitor.visit(query_ast)
 
         return {
-            "query": db.execute(query_converted[0]).all(),
+            "query": query_converted[0].fetchall(),
             "count_query": query_converted[1],
             "query_count": query_converted[2].scalar(),
             "ref": uri["ref"],

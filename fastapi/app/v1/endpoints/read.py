@@ -2,7 +2,7 @@ import os
 import traceback
 from collections.abc import Iterable
 
-from app.models.database import SessionLocal
+from app.models.database import get_db
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
 from fastapi.responses import JSONResponse, Response
@@ -18,14 +18,6 @@ try:
         from app.utils.utils import response2jsonfile
 except:
     DEBUG = 0
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def __handle_root(request: Request):
@@ -88,7 +80,7 @@ async def catch_all_get(
         if request.url.query:
             full_path += "?" + request.url.query
 
-        result = sta2rest.STA2REST.convert_query(full_path, db)
+        result = await sta2rest.STA2REST.convert_query(full_path, db)
         items = result["query"]
         query_count = result["query_count"]
         item_dicts = []
