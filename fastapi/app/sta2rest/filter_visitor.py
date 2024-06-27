@@ -70,10 +70,10 @@ class FilterVisitor(visitor.NodeVisitor):
         return any_
 
     def visit_Integer(self, node: ast.Integer) -> BindParameter:
-        return literal(node.val, type_=Integer())
+        return literal(node.py_val)
 
     def visit_Float(self, node: ast.Float) -> BindParameter:
-        return literal(node.val, type_=Float())
+        return literal(node.py_val)
 
     def visit_Boolean(self, node: ast.Boolean) -> Union[True_, False_]:
         if node.val == "true":
@@ -81,10 +81,10 @@ class FilterVisitor(visitor.NodeVisitor):
         return false()
 
     def visit_String(self, node: ast.String) -> BindParameter:
-        return literal(node.val, type_=String())
+        return literal(node.py_val)
 
     def visit_DateTime(self, node: ast.DateTime) -> BindParameter:
-        return literal(node.val, type_=DateTime())
+        return literal(node.py_val)
 
     ####################################################################################
     # Comparison Operators
@@ -200,13 +200,11 @@ class FilterVisitor(visitor.NodeVisitor):
             return getattr(owner_cls, node.attr)
         except AttributeError:
             raise ex.InvalidFieldException(node.attr)
-        return node
 
     def visit_BinOp(self, node: ast.BinOp) -> Any:
         left = self.visit(node.left)
         right = self.visit(node.right)
         op = self.visit(node.op)
-
         return op(left, right)
 
     def visit_BoolOp(self, node: ast.BoolOp) -> BooleanClauseList:
@@ -219,6 +217,7 @@ class FilterVisitor(visitor.NodeVisitor):
         left = self.visit(node.left)
         right = self.visit(node.right)
         op = self.visit(node.comparator)
+
         if isinstance(left, InstrumentedAttribute):
             if (
                 "system_time_validity" in left.key

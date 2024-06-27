@@ -356,7 +356,7 @@ class NodeVisitor(Visitor):
                     or (fk_parent is not None and attr.name != fk_parent.name)
                 ):
                     json_build_object_args.append(
-                        literal(attr.name)
+                        literal(attr.name, type_=String())
                         if attr.name != "id"
                         else text("'@iot.id'")
                     )
@@ -502,7 +502,7 @@ class NodeVisitor(Visitor):
 
         return expand_queries
 
-    def visit_QueryNode(self, node: QueryNode):
+    async def visit_QueryNode(self, node: QueryNode):
         """
         Visit a query node.
 
@@ -514,15 +514,13 @@ class NodeVisitor(Visitor):
         """
 
         # list to store the converted parts of the query node
-        with self.db as session:
+        async with self.db() as session:
             main_entity = globals()[self.main_entity]
             main_query = None
             query_count = (
-                session.query(
-                    func.count(getattr(main_entity, "id").distinct())
-                )
-                if not "TravelTime" in self.main_entity
-                else session.query(
+                select(func.count(getattr(main_entity, "id").distinct()))
+                if "TravelTime" not in self.main_entity
+                else select(
                     func.count(
                         func.distinct(
                             getattr(main_entity, "id"),
@@ -553,7 +551,9 @@ class NodeVisitor(Visitor):
             json_build_object_args = []
             for attr in select_query:
                 (
-                    json_build_object_args.append(literal(attr.name))
+                    json_build_object_args.append(
+                        literal(attr.name, type_=String())
+                    )
                     if attr.name != "id"
                     else json_build_object_args.append(text("'@iot.id'"))
                 )
@@ -604,7 +604,7 @@ class NodeVisitor(Visitor):
                         expand_identifiers_path["expand"]["identifiers"]
                     ):
                         current = e.identifier
-                        sub_query = session.query(globals()[current])
+                        sub_query = select(globals()[current])
 
                         if i > 0:
                             previous = expand_identifiers_path["expand"][
@@ -776,5 +776,8 @@ class NodeVisitor(Visitor):
 
                 else:
                     count_query = False
+
+            main_query = await session.execute(main_query)
+            query_count = await session.execute(query_count)
 
             return main_query, count_query, query_count
