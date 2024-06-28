@@ -815,6 +815,7 @@ class NodeVisitor(Visitor):
 
             # Apply ordering to main_query
             if not (node.result_format and node.result_format.value == "dataArray"):
+                # TODO: Fix ordering for dataArray format queries
                 main_query = main_query.order_by(*ordering)
 
             # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
