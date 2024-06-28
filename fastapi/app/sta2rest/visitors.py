@@ -768,6 +768,8 @@ class NodeVisitor(Visitor):
                                 getattr(main_entity, "datastream_id"),
                                 ')'
                             ),
+                            "components",
+                            components,
                             "dataArray@iot.count",
                             func.count(getattr(main_entity, "datastream_id")),
                             'dataArray',
