@@ -755,8 +755,6 @@ class NodeVisitor(Visitor):
             else:
                 # Set options for main_query if select_query is not empty
                 if node.result_format and node.result_format.value == "dataArray":
-                    print("dataArray")
-                    print(json_build_object_args)
                     main_query = select(
                         func.json_build_object(
                             "Datastream@iot.navigationLink",
