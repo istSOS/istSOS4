@@ -514,6 +514,9 @@ class NodeVisitor(Visitor):
         """
 
         # list to store the converted parts of the query node
+
+        result_format = "DataArray" if node.result_format and node.result_format.value == "dataArray" else None
+
         with self.db as session:
             main_entity = globals()[self.main_entity]
             main_query = None
@@ -536,7 +539,7 @@ class NodeVisitor(Visitor):
                 node.select = SelectNode([])
                 # get default columns for main entity
                 default_columns = sta2rest.STA2REST.get_default_column_names(
-                    self.main_entity
+                    self.main_entity if not result_format else self.main_entity + result_format
                 )
                 for column in default_columns:
                     node.select.identifiers.append(IdentifierNode(column))
@@ -597,7 +600,14 @@ class NodeVisitor(Visitor):
                 if expand_identifiers_path["expand"]["identifiers"]:
                     if node.result_format and node.result_format.value == "dataArray":
                         main_query = select(
-                            func.json_build_array(*json_build_object_args)
+                            func.json_build_object(
+                                'dataArray@iot.count',
+                                func.count(),
+                                'dataArray',
+                                func.json_agg(
+                                    func.json_build_array(*json_build_object_args)
+                                )
+                            )
                         )
                     else:
                         main_query = select(
@@ -731,8 +741,8 @@ class NodeVisitor(Visitor):
                 # Set options for main_query if select_query is not empty
                 if node.result_format and node.result_format.value == "dataArray":
                     main_query = select(
-                        func.json_build_array(*json_build_object_args)
-                    ) 
+                        func.json_build_object(*json_build_object_args)
+                    )
                 else:
                     main_query = select(
                         func.json_build_object(*json_build_object_args)
@@ -771,7 +781,8 @@ class NodeVisitor(Visitor):
                 ordering = [desc(getattr(main_entity, "id"))]
 
             # Apply ordering to main_query
-            main_query = main_query.order_by(*ordering)
+            if not (node.result_format and node.result_format.value == "dataArray"):
+                main_query = main_query.order_by(*ordering)
 
             # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
             skip_value = self.visit(node.skip) if node.skip else 0

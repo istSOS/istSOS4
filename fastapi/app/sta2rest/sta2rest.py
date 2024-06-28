@@ -268,6 +268,15 @@ class STA2REST:
             "valid_time",
             "parameters",
         ],
+        "ObservationDataArray": [
+            "id",
+            "phenomenon_time",
+            "result_time",
+            "result",
+            "result_quality",
+            "valid_time",
+            "parameters",
+        ],
         "ObservationTravelTime": [
             "id",
             "self_link",
@@ -488,18 +497,15 @@ class STA2REST:
         result = db.execute(query_converted[0]).all()
 
         if query_ast.result_format and query_ast.result_format.value == 'dataArray':
-            items = [item[0] for item in result]
-            components = [identifier.name for identifier in query_ast.select.identifiers]
-
+            components = [STA2REST.REVERSE_SELECT_MAPPING.get(identifier.name, identifier.name) for identifier in query_ast.select.identifiers]
             entity_id = entities[0][1]
             link = f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}/Datastreams({entity_id})"
-
-            result = [({
+            tmp = [({
                 "Datastream@iot.navigationLink": link,
-                "components": components,
-                "dataArray@iot.count": len(result),
-                "dataArray": items
+                "components": components
             },)]
+            tmp[0][0].update(result[0][0])
+            result = tmp
 
         return {
             "query": result,
