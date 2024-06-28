@@ -10,13 +10,13 @@ You can enable or disable database versioning by setting the **VERSIONING** envi
 
 For more information about the database versioning, refer to the [Database Versioning Documentation](https://github.com/istSOS/istsos-miu/blob/traveltime/database/README_VERSIONING.md)
     
-### Database fake data
+### Database dummy data
 
-When you build the Docker image, the script will automatically clear the database and add static and dynamic values. 
+You can enable or disable the addition of dummy data by setting **DUMMY_DATA** environment variable in the `.env` file.
 
-To disable the addition of these data, set **dummy_data** to *False* in the `/dummy_data/config.yaml` file.
+You can enable or disable the cleaning by setting **CLEAR_DATA** environment variable in the `.env` file.
 
-To prevent clearing the database, set **clear_data** to *False* in the `/dummy_data/config.yaml` file.
+For more information about the database dummy data, refer to the [Database Dummy Data Documentation](https://github.com/istSOS/istsos-miu/blob/traveltime/dummy_data/README.md)
 
 ### Connect to database in DBeaver
 
