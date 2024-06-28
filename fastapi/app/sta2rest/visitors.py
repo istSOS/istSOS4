@@ -1,3 +1,4 @@
+import os
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
 from odata_query.grammar import ODataLexer, ODataParser
@@ -517,6 +518,7 @@ class NodeVisitor(Visitor):
 
         result_format = "DataArray" if node.result_format and node.result_format.value == "dataArray" else None
 
+
         with self.db as session:
             main_entity = globals()[self.main_entity]
             main_query = None
@@ -552,6 +554,8 @@ class NodeVisitor(Visitor):
                 for field in self.visit(node.select):
                     field_name = field.split(".")[-1]
                     select_query.append(getattr(main_entity, field_name))
+
+            components = [sta2rest.STA2REST.REVERSE_SELECT_MAPPING.get(identifier.name, identifier.name) for identifier in node.select.identifiers]
 
             json_build_object_args = []
             for attr in select_query:
@@ -601,6 +605,17 @@ class NodeVisitor(Visitor):
                     if node.result_format and node.result_format.value == "dataArray":
                         main_query = select(
                             func.json_build_object(
+                                "Datastream@iot.navigationLink",
+                                func.concat(
+                                    os.getenv('HOSTNAME', ''),
+                                    os.getenv('SUBPATH', ''),
+                                    os.getenv('VERSION', ''),
+                                    '/Datastreams(', 
+                                    getattr(main_entity, "datastream_id"),
+                                    ')'
+                                ),
+                                'components',
+                                components,
                                 'dataArray@iot.count',
                                 func.count(),
                                 'dataArray',
@@ -608,7 +623,7 @@ class NodeVisitor(Visitor):
                                     func.json_build_array(*json_build_object_args)
                                 )
                             )
-                        )
+                        ).group_by("datastream_id")
                     else:
                         main_query = select(
                             func.json_build_object(*json_build_object_args)
@@ -740,9 +755,27 @@ class NodeVisitor(Visitor):
             else:
                 # Set options for main_query if select_query is not empty
                 if node.result_format and node.result_format.value == "dataArray":
+                    print("dataArray")
+                    print(json_build_object_args)
                     main_query = select(
-                        func.json_build_object(*json_build_object_args)
-                    )
+                        func.json_build_object(
+                            "Datastream@iot.navigationLink",
+                            func.concat(
+                                os.getenv('HOSTNAME', ''),
+                                os.getenv('SUBPATH', ''),
+                                os.getenv('VERSION', ''),
+                                '/Datastreams(', 
+                                getattr(main_entity, "datastream_id"),
+                                ')'
+                            ),
+                            "dataArray@iot.count",
+                            func.count(getattr(main_entity, "datastream_id")),
+                            'dataArray',
+                            func.json_agg(
+                                func.json_build_array(*json_build_object_args)
+                            )
+                        )
+                    ).group_by("datastream_id")
                 else:
                     main_query = select(
                         func.json_build_object(*json_build_object_args)

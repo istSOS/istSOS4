@@ -496,17 +496,6 @@ class STA2REST:
 
         result = db.execute(query_converted[0]).all()
 
-        if query_ast.result_format and query_ast.result_format.value == 'dataArray':
-            components = [STA2REST.REVERSE_SELECT_MAPPING.get(identifier.name, identifier.name) for identifier in query_ast.select.identifiers]
-            entity_id = entities[0][1]
-            link = f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}/Datastreams({entity_id})"
-            tmp = [({
-                "Datastream@iot.navigationLink": link,
-                "components": components
-            },)]
-            tmp[0][0].update(result[0][0])
-            result = tmp
-
         return {
             "query": result,
             "count_query": query_converted[1],
