@@ -1,6 +1,5 @@
 version: "3.7"
 services:
-
   database:
     image: gitlab-edu.supsi.ch:5050/dacd-ist/geomatica/iststa/istsos-miu-database:0.0.1
     environment:
@@ -33,24 +32,19 @@ services:
     command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - 8018:5000
-    volumes:
-      - ./fastapi/app:/code/app
     working_dir: /code
     env_file:
-    - .env 
-    
+      - .env
 
   dummy_data:
     image: gitlab-edu.supsi.ch:5050/dacd-ist/geomatica/iststa/istsos-miu-dummy-data:0.0.1
     command: python3 generator.py
-    volumes:
-      - ./dummy_data:/dummy_data
     working_dir: /dummy_data
     depends_on:
       database:
         condition: service_healthy
     env_file:
-    - .env 
+      - .env
 
 volumes:
   v-istsos-miu-database-data:
