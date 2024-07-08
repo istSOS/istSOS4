@@ -289,8 +289,10 @@ async def generate_observations(conn):
     Returns:
         None
     """
+    yearly_chunk = isodate.parse_duration("P1Y")
     observations = []
     for j in range(1, n_things * n_observed_properties + 1):
+        print("Generating observations for datastream", j)
         phenomenonTime = date
         while phenomenonTime < (date + interval):
             phenomenonTime += frequency
@@ -307,13 +309,21 @@ async def generate_observations(conn):
                     featuresofinterest_id,
                 )
             )
-
-    insert_sql = """
-    INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultInteger", "resultType", datastream_id, featuresofinterest_id)
-    VALUES ($1, $2, $3, $4, $5)
-    """
-    await conn.executemany(insert_sql, observations)
-
+            if phenomenonTime >= date + yearly_chunk:
+                insert_sql = """
+                INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultInteger", "resultType", datastream_id, featuresofinterest_id)
+                VALUES ($1, $2, $3, $4, $5)
+                """
+                await conn.executemany(insert_sql, observations)
+                observations = []
+    if len(observations)>0:
+        insert_sql = """
+        INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultInteger", "resultType", datastream_id, featuresofinterest_id)
+        VALUES ($1, $2, $3, $4, $5)
+        """
+        await conn.executemany(insert_sql, observations)
+        observations = []
+    print("Observations generated successfully")
 
 async def create_data():
     """
