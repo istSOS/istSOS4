@@ -514,7 +514,7 @@ class NodeVisitor(Visitor):
         """
 
         # list to store the converted parts of the query node
-        async with self.db() as session:
+        async with self.db as session:
             main_entity = globals()[self.main_entity]
             main_query = None
             query_count = (
@@ -764,7 +764,7 @@ class NodeVisitor(Visitor):
 
             # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
             skip_value = self.visit(node.skip) if node.skip else 0
-            top_value = self.visit(node.top) if node.top else 100
+            top_value = self.visit(node.top) + 1 if node.top else 101
 
             main_query = main_query.offset(skip_value).limit(top_value)
 
@@ -778,6 +778,9 @@ class NodeVisitor(Visitor):
                     count_query = False
 
             main_query = await session.execute(main_query)
-            query_count = await session.execute(query_count)
+            main_query = main_query.scalars().all()
+            if count_query:
+                query_count = await session.execute(query_count)
+                query_count = query_count.scalar()
 
-            return main_query, count_query, query_count
+        return main_query, count_query, query_count

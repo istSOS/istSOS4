@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -18,5 +19,12 @@ Base = declarative_base()
 SCHEMA_NAME = "sensorthings"
 
 
-def get_db():
-    return SessionLocal
+@asynccontextmanager
+async def get_db():
+    async with SessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

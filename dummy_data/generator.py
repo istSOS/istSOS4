@@ -18,6 +18,7 @@ date = (
     if os.getenv("START_DATETIME")
     else datetime.combine(datetime.now().today(), time.min)
 )
+chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL"))
 
 pgpool = None
 
@@ -278,7 +279,6 @@ async def generate_featuresofinterest(conn):
     """
     await conn.executemany(insert_sql, featuresofinterest)
 
-
 async def generate_observations(conn):
     """
     Generates observations and inserts them into the database.
@@ -289,17 +289,19 @@ async def generate_observations(conn):
     Returns:
         None
     """
-    yearly_chunk = isodate.parse_duration("P1Y")
     observations = []
+
     for j in range(1, n_things * n_observed_properties + 1):
-        print("Generating observations for datastream", j)
         phenomenonTime = date
+        check_date = date
+
         while phenomenonTime < (date + interval):
             phenomenonTime += frequency
             resultInteger = random.randint(1, 100)
             resultType = 1
             datastream_id = j
             featuresofinterest_id = random.randint(1, n_things)
+
             observations.append(
                 (
                     phenomenonTime,
@@ -309,21 +311,17 @@ async def generate_observations(conn):
                     featuresofinterest_id,
                 )
             )
-            if phenomenonTime >= date + yearly_chunk:
-                insert_sql = """
-                INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultInteger", "resultType", datastream_id, featuresofinterest_id)
-                VALUES ($1, $2, $3, $4, $5)
-                """
-                await conn.executemany(insert_sql, observations)
+            if phenomenonTime >= (check_date + chunk):
+                await conn.copy_records_to_table('Observation', records=observations, schema_name='sensorthings', columns=[
+                    'phenomenonTime', 'resultInteger', 'resultType', 'datastream_id', 'featuresofinterest_id'
+                ])
+                check_date = phenomenonTime
                 observations = []
-    if len(observations)>0:
-        insert_sql = """
-        INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultInteger", "resultType", datastream_id, featuresofinterest_id)
-        VALUES ($1, $2, $3, $4, $5)
-        """
-        await conn.executemany(insert_sql, observations)
-        observations = []
-    print("Observations generated successfully")
+
+    if observations:
+        await conn.copy_records_to_table('Observation', records=observations, schema_name='sensorthings', columns=[
+            'phenomenonTime', 'resultInteger', 'resultType', 'datastream_id', 'featuresofinterest_id'
+        ])
 
 async def create_data():
     """
