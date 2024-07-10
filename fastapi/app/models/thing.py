@@ -1,7 +1,6 @@
 from sqlalchemy.dialects.postgresql.json import JSON
-from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql.schema import Column
+from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
 from .database import SCHEMA_NAME, Base
@@ -19,50 +18,16 @@ class Thing(Base):
         "HistoricalLocations@iot.navigationLink", Text
     )
     datastream_navigation_link = Column("Datastreams@iot.navigationLink", Text)
+    commit_navigation_link = Column("Commit@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     properties = Column(JSON)
+    commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
     location = relationship(
         "Location", secondary=Thing_Location, back_populates="thing"
     )
-    datastream = relationship("Datastream", back_populates="thing")
     historicallocation = relationship(
         "HistoricalLocation", back_populates="thing"
     )
-
-    def _serialize_columns(self):
-        """Serialize model columns to a dict, applying naming transformations."""
-        rename_map = {
-            "id": "@iot.id",
-            "self_link": "@iot.selfLink",
-            "location_navigation_link": "Locations@iot.navigationLink",
-            "historicallocation_navigation_link": "HistoricalLocations@iot.navigationLink",
-            "datastream_navigation_link": "Datastreams@iot.navigationLink",
-        }
-        return {
-            rename_map.get(column.key, column.key): getattr(self, column.key)
-            for column in self.__class__.__mapper__.column_attrs
-            if column.key not in inspect(self).unloaded
-        }
-
-    def to_dict_expand(self):
-        """Serialize the Thing model to a dict, including expanded relationships."""
-        data = self._serialize_columns()
-        if "datastream" not in inspect(self).unloaded:
-            data["Datastreams"] = [
-                ds.to_dict_expand() for ds in self.datastream
-            ]
-        if "historicallocation" not in inspect(self).unloaded:
-            data["HistoricalLocations"] = [
-                hl.to_dict_expand() for hl in self.historicallocation
-            ]
-        if (
-            "location" not in inspect(self).unloaded
-            and self.location is not None
-        ):
-            data["Locations"] = [l.to_dict_expand() for l in self.location]
-        return data
-
-    def to_dict(self):
-        """Serialize the Thing model to a dict without expanding relationships."""
-        return self._serialize_columns()
+    datastream = relationship("Datastream", back_populates="thing")
+    commit = relationship("Commit", back_populates="thing")

@@ -78,6 +78,7 @@ class STA2REST:
 
     # Mapping from SensorThings entities to their corresponding database table names
     ENTITY_MAPPING = {
+        "Commits": "Commit",
         "Things": "Thing",
         "Locations": "Location",
         "Sensors": "Sensor",
@@ -86,6 +87,7 @@ class STA2REST:
         "Observations": "Observation",
         "FeaturesOfInterest": "FeaturesOfInterest",
         "HistoricalLocations": "HistoricalLocation",
+        "Commit": "Commit",
         "Thing": "Thing",
         "Location": "Location",
         "Sensor": "Sensor",
@@ -98,11 +100,28 @@ class STA2REST:
 
     # Default columns for each entity
     DEFAULT_SELECT = {
+        "Commit": [
+            "id",
+            "self_link",
+            "location_navigation_link",
+            "thing_navigation_link",
+            "historicallocation_navigation_link",
+            "observedproperty_navigation_link",
+            "sensor_navigation_link",
+            "datastream_navigation_link",
+            "featuresofinterest_navigation_link",
+            "observation_navigation_link",
+            "author",
+            "encoding_type",
+            "message",
+            "date",
+        ],
         "Location": [
             "id",
             "self_link",
             "thing_navigation_link",
             "historicallocation_navigation_link",
+            "commit_navigation_link",
             "name",
             "description",
             "encoding_type",
@@ -114,6 +133,7 @@ class STA2REST:
             "self_link",
             "thing_navigation_link",
             "historicallocation_navigation_link",
+            "commit_navigation_link",
             "name",
             "description",
             "encoding_type",
@@ -127,6 +147,7 @@ class STA2REST:
             "location_navigation_link",
             "historicallocation_navigation_link",
             "datastream_navigation_link",
+            "commit_navigation_link",
             "name",
             "description",
             "properties",
@@ -137,6 +158,7 @@ class STA2REST:
             "location_navigation_link",
             "historicallocation_navigation_link",
             "datastream_navigation_link",
+            "commit_navigation_link",
             "name",
             "description",
             "properties",
@@ -147,6 +169,7 @@ class STA2REST:
             "self_link",
             "location_navigation_link",
             "thing_navigation_link",
+            "commit_navigation_link",
             "time",
         ],
         "HistoricalLocationTravelTime": [
@@ -154,6 +177,7 @@ class STA2REST:
             "self_link",
             "location_navigation_link",
             "thing_navigation_link",
+            "commit_navigation_link",
             "time",
             "system_time_validity",
         ],
@@ -161,6 +185,7 @@ class STA2REST:
             "id",
             "self_link",
             "datastream_navigation_link",
+            "commit_navigation_link",
             "name",
             "description",
             "definition",
@@ -170,6 +195,7 @@ class STA2REST:
             "id",
             "self_link",
             "datastream_navigation_link",
+            "commit_navigation_link",
             "name",
             "description",
             "definition",
@@ -180,6 +206,7 @@ class STA2REST:
             "id",
             "self_link",
             "datastream_navigation_link",
+            "commit_navigation_link",
             "name",
             "description",
             "encoding_type",
@@ -190,6 +217,7 @@ class STA2REST:
             "id",
             "self_link",
             "datastream_navigation_link",
+            "commit_navigation_link",
             "name",
             "description",
             "encoding_type",
@@ -204,6 +232,7 @@ class STA2REST:
             "sensor_navigation_link",
             "observedproperty_navigation_link",
             "observation_navigation_link",
+            "commit_navigation_link",
             "name",
             "description",
             "unit_of_measurement",
@@ -220,6 +249,7 @@ class STA2REST:
             "sensor_navigation_link",
             "observedproperty_navigation_link",
             "observation_navigation_link",
+            "commit_navigation_link",
             "name",
             "description",
             "unit_of_measurement",
@@ -234,6 +264,7 @@ class STA2REST:
             "id",
             "self_link",
             "observation_navigation_link",
+            "commit_navigation_link",
             "name",
             "description",
             "encoding_type",
@@ -244,6 +275,7 @@ class STA2REST:
             "id",
             "self_link",
             "observation_navigation_link",
+            "commit_navigation_link",
             "name",
             "description",
             "encoding_type",
@@ -256,6 +288,7 @@ class STA2REST:
             "self_link",
             "featuresofinterest_navigation_link",
             "datastream_navigation_link",
+            "commit_navigation_link",
             "phenomenon_time",
             "result_time",
             "result",
@@ -268,13 +301,10 @@ class STA2REST:
             "self_link",
             "featuresofinterest_navigation_link",
             "datastream_navigation_link",
+            "commit_navigation_link",
             "phenomenon_time",
             "result_time",
-            "result_string",
-            "result_integer",
-            "result_double",
-            "result_boolean",
-            "result_json",
+            "result",
             "result_quality",
             "valid_time",
             "parameters",
@@ -475,9 +505,9 @@ class STA2REST:
         query_converted = await visitor.visit(query_ast)
 
         return {
-            "query": query_converted[0].fetchall(),
+            "query": query_converted[0],
             "count_query": query_converted[1],
-            "query_count": query_converted[2].scalar(),
+            "query_count": query_converted[2],
             "ref": uri["ref"],
             "value": uri["value"],
             "single_result": single_result,
@@ -523,7 +553,7 @@ class STA2REST:
         keys_list = list(STA2REST.ENTITY_MAPPING.keys())
         if entity_name in keys_list:
             index = keys_list.index(entity_name)
-            if index > 7:
+            if index > 8:
                 single = True
         # Parse first entity
         main_entity = STA2REST.parse_entity(parts.pop(0))

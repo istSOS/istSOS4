@@ -83,12 +83,10 @@ async def catch_all_get(
         result = await sta2rest.STA2REST.convert_query(full_path, db)
         items = result["query"]
         query_count = result["query_count"]
-        item_dicts = []
-        for item in items:
-            item_dicts.append(item[0])
+        items_len = len(items)
         data = {}
-        if len(item_dicts) == 1 and result["single_result"]:
-            data = item_dicts[0]
+        if len(items) == 1 and result["single_result"]:
+            data = items[0]
         else:
             nextLink = f"{os.getenv('HOSTNAME')}{full_path}"
             new_top_value = 100
@@ -111,6 +109,7 @@ async def catch_all_get(
                     nextLink = nextLink + f"&$top={new_top_value}"
                 else:
                     nextLink = nextLink + f"?$top={new_top_value}"
+            items = items[:new_top_value]
             if "$skip" in nextLink:
                 start_index = nextLink.find("$skip=") + 6
                 end_index = len(nextLink)
@@ -128,14 +127,15 @@ async def catch_all_get(
             else:
                 new_skip_value = new_top_value
                 nextLink = nextLink + f"&$skip={new_skip_value}"
+
             if result["count_query"]:
                 data["@iot.count"] = query_count
 
-            if new_skip_value < query_count:
+            if new_top_value < items_len:
                 data["@iot.nextLink"] = nextLink
 
             # Always included
-            data["value"] = item_dicts
+            data["value"] = items
 
         if result["ref"]:
             if "value" in data:

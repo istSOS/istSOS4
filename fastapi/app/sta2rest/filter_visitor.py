@@ -229,9 +229,6 @@ class FilterVisitor(visitor.NodeVisitor):
                         functions.func.timestamptz(right[1]),
                     )
                     return left.op("&&")(right)
-                right = datetime.fromisoformat(right.rstrip("Z")).replace(
-                    tzinfo=timezone.utc
-                )
                 return left.op("@>")(functions.func.timestamptz(right))
         else:
             if isinstance(left, BooleanClauseList):

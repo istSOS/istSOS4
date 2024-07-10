@@ -1,8 +1,7 @@
 from geoalchemy2 import Geometry
 from sqlalchemy.dialects.postgresql.json import JSON
-from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql.schema import Column
+from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
 from .database import SCHEMA_NAME, Base
@@ -17,6 +16,7 @@ class FeaturesOfInterest(Base):
     observation_navigation_link = Column(
         "Observations@iot.navigationLink", Text
     )
+    commit_navigation_link = Column("Commit@iot.navigationLink", Text)
     name = Column(String(255), nullable=False)
     description = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
@@ -24,35 +24,8 @@ class FeaturesOfInterest(Base):
         Geometry(geometry_type="GEOMETRY", srid=4326), nullable=False
     )
     properties = Column(JSON)
+    commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
     observation = relationship(
         "Observation", back_populates="featuresofinterest"
     )
-
-    def _serialize_columns(self):
-        """Serialize model columns to a dict, applying naming transformations."""
-        rename_map = {
-            "id": "@iot.id",
-            "self_link": "@iot.selfLink",
-            "observation_navigation_link": "Observations@iot.navigationLink",
-            "encoding_type": "encodingType",
-        }
-        serialized_data = {
-            rename_map.get(column.key, column.key): getattr(self, column.key)
-            for column in self.__class__.__mapper__.column_attrs
-            if column.key not in inspect(self).unloaded
-        }
-        return serialized_data
-
-    def to_dict_expand(self):
-        """Serialize the FeaturesOfInterest model to a dict, including expanded relationships."""
-        data = self._serialize_columns()
-        if "observation" not in inspect(self).unloaded:
-            data["Observations"] = [
-                observation.to_dict_expand()
-                for observation in self.observation
-            ]
-        return data
-
-    def to_dict(self):
-        """Serialize the FeaturesOfInterest model to a dict without expanding relationships."""
-        return self._serialize_columns()
+    commit = relationship("Commit", back_populates="featuresofinterest")
