@@ -5,17 +5,20 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
+user = os.getenv("POSTGRES_USER")
+password = os.getenv("POSTGRES_PASSWORD")
+db = os.getenv("POSTGRES_DB")
+host = os.getenv("POSTGRES_HOST", "database")
+port = os.getenv("POSTGRES_PORT", "5432")
+dsn = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}"
+
 engine = create_async_engine(
-    os.getenv("DATABASE_URL"),
-    pool_size=os.getenv("PG_POOL_SIZE"),  # Dimensione del pool di connessioni
-    max_overflow=os.getenv(
-        "PG_MAX_OVERFLOW"
-    ),  # Numero di connessioni extra che possono essere create se il pool è pieno
-    pool_timeout=os.getenv(
-        "PG_POOL_TIMEOUT"
-    ),  # Tempo di attesa prima di lanciare un timeout
-    pool_recycle=3600,  # Riciclo delle connessioni dopo un'ora
-    pool_pre_ping=True,  # Controllo delle connessioni prima di riutilizzarle
+    dsn,
+    pool_size=os.getenv("PG_POOL_SIZE", 10),
+    max_overflow=os.getenv("PG_MAX_OVERFLOW", 0),
+    pool_timeout=os.getenv("PG_POOL_TIMEOUT", 30),
+    pool_recycle=3600,
+    pool_pre_ping=True,
 )
 
 # Create the asynchronous session

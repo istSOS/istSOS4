@@ -28,7 +28,6 @@ services:
       context: ./fastapi
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -36,6 +35,9 @@ services:
       SUBPATH: ${SUBPATH}
       VERSION: ${VERSION}
       DEBUG: ${DEBUG}
+      PG_MAX_OVERFLOW: ${PG_MAX_OVERFLOW}
+      PG_POOL_SIZE: ${PG_POOL_SIZE}
+      PG_POOL_TIMEOUT: ${PG_POOL_TIMEOUT}
     command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - 8018:5000
