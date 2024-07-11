@@ -14,9 +14,9 @@ dsn = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}"
 
 engine = create_async_engine(
     dsn,
-    pool_size=os.getenv("PG_POOL_SIZE", 10),
-    max_overflow=os.getenv("PG_MAX_OVERFLOW", 0),
-    pool_timeout=os.getenv("PG_POOL_TIMEOUT", 30),
+    pool_size=int(os.getenv("PG_POOL_SIZE", 10)),
+    max_overflow=int(os.getenv("PG_MAX_OVERFLOW", 0)),
+    pool_timeout=float(os.getenv("PG_POOL_TIMEOUT", 30)),
     pool_recycle=3600,
     pool_pre_ping=True,
 )
