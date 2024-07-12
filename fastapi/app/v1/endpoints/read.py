@@ -89,7 +89,7 @@ async def catch_all_get(
             data = items[0]
         else:
             nextLink = f"{os.getenv('HOSTNAME')}{full_path}"
-            new_top_value = 100
+            new_top_value = int(os.getenv("TOP_VALUE", 100))
             if "$top" in nextLink:
                 start_index = nextLink.find("$top=") + 5
                 end_index = len(nextLink)
