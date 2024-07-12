@@ -522,7 +522,7 @@ class STA2REST:
 
         # Visit the query ast to convert it
         visitor = NodeVisitor(main_entity, db)
-        query_converted = visitor.visit(query_ast)
+        query_converted = await visitor.visit(query_ast)
 
         # Result format is allowed only for Observations
         if query_ast.result_format and main_entity != 'Observation':
