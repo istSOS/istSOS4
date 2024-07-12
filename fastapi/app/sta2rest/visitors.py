@@ -572,7 +572,9 @@ class NodeVisitor(Visitor):
             for attr in select_query:
                 if not node.result_format:
                     (
-                        json_build_object_args.append((attr.name))
+                        json_build_object_args.append(
+                            literal(attr.name, type_=String())
+                        )
                         if attr.name != "id"
                         else json_build_object_args.append(text("'@iot.id'"))
                     )
