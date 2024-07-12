@@ -1,3 +1,5 @@
+import os
+
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
 from odata_query.grammar import ODataLexer, ODataParser
@@ -7,6 +9,7 @@ from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.sql.sqltypes import String, Text
 
 from ..models import *
+from ..models.database import engine
 from .filter_visitor import FilterVisitor
 from .sta_parser.ast import *
 from .sta_parser.visitor import Visitor
@@ -290,7 +293,7 @@ class NodeVisitor(Visitor):
                 for field in identifiers:
                     attr, order = field.split(".")
                     collation = (
-                        "C" if isinstance(attr.type, (String, Text)) else None
+                        "C" if isinstance(attr, (String, Text)) else None
                     )
                     if order == "asc":
                         ordering.append(
@@ -305,7 +308,7 @@ class NodeVisitor(Visitor):
                             else desc(attr)
                         )
             else:
-                ordering = [desc(getattr(sub_entity, "id"))]
+                ordering = [asc(getattr(sub_entity, "id"))]
             sub_query = sub_query.order_by(*ordering)
 
             # Process skip clause
@@ -321,7 +324,7 @@ class NodeVisitor(Visitor):
                 expand_identifier.subquery.top.count
                 if expand_identifier.subquery
                 and expand_identifier.subquery.top
-                else 100
+                else int(os.getenv("TOP_VALUE", 100))
             )
 
             if select_from:
@@ -517,18 +520,30 @@ class NodeVisitor(Visitor):
         async with self.db as session:
             main_entity = globals()[self.main_entity]
             main_query = None
-            query_count = (
-                select(func.count(getattr(main_entity, "id").distinct()))
-                if "TravelTime" not in self.main_entity
-                else select(
-                    func.count(
+            if int(os.getenv("ESTIMATE_COUNT", 0)):
+                query_count = (
+                    select(getattr(main_entity, "id").distinct())
+                    if "TravelTime" not in self.main_entity
+                    else select(
                         func.distinct(
                             getattr(main_entity, "id"),
                             getattr(main_entity, "system_time_validity"),
                         )
                     )
                 )
-            )
+            else:
+                query_count = (
+                    select(func.count(getattr(main_entity, "id").distinct()))
+                    if "TravelTime" not in self.main_entity
+                    else select(
+                        func.count(
+                            func.distinct(
+                                getattr(main_entity, "id"),
+                                getattr(main_entity, "system_time_validity"),
+                            )
+                        )
+                    )
+                )
 
             if not node.select:
                 node.select = SelectNode([])
@@ -757,14 +772,18 @@ class NodeVisitor(Visitor):
                                 else desc(a)
                             )
             else:
-                ordering = [desc(getattr(main_entity, "id"))]
+                ordering = [asc(getattr(main_entity, "id"))]
 
             # Apply ordering to main_query
             main_query = main_query.order_by(*ordering)
 
             # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
             skip_value = self.visit(node.skip) if node.skip else 0
-            top_value = self.visit(node.top) + 1 if node.top else 101
+            top_value = (
+                self.visit(node.top) + 1
+                if node.top
+                else int(os.getenv("TOP_VALUE", 100)) + 1
+            )
 
             main_query = main_query.offset(skip_value).limit(top_value)
 
@@ -780,7 +799,23 @@ class NodeVisitor(Visitor):
             main_query = await session.execute(main_query)
             main_query = main_query.scalars().all()
             if count_query:
-                query_count = await session.execute(query_count)
-                query_count = query_count.scalar()
+                if int(os.getenv("ESTIMATE_COUNT", 0)):
+                    compiled_query_text = str(
+                        query_count.compile(
+                            dialect=engine.dialect,
+                            compile_kwargs={"literal_binds": True},
+                        )
+                    )
+                    query_estimate_count_sql = text(
+                        f"SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
+                    )
+                    query_count = await session.execute(
+                        query_estimate_count_sql,
+                        {"query_text": compiled_query_text},
+                    )
+                    query_count = query_count.scalar()
+                else:
+                    query_count = await session.execute(query_count)
+                    query_count = query_count.scalar()
 
         return main_query, count_query, query_count

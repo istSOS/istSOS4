@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "gen_foi_id" BIGINT
 );
 
-CREATE INDEX "idx_location_id" ON sensorthings."Location" USING btree ("id");
+CREATE UNIQUE INDEX "idx_location_id" ON sensorthings."Location" USING btree ("id");
+CREATE INDEX "idx_location_commit_id" ON sensorthings."Location" USING btree ("commit_id");
 
 CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
@@ -52,7 +53,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
     "Commit@iot.navigationLink" TEXT
 );
 
-CREATE INDEX "idx_thing_id" ON sensorthings."Thing" USING btree ("id");
+CREATE UNIQUE INDEX "idx_thing_id" ON sensorthings."Thing" USING btree ("id");
+CREATE INDEX "idx_thing_commit_id" ON sensorthings."Thing" USING btree ("commit_id");
 
 CREATE TABLE IF NOT EXISTS sensorthings."Thing_Location" (
     "thing_id" BIGINT NOT NULL REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
@@ -60,7 +62,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing_Location" (
     CONSTRAINT thing_location_unique UNIQUE ("thing_id", "location_id")
 );
 
-CREATE INDEX "idx_thing_location_id" ON sensorthings."Thing_Location" USING btree ("thing_id", "location_id");
+CREATE UNIQUE INDEX "idx_thing_location_id" ON sensorthings."Thing_Location" USING btree ("thing_id", "location_id");
 CREATE INDEX "idx_thing_location_thing_id" ON sensorthings."Thing_Location" USING btree ("thing_id");
 CREATE INDEX "idx_thing_location_location_id" ON sensorthings."Thing_Location" USING btree ("location_id");
 
@@ -75,8 +77,9 @@ CREATE TABLE IF NOT EXISTS sensorthings."HistoricalLocation" (
     "Commit@iot.navigationLink" TEXT
 );
 
-CREATE INDEX "idx_historicallocation_id" ON sensorthings."HistoricalLocation" USING btree ("id");
+CREATE UNIQUE INDEX "idx_historicallocation_id" ON sensorthings."HistoricalLocation" USING btree ("id");
 CREATE INDEX "idx_historicallocation_thing_id" ON sensorthings."HistoricalLocation" USING btree ("thing_id");
+CREATE INDEX "idx_historicallocation_commit_id" ON sensorthings."HistoricalLocation" USING btree ("commit_id");
 
 CREATE TABLE IF NOT EXISTS sensorthings."Location_HistoricalLocation" (
     "location_id" BIGINT NOT NULL REFERENCES sensorthings."Location"(id) ON DELETE CASCADE,
@@ -84,7 +87,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location_HistoricalLocation" (
     CONSTRAINT location_historical_location_unique UNIQUE ("location_id", "historicallocation_id")
 );
 
-CREATE INDEX "idx_location_historicallocation_id" ON sensorthings."Location_HistoricalLocation" USING btree ("location_id", "historicallocation_id");
+CREATE UNIQUE INDEX "idx_location_historicallocation_id" ON sensorthings."Location_HistoricalLocation" USING btree ("location_id", "historicallocation_id");
 CREATE INDEX "idx_location_historicallocation_location_id" ON sensorthings."Location_HistoricalLocation" USING btree ("location_id");
 CREATE INDEX "idx_location_historicallocation_historicallocation_id" ON sensorthings."Location_HistoricalLocation" USING btree ("historicallocation_id");
 
@@ -100,7 +103,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
     "Commit@iot.navigationLink" TEXT
 );
 
-CREATE INDEX "idx_observedproperty_id" ON sensorthings."ObservedProperty" USING btree ("id");
+CREATE UNIQUE INDEX "idx_observedproperty_id" ON sensorthings."ObservedProperty" USING btree ("id");
+CREATE INDEX "idx_observedproperty_commit_id" ON sensorthings."ObservedProperty" USING btree ("commit_id");
 
 CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
@@ -115,7 +119,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
     "Commit@iot.navigationLink" TEXT
 );
 
-CREATE INDEX "idx_sensor_id" ON sensorthings."Sensor" USING btree ("id");
+CREATE UNIQUE INDEX "idx_sensor_id" ON sensorthings."Sensor" USING btree ("id");
+CREATE INDEX "idx_sensor_commit_id" ON sensorthings."Sensor" USING btree ("commit_id");
 
 CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
@@ -139,10 +144,11 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "Commit@iot.navigationLink" TEXT
 );
 
-CREATE INDEX "idx_datastream_id" ON sensorthings."Datastream" USING btree ("id");
+CREATE UNIQUE INDEX "idx_datastream_id" ON sensorthings."Datastream" USING btree ("id");
 CREATE INDEX "idx_datastream_thing_id" ON sensorthings."Datastream" USING btree ("thing_id");
 CREATE INDEX "idx_datastream_sensor_id" ON sensorthings."Datastream" USING btree ("sensor_id");
 CREATE INDEX "idx_datastream_observedproperty_id" ON sensorthings."Datastream" USING btree ("observedproperty_id");
+CREATE INDEX "idx_datastream_commit_id" ON sensorthings."Datastream" USING btree ("commit_id");
 
 CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
@@ -157,7 +163,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
     "Commit@iot.navigationLink" TEXT
 );
 
-CREATE INDEX "idx_featuresofinterest_id" ON sensorthings."FeaturesOfInterest" USING btree ("id");
+CREATE UNIQUE INDEX "idx_featuresofinterest_id" ON sensorthings."FeaturesOfInterest" USING btree ("id");
+CREATE INDEX "idx_featuresofinterest_commit_id" ON sensorthings."FeaturesOfInterest" USING btree ("commit_id");
 
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
@@ -181,9 +188,11 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "Commit@iot.navigationLink" TEXT
 );
 
-CREATE INDEX "idx_observation_id" ON sensorthings."Observation" USING btree ("id");
+CREATE UNIQUE INDEX "idx_observation_id" ON sensorthings."Observation" USING btree ("id");
 CREATE INDEX "idx_observation_datastream_id" ON sensorthings."Observation" USING btree ("datastream_id");
 CREATE INDEX "idx_observation_featuresofinterest_id" ON sensorthings."Observation" USING btree ("featuresofinterest_id");
+CREATE INDEX "idx_observation_observation_id_datastream_id" ON sensorthings."Observation" USING btree ("id", "datastream_id");
+CREATE INDEX "idx_observation_commit_id" ON sensorthings."Observation" USING btree ("commit_id");
 
 CREATE OR REPLACE FUNCTION result(sensorthings."Observation") RETURNS jsonb AS $$
 BEGIN
@@ -475,3 +484,26 @@ CREATE TRIGGER before_location_delete
 BEFORE DELETE ON sensorthings."Location"
 FOR EACH ROW
 EXECUTE FUNCTION delete_related_historical_locations();
+
+create or replace function sensorthings.count_estimate(query text)
+  returns integer
+  language plpgsql as
+$func$
+declare
+    rec record;
+
+rows integer;
+
+begin
+    for rec in execute 'EXPLAIN ' || query loop
+        rows := substring(rec."QUERY PLAN"
+from
+' rows=([[:digit:]]+)');
+
+exit
+when rows is not null;
+end loop;
+
+return rows;
+end
+$func$;

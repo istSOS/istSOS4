@@ -38,6 +38,8 @@ services:
       PG_MAX_OVERFLOW: ${PG_MAX_OVERFLOW}
       PG_POOL_SIZE: ${PG_POOL_SIZE}
       PG_POOL_TIMEOUT: ${PG_POOL_TIMEOUT}
+      ESTIMATE_COUNT: ${ESTIMATE_COUNT}
+      TOP_VALUE: ${TOP_VALUE}
     command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - 8018:5000
