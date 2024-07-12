@@ -2,9 +2,10 @@ import json
 import os
 import random
 from datetime import datetime, time
+import asyncio
 
+import asyncpg
 import isodate
-import psycopg2
 
 create_dummy_data = int(os.getenv("DUMMY_DATA"))
 delete_dummy_data = int(os.getenv("CLEAR_DATA"))
@@ -17,15 +18,27 @@ date = (
     if os.getenv("START_DATETIME")
     else datetime.combine(datetime.now().today(), time.min)
 )
+chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL"))
 
-connection_url = "dbname={db} user={user} password={password} host='database' port='5432'".format(
-    db=os.getenv("POSTGRES_DB"),
-    user=os.getenv("POSTGRES_USER"),
-    password=os.getenv("POSTGRES_PASSWORD"),
-)
+pgpool = None
+
+async def get_pool():
+    """
+    Retrieves or creates a connection pool to the PostgreSQL database.
+
+    Returns:
+        asyncpg.pool.Pool: The connection pool object.
+    """
+    global pgpool
+    if not pgpool:
+        pgpool = await asyncpg.create_pool(
+            dsn=f"postgresql://{os.getenv("POSTGRES_USER")}:{os.getenv("POSTGRES_PASSWORD")}@database:5432/{os.getenv("POSTGRES_DB")}"
+        )
+    return pgpool
 
 
-def generate_things(cur):
+
+async def generate_things(conn):
     """
     Generate a list of things and insert them into the database.
 
@@ -44,12 +57,12 @@ def generate_things(cur):
 
     insert_sql = """
     INSERT INTO sensorthings."Thing" (description, name, properties)
-    VALUES (%s, %s, %s)
+    VALUES ($1, $2, $3)
     """
-    cur.executemany(insert_sql, things)
+    await conn.executemany(insert_sql, things)
 
 
-def generate_locations(cur):
+async def generate_locations(conn):
     """
     Generate locations and insert them into the database.
 
@@ -69,12 +82,12 @@ def generate_locations(cur):
 
     insert_sql = """
     INSERT INTO sensorthings."Location" (description, name, location, "encodingType")
-    VALUES (%s, %s, %s, %s)
+    VALUES ($1, $2, $3, $4)
     """
-    cur.executemany(insert_sql, locations)
+    await conn.executemany(insert_sql, locations)
 
 
-def generate_things_locations(cur):
+async def generate_things_locations(conn):
     """
     Generate and insert things locations into the database.
 
@@ -92,12 +105,12 @@ def generate_things_locations(cur):
 
     insert_sql = """
     INSERT INTO sensorthings."Thing_Location" (thing_id, location_id)
-    VALUES (%s, %s)
+    VALUES ($1, $2)
     """
-    cur.executemany(insert_sql, things_locations)
+    await conn.executemany(insert_sql, things_locations)
 
 
-def generate_historicallocations(cur):
+async def generate_historicallocations(conn):
     """
     Generate historical locations for things and insert them into the database.
 
@@ -116,12 +129,12 @@ def generate_historicallocations(cur):
 
     insert_sql = """
     INSERT INTO sensorthings."HistoricalLocation" (time, thing_id)
-    VALUES (%s, %s)
+    VALUES ($1, $2)
     """
-    cur.executemany(insert_sql, historicallocations)
+    await conn.executemany(insert_sql, historicallocations)
 
 
-def generate_locations_historicallocations(cur):
+async def generate_locations_historicallocations(conn):
     """
     Generate a list of tuples representing the relationship between location and historical location.
 
@@ -141,12 +154,12 @@ def generate_locations_historicallocations(cur):
 
     insert_sql = """
     INSERT INTO sensorthings."Location_HistoricalLocation" (location_id, historicallocation_id)
-    VALUES (%s, %s)
+    VALUES ($1, $2)
     """
-    cur.executemany(insert_sql, locations_historicallocations)
+    await conn.executemany(insert_sql, locations_historicallocations)
 
 
-def generate_observedProperties(cur):
+async def generate_observedProperties(conn):
     """
     Generate observed properties and insert them into the database.
 
@@ -165,12 +178,12 @@ def generate_observedProperties(cur):
 
     insert_sql = """
     INSERT INTO sensorthings."ObservedProperty" (name, definition, description)
-    VALUES (%s, %s, %s)
+    VALUES ($1, $2, $3)
     """
-    cur.executemany(insert_sql, observedProperties)
+    await conn.executemany(insert_sql, observedProperties)
 
 
-def generate_sensors(cur):
+async def generate_sensors(conn):
     """
     Generate a list of sensors with random descriptions, names, encoding types, and metadata.
 
@@ -190,12 +203,12 @@ def generate_sensors(cur):
 
     insert_sql = """
     INSERT INTO sensorthings."Sensor" (description, name, "encodingType", metadata)
-    VALUES (%s, %s, %s, %s)
+    VALUES ($1, $2, $3, $4)
     """
-    cur.executemany(insert_sql, sensors)
+    await conn.executemany(insert_sql, sensors)
 
 
-def generate_datastreams(cur):
+async def generate_datastreams(conn):
     """
     Generate datastreams and insert them into the database.
 
@@ -237,12 +250,12 @@ def generate_datastreams(cur):
 
     insert_sql = """
     INSERT INTO sensorthings."Datastream" ("unitOfMeasurement", description, name, "observationType", thing_id, sensor_id, observedproperty_id)
-    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     """
-    cur.executemany(insert_sql, datastreams)
+    await conn.executemany(insert_sql, datastreams)
 
 
-def generate_featuresofinterest(cur):
+async def generate_featuresofinterest(conn):
     """
     Generate features of interest and insert them into the database.
 
@@ -262,12 +275,11 @@ def generate_featuresofinterest(cur):
 
     insert_sql = """
     INSERT INTO sensorthings."FeaturesOfInterest" (description, name, "encodingType", feature)
-    VALUES (%s, %s, %s, %s)
+    VALUES ($1, $2, $3, $4)
     """
-    cur.executemany(insert_sql, featuresofinterest)
+    await conn.executemany(insert_sql, featuresofinterest)
 
-
-def generate_observations(cur):
+async def generate_observations(conn):
     """
     Generates observations and inserts them into the database.
 
@@ -278,14 +290,18 @@ def generate_observations(cur):
         None
     """
     observations = []
+
     for j in range(1, n_things * n_observed_properties + 1):
         phenomenonTime = date
+        check_date = date
+
         while phenomenonTime < (date + interval):
             phenomenonTime += frequency
             resultInteger = random.randint(1, 100)
             resultType = 1
             datastream_id = j
             featuresofinterest_id = random.randint(1, n_things)
+
             observations.append(
                 (
                     phenomenonTime,
@@ -295,15 +311,19 @@ def generate_observations(cur):
                     featuresofinterest_id,
                 )
             )
+            if phenomenonTime >= (check_date + chunk):
+                await conn.copy_records_to_table('Observation', records=observations, schema_name='sensorthings', columns=[
+                    'phenomenonTime', 'resultInteger', 'resultType', 'datastream_id', 'featuresofinterest_id'
+                ])
+                check_date = phenomenonTime
+                observations = []
 
-    insert_sql = """
-    INSERT INTO sensorthings."Observation" ("phenomenonTime", "resultInteger", "resultType", datastream_id, featuresofinterest_id)
-    VALUES (%s, %s, %s, %s, %s)
-    """
-    cur.executemany(insert_sql, observations)
+    if observations:
+        await conn.copy_records_to_table('Observation', records=observations, schema_name='sensorthings', columns=[
+            'phenomenonTime', 'resultInteger', 'resultType', 'datastream_id', 'featuresofinterest_id'
+        ])
 
-
-def create_data():
+async def create_data():
     """
     Generates dummy data and inserts it into the database.
 
@@ -314,29 +334,25 @@ def create_data():
 
     After the creation is complete, the database connection is closed.
     """
-    conn = psycopg2.connect(connection_url)
-    cur = conn.cursor()
-    try:
-        generate_things(cur)
-        generate_locations(cur)
-        generate_things_locations(cur)
-        generate_historicallocations(cur)
-        generate_locations_historicallocations(cur)
-        generate_observedProperties(cur)
-        generate_sensors(cur)
-        generate_datastreams(cur)
-        generate_featuresofinterest(cur)
-        generate_observations(cur)
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print(f"An error occurred: {e}")
-    finally:
-        cur.close()
-        conn.close()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            try:
+                await generate_things(conn)
+                await generate_locations(conn)
+                await generate_things_locations(conn)
+                await generate_historicallocations(conn)
+                await generate_locations_historicallocations(conn)
+                await generate_observedProperties(conn)
+                await generate_sensors(conn)
+                await generate_datastreams(conn)
+                await generate_featuresofinterest(conn)
+                await generate_observations(conn)
+            except Exception as e:
+                print(f"An error occured: {e}")
 
 
-def delete_data():
+async def delete_data():
     """
     Deletes all data from the sensorthings tables in the database.
 
@@ -358,30 +374,28 @@ def delete_data():
 
     After the deletion is complete, the database connection is closed.
     """
-    conn = psycopg2.connect(connection_url)
-    cur = conn.cursor()
-    try:
-        cur.execute('DELETE FROM sensorthings."Thing"')
-        cur.execute('DELETE FROM sensorthings."Location"')
-        cur.execute('DELETE FROM sensorthings."Thing_Location"')
-        cur.execute('DELETE FROM sensorthings."HistoricalLocation"')
-        cur.execute('DELETE FROM sensorthings."Location_HistoricalLocation"')
-        cur.execute('DELETE FROM sensorthings."ObservedProperty"')
-        cur.execute('DELETE FROM sensorthings."Sensor"')
-        cur.execute('DELETE FROM sensorthings."Datastream"')
-        cur.execute('DELETE FROM sensorthings."FeaturesOfInterest"')
-        cur.execute('DELETE FROM sensorthings."Observation"')
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print(f"An error occurred: {e}")
-    finally:
-        cur.close()
-        conn.close()
+    pool = await get_pool()
+    async with  pool.acquire() as conn:
+        async with conn.transaction():
+            try:
+                await conn.execute('DELETE FROM sensorthings."Thing"')
+                await conn.execute('DELETE FROM sensorthings."Location"')
+                await conn.execute('DELETE FROM sensorthings."Thing_Location"')
+                await conn.execute('DELETE FROM sensorthings."HistoricalLocation"')
+                await conn.execute('DELETE FROM sensorthings."Location_HistoricalLocation"')
+                await conn.execute('DELETE FROM sensorthings."ObservedProperty"')
+                await conn.execute('DELETE FROM sensorthings."Sensor"')
+                await conn.execute('DELETE FROM sensorthings."Datastream"')
+                await conn.execute('DELETE FROM sensorthings."FeaturesOfInterest"')
+                await conn.execute('DELETE FROM sensorthings."Observation"')
+            except Exception as e:
+                print(f"An error occurred: {e}")
+            finally:
+                await conn.close()
 
 
 if __name__ == "__main__":
     if delete_dummy_data:
-        delete_data()
+        asyncio.run(delete_data())
     if create_dummy_data:
-        create_data()
+        asyncio.run(create_data())

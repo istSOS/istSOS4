@@ -7,6 +7,8 @@ CREATE OR REPLACE FUNCTION istsos_mutate_history()
 RETURNS trigger 
 LANGUAGE plpgsql
 AS $body$
+DECLARE
+    commit_id INTEGER;
 BEGIN
     IF (TG_OP = 'UPDATE')
     THEN
@@ -15,6 +17,17 @@ BEGIN
         THEN
             RAISE EXCEPTION 'the ID must not be changed (%)', NEW.id;
         END IF;
+
+        -- Insert a new record into the Commit table
+        EXECUTE format(
+            'INSERT INTO sensorthings."Commit" (author, message) VALUES (%L, %L) RETURNING id',
+            TG_TABLE_NAME || ' user ' || NEW.id,
+            TG_TABLE_NAME || ' commit ' || NEW.id
+        )
+        INTO commit_id;
+
+        NEW.commit_id := commit_id;
+
         -- Set the new START system_type_validity for the main table
         NEW.system_time_validity := tstzrange(current_timestamp, TIMESTAMPTZ  'infinity');
         -- Set the END system_time_validity to the 'current_timestamp'
@@ -63,8 +76,8 @@ AS $body$
 BEGIN
     -- Add the new columns for versioning to the original table
     EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_time_validity tstzrange DEFAULT tstzrange(current_timestamp, TIMESTAMPTZ ''infinity'');', schemaname, tablename);
-    EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_commiter text DEFAULT NULL;', schemaname, tablename);
-    EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_commit_message text DEFAULT NULL;', schemaname, tablename);
+    -- EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_commiter text DEFAULT NULL;', schemaname, tablename);
+    -- EXECUTE format('ALTER TABLE %I.%I ADD COLUMN system_commit_message text DEFAULT NULL;', schemaname, tablename);
 
     -- Create a new table with the same structure as the original table, but no data
     EXECUTE format('CREATE TABLE %I.%I AS SELECT * FROM %I.%I WITH NO DATA;', schemaname || '_history', tablename, schemaname, tablename);
@@ -105,14 +118,7 @@ BEGIN
             EXECUTE format('SELECT sensorthings.add_table_to_versioning(%L, %L);', tablename, original_schema);
         END LOOP;
 
-    -- Create the location_geojson function
-    EXECUTE 'CREATE OR REPLACE FUNCTION location_geojson(sensorthings."Location_traveltime") RETURNS jsonb AS $$ BEGIN RETURN ST_AsGeoJSON($1."location")::jsonb; END; $$ LANGUAGE plpgsql;';
-
-    -- Create the observed_area_geojson function
-    EXECUTE 'CREATE OR REPLACE FUNCTION observed_area_geojson(sensorthings."Datastream_traveltime") RETURNS jsonb AS $$ BEGIN RETURN ST_AsGeoJSON($1."observedArea")::jsonb; END; $$ LANGUAGE plpgsql;';
-
-    -- Create the feature_geojson function
-    EXECUTE 'CREATE OR REPLACE FUNCTION feature_geojson(sensorthings."FeaturesOfInterest_traveltime") RETURNS jsonb AS $$ BEGIN RETURN ST_AsGeoJSON($1."feature")::jsonb; END; $$ LANGUAGE plpgsql;';
+    EXECUTE 'CREATE OR REPLACE FUNCTION result(sensorthings."Observation_traveltime") RETURNS jsonb AS $$ BEGIN RETURN CASE  WHEN $1."resultType" = 0 THEN to_jsonb($1."resultString") WHEN $1."resultType" = 1 THEN to_jsonb($1."resultInteger") WHEN $1."resultType" = 2 THEN to_jsonb($1."resultDouble") WHEN $1."resultType" = 3 THEN to_jsonb($1."resultBoolean") WHEN $1."resultType" = 4 THEN $1."resultJSON" ELSE NULL::jsonb END; END; $$ LANGUAGE plpgsql;';
 
     RAISE NOTICE 'Schema % is now versionized.', original_schema;
 END;

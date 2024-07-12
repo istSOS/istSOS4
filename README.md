@@ -11,7 +11,7 @@ git clone -b traveltime https://github.com/istSOS/istsos-miu.git
 To start the Docker service, run:
 
 ```sh
-docker compose up -d
+docker compose -f dev_docker-compose.yml up -d
 ```
 
 ## Use Sensor Things APIs
