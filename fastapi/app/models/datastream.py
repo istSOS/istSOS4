@@ -1,7 +1,6 @@
 from geoalchemy2 import Geometry
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
-from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, String, Text
@@ -23,6 +22,7 @@ class Datastream(Base):
     observation_navigation_link = Column(
         "Observations@iot.navigationLink", Text
     )
+    commit_navigation_link = Column("Commit@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     unit_of_measurement = Column("unitOfMeasurement", JSON, nullable=False)
@@ -34,83 +34,25 @@ class Datastream(Base):
     result_time = Column("resultTime", TSTZRANGE)
     properties = Column(JSON)
     thing_id = Column(
-        Integer, ForeignKey(f"{SCHEMA_NAME}.Thing.id"), nullable=False
+        Integer,
+        ForeignKey(f"{SCHEMA_NAME}.Thing.id"),
+        nullable=False,
     )
-    thing = relationship("Thing", back_populates="datastream")
     sensor_id = Column(
-        Integer, ForeignKey(f"{SCHEMA_NAME}.Sensor.id"), nullable=False
+        Integer,
+        ForeignKey(f"{SCHEMA_NAME}.Sensor.id"),
+        nullable=False,
     )
-    sensor = relationship("Sensor", back_populates="datastream")
     observedproperty_id = Column(
         Integer,
         ForeignKey(f"{SCHEMA_NAME}.ObservedProperty.id"),
         nullable=False,
     )
+    commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
+    thing = relationship("Thing", back_populates="datastream")
+    sensor = relationship("Sensor", back_populates="datastream")
     observedproperty = relationship(
         "ObservedProperty", back_populates="datastream"
     )
     observation = relationship("Observation", back_populates="datastream")
-
-    def _serialize_columns(self):
-        """Serialize model columns to a dict, applying naming transformations."""
-        rename_map = {
-            "id": "@iot.id",
-            "self_link": "@iot.selfLink",
-            "thing_navigation_link": "Thing@iot.navigationLink",
-            "sensor_navigation_link": "Sensor@iot.navigationLink",
-            "observedproperty_navigation_link": "ObservedProperty@iot.navigationLink",
-            "observation_navigation_link": "Observations@iot.navigationLink",
-            "unit_of_measurement": "unitOfMeasurement",
-            "observation_type": "observationType",
-            "observed_area": "observedArea",
-            "phenomenon_time": "phenomenonTime",
-            "result_time": "resultTime",
-        }
-        serialized_data = {
-            rename_map.get(column.key, column.key): getattr(self, column.key)
-            for column in self.__class__.__mapper__.column_attrs
-            if column.key not in inspect(self).unloaded
-        }
-        if (
-            "phenomenonTime" in serialized_data
-            and self.phenomenon_time is not None
-        ):
-            serialized_data["phenomenonTime"] = self._format_datetime_range(
-                self.phenomenon_time
-            )
-        if "resultTime" in serialized_data and self.result_time is not None:
-            serialized_data["resultTime"] = self._format_datetime_range(
-                self.result_time
-            )
-        return serialized_data
-
-    def to_dict_expand(self):
-        """Serialize the Datastream model to a dict, including expanded relationships."""
-        data = self._serialize_columns()
-        if "observation" not in inspect(self).unloaded:
-            data["Observations"] = [
-                observation.to_dict_expand()
-                for observation in self.observation
-            ]
-        for relationship in ["thing", "sensor", "observedproperty"]:
-            if relationship not in inspect(self).unloaded:
-                related_obj = getattr(self, relationship, None)
-                if related_obj is not None:
-                    relationship_key = (
-                        relationship.capitalize()
-                        if relationship != "observedproperty"
-                        else "ObservedProperty"
-                    )
-                    data[relationship_key] = related_obj.to_dict_expand()
-        return data
-
-    def to_dict(self):
-        """Serialize the Datastream model to a dict without expanding relationships."""
-        return self._serialize_columns()
-
-    def _format_datetime_range(self, range_obj):
-        if range_obj:
-            lower = getattr(range_obj, "lower", None)
-            upper = getattr(range_obj, "upper", None)
-            return f"{lower.isoformat()}/{upper.isoformat()}"
-        return None
+    commit = relationship("Commit", back_populates="datastream")

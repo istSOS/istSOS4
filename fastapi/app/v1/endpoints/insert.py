@@ -72,7 +72,10 @@ async def catch_all_post(
         if len(result["entities"]) == 1:
             [name, id] = result["entities"][0]
             if main_table == "Observation" and name == "Datastream":
-                body[f"{name.lower()}_id"] = int(id)
+                if isinstance(body, dict):
+                    body = [body]
+                for e in body:
+                    e[f"{name.lower()}_id"] = int(id)
             # if main_table == "Location" and name == "Thing":
             #     body[f"{name.lower()}_id"] = int(id)
             # elif main_table == "Datastream" and name == "Thing":

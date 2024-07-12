@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.sql.sqltypes import String, Text
 
 from ..models import *
+from ..models.database import engine
 from .filter_visitor import FilterVisitor
 from .sta_parser.ast import *
 from .sta_parser.visitor import Visitor
@@ -291,7 +292,7 @@ class NodeVisitor(Visitor):
                 for field in identifiers:
                     attr, order = field.split(".")
                     collation = (
-                        "C" if isinstance(attr.type, (String, Text)) else None
+                        "C" if isinstance(attr, (String, Text)) else None
                     )
                     if order == "asc":
                         ordering.append(
@@ -306,7 +307,7 @@ class NodeVisitor(Visitor):
                             else desc(attr)
                         )
             else:
-                ordering = [desc(getattr(sub_entity, "id"))]
+                ordering = [asc(getattr(sub_entity, "id"))]
             sub_query = sub_query.order_by(*ordering)
 
             # Process skip clause
@@ -322,7 +323,7 @@ class NodeVisitor(Visitor):
                 expand_identifier.subquery.top.count
                 if expand_identifier.subquery
                 and expand_identifier.subquery.top
-                else 100
+                else int(os.getenv("TOP_VALUE", 100))
             )
 
             if select_from:
@@ -357,7 +358,7 @@ class NodeVisitor(Visitor):
                     or (fk_parent is not None and attr.name != fk_parent.name)
                 ):
                     json_build_object_args.append(
-                        literal(attr.name)
+                        literal(attr.name, type_=String())
                         if attr.name != "id"
                         else text("'@iot.id'")
                     )
@@ -503,7 +504,7 @@ class NodeVisitor(Visitor):
 
         return expand_queries
 
-    def visit_QueryNode(self, node: QueryNode):
+    async def visit_QueryNode(self, node: QueryNode):
         """
         Visit a query node.
 
@@ -519,23 +520,33 @@ class NodeVisitor(Visitor):
         result_format = "DataArray" if node.result_format and node.result_format.value == "dataArray" else None
 
 
-        with self.db as session:
+        async with self.db as session:
             main_entity = globals()[self.main_entity]
             main_query = None
-            query_count = (
-                session.query(
-                    func.count(getattr(main_entity, "id").distinct())
-                )
-                if not "TravelTime" in self.main_entity
-                else session.query(
-                    func.count(
+            if int(os.getenv("ESTIMATE_COUNT", 0)):
+                query_count = (
+                    select(getattr(main_entity, "id").distinct())
+                    if "TravelTime" not in self.main_entity
+                    else select(
                         func.distinct(
                             getattr(main_entity, "id"),
                             getattr(main_entity, "system_time_validity"),
                         )
                     )
                 )
-            )
+            else:
+                query_count = (
+                    select(func.count(getattr(main_entity, "id").distinct()))
+                    if "TravelTime" not in self.main_entity
+                    else select(
+                        func.count(
+                            func.distinct(
+                                getattr(main_entity, "id"),
+                                getattr(main_entity, "system_time_validity"),
+                            )
+                        )
+                    )
+                )
 
             if not node.select:
                 node.select = SelectNode([])
@@ -663,7 +674,7 @@ class NodeVisitor(Visitor):
                         expand_identifiers_path["expand"]["identifiers"]
                     ):
                         current = e.identifier
-                        sub_query = session.query(globals()[current])
+                        sub_query = select(globals()[current])
 
                         if i > 0:
                             previous = expand_identifiers_path["expand"][
@@ -864,7 +875,7 @@ class NodeVisitor(Visitor):
                                 else desc(a)
                             )
             else:
-                ordering = [desc(getattr(main_entity, "id"))]
+                ordering = [asc(getattr(main_entity, "id"))]
 
             # Apply ordering to main_query
             if not (node.result_format and node.result_format.value == "dataArray"):
@@ -873,7 +884,11 @@ class NodeVisitor(Visitor):
 
             # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
             skip_value = self.visit(node.skip) if node.skip else 0
-            top_value = self.visit(node.top) if node.top else 100
+            top_value = (
+                self.visit(node.top) + 1
+                if node.top
+                else int(os.getenv("TOP_VALUE", 100)) + 1
+            )
 
             main_query = main_query.offset(skip_value).limit(top_value)
 
@@ -886,4 +901,26 @@ class NodeVisitor(Visitor):
                 else:
                     count_query = False
 
-            return main_query, count_query, query_count
+            main_query = await session.execute(main_query)
+            main_query = main_query.scalars().all()
+            if count_query:
+                if int(os.getenv("ESTIMATE_COUNT", 0)):
+                    compiled_query_text = str(
+                        query_count.compile(
+                            dialect=engine.dialect,
+                            compile_kwargs={"literal_binds": True},
+                        )
+                    )
+                    query_estimate_count_sql = text(
+                        f"SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
+                    )
+                    query_count = await session.execute(
+                        query_estimate_count_sql,
+                        {"query_text": compiled_query_text},
+                    )
+                    query_count = query_count.scalar()
+                else:
+                    query_count = await session.execute(query_count)
+                    query_count = query_count.scalar()
+
+        return main_query, count_query, query_count

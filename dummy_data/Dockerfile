@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.10
+FROM python:3.12.4-alpine3.20
 
 # Set the working directory to /app
 WORKDIR /dummy_data
