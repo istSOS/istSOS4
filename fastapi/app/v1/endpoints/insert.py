@@ -18,6 +18,13 @@ try:
 except:
     DEBUG = 0
 
+@v1.api_route("/CreateObservations", methods=["POST"])
+async def create_observations(request: Request, pgpool=Depends(get_pool)):
+    print("CreateObservations")
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"code": 200, "type": "success", "message": "CreateObservations"},
+    )
 
 @v1.api_route("/{path_name:path}", methods=["POST"])
 async def catch_all_post(
