@@ -528,10 +528,8 @@ class STA2REST:
         if query_ast.result_format and main_entity != 'Observation':
             raise Exception("Illegal operation: $resultFormat is only valid for /Observations")
 
-        result = db.execute(query_converted[0]).all()
-
         return {
-            "query": result,
+            "query": query_converted[0],
             "count_query": query_converted[1],
             "query_count": query_converted[2],
             "ref": uri["ref"],
