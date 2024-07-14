@@ -2,10 +2,12 @@ import os
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
 from odata_query.grammar import ODataLexer, ODataParser
-from sqlalchemy import asc, case, desc, func, literal, select, text
+from sqlalchemy import asc, case, desc, func, literal, select, text, Integer
 from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.sql.sqltypes import String, Text
+from sqlalchemy.sql.expression import cast
+from sqlalchemy.dialects.postgresql import ARRAY
 
 from ..models import *
 from ..models.database import engine
@@ -656,7 +658,7 @@ class NodeVisitor(Visitor):
                                     ')'
                                 ),
                                 'components',
-                                components,
+                                cast(components, ARRAY(String)),
                                 'dataArray@iot.count',
                                 func.count(),
                                 'dataArray',
@@ -833,9 +835,9 @@ class NodeVisitor(Visitor):
                                 ')'
                             ),
                             "components",
-                            components,
+                            cast(components, ARRAY(String)),
                             "dataArray@iot.count",
-                            func.count(sub_query_ranked.columns.datastream_id),
+                            0,
                             'dataArray',
                             func.json_agg(
                                 func.json_build_array(*sub_query_ranked.columns[:-1])
