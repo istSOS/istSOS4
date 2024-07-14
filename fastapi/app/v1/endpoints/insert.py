@@ -43,11 +43,6 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
 
                             observation_payload["datastream_id"] = datastream_id
                             
-                            if "phenomenonTime" in observation_payload:
-                                observation_payload["phenomenonTime"] = observation_payload.pop("phenomenonTime")
-                            if "result" in observation_payload:
-                                observation_payload["result"] = observation_payload.pop("result")
-
                             if "FeatureOfInterest/id" in observation_payload:
                                 observation_payload["FeatureOfInterest"] = {"@iot.id": observation_payload.pop("FeatureOfInterest/id")}
                             else:
