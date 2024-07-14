@@ -37,6 +37,19 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
                     components = observation_set.get("components", [])
                     data_array = observation_set.get("dataArray", [])
 
+                    if not datastream_id:
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={"code": 400, "type": "error", "message": "Missing 'datastream_id' in Datastream."}
+                        )
+
+                    # Check that at least phenomenonTime and result are present
+                    if "phenomenonTime" not in components or "result" not in components:
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={"code": 400, "type": "error", "message": "Missing required properties 'phenomenonTime' or 'result' in components."}
+                        )
+
                     for data in data_array:
                         try:
                             observation_payload = {components[i]: data[i] if i < len(data) else None for i in range(len(components))}
