@@ -20,11 +20,55 @@ except:
 
 @v1.api_route("/CreateObservations", methods=["POST"])
 async def create_observations(request: Request, pgpool=Depends(get_pool)):
-    print("CreateObservations")
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content={"code": 200, "type": "success", "message": "CreateObservations"},
-    )
+    try:
+        body = await request.json()
+        if not isinstance(body, list):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"code": 400, "type": "error", "message": "Invalid payload format. Expected a list of observations."}
+            )
+
+        response_urls = []
+
+        async with pgpool.acquire() as conn:
+            async with conn.transaction():
+                for observation_set in body:
+                    datastream_id = observation_set.get("Datastream", {}).get("@iot.id")
+                    components = observation_set.get("components", [])
+                    data_array = observation_set.get("dataArray", [])
+
+                    for data in data_array:
+                        observation_payload = {components[i]: data[i] if i < len(data) else None for i in range(len(components))}
+
+                        if "phenomenonTime" in observation_payload:
+                            observation_payload["phenomenonTime"] = observation_payload.pop("phenomenonTime")
+                        if "result" in observation_payload:
+                            observation_payload["result"] = observation_payload.pop("result")
+                        if "FeatureOfInterest/id" in observation_payload:
+                            observation_payload["FeatureOfInterest"] = {"@iot.id": observation_payload.pop("FeatureOfInterest/id")}
+
+                        observation_payload["datastream_id"] = datastream_id
+
+                        try:
+                            _, observation_selfLink = await insertObservation(observation_payload, conn)
+                            response_urls.append(observation_selfLink)
+                        except Exception as e:
+                            response_urls.append("error")
+                            if DEBUG:
+                                print(f"Error inserting observation: {str(e)}")
+                                traceback.print_exc()
+
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content=response_urls
+        )
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"code": 400, "type": "error", "message": str(e)}
+        )
+
 
 @v1.api_route("/{path_name:path}", methods=["POST"])
 async def catch_all_post(
