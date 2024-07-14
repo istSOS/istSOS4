@@ -38,18 +38,21 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
                     data_array = observation_set.get("dataArray", [])
 
                     for data in data_array:
-                        observation_payload = {components[i]: data[i] if i < len(data) else None for i in range(len(components))}
-
-                        if "phenomenonTime" in observation_payload:
-                            observation_payload["phenomenonTime"] = observation_payload.pop("phenomenonTime")
-                        if "result" in observation_payload:
-                            observation_payload["result"] = observation_payload.pop("result")
-                        if "FeatureOfInterest/id" in observation_payload:
-                            observation_payload["FeatureOfInterest"] = {"@iot.id": observation_payload.pop("FeatureOfInterest/id")}
-
-                        observation_payload["datastream_id"] = datastream_id
-
                         try:
+                            observation_payload = {components[i]: data[i] if i < len(data) else None for i in range(len(components))}
+
+                            observation_payload["datastream_id"] = datastream_id
+                            
+                            if "phenomenonTime" in observation_payload:
+                                observation_payload["phenomenonTime"] = observation_payload.pop("phenomenonTime")
+                            if "result" in observation_payload:
+                                observation_payload["result"] = observation_payload.pop("result")
+
+                            if "FeatureOfInterest/id" in observation_payload:
+                                observation_payload["FeatureOfInterest"] = {"@iot.id": observation_payload.pop("FeatureOfInterest/id")}
+                            else:
+                                await generate_feature_of_interest(observation_payload, conn)
+
                             _, observation_selfLink = await insertObservation(observation_payload, conn)
                             response_urls.append(observation_selfLink)
                         except Exception as e:
@@ -57,7 +60,6 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
                             if DEBUG:
                                 print(f"Error inserting observation: {str(e)}")
                                 traceback.print_exc()
-
         return JSONResponse(
             status_code=status.HTTP_201_CREATED,
             content=response_urls
