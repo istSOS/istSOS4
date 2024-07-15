@@ -4,4 +4,4 @@ if [[ $(uname -m) == "arm64" ]]; then
     export DOCKER_DEFAULT_PLATFORM=linux/amd64
 fi
 
-docker compose up --build
+docker compose -f dev_docker-compose.yml up --build
