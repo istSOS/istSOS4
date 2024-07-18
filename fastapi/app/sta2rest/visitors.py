@@ -262,7 +262,6 @@ class NodeVisitor(Visitor):
                         if fk_parent is None
                         else fk_parent
                     ),
-                    order_by=getattr(sub_entity, "id"),
                 )
                 .label("rank"),
             )
@@ -383,7 +382,15 @@ class NodeVisitor(Visitor):
                             )
                         )
                     else:
-                        json_build_object_args.append(attr)
+                        if "Link" in attr.name:
+                            json_build_object_args.append(
+                                os.getenv("HOSTNAME")
+                                + os.getenv("SUBPATH")
+                                + os.getenv("VERSION")
+                                + attr
+                            )
+                        else:
+                            json_build_object_args.append(attr)
 
             aggregation_type = (
                 func.array_agg(
@@ -592,7 +599,15 @@ class NodeVisitor(Visitor):
                         )
                     )
                 else:
-                    json_build_object_args.append(attr)
+                    if "Link" in attr.name:
+                        json_build_object_args.append(
+                            os.getenv("HOSTNAME")
+                            + os.getenv("SUBPATH")
+                            + os.getenv("VERSION")
+                            + attr
+                        )
+                    else:
+                        json_build_object_args.append(attr)
 
             # Check if we have an expand node before the other parts of the query
             if node.expand:

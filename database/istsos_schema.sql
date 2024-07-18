@@ -12,102 +12,40 @@ CREATE TABLE IF NOT EXISTS sensorthings."Commit"(
 );
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Commit") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Commits(',
-        $1.id,
-        ')'
-    );
+    SELECT '/Commits(' || $1.id || ')';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Thing@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Commits(',
-        $1.id,
-        ')/Thing'
-    );
+    SELECT '/Commits(' || $1.id || ')/Thing';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Location@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Commits(',
-        $1.id,
-        ')/Location'
-    );
+    SELECT '/Commits(' || $1.id || ')/Location';
+
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "HistoricalLocation@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Commits(',
-        $1.id,
-        ')/HistoricalLocation'
-    );
+    SELECT '/Commits(' || $1.id || ')/HistoricalLocation';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "ObservedProperty@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Commits(',
-        $1.id,
-        ')/ObservedProperty'
-    );
+    SELECT '/Commits(' || $1.id || ')/ObservedProperty';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Sensor@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Commits(',
-        $1.id,
-        ')/Sensor'
-    );
+    SELECT '/Commits(' || $1.id || ')/Sensor';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Datastream@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Commits(',
-        $1.id,
-        ')/Datastream'
-    );
+    SELECT '/Commits(' || $1.id || ')/Datastream';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "FeatureOfInterest@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Commits(',
-        $1.id,
-        ')/FeatureOfInterest'
-    );
+    SELECT '/Commits(' || $1.id || ')/FeatureOfInterest';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Observation@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Commits(',
-        $1.id,
-        ')/Observation'
-    );
+    SELECT '/Commits(' || $1.id || ')/Observation';
 $$ LANGUAGE SQL;
 
 CREATE TABLE IF NOT EXISTS sensorthings."Location" (
@@ -124,47 +62,19 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
 CREATE INDEX IF NOT EXISTS "idx_location_commit_id" ON sensorthings."Location" USING btree ("commit_id" ASC NULLS LAST) TABLESPACE pg_default;
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Location") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Locations(',
-        $1.id,
-        ')'
-    );
+    SELECT '/Locations(' || $1.id || ')';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Things@iot.navigationLink"(sensorthings."Location") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Locations(',
-        $1.id,
-        ')/Things'
-    );
+    SELECT '/Locations(' || $1.id || ')/Things';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "HistoricalLocations@iot.navigationLink"(sensorthings."Location") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Locations(',
-        $1.id,
-        ')/HistoricalLocations'
-    );
+    SELECT '/Locations(' || $1.id || ')/HistoricalLocations';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Location") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Locations(',
-        $1.id,
-        ')/Commit'
-    );
+    SELECT '/Locations(' || $1.id || ')/Commit';
 $$ LANGUAGE SQL;
 
 CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
@@ -178,58 +88,24 @@ CREATE TABLE IF NOT EXISTS sensorthings."Thing" (
 CREATE INDEX IF NOT EXISTS "idx_thing_commit_id" ON sensorthings."Thing" USING btree ("commit_id" ASC NULLS LAST) TABLESPACE pg_default;
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Thing") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Things(',
-        $1.id,
-        ')'
-    );
+    SELECT '/Things(' || $1.id || ')';
+
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Locations@iot.navigationLink"(sensorthings."Thing") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Things(',
-        $1.id,
-        ')/Locations'
-    );
+    SELECT '/Things(' || $1.id || ')/Locations';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "HistoricalLocations@iot.navigationLink"(sensorthings."Thing") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Things(',
-        $1.id,
-        ')/HistoricalLocations'
-    );
+    SELECT '/Things(' || $1.id || ')/HistoricalLocations';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Datastreams@iot.navigationLink"(sensorthings."Thing") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Things(',
-        $1.id,
-        ')/Datastreams'
-    );
+    SELECT '/Things(' || $1.id || ')/Datastreams';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Thing") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Things(',
-        $1.id,
-        ')/Commit'
-    );
+    SELECT '/Things(' || $1.id || ')/Commit';
 $$ LANGUAGE SQL;
 
 CREATE TABLE IF NOT EXISTS sensorthings."Thing_Location" (
@@ -252,47 +128,19 @@ CREATE INDEX IF NOT EXISTS "idx_historicallocation_thing_id" ON sensorthings."Hi
 CREATE INDEX IF NOT EXISTS "idx_historicallocation_commit_id" ON sensorthings."HistoricalLocation" USING btree ("commit_id" ASC NULLS LAST) TABLESPACE pg_default;
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."HistoricalLocation") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/HistoricalLocations(',
-        $1.id,
-        ')'
-    );
+    SELECT '/HistoricalLocations(' || $1.id || ')';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Locations@iot.navigationLink"(sensorthings."HistoricalLocation") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/HistoricalLocations(',
-        $1.id,
-        ')/Locations'
-    );
+    SELECT '/HistoricalLocations(' || $1.id || ')/Locations';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Thing@iot.navigationLink"(sensorthings."HistoricalLocation") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/HistoricalLocations(',
-        $1.id,
-        ')/Thing'
-    );
+    SELECT '/HistoricalLocations(' || $1.id || ')/Thing';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."HistoricalLocation") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/HistoricalLocations(',
-        $1.id,
-        ')/Commit'
-    );
+    SELECT '/HistoricalLocations(' || $1.id || ')/Commit';
 $$ LANGUAGE SQL;
 
 CREATE TABLE IF NOT EXISTS sensorthings."Location_HistoricalLocation" (
@@ -316,36 +164,15 @@ CREATE TABLE IF NOT EXISTS sensorthings."ObservedProperty" (
 CREATE INDEX IF NOT EXISTS "idx_observedproperty_commit_id" ON sensorthings."ObservedProperty" USING btree ("commit_id" ASC NULLS LAST) TABLESPACE pg_default;
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."ObservedProperty") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/ObservedProperties(',
-        $1.id,
-        ')'
-    );
+    SELECT '/ObservedProperties(' ||  $1.id || ')';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Datastreams@iot.navigationLink"(sensorthings."ObservedProperty") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/ObservedProperties(',
-        $1.id,
-        ')/Datastreams'
-    );
+    SELECT '/ObservedProperties(' || $1.id || ')/Datastreams';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."ObservedProperty") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/ObservedProperties(',
-        $1.id,
-        ')/Commit'
-    );
+    SELECT '/ObservedProperties(' || $1.id || ')/Commit';
 $$ LANGUAGE SQL;
 
 CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
@@ -361,36 +188,15 @@ CREATE TABLE IF NOT EXISTS sensorthings."Sensor" (
 CREATE INDEX IF NOT EXISTS "idx_sensor_commit_id" ON sensorthings."Sensor" USING btree ("commit_id" ASC NULLS LAST) TABLESPACE pg_default;
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Sensor") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Sensors(',
-        $1.id,
-        ')'
-    );
+    SELECT '/Sensors(' || $1.id || ')';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Datastreams@iot.navigationLink"(sensorthings."Sensor") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Sensors(',
-        $1.id,
-        ')/Datastreams'
-    );
+    SELECT '/Sensors(' || $1.id || ')/Datastreams';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Sensor") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Sensors(',
-        $1.id,
-        ')/Commit'
-    );
+    SELECT '/Sensors(' || $1.id || ')/Commit';
 $$ LANGUAGE SQL;
 
 CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
@@ -415,69 +221,27 @@ CREATE INDEX IF NOT EXISTS "idx_datastream_observedproperty_id" ON sensorthings.
 CREATE INDEX IF NOT EXISTS "idx_datastream_commit_id" ON sensorthings."Datastream" USING btree ("commit_id" ASC NULLS LAST) TABLESPACE pg_default;
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Datastream") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Datastreams(',
-        $1.id,
-        ')'
-    );
+    SELECT '/Datastreams(' || $1.id || ')';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Thing@iot.navigationLink"(sensorthings."Datastream") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Datastreams(',
-        $1.id,
-        ')/Thing'
-    );
+    SELECT '/Datastreams(' || $1.id || ')/Thing';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Sensor@iot.navigationLink"(sensorthings."Datastream") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Datastreams(',
-        $1.id,
-        ')/Sensor'
-    );
+    SELECT '/Datastreams(' || $1.id || ')/Sensor';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "ObservedProperty@iot.navigationLink"(sensorthings."Datastream") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Datastreams(',
-        $1.id,
-        ')/ObservedProperty'
-    );
+    SELECT '/Datastreams(' || $1.id || ')/ObservedProperty';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Observations@iot.navigationLink"(sensorthings."Datastream") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Datastreams(',
-        $1.id,
-        ')/Observations'
-    );
+    SELECT '/Datastreams(' || $1.id || ')/Observations';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Datastream") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Datastreams(',
-        $1.id,
-        ')/Commit'
-    );
+    SELECT '/Datastreams(' || $1.id || ')/Commit';
 $$ LANGUAGE SQL;
 
 CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
@@ -493,36 +257,15 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
 CREATE INDEX IF NOT EXISTS "idx_featuresofinterest_commit_id" ON sensorthings."FeaturesOfInterest" USING btree ("commit_id" ASC NULLS LAST) TABLESPACE pg_default;
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."FeaturesOfInterest") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/FeaturesOfInterest(',
-        $1.id,
-        ')'
-    );
+    SELECT '/FeaturesOfInterest(' || $1.id || ')';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Observations@iot.navigationLink"(sensorthings."FeaturesOfInterest") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/FeaturesOfInterest(',
-        $1.id,
-        ')/Observations'
-    );
+    SELECT '/FeaturesOfInterest(' || $1.id || ')/Observations';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."FeaturesOfInterest") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/FeaturesOfInterest(',
-        $1.id,
-        ')/Commit'
-    );
+    SELECT '/FeaturesOfInterest(' || $1.id || ')/Commit';
 $$ LANGUAGE SQL;
 
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
@@ -550,47 +293,19 @@ CREATE INDEX IF NOT EXISTS "idx_observation_commit_id" ON sensorthings."Observat
 
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Observation") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Observations(',
-        $1.id,
-        ')'
-    );
+    SELECT '/Observations(' || $1.id || ')';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "FeatureOfInterest@iot.navigationLink"(sensorthings."Observation") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Observations(',
-        $1.id,
-        ')/FeatureOfInterest'
-    );
+    SELECT '/Observations(' || $1.id || ')/FeatureOfInterest';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Datastream@iot.navigationLink"(sensorthings."Observation") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Observations(',
-        $1.id,
-        ')/Datastream'
-    );
+    SELECT '/Observations(' || $1.id || ')/Datastream';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Observation") RETURNS text AS $$
-    SELECT concat(
-        current_setting('custom.hostname'),
-        current_setting('custom.subpath'),
-        current_setting('custom.version'),
-        '/Observations(',
-        $1.id,
-        ')/Commit'
-    );
+    SELECT '/Observations(' || $1.id || ')/Commit';
 $$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION result(sensorthings."Observation") RETURNS jsonb AS $$
