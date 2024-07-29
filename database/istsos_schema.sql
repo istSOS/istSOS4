@@ -364,3 +364,40 @@ end loop;
 return rows;
 end
 $func$;
+
+-- FUNCTION: sensorthings.expand(text, text, integer, integer, integer, boolean)
+
+-- DROP FUNCTION IF EXISTS sensorthings.expand(text, text, integer, integer, integer, boolean);
+
+CREATE OR REPLACE FUNCTION sensorthings.expand(
+	query_ text,
+	fk_field_ text,
+	fk_id_ integer,
+	limit_ integer DEFAULT 100,
+	offset_ integer DEFAULT 0,
+	one_to_many_ boolean DEFAULT true)
+    RETURNS json
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+DECLARE
+    query text;
+    result json;
+BEGIN
+
+	IF ONE_TO_MANY_ THEN
+ 
+	    -- Execute the query
+		EXECUTE format('SELECT jsonb_agg(row_to_json(t)) FROM (SELECT * FROM (%s) d WHERE d.%s=%s LIMIT %s OFFSET %s ) t', query_, fk_field_, fk_id_, limit_, offset_) INTO result;
+	ELSE
+		-- Execute the query
+		EXECUTE format('SELECT row_to_json(t) FROM (SELECT * FROM (%s) d WHERE d.%s=%s LIMIT %s OFFSET %s ) t', query_, fk_field_, fk_id_, limit_, offset_) INTO result;
+ 	END IF;
+    -- Return the result
+    RETURN result;
+END;
+$BODY$;
+
+ALTER FUNCTION sensorthings.expand(text, text, integer, integer, integer, boolean)
+    OWNER TO admin;
