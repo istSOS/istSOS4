@@ -307,6 +307,9 @@ class NodeVisitor(Visitor):
                         dialect=engine.dialect,
                         compile_kwargs={"literal_binds": True},
                     )
+                    relationship_nested = getattr(
+                        globals()[nested_sub_query[2]], nested_sub_query[5].lower()
+                    ).property
                     if nested_sub_query[1] is not None:
                         json_expands.append(
                             func.sensorthings.expand(
@@ -328,16 +331,18 @@ class NodeVisitor(Visitor):
                         ).name.split("@")[0]}")
                         )
                     else:
-                        if relationship_entity.direction.name == "MANYTOMANY":
+                        if relationship_nested.direction.name == "MANYTOMANY":
                             json_expands.append(
                                 func.sensorthings.expand_many2many(
                                     str(compiled_query_text),
-                                    f'{relationship_entity.secondary.schema}."{relationship_entity.secondary.name}"',
-                                    "id",
+                                    f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
                                     text(
                                         '"{}".id::integer'.format(
                                             nested_sub_query[2]
                                         )
+                                    ),
+                                    '{}_id'.format(
+                                        nested_sub_query[5]
                                     ),
                                     '{}_id'.format(
                                         nested_sub_query[2]
@@ -618,16 +623,17 @@ class NodeVisitor(Visitor):
                                     func.sensorthings.expand_many2many(
                                         str(compiled_query_text),
                                         f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
-                                        "id",
                                         text(
                                             '"{}".id::integer'.format(
                                                 sub_query[2]
                                             )
                                         ),
                                         '{}_id'.format(
+                                            sub_query[5]
+                                        ),
+                                        '{}_id'.format(
                                             sub_query[2]
                                         )
-                                        ,
                                     )
                                 )
                             else:
