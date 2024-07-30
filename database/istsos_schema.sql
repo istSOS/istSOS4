@@ -366,32 +366,57 @@ end
 $func$;
 
 CREATE OR REPLACE FUNCTION sensorthings.expand(
-	query_ text,
-	fk_field_ text,
-	fk_id_ integer,
-	limit_ integer DEFAULT 100,
-	offset_ integer DEFAULT 0,
-	one_to_many_ boolean DEFAULT true)
+    query_ text,
+    fk_field_ text,
+    fk_id_ integer,
+    limit_ integer DEFAULT 100,
+    offset_ integer DEFAULT 0,
+    one_to_many_ boolean DEFAULT true)
     RETURNS json
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
 AS $BODY$
 DECLARE
-    query text;
     result json;
 BEGIN
-	IF ONE_TO_MANY_ THEN
-        -- Execute the query
-		EXECUTE format('SELECT jsonb_agg(row_to_json(t)::jsonb - %L - %L) FROM (SELECT id as "@iot.id", * FROM (%s) d WHERE d.%s=%s LIMIT %s OFFSET %s ) t', fk_field_, 'id', query_, fk_field_, fk_id_, limit_, offset_) INTO result;
-	ELSE
-		-- Execute the query
-		EXECUTE format('SELECT row_to_json(t)::jsonb - %L FROM (SELECT id as "@iot.id", * FROM (%s) d WHERE d.%s=%s LIMIT %s OFFSET %s ) t', 'id', query_, fk_field_, fk_id_, limit_, offset_) INTO result;
- 	END IF;
+    IF one_to_many_ THEN
+        -- Execute the query for one-to-many relationship
+        EXECUTE format(
+            'SELECT jsonb_agg(row_to_json(t)::jsonb - %L - %L) 
+            FROM (SELECT id as "@iot.id", * 
+                  FROM (%s) d 
+                  WHERE d.%s = %s 
+                  LIMIT %s OFFSET %s) t', 
+            fk_field_, 'id', query_, fk_field_, fk_id_, limit_, offset_
+        ) INTO result;
+
+        -- Handle NULL result for one-to-many
+        IF result IS NULL THEN
+            result := '[]'::json;
+        END IF;
+    ELSE
+        -- Execute the query for one-to-one relationship
+        EXECUTE format(
+            'SELECT row_to_json(t)::jsonb - %L 
+            FROM (SELECT id as "@iot.id", * 
+                  FROM (%s) d 
+                  WHERE d.%s = %s 
+                  LIMIT %s OFFSET %s) t', 
+            'id', query_, fk_field_, fk_id_, limit_, offset_
+        ) INTO result;
+
+        -- Handle NULL result for one-to-one
+        IF result IS NULL THEN
+            result := '{}'::json;
+        END IF;
+    END IF;
+
     -- Return the result
     RETURN result;
 END;
 $BODY$;
+
 
 CREATE OR REPLACE FUNCTION sensorthings.expand_many2many(
 	query_ text,
@@ -418,6 +443,10 @@ BEGIN
 		      LIMIT %s OFFSET %s ) t', 
 		'id', query_, join_table_, related_fk_field1_, related_fk_field2_, fk_id_, limit_, offset_
 	) INTO result;
+
+	IF result IS NULL THEN
+        result := '[]'::json;
+    END IF;
 
     RETURN result;
 END;
