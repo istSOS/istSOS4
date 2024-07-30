@@ -413,7 +413,7 @@ BEGIN
     -- Execute the query with both fk_field_, related_fk_field_ and id excluded, and strip null values
 	EXECUTE format(
 		'SELECT jsonb_agg(row_to_json(t)::jsonb - %L - %L - %L)
-		FROM (SELECT m.* FROM (%s) m
+		FROM (SELECT m.id as "@iot.id", m.* FROM (%s) m
 		      JOIN %s jt ON m.%s = jt.%s
 		      WHERE jt.%s = %s
 		      LIMIT %s OFFSET %s ) t', 
