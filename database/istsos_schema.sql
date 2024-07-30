@@ -365,10 +365,6 @@ return rows;
 end
 $func$;
 
--- FUNCTION: sensorthings.expand(text, text, integer, integer, integer, boolean)
-
--- DROP FUNCTION IF EXISTS sensorthings.expand(text, text, integer, integer, integer, boolean);
-
 CREATE OR REPLACE FUNCTION sensorthings.expand(
 	query_ text,
 	fk_field_ text,
@@ -385,19 +381,46 @@ DECLARE
     query text;
     result json;
 BEGIN
-
 	IF ONE_TO_MANY_ THEN
- 
-	    -- Execute the query
-		EXECUTE format('SELECT jsonb_agg(row_to_json(t)) FROM (SELECT * FROM (%s) d WHERE d.%s=%s LIMIT %s OFFSET %s ) t', query_, fk_field_, fk_id_, limit_, offset_) INTO result;
+        -- Execute the query
+		EXECUTE format('SELECT jsonb_agg(row_to_json(t)::jsonb - %L - %L) FROM (SELECT id as "@iot.id", * FROM (%s) d WHERE d.%s=%s LIMIT %s OFFSET %s ) t', fk_field_, 'id', query_, fk_field_, fk_id_, limit_, offset_) INTO result;
 	ELSE
 		-- Execute the query
-		EXECUTE format('SELECT row_to_json(t) FROM (SELECT * FROM (%s) d WHERE d.%s=%s LIMIT %s OFFSET %s ) t', query_, fk_field_, fk_id_, limit_, offset_) INTO result;
+		EXECUTE format('SELECT row_to_json(t)::jsonb - %L FROM (SELECT id as "@iot.id", * FROM (%s) d WHERE d.%s=%s LIMIT %s OFFSET %s ) t', 'id', query_, fk_field_, fk_id_, limit_, offset_) INTO result;
  	END IF;
     -- Return the result
     RETURN result;
 END;
 $BODY$;
 
-ALTER FUNCTION sensorthings.expand(text, text, integer, integer, integer, boolean)
-    OWNER TO admin;
+CREATE OR REPLACE FUNCTION sensorthings.expand_many2many(
+	query_ text,
+	join_table_ text,
+	fk_field_ text,
+	fk_id_ integer,
+	related_fk_field_ text,
+	limit_ integer DEFAULT 100,
+	offset_ integer DEFAULT 0)
+    RETURNS json
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+DECLARE
+    query text;
+    result json;
+BEGIN
+    -- Execute the query with both fk_field_, related_fk_field_ and id excluded, and strip null values
+	EXECUTE format(
+		'SELECT jsonb_agg(row_to_json(t)::jsonb - %L - %L - %L)
+		FROM (SELECT m.* FROM (%s) m
+		      JOIN %s jt ON m.%s = jt.%s
+		      WHERE jt.%s = %s
+		      LIMIT %s OFFSET %s ) t', 
+		fk_field_, 'id', related_fk_field_, query_, join_table_, fk_field_, related_fk_field_, related_fk_field_, fk_id_, limit_, offset_
+	) INTO result;
+
+    -- Return the result
+    RETURN result;
+END;
+$BODY$;
