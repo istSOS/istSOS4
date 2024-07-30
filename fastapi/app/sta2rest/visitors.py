@@ -186,6 +186,59 @@ class NodeVisitor(Visitor):
             )
             sub_entity = globals()[expand_identifier.identifier]
             sub_query = None
+
+            # Process select clause if exists
+            select_fields = []
+            if (
+                expand_identifier.subquery
+                and expand_identifier.subquery.select
+            ):
+                identifiers = [
+                    self.visit(identifier)
+                    for identifier in expand_identifier.subquery.select.identifiers
+                ]
+            else:
+                identifiers = sta2rest.STA2REST.get_default_column_names(
+                    expand_identifier.identifier
+                )
+                identifiers = [
+                    item
+                    for item in identifiers
+                    if "navigation_link" not in item
+                ]
+
+            for field in identifiers:
+                tmpField = getattr(sub_entity, field)
+                if isinstance(tmpField.type, Geometry):
+                    select_fields.append((
+                        func.ST_AsGeoJSON(tmpField).cast(JSONB)
+                    ).label(tmpField.name))
+                elif isinstance(tmpField.type, TSTZRANGE):
+                    select_fields.append((
+                        case(
+                            (
+                                func.lower(tmpField).isnot(None)
+                                & func.upper(tmpField).isnot(None),
+                                func.concat(
+                                    func.lower(tmpField),
+                                    "/",
+                                    func.upper(tmpField),
+                                ),
+                            ),
+                            else_=None,
+                        ).label(tmpField.name))
+                    )
+                else:
+                    if "Link" in tmpField.name:
+                        select_fields.append((
+                            os.getenv("HOSTNAME")
+                            + os.getenv("SUBPATH")
+                            + os.getenv("VERSION")
+                            + tmpField
+                        ).label(tmpField.name))
+                    else:
+                        select_fields.append(tmpField)
+            
             if parent:
                 relationship_entity = getattr(
                     globals()[parent], expand_identifier.identifier.lower()
@@ -196,6 +249,7 @@ class NodeVisitor(Visitor):
                     fk_parent = relationship_entity.secondary.c[
                         f"{parent.lower()}_id"
                     ]
+
             # Process orderby clause
             ordering = []
             if (
@@ -225,6 +279,7 @@ class NodeVisitor(Visitor):
                         )
             else:
                 ordering = [asc(getattr(sub_entity, "id"))]
+
             # Process skip clause
             skip_value = (
                 expand_identifier.subquery.skip.count
@@ -232,6 +287,7 @@ class NodeVisitor(Visitor):
                 and expand_identifier.subquery.skip
                 else 0
             )
+
             # Process top clause
             top_value = (
                 expand_identifier.subquery.top.count
@@ -241,6 +297,7 @@ class NodeVisitor(Visitor):
             )
 
             # Handle nested expand
+            json_expands = []
             if (
                 expand_identifier.subquery
                 and expand_identifier.subquery.expand
@@ -249,28 +306,51 @@ class NodeVisitor(Visitor):
                     expand_identifier.subquery.expand,
                     expand_identifier.identifier,
                 )
-                json_expands = []
                 for nested_sub_query in nested_expand_queries:
                     compiled_query_text = nested_sub_query[0].compile(
                         dialect=engine.dialect,
                         compile_kwargs={"literal_binds": True},
                     )
-                    if nested_sub_query[1]:
-                        json_expands.append(
-                            func.sensorthings.expand(
-                                str(compiled_query_text),
-                                "{}".format(
-                                    nested_sub_query[1].name,
-                                ),
-                                text(
-                                    '"{}".id::integer'.format(
+                    if nested_sub_query[1] is not None:
+                        if relationship_entity.direction.name == "MANYTOMANY":
+                            json_expands.append(
+                                func.sensorthings.expand_many2many(
+                                    str(compiled_query_text),
+                                    f'{relationship_entity.secondary.schema}."{relationship_entity.secondary.name}"',
+                                    "id",
+                                    text(
+                                        '"{}".id::integer'.format(
+                                            nested_sub_query[2]
+                                        )
+                                    ),
+                                    '{}_id'.format(
                                         nested_sub_query[2]
                                     )
-                                ),
-                                nested_sub_query[4],
-                                nested_sub_query[3],
-                            ).label(nested_sub_query[5])
-                        )
+                                ).label(f"{ getattr(
+                                sub_entity,
+                                f"{nested_sub_query[5].lower()}_navigation_link",
+                            ).name.split("@")[0]}")
+                            )
+                        else:
+                            json_expands.append(
+                                func.sensorthings.expand(
+                                    str(compiled_query_text),
+                                    "{}".format(
+                                        nested_sub_query[1].name,
+                                    ),
+                                    text(
+                                        '"{}".id::integer'.format(
+                                            nested_sub_query[2]
+                                        )
+                                    ),
+                                    nested_sub_query[4],
+                                    nested_sub_query[3],
+                                    True,
+                                ).label(f"{ getattr(
+                                sub_entity,
+                                f"{nested_sub_query[5].lower()}_navigation_link",
+                            ).name.split("@")[0]}")
+                            )
                     else:
                         json_expands.append(
                             func.sensorthings.expand(
@@ -285,16 +365,32 @@ class NodeVisitor(Visitor):
                                 nested_sub_query[4],
                                 nested_sub_query[3],
                                 False,
-                            ).label(nested_sub_query[5])
+                            ).label(f"{ getattr(
+                            sub_entity,
+                            f"{nested_sub_query[5].lower()}_navigation_link",
+                        ).name.split("@")[0]}")
                         )
-                sub_query = select(
-                    sub_entity,
-                    *json_expands,
-                ).order_by(*ordering)
-            else:
-                sub_query = select(
-                    sub_entity,
-                ).order_by(*ordering)
+            if fk_parent is not None:
+                select_fields.append(fk_parent)
+
+            # Combine select fields and json expands
+            query_fields = select_fields + json_expands if json_expands else select_fields
+
+            sub_query = select(*query_fields).order_by(*ordering)
+
+            # Process filter clause if exists
+            if (
+                expand_identifier.subquery
+                and expand_identifier.subquery.filter
+            ):
+                filter, join_relationships = self.visit_FilterNode(
+                    expand_identifier.subquery.filter,
+                    expand_identifier.identifier,
+                )
+                for rel in join_relationships:
+                    sub_query = sub_query.join(rel)
+                sub_query = sub_query.filter(filter)
+
             expand_queries.append(
                 [
                     sub_query,
@@ -486,20 +582,40 @@ class NodeVisitor(Visitor):
                     sub_queries = self.visit_ExpandNode(
                         node.expand, self.main_entity
                     )
-                    # func.sensorthings.obs_expand(
-                    #    sub_query, text("{}".format(fk_parent)), param
-                    # )
                     for sub_query in sub_queries:
                         compiled_query_text = sub_query[0].compile(
                             dialect=engine.dialect,
                             compile_kwargs={"literal_binds": True},
                         )
                         json_build_object_args.append(
-                            node.expand.identifiers[0].identifier
+                            f"{ getattr(
+                            main_entity,
+                            f"{sub_query[5].lower()}_navigation_link",
+                        ).name.split("@")[0]}"
                         )
-                        if sub_query[1]:
-                            if sub_query[6]:
-                                print("ciao")
+
+                        relationship_type = getattr(
+                            main_entity, sub_query[5].lower()
+                        ).property
+
+                        if sub_query[1] is not None:
+                            if relationship_type.direction.name == "MANYTOMANY":
+                                json_build_object_args.append(
+                                    func.sensorthings.expand_many2many(
+                                        str(compiled_query_text),
+                                        f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
+                                        "id",
+                                        text(
+                                            '"{}".id::integer'.format(
+                                                sub_query[2]
+                                            )
+                                        ),
+                                        '{}_id'.format(
+                                            sub_query[2]
+                                        )
+                                        ,
+                                    )
+                                )
                             else:
                                 json_build_object_args.append(
                                     func.sensorthings.expand(
@@ -514,6 +630,7 @@ class NodeVisitor(Visitor):
                                         ),
                                         sub_query[4],
                                         sub_query[3],
+                                        True,
                                     )
                                 )
                         else:
@@ -531,30 +648,9 @@ class NodeVisitor(Visitor):
                                     False,
                                 )
                             )
-                        # json_build_object_args.append(
-                        #     func.sensorthings.obs_expand(
-                        #         compiled_query_text,
-                        #         '"{}".{}'.format(
-                        #             node.expand.identifiers[0].identifier,
-                        #             sub_query[1].name,
-                        #         ),
-                        #         text(
-                        #             'sensorthings."{}".id::integer'.format(
-                        #                 main_entity.__tablename__
-                        #             )
-                        #         ),
-                        #     )
-                        # )
-                    print(json_build_object_args)
-                    # print(compiled_query_text)
-                    # fk_parent_splitted = sub_queries[0][1].split(".")
-                    # fk_parent = '"{}".{}'.format(
-                    #     fk_parent_splitted[0], fk_parent_splitted[1]
-                    # )
                     main_query = select(
                         func.json_build_object(*json_build_object_args),
                     )
-                    # print(main_query)
             else:
                 # Set options for main_query if select_query is not empty
                 main_query = select(
