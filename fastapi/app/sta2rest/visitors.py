@@ -206,6 +206,8 @@ class NodeVisitor(Visitor):
                     for item in identifiers
                     if "navigation_link" not in item
                 ]
+            if "id" not in identifiers:
+                identifiers.append("id")
 
             for field in identifiers:
                 tmpField = getattr(sub_entity, field)
@@ -522,51 +524,10 @@ class NodeVisitor(Visitor):
 
                 if expand_identifiers_path["expand"]["identifiers"]:
                     identifiers = expand_identifiers_path["expand"]["identifiers"]
-                    select_ids = []
-                    for i, e in enumerate(identifiers):
-                        if i > 0:
-                            identifier = e.identifier
-                            nested_identifier = identifiers[i - 1].identifier
-                        else:
-                            identifier = self.main_entity
-                            nested_identifier = e.identifier
-
-                        select_ids.append(getattr(globals()[nested_identifier], "id"))
-                        relationship = getattr(globals()[identifier], nested_identifier.lower()).property
-                        if relationship.direction.name == "MANYTOMANY":
-                            select_ids.append(relationship.secondary.columns.get(f"{nested_identifier.lower()}_id"))
-                            select_ids.append(relationship.secondary.columns.get(f"{identifier.lower()}_id"))
 
                     main_query = select(
-                        func.json_build_object(*json_build_object_args),
-                        *select_ids
+                        func.json_build_object(*json_build_object_args)
                     )
-                    if int(os.getenv("ESTIMATE_COUNT", 0)):
-                        query_count = (
-                            select(getattr(main_entity, "id").distinct(), *select_ids)
-                            if "TravelTime" not in self.main_entity
-                            else select(
-                                func.distinct(
-                                    getattr(main_entity, "id"),
-                                    getattr(main_entity, "system_time_validity"),
-                                ),
-                                *select_ids
-                            )
-                        )
-                    else:
-                        query_count = (
-                            select(func.count(getattr(main_entity, "id").distinct()), *select_ids)
-                            if "TravelTime" not in self.main_entity
-                            else select(
-                                func.count(
-                                    func.distinct(
-                                        getattr(main_entity, "id"),
-                                        getattr(main_entity, "system_time_validity"),
-                                    )
-                                ),
-                                *select_ids
-                            )
-                        )
 
                     for i, e in enumerate(identifiers):
                         if e.subquery and e.subquery.filter:
