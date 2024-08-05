@@ -541,6 +541,32 @@ class NodeVisitor(Visitor):
                         func.json_build_object(*json_build_object_args),
                         *select_ids
                     )
+                    if int(os.getenv("ESTIMATE_COUNT", 0)):
+                        query_count = (
+                            select(getattr(main_entity, "id").distinct(), *select_ids)
+                            if "TravelTime" not in self.main_entity
+                            else select(
+                                func.distinct(
+                                    getattr(main_entity, "id"),
+                                    getattr(main_entity, "system_time_validity"),
+                                ),
+                                *select_ids
+                            )
+                        )
+                    else:
+                        query_count = (
+                            select(func.count(getattr(main_entity, "id").distinct()), *select_ids)
+                            if "TravelTime" not in self.main_entity
+                            else select(
+                                func.count(
+                                    func.distinct(
+                                        getattr(main_entity, "id"),
+                                        getattr(main_entity, "system_time_validity"),
+                                    )
+                                ),
+                                *select_ids
+                            )
+                        )
 
                     for i, e in enumerate(identifiers):
                         if e.subquery and e.subquery.filter:
@@ -548,9 +574,11 @@ class NodeVisitor(Visitor):
                                 e.subquery.filter, e.identifier
                             )
                             main_query = main_query.filter(filter)
+                            query_count = query_count.filter(filter)
                             if join_relationships:
                                 for rel in join_relationships:
                                     main_query = main_query.join(rel)
+                                    query_count = query_count.join(rel)
                         
                         if i > 0:
                             identifier = e.identifier
@@ -568,9 +596,11 @@ class NodeVisitor(Visitor):
                         else:
                             filter = getattr(globals()[identifier], "id") == relationship.secondary.columns.get(f"{identifier.lower()}_id")
                             main_query = main_query.filter(filter)
+                            query_count = query_count.filter(filter)
                             filter = getattr(globals()[nested_identifier], "id") == relationship.secondary.columns.get(f"{nested_identifier.lower()}_id")
                         
                         main_query = main_query.filter(filter)
+                        query_count = query_count.filter(filter)
 
                 # here we create the sub queries for the expand identifiers
                 if node.expand.identifiers:
