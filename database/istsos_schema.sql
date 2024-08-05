@@ -288,7 +288,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
 
 CREATE INDEX IF NOT EXISTS "idx_observation_datastream_id" ON sensorthings."Observation" USING btree ("datastream_id" ASC NULLS LAST) TABLESPACE pg_default;
 CREATE INDEX IF NOT EXISTS "idx_observation_featuresofinterest_id" ON sensorthings."Observation" USING btree ("featuresofinterest_id" ASC NULLS LAST) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS "idx_observation_observation_id_datastream_id" ON sensorthings."Observation" USING btree ("id" ASC NULLS LAST, "datastream_id" ASC NULLS LAST) TABLESPACE pg_default;
+CREATE INDEX IF NOT EXISTS "idx_observation_observation_id_datastream_id" ON sensorthings."Observation" USING btree ("datastream_id" ASC NULLS LAST, "id" ASC NULLS LAST) TABLESPACE pg_default;
 CREATE INDEX IF NOT EXISTS "idx_observation_commit_id" ON sensorthings."Observation" USING btree ("commit_id" ASC NULLS LAST) TABLESPACE pg_default;
 
 

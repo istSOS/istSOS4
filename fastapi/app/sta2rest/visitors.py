@@ -520,63 +520,57 @@ class NodeVisitor(Visitor):
                     e for e in node.expand.identifiers if e.expand
                 ]
 
-                sub_queries_no_expand = []
-                # here we create the sub queries for the expand identifiers
-                # that do NOT have a nested expand
                 if expand_identifiers_path["expand"]["identifiers"]:
-                    main_query = select(
-                        func.json_build_object(*json_build_object_args)
-                    )
-                    current = None
-                    previous = None
-
-                    for i, e in enumerate(
-                        expand_identifiers_path["expand"]["identifiers"]
-                    ):
-                        current = e.identifier
-                        sub_query = select(globals()[current])
-
+                    identifiers = expand_identifiers_path["expand"]["identifiers"]
+                    select_ids = []
+                    for i, e in enumerate(identifiers):
                         if i > 0:
-                            previous = expand_identifiers_path["expand"][
-                                "identifiers"
-                            ][i - 1].identifier
-                            relationship = getattr(
-                                globals()[current], previous.lower()
-                            ).property.direction.name
-                            sub_query = (
-                                sub_query.join(
-                                    getattr(
-                                        globals()[current], previous.lower()
-                                    )
-                                ).join(sub_queries_no_expand[i - 1])
-                                if relationship == "MANYTOMANY"
-                                else sub_query.join(
-                                    sub_queries_no_expand[i - 1]
-                                )
-                            )
+                            identifier = e.identifier
+                            nested_identifier = identifiers[i - 1].identifier
+                        else:
+                            identifier = self.main_entity
+                            nested_identifier = e.identifier
 
+                        select_ids.append(getattr(globals()[nested_identifier], "id"))
+                        relationship = getattr(globals()[identifier], nested_identifier.lower()).property
+                        if relationship.direction.name == "MANYTOMANY":
+                            select_ids.append(relationship.secondary.columns.get(f"{nested_identifier.lower()}_id"))
+                            select_ids.append(relationship.secondary.columns.get(f"{identifier.lower()}_id"))
+
+                    main_query = select(
+                        func.json_build_object(*json_build_object_args),
+                        *select_ids
+                    )
+
+                    for i, e in enumerate(identifiers):
                         if e.subquery and e.subquery.filter:
                             filter, join_relationships = self.visit_FilterNode(
-                                e.subquery.filter, current
+                                e.subquery.filter, e.identifier
                             )
-                            sub_query = sub_query.filter(filter)
+                            main_query = main_query.filter(filter)
+                            if join_relationships:
+                                for rel in join_relationships:
+                                    main_query = main_query.join(rel)
+                        
+                        if i > 0:
+                            identifier = e.identifier
+                            nested_identifier = identifiers[i - 1].identifier
+                        else:
+                            identifier = self.main_entity
+                            nested_identifier = e.identifier
 
-                        sub_queries_no_expand.append(sub_query.subquery())
+                        relationship = getattr(globals()[identifier], nested_identifier.lower()).property
 
-                    if sub_queries_no_expand and not node.expand.identifiers:
-                        relationship = getattr(
-                            main_entity, current.lower()
-                        ).property.direction.name
-                        main_query = (
-                            main_query.join(
-                                getattr(main_entity, current.lower())
-                            ).join(sub_queries_no_expand[-1])
-                            if relationship == "MANYTOMANY"
-                            else main_query.join(sub_queries_no_expand[-1])
-                        )
-                        query_count = query_count.join(
-                            getattr(main_entity, current.lower())
-                        ).join(sub_queries_no_expand[-1])
+                        if relationship.direction.name == "MANYTOONE":
+                            filter = getattr(globals()[identifier], f"{nested_identifier.lower()}_id") == getattr(globals()[nested_identifier], "id")
+                        elif relationship.direction.name == "ONETOMANY":
+                            filter = getattr(globals()[nested_identifier], f"{identifier.lower()}_id") == getattr(globals()[identifier], "id")
+                        else:
+                            filter = getattr(globals()[identifier], "id") == relationship.secondary.columns.get(f"{identifier.lower()}_id")
+                            main_query = main_query.filter(filter)
+                            filter = getattr(globals()[nested_identifier], "id") == relationship.secondary.columns.get(f"{nested_identifier.lower()}_id")
+                        
+                        main_query = main_query.filter(filter)
 
                 # here we create the sub queries for the expand identifiers
                 if node.expand.identifiers:
