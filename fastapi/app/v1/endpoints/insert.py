@@ -154,8 +154,13 @@ async def insert_record(payload, conn, table):
 
     keys = ", ".join(f'"{key}"' for key in payload.keys())
     values_placeholders = ", ".join(f"${i+1}" for i in range(len(payload)))
-    query = f'INSERT INTO sensorthings."{table}" ({keys}) VALUES ({values_placeholders}) RETURNING (id, "@iot.selfLink")'
-    insert_id, insert_selfLink = await conn.fetchval(query, *payload.values())
+    query = f'INSERT INTO sensorthings."{table}" ({keys}) VALUES ({values_placeholders}) RETURNING id'
+    insert_id = await conn.fetchval(query, *payload.values())
+    if table == "ObservedProperty":
+        table = "ObservedProperties"
+    elif table != "FeaturesOfInterest":
+        table = f"{table}s"    
+    insert_selfLink = f"{os.getenv('HOSTNAME')}{os.getenv("SUBPATH")}{os.getenv("VERSION")}/{table}({insert_id})"
     return (insert_id, insert_selfLink)
 
 
@@ -190,10 +195,11 @@ async def insertLocation(payload, conn):
                 values_placeholders = ", ".join(
                     f"${i+1}" for i in range(len(item))
                 )
-                query = f'INSERT INTO sensorthings."Location" ({keys}, "gen_foi_id") VALUES ({values_placeholders}, NULL) RETURNING (id, "@iot.selfLink")'
-                location_id, location_selfLink = await conn.fetchval(
+                query = f'INSERT INTO sensorthings."Location" ({keys}, "gen_foi_id") VALUES ({values_placeholders}, NULL) RETURNING id'
+                location_id = await conn.fetchval(
                     query, *item.values()
                 )
+                location_selfLink = f"{os.getenv('HOSTNAME')}{os.getenv("SUBPATH")}{os.getenv("VERSION")}/Locations({location_id})"
                 location_ids.append(location_id)
                 location_selfLinks.append(location_selfLink)
 
@@ -459,7 +465,7 @@ async def insertDatastream(payload, conn, thing_id=None):
             insert_sql = f"""
             INSERT INTO sensorthings."Datastream" ({keys})
             VALUES {values_placeholders}
-            RETURNING id, "@iot.selfLink"
+            RETURNING id
             """
             values = [
                 value for datastream in datastreams for value in datastream
@@ -472,10 +478,8 @@ async def insertDatastream(payload, conn, thing_id=None):
                         observations[index], conn, datastream_id
                     )
 
-            datastream_id, datastream_selfLink = (
-                result[0]["id"],
-                result[0]["@iot.selfLink"],
-            )
+            datastream_id = result[0]["id"]
+            datastream_selfLink = f"{os.getenv('HOSTNAME')}{os.getenv("SUBPATH")}{os.getenv("VERSION")}/Datastreams({datastream_id})"
             return (datastream_id, datastream_selfLink)
 
     except Exception as e:
@@ -541,7 +545,7 @@ async def insertObservation(payload, conn, datastream_id=None):
             insert_sql = f"""
             INSERT INTO sensorthings."Observation" ({keys})
             VALUES {values_placeholders}
-            RETURNING id, "@iot.selfLink"
+            RETURNING id
             """
 
             values = [
@@ -549,10 +553,8 @@ async def insertObservation(payload, conn, datastream_id=None):
             ]
             result = await conn.fetch(insert_sql, *values)
 
-            observation_id, observation_selfLink = (
-                result[0]["id"],
-                result[0]["@iot.selfLink"],
-            )
+            observation_id = result[0]["id"]
+            observation_selfLink = f"{os.getenv('HOSTNAME')}{os.getenv("SUBPATH")}{os.getenv("VERSION")}/Observations({observation_id})"
             return (observation_id, observation_selfLink)
 
     except Exception as e:

@@ -616,7 +616,6 @@ class STA2REST:
             entities.append(main_entity)
             main_entity = entities[0]
             entities.pop(0)
-            entities = entities[::-1]
 
         return {
             "version": version,

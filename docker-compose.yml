@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DATADIR: /var/lib/postgresql/data
     command: >
-      postgres -c custom.hostname="${HOSTNAME}" -c custom.subpath="${SUBPATH}" -c custom.version="${VERSION}" -c custom.versioning="${VERSIONING}" -c log_statement="all" -c log_destination="stderr"
+      postgres -c custom.versioning="${VERSIONING}" -c log_statement="all" -c log_destination="stderr"
     ports:
       - "45432:5432"
     volumes:
