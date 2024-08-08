@@ -8,7 +8,7 @@ from sqlalchemy import asc, case, desc, func, literal, select, text
 from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.sql.sqltypes import String, Text
-
+import ujson
 from ..models import *
 from ..models.database import engine
 from .filter_visitor import FilterVisitor
@@ -698,8 +698,9 @@ class NodeVisitor(Visitor):
 
                 else:
                     count_query = False
-            main_query = await session.execute(main_query)
-            main_query = main_query.scalars().all()
+
+            main_query = stream_results(main_query, session)
+
             if count_query:
                 if int(os.getenv("ESTIMATE_COUNT", 0)):
                     compiled_query_text = str(
@@ -721,3 +722,20 @@ class NodeVisitor(Visitor):
                     query_count = query_count.scalar()
 
         return main_query, count_query, query_count
+
+async def stream_results(query, session):
+    result = await session.stream(query)
+    first = True
+    yield '{"value": ['  
+    async for partition in result.scalars().partitions(10000):
+        if not first:
+            yield ',' + ujson.dumps(
+                partition
+            )[1:-1]
+        else:
+            yield ujson.dumps(
+                partition
+            )[1:-1]
+            first = False
+    yield  ']}'
+
