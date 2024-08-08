@@ -1,4 +1,6 @@
 import os
+from ast import main
+
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
 from odata_query.grammar import ODataLexer, ODataParser
@@ -21,7 +23,7 @@ class NodeVisitor(Visitor):
     main_entity = None
     db = None
 
-    """ 
+    """
     Constructor for the NodeVisitor class that accepts the main entity name
     """
 
@@ -178,15 +180,16 @@ class NodeVisitor(Visitor):
 
         # Process each identifier in the expand node
         for expand_identifier in node.identifiers:
+            relationship_entity = None
+            fk_parent = None
             # Convert the table name
             expand_identifier.identifier = sta2rest.STA2REST.convert_entity(
                 expand_identifier.identifier
             )
             sub_entity = globals()[expand_identifier.identifier]
             sub_query = None
-            sub_query_ranked = None
 
-            # Prepare select fields
+            # Process select clause if exists
             select_fields = []
             if (
                 expand_identifier.subquery
@@ -205,81 +208,47 @@ class NodeVisitor(Visitor):
                     for item in identifiers
                     if "navigation_link" not in item
                 ]
+            if "id" not in identifiers:
+                identifiers.append("id")
 
             for field in identifiers:
-                select_fields.append(getattr(sub_entity, field))
-
-            relationship = None
-            fk_parent = None
-            select_from = False
-
+                tmpField = getattr(sub_entity, field)
+                if isinstance(tmpField.type, Geometry):
+                    select_fields.append((
+                        func.ST_AsGeoJSON(tmpField).cast(JSONB)
+                    ).label(tmpField.name))
+                elif isinstance(tmpField.type, TSTZRANGE):
+                    select_fields.append((
+                        case(
+                            (
+                                func.lower(tmpField).isnot(None)
+                                & func.upper(tmpField).isnot(None),
+                                func.concat(
+                                    func.lower(tmpField),
+                                    "/",
+                                    func.upper(tmpField),
+                                ),
+                            ),
+                            else_=None,
+                        ).label(tmpField.name))
+                    )
+                else:
+                    if "Link" in tmpField.name:
+                        select_fields.append((
+                            os.getenv("HOSTNAME")
+                            + os.getenv("SUBPATH")
+                            + os.getenv("VERSION")
+                            + tmpField
+                        ).label(tmpField.name))
+                    else:
+                        select_fields.append(tmpField)
+            
             if parent:
-                relationship = getattr(
+                relationship_entity = getattr(
                     globals()[parent], expand_identifier.identifier.lower()
                 ).property
-                if relationship.direction.name == "ONETOMANY":
+                if relationship_entity.direction.name == "ONETOMANY":
                     fk_parent = getattr(sub_entity, f"{parent.lower()}_id")
-                elif relationship.direction.name == "MANYTOMANY":
-                    fk_parent = relationship.secondary.c[
-                        f"{parent.lower()}_id"
-                    ]
-                    select_from = True
-
-                if fk_parent is not None:
-                    select_fields.insert(0, fk_parent)
-
-            fk_child_arr = []
-            if (
-                expand_identifier.subquery
-                and expand_identifier.subquery.expand
-            ):
-                for e in expand_identifier.subquery.expand.identifiers:
-                    identifier = sta2rest.STA2REST.ENTITY_MAPPING.get(
-                        e.identifier, e.identifier
-                    )
-                    if hasattr(
-                        globals()[expand_identifier.identifier],
-                        identifier.lower(),
-                    ):
-                        relationship_nested = getattr(
-                            globals()[expand_identifier.identifier],
-                            identifier.lower(),
-                        ).property
-                        if relationship_nested.direction.name == "MANYTOONE":
-                            fk = getattr(
-                                sub_entity, f"{identifier.lower()}_id"
-                            )
-                            if fk not in select_fields:
-                                select_fields.insert(0, fk)
-                                fk_child_arr.append(fk)
-
-            # Build sub-query with row number
-            sub_query = select(
-                *select_fields,
-                func.row_number()
-                .over(
-                    partition_by=(
-                        getattr(sub_entity, "id")
-                        if fk_parent is None
-                        else fk_parent
-                    ),
-                    order_by=getattr(sub_entity, "id"),
-                )
-                .label("rank"),
-            )
-
-            # Process filter clause if exists
-            if (
-                expand_identifier.subquery
-                and expand_identifier.subquery.filter
-            ):
-                filter, join_relationships = self.visit_FilterNode(
-                    expand_identifier.subquery.filter,
-                    expand_identifier.identifier,
-                )
-                for rel in join_relationships:
-                    sub_query = sub_query.join(rel)
-                sub_query = sub_query.filter(filter)
 
             # Process orderby clause
             ordering = []
@@ -310,7 +279,6 @@ class NodeVisitor(Visitor):
                         )
             else:
                 ordering = [asc(getattr(sub_entity, "id"))]
-            sub_query = sub_query.order_by(*ordering)
 
             # Process skip clause
             skip_value = (
@@ -328,105 +296,8 @@ class NodeVisitor(Visitor):
                 else int(os.getenv("TOP_VALUE", 100))
             )
 
-            if select_from:
-                sub_query = sub_query.select_from(
-                    relationship.secondary.outerjoin(sub_entity)
-                )
-
-            sub_query.alias(
-                f"sub_query_{expand_identifier.identifier.lower()}"
-            )
-
-            # Build the ranked subquery
-            sub_query_ranked = (
-                select(
-                    *[col for col in sub_query.columns if col.name != "rank"]
-                )
-                .filter(
-                    sub_query.c.rank > skip_value,
-                    sub_query.c.rank <= (top_value + skip_value),
-                )
-                .alias(
-                    f"subquery_ranked_{expand_identifier.identifier.lower()}"
-                )
-            )
-
-            # Construct JSON object arguments
-            json_build_object_args = []
-            fk_child_names = [fk.name for fk in fk_child_arr]
-            for attr in sub_query_ranked.columns:
-                if (str(attr.name) not in fk_child_names) and (
-                    fk_parent is None
-                    or (fk_parent is not None and attr.name != fk_parent.name)
-                ):
-                    json_build_object_args.append(
-                        literal(attr.name, type_=String())
-                        if attr.name != "id"
-                        else text("'@iot.id'")
-                    )
-                    if isinstance(attr.type, Geometry):
-                        json_build_object_args.append(
-                            func.ST_AsGeoJSON(attr).cast(JSONB)
-                        )
-                    elif isinstance(attr.type, TSTZRANGE):
-                        json_build_object_args.append(
-                            case(
-                                (
-                                    func.lower(attr).isnot(None)
-                                    & func.upper(attr).isnot(None),
-                                    func.concat(
-                                        func.lower(attr),
-                                        "/",
-                                        func.upper(attr),
-                                    ),
-                                ),
-                                else_=None,
-                            )
-                        )
-                    else:
-                        json_build_object_args.append(attr)
-
-            aggregation_type = (
-                func.array_agg(
-                    func.json_build_object(*json_build_object_args)
-                )[1]
-                if relationship.direction.name == "MANYTOONE"
-                else func.json_agg(
-                    func.json_build_object(*json_build_object_args)
-                )
-            )
-
-            # Build sub-query JSON aggregation
-            if relationship.direction.name in ["MANYTOONE", "ONETOMANY"]:
-                select_from_clause = sub_query_ranked
-            else:
-                select_from_clause = sub_query_ranked.outerjoin(
-                    relationship.secondary
-                )
-
-            sub_query_json_agg = (
-                select(
-                    (
-                        sub_query_ranked.c[fk_parent.name]
-                        if fk_parent is not None
-                        else sub_query_ranked.c.id
-                    ),
-                    aggregation_type.label(
-                        expand_identifier.identifier.lower()
-                    ),
-                )
-                .select_from(select_from_clause)
-                .group_by(
-                    sub_query_ranked.c[fk_parent.name]
-                    if fk_parent is not None
-                    else sub_query_ranked.c.id
-                )
-                .alias(
-                    f"sub_query_json_agg_{expand_identifier.identifier.lower()}"
-                )
-            )
-
             # Handle nested expand
+            json_expands = []
             if (
                 expand_identifier.subquery
                 and expand_identifier.subquery.expand
@@ -435,75 +306,111 @@ class NodeVisitor(Visitor):
                     expand_identifier.subquery.expand,
                     expand_identifier.identifier,
                 )
-                select_from_clause = sub_query_ranked
-                for (
-                    nested_expand_query,
-                    nested_identifier,
-                ) in nested_expand_queries:
-                    value = getattr(
-                        sub_entity,
-                        f"{nested_identifier.lower()}_navigation_link",
-                    )
-                    json_build_object_args.append(
-                        f"{value.name.split('@')[0]}"
+                for nested_sub_query in nested_expand_queries:
+                    compiled_query_text = nested_sub_query[0].compile(
+                        dialect=engine.dialect,
+                        compile_kwargs={"literal_binds": True},
                     )
                     relationship_nested = getattr(
-                        globals()[expand_identifier.identifier],
-                        nested_identifier.lower(),
+                        globals()[nested_sub_query[2]], nested_sub_query[5].lower()
                     ).property
-                    coalesce_text = (
-                        "'{}'"
-                        if relationship_nested.direction.name == "MANYTOONE"
-                        else "'[]'"
-                    )
-                    json_build_object_args.append(
-                        func.coalesce(
-                            nested_expand_query.columns[
-                                nested_identifier.lower()
-                            ],
-                            text(coalesce_text),
+                    if nested_sub_query[1] is not None:
+                        json_expands.append(
+                            func.sensorthings.expand(
+                                str(compiled_query_text),
+                                "{}".format(
+                                    nested_sub_query[1].name,
+                                ),
+                                text(
+                                    '"{}".id::integer'.format(
+                                        nested_sub_query[2]
+                                    )
+                                ),
+                                nested_sub_query[4],
+                                nested_sub_query[3],
+                                True,
+                            ).label(f"{ getattr(
+                            sub_entity,
+                            f"{nested_sub_query[5].lower()}_navigation_link",
+                        ).name.split("@")[0]}")
                         )
-                    )
+                    else:
+                        if relationship_nested.direction.name == "MANYTOMANY":
+                            json_expands.append(
+                                func.sensorthings.expand_many2many(
+                                    str(compiled_query_text),
+                                    f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
+                                    text(
+                                        '"{}".id::integer'.format(
+                                            nested_sub_query[2]
+                                        )
+                                    ),
+                                    '{}_id'.format(
+                                        nested_sub_query[5]
+                                    ),
+                                    '{}_id'.format(
+                                        nested_sub_query[2]
+                                    )
+                                ).label(f"{ getattr(
+                                sub_entity,
+                                f"{nested_sub_query[5].lower()}_navigation_link",
+                            ).name.split("@")[0]}")
+                            )
+                        else:
+                            json_expands.append(
+                                func.sensorthings.expand(
+                                    str(compiled_query_text),
+                                    "id",
+                                    text(
+                                        '"{}".{}_id::integer'.format(
+                                            nested_sub_query[2],
+                                            nested_sub_query[5],
+                                        )
+                                    ),
+                                    nested_sub_query[4],
+                                    nested_sub_query[3],
+                                    False,
+                                ).label(f"{ getattr(
+                                sub_entity,
+                                f"{nested_sub_query[5].lower()}_navigation_link",
+                            ).name.split("@")[0]}")
+                            )
+            if fk_parent is not None:
+                select_fields.append(fk_parent)
 
-                    aggregation_type = (
-                        func.array_agg(
-                            func.json_build_object(*json_build_object_args)
-                        )[1]
-                        if relationship.direction.name == "MANYTOONE"
-                        else func.json_agg(
-                            func.json_build_object(*json_build_object_args)
-                        )
-                    )
-                    select_from_clause = select_from_clause.outerjoin(
-                        nested_expand_query
-                    )
+            # Combine select fields and json expands
+            query_fields = select_fields + json_expands if json_expands else select_fields
 
-                sub_query_json_agg = (
-                    select(
-                        (
-                            sub_query_ranked.c[fk_parent.name]
-                            if fk_parent is not None
-                            else sub_query_ranked.c.id
-                        ),
-                        aggregation_type.label(
-                            expand_identifier.identifier.lower()
-                        ),
-                    )
-                    .select_from(select_from_clause)
-                    .group_by(
-                        sub_query_ranked.c[fk_parent.name]
-                        if fk_parent is not None
-                        else sub_query_ranked.c.id
-                    )
-                    .alias(
-                        f"sub_query_json_agg_{expand_identifier.identifier.lower()}"
-                    )
+            sub_query = select(*query_fields).order_by(*ordering)
+
+            # Process filter clause if exists
+            if (
+                expand_identifier.subquery
+                and expand_identifier.subquery.filter
+            ):
+                filter, join_relationships = self.visit_FilterNode(
+                    expand_identifier.subquery.filter,
+                    expand_identifier.identifier,
                 )
+                for rel in join_relationships:
+                    sub_query = sub_query.join(rel)
+                sub_query = sub_query.filter(filter)
 
             expand_queries.append(
-                (sub_query_json_agg, expand_identifier.identifier)
+                [
+                    sub_query,
+                    fk_parent,
+                    parent,
+                    skip_value,
+                    top_value,
+                    expand_identifier.identifier,
+                    (
+                        True
+                        if relationship_entity.direction.name == "MANYTOMANY"
+                        else False
+                    ),
+                ]
             )
-
         return expand_queries
 
     async def visit_QueryNode(self, node: QueryNode):
@@ -516,7 +423,6 @@ class NodeVisitor(Visitor):
         Returns:
             str: The converted query node.
         """
-
         # list to store the converted parts of the query node
 
         result_format = "DataArray" if node.result_format and node.result_format.value == "dataArray" else None
@@ -600,10 +506,19 @@ class NodeVisitor(Visitor):
                         )
                     )
                 else:
-                    json_build_object_args.append(attr)
+                    if "Link" in attr.name:
+                        json_build_object_args.append(
+                            os.getenv("HOSTNAME")
+                            + os.getenv("SUBPATH")
+                            + os.getenv("VERSION")
+                            + attr
+                        )
+                    else:
+                        json_build_object_args.append(attr)
 
             # Check if we have an expand node before the other parts of the query
             if node.expand:
+                # get the expand identifiers that do NOT have a nested expand
                 expand_identifiers_path = {
                     "expand": {
                         "identifiers": [
@@ -611,243 +526,133 @@ class NodeVisitor(Visitor):
                         ]
                     }
                 }
+                # in this list there are all the expand identifiers that have a nested expand
                 node.expand.identifiers = [
                     e for e in node.expand.identifiers if e.expand
                 ]
 
-                sub_queries_no_expand = []
                 if expand_identifiers_path["expand"]["identifiers"]:
-                    if node.result_format and node.result_format.value == "dataArray":
-                    
-                        select_query.append(getattr(main_entity, "datastream_id"))
+                    identifiers = expand_identifiers_path["expand"]["identifiers"]
 
-                        top_value = self.visit(node.top) if node.top else 100
-                        skip_value = self.visit(node.skip) if node.skip else 0
+                    main_query = select(
+                        func.json_build_object(*json_build_object_args)
+                    )
 
-                        sub_query = select(
-                            *select_query,
-                            func.row_number()
-                            .over(
-                                partition_by=(
-                                    getattr(main_entity, "datastream_id")
-                                ),
-                                order_by=getattr(main_entity, "id"),
-                            )
-                            .label("rank"),
-                        )
-
-                        sub_query_ranked = (
-                            select(
-                                *[col for col in sub_query.columns if col.name != "rank"]
-                            )
-                            .filter(
-                                sub_query.c.rank > skip_value,
-                                sub_query.c.rank <= (top_value + skip_value),
-                            )
-                        )
-
-                        main_query = select(
-                            func.json_build_object(
-                                "Datastream@iot.navigationLink",
-                                func.concat(
-                                    os.getenv('HOSTNAME', ''),
-                                    os.getenv('SUBPATH', ''),
-                                    os.getenv('VERSION', ''),
-                                    '/Datastreams(', 
-                                    sub_query_ranked.columns.datastream_id,
-                                    ')'
-                                ),
-                                'components',
-                                cast(components, ARRAY(String)),
-                                'dataArray@iot.count',
-                                func.count(),
-                                'dataArray',
-                                func.json_agg(
-                                    func.json_build_array(*sub_query_ranked.columns[:-1])
-                                )
-                            )
-                        ).group_by("datastream_id")
-                    else:
-                        main_query = select(
-                            func.json_build_object(*json_build_object_args)
-                        )
-                    current = None
-                    previous = None
-
-                    for i, e in enumerate(
-                        expand_identifiers_path["expand"]["identifiers"]
-                    ):
-                        current = e.identifier
-                        sub_query = select(globals()[current])
-
-                        if i > 0:
-                            previous = expand_identifiers_path["expand"][
-                                "identifiers"
-                            ][i - 1].identifier
-                            relationship = getattr(
-                                globals()[current], previous.lower()
-                            ).property.direction.name
-                            sub_query = (
-                                sub_query.join(
-                                    getattr(
-                                        globals()[current], previous.lower()
-                                    )
-                                ).join(sub_queries_no_expand[i - 1])
-                                if relationship == "MANYTOMANY"
-                                else sub_query.join(
-                                    sub_queries_no_expand[i - 1]
-                                )
-                            )
-
+                    for i, e in enumerate(identifiers):
                         if e.subquery and e.subquery.filter:
                             filter, join_relationships = self.visit_FilterNode(
-                                e.subquery.filter, current
+                                e.subquery.filter, e.identifier
                             )
-                            sub_query = sub_query.filter(filter)
+                            main_query = main_query.filter(filter)
+                            query_count = query_count.filter(filter)
+                            if join_relationships:
+                                for rel in join_relationships:
+                                    main_query = main_query.join(rel)
+                                    query_count = query_count.join(rel)
+                        
+                        if i > 0:
+                            identifier = e.identifier
+                            nested_identifier = identifiers[i - 1].identifier
+                        else:
+                            identifier = self.main_entity
+                            nested_identifier = e.identifier
 
-                        sub_queries_no_expand.append(sub_query.subquery())
+                        relationship = getattr(globals()[identifier], nested_identifier.lower()).property
 
-                    if sub_queries_no_expand and not node.expand.identifiers:
-                        relationship = getattr(
-                            main_entity, current.lower()
-                        ).property.direction.name
-                        main_query = (
-                            main_query.join(
-                                getattr(main_entity, current.lower())
-                            ).join(sub_queries_no_expand[-1])
-                            if relationship == "MANYTOMANY"
-                            else main_query.join(sub_queries_no_expand[-1])
-                        )
-                        query_count = query_count.join(
-                            getattr(main_entity, current.lower())
-                        ).join(sub_queries_no_expand[-1])
+                        if relationship.direction.name == "MANYTOONE":
+                            filter = getattr(globals()[identifier], f"{nested_identifier.lower()}_id") == getattr(globals()[nested_identifier], "id")
+                        elif relationship.direction.name == "ONETOMANY":
+                            filter = getattr(globals()[nested_identifier], f"{identifier.lower()}_id") == getattr(globals()[identifier], "id")
+                        else:
+                            filter = getattr(globals()[identifier], "id") == relationship.secondary.columns.get(f"{identifier.lower()}_id")
+                            main_query = main_query.filter(filter)
+                            query_count = query_count.filter(filter)
+                            filter = getattr(globals()[nested_identifier], "id") == relationship.secondary.columns.get(f"{nested_identifier.lower()}_id")
+                        
+                        main_query = main_query.filter(filter)
+                        query_count = query_count.filter(filter)
 
+                # here we create the sub queries for the expand identifiers
                 if node.expand.identifiers:
                     # Visit the expand node
                     sub_queries = self.visit_ExpandNode(
                         node.expand, self.main_entity
                     )
-                    for sub_query, alias in sub_queries:
-                        value = getattr(
-                            main_entity, f"{alias.lower()}_navigation_link"
+                    for sub_query in sub_queries:
+                        compiled_query_text = sub_query[0].compile(
+                            dialect=engine.dialect,
+                            compile_kwargs={"literal_binds": True},
                         )
                         json_build_object_args.append(
-                            f"{value.name.split('@')[0]}"
+                            f"{ getattr(
+                            main_entity,
+                            f"{sub_query[5].lower()}_navigation_link",
+                        ).name.split("@")[0]}"
                         )
 
-                        # Determine the JSON structure based on the relationship type
-                        relationship = getattr(
-                            main_entity, alias.lower()
-                        ).property.direction.name
-                        coalesce_text = (
-                            "'{}'" if relationship == "MANYTOONE" else "'[]'"
-                        )
-                        json_build_object_args.append(
-                            func.coalesce(
-                                sub_query.columns[alias.lower()],
-                                text(coalesce_text),
-                            )
-                        )
-
-                    # Build the main query
-                    main_query = select(
-                        func.json_build_object(*json_build_object_args)
-                    )
-                    if sub_queries_no_expand:
-                        relationship = getattr(
-                            main_entity, current.lower()
-                        ).property.direction.name
-                        main_query = (
-                            main_query.join(
-                                getattr(main_entity, current.lower())
-                            ).join(sub_queries_no_expand[-1])
-                            if relationship == "MANYTOMANY"
-                            else main_query.join(sub_queries_no_expand[-1])
-                        )
-                        query_count = query_count.join(
-                            getattr(main_entity, current.lower())
-                        ).join(sub_queries_no_expand[-1])
-
-                    # Reverse the sub_queries order for specific case
-                    if (
-                        self.main_entity == "Location"
-                        and sub_queries[0][1] == "HistoricalLocation"
-                    ):
-                        sub_queries.reverse()
-
-                    # Join the main query with subqueries
-                    fk_main_entity = f"{self.main_entity.lower()}_id"
-                    main_entity_id = getattr(main_entity, "id")
-
-                    for sub_query, alias in sub_queries:
                         relationship_type = getattr(
-                            main_entity, alias.lower()
-                        ).property.direction.name
-
-                        # Determine join condition based on relationship type
-                        join_condition = (
-                            main_entity_id == sub_query.c[fk_main_entity]
-                            if relationship_type in ["MANYTOMANY", "ONETOMANY"]
-                            else getattr(main_entity, f"{alias.lower()}_id")
-                            == sub_query.c.id
-                        )
-
-                        main_query = main_query.outerjoin(
-                            sub_query, join_condition
-                        )
+                            main_entity, sub_query[5].lower()
+                        ).property
+                        
+                        if sub_query[1] is not None:
+                            json_build_object_args.append(
+                                func.sensorthings.expand(
+                                    str(compiled_query_text),
+                                    "{}".format(
+                                        sub_query[1].name,
+                                    ),
+                                    text(
+                                        '"{}".id::integer'.format(
+                                            sub_query[2]
+                                        )
+                                    ),
+                                    sub_query[4],
+                                    sub_query[3],
+                                    True,
+                                )
+                            )
+                        else:
+                            if relationship_type.direction.name == "MANYTOMANY":
+                                json_build_object_args.append(
+                                    func.sensorthings.expand_many2many(
+                                        str(compiled_query_text),
+                                        f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
+                                        text(
+                                            '"{}".id::integer'.format(
+                                                sub_query[2]
+                                            )
+                                        ),
+                                        '{}_id'.format(
+                                            sub_query[5]
+                                        ),
+                                        '{}_id'.format(
+                                            sub_query[2]
+                                        )
+                                    )
+                                )
+                            else:
+                                json_build_object_args.append(
+                                    func.sensorthings.expand(
+                                        str(compiled_query_text),
+                                        "id",
+                                        text(
+                                            '"{}".{}_id::integer'.format(
+                                                sub_query[2], sub_query[5]
+                                            )
+                                        ),
+                                        sub_query[4],
+                                        sub_query[3],
+                                        False,
+                                    )
+                                )
+                    main_query = select(
+                        func.json_build_object(*json_build_object_args),
+                    )
             else:
                 # Set options for main_query if select_query is not empty
-                if node.result_format and node.result_format.value == "dataArray":
-                    select_query.append(getattr(main_entity, "datastream_id"))
-
-                    top_value = 1
-
-                    sub_query = select(
-                        *select_query,
-                        func.row_number()
-                        .over(
-                            partition_by=(
-                                getattr(main_entity, "datastream_id")
-                            ),
-                            order_by=getattr(main_entity, "id"),
-                        )
-                        .label("rank"),
-                    )
-
-                    sub_query_ranked = (
-                        select(
-                            *[col for col in sub_query.columns if col.name != "rank"]
-                        )
-                        .filter(
-                            sub_query.c.rank <= (top_value),
-                        )
-                    )
-
-                    main_query = select(
-                        func.json_build_object(
-                            "Datastream@iot.navigationLink",
-                            func.concat(
-                                os.getenv('HOSTNAME', ''),
-                                os.getenv('SUBPATH', ''),
-                                os.getenv('VERSION', ''),
-                                '/Datastreams(', 
-                                sub_query_ranked.columns.datastream_id,
-                                ')'
-                            ),
-                            "components",
-                            cast(components, ARRAY(String)),
-                            "dataArray@iot.count",
-                            0,
-                            'dataArray',
-                            func.json_agg(
-                                func.json_build_array(*sub_query_ranked.columns[:-1])
-                            )  
-                        )
-                    ).group_by("datastream_id")
-                else:
-                    main_query = select(
-                        func.json_build_object(*json_build_object_args)
-                    )
+                main_query = select(
+                    func.json_build_object(*json_build_object_args)
+                )
 
             if node.filter:
                 filter, join_relationships = self.visit_FilterNode(
@@ -904,7 +709,6 @@ class NodeVisitor(Visitor):
 
                 else:
                     count_query = False
-
             main_query = await session.execute(main_query)
             main_query = main_query.scalars().all()
             if count_query:
