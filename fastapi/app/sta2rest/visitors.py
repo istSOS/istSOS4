@@ -678,6 +678,7 @@ class NodeVisitor(Visitor):
                 # Set options for main_query if select_query is not empty
                 if node.result_format and node.result_format.value == "dataArray":
                     select_query.append(getattr(main_entity, "datastream_id"))
+                    select_query.append(getattr(main_entity, "datastream_navigation_link"))
 
                     top_value = 1
 
@@ -709,9 +710,7 @@ class NodeVisitor(Visitor):
                                 os.getenv('HOSTNAME', ''),
                                 os.getenv('SUBPATH', ''),
                                 os.getenv('VERSION', ''),
-                                '/Datastreams(', 
-                                sub_query_ranked.columns.datastream_id,
-                                ')'
+                                sub_query_ranked.columns.datastream_navigation_link,
                             ),
                             "components",
                             cast(components, ARRAY(String)),
@@ -719,10 +718,10 @@ class NodeVisitor(Visitor):
                             func.count(),
                             'dataArray',
                             func.json_agg(
-                                func.json_build_array(*sub_query_ranked.columns[:-1])
+                                func.json_build_array(*sub_query_ranked.columns[1:-1])
                             )  
                         )
-                    ).group_by("datastream_id")
+                    ).group_by("datastream_navigation_link")
                 else:
                     main_query = select(
                         func.json_build_object(*json_build_object_args)
