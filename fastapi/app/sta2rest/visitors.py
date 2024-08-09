@@ -1,3 +1,4 @@
+import datetime
 import os
 
 from app.sta2rest import sta2rest
@@ -770,7 +771,7 @@ async def stream_results(query, session, count_links, iot_count, iot_nextLink, s
 
         async for partition in result.scalars().partitions(int(os.getenv("PARTITION_CHUNK", 10000))):
             has_rows = True
-            partition_json = ujson.dumps(partition)[1:-1]
+            partition_json = ujson.dumps(partition, default=datetime.datetime.isoformat)[1:-1]
             if first_partition:
                 yield start_json + partition_json
                 first_partition = False
