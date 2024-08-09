@@ -1,4 +1,4 @@
-# Quick start
+# istSOSm
 
 ## Clone the istSOSm repository
 
@@ -6,12 +6,18 @@
 git clone -b traveltime https://github.com/istSOS/istsos-miu.git
 ```
 
-## Start docker service
+## Start DEV environment
 
-To start the Docker service, run:
+To start the Docker services, run:
 
 ```sh
-docker compose -f dev_docker-compose.yml up -d
+docker compose -f dev_docker-compose.yml --project-name $(basename $PWD) up -d
+```
+
+To switch off the services:
+
+```sh
+docker compose -f dev-docker-compose.yml --project-name $(basename $PWD) down
 ```
 
 ## Use Sensor Things APIs
