@@ -536,33 +536,6 @@ class NodeVisitor(Visitor):
 
                     if node.result_format and node.result_format.value == "dataArray":
                     
-                        select_query.append(getattr(main_entity, "datastream_id"))
-
-                        top_value = self.visit(node.top) if node.top else 100
-                        skip_value = self.visit(node.skip) if node.skip else 0
-
-                        sub_query = select(
-                            *select_query,
-                            func.row_number()
-                            .over(
-                                partition_by=(
-                                    getattr(main_entity, "datastream_id")
-                                ),
-                                order_by=getattr(main_entity, "id"),
-                            )
-                            .label("rank"),
-                        )
-
-                        sub_query_ranked = (
-                            select(
-                                *[col for col in sub_query.columns if col.name != "rank"]
-                            )
-                            .filter(
-                                sub_query.c.rank > skip_value,
-                                sub_query.c.rank <= (top_value + skip_value),
-                            )
-                        )
-
                         main_query = select(
                             func.json_build_object(
                                 "Datastream@iot.navigationLink",
@@ -571,7 +544,7 @@ class NodeVisitor(Visitor):
                                     os.getenv('SUBPATH', ''),
                                     os.getenv('VERSION', ''),
                                     '/Datastreams(', 
-                                    sub_query_ranked.columns.datastream_id,
+                                    getattr(main_entity, 'datastream_id'),
                                     ')'
                                 ),
                                 'components',
@@ -580,7 +553,7 @@ class NodeVisitor(Visitor):
                                 func.count(),
                                 'dataArray',
                                 func.json_agg(
-                                    func.json_build_array(*sub_query_ranked.columns[:-1])
+                                    func.json_build_array(*json_build_object_args)
                                 )
                             )
                         ).group_by("datastream_id")
@@ -696,6 +669,8 @@ class NodeVisitor(Visitor):
                                         False,
                                     )
                                 )
+
+
                     main_query = select(
                         func.json_build_object(*json_build_object_args),
                     )
@@ -741,7 +716,7 @@ class NodeVisitor(Visitor):
                             "components",
                             cast(components, ARRAY(String)),
                             "dataArray@iot.count",
-                            0,
+                            func.count(),
                             'dataArray',
                             func.json_agg(
                                 func.json_build_array(*sub_query_ranked.columns[:-1])
