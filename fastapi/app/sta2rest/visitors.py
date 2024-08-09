@@ -1,5 +1,4 @@
 import os
-from ast import main
 
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
@@ -25,10 +24,14 @@ class NodeVisitor(Visitor):
     Constructor for the NodeVisitor class that accepts the main entity name
     """
 
-    def __init__(self, main_entity=None, db=None):
+    def __init__(self, main_entity=None, db=None, full_path=None, ref=False, value=False, single_result=False):
         super().__init__()
         self.main_entity = main_entity
         self.db = db
+        self.full_path = full_path
+        self.ref = ref
+        self.value = value
+        self.single_result = single_result
 
     """
     This class provides a visitor to convert a STA query to a PostgREST query.
@@ -450,6 +453,21 @@ class NodeVisitor(Visitor):
                     )
                 )
 
+            query_count_links = (
+                    select(getattr(main_entity, "id").distinct())
+                    if "TravelTime" not in self.main_entity
+                    else select(
+                        func.distinct(
+                            getattr(main_entity, "id"),
+                            getattr(main_entity, "system_time_validity"),
+                        )
+                    )
+                )
+
+            if self.ref:
+                node.select = SelectNode([])
+                node.select.identifiers.append(IdentifierNode("self_link"))
+
             if not node.select:
                 node.select = SelectNode([])
                 # get default columns for main entity
@@ -470,13 +488,14 @@ class NodeVisitor(Visitor):
 
             json_build_object_args = []
             for attr in select_query:
-                (
-                    json_build_object_args.append(
-                        literal(attr.name, type_=String())
+                if not self.value:
+                    (
+                        json_build_object_args.append(
+                            literal(attr.name, type_=String())
+                        )
+                        if attr.name != "id"
+                        else json_build_object_args.append(text("'@iot.id'"))
                     )
-                    if attr.name != "id"
-                    else json_build_object_args.append(text("'@iot.id'"))
-                )
                 if isinstance(attr.type, Geometry):
                     json_build_object_args.append(
                         func.ST_AsGeoJSON(attr).cast(JSONB)
@@ -525,9 +544,12 @@ class NodeVisitor(Visitor):
                 if expand_identifiers_path["expand"]["identifiers"]:
                     identifiers = expand_identifiers_path["expand"]["identifiers"]
 
-                    main_query = select(
-                        func.json_build_object(*json_build_object_args)
-                    )
+                    if self.value:
+                        main_query = select(*json_build_object_args)
+                    else:
+                        main_query = select(
+                            func.json_build_object(*json_build_object_args)
+                        )
 
                     for i, e in enumerate(identifiers):
                         if e.subquery and e.subquery.filter:
@@ -636,14 +658,20 @@ class NodeVisitor(Visitor):
                                         False,
                                     )
                                 )
-                    main_query = select(
-                        func.json_build_object(*json_build_object_args),
-                    )
+                    if self.value:
+                        main_query = select(*json_build_object_args)
+                    else:     
+                        main_query = select(
+                            func.json_build_object(*json_build_object_args),
+                        )
             else:
-                # Set options for main_query if select_query is not empty
-                main_query = select(
-                    func.json_build_object(*json_build_object_args)
-                )
+                if self.value:
+                    main_query = select(*json_build_object_args)
+                else:
+                    # Set options for main_query if select_query is not empty
+                    main_query = select(
+                        func.json_build_object(*json_build_object_args)
+                    )
 
             if node.filter:
                 filter, join_relationships = self.visit_FilterNode(
@@ -683,12 +711,12 @@ class NodeVisitor(Visitor):
             # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
             skip_value = self.visit(node.skip) if node.skip else 0
             top_value = (
-                self.visit(node.top) + 1
+                self.visit(node.top)
                 if node.top
-                else int(os.getenv("TOP_VALUE", 100)) + 1
+                else int(os.getenv("TOP_VALUE", 100))
             )
 
-            main_query = main_query.offset(skip_value).limit(top_value)
+            # main_query = main_query.offset(skip_value).limit(top_value)
 
             if not node.count:
                 count_query = False
@@ -699,43 +727,106 @@ class NodeVisitor(Visitor):
                 else:
                     count_query = False
 
-            main_query = stream_results(main_query, session)
+            compiled_query_text = str(
+                query_count_links.compile(
+                    dialect=engine.dialect,
+                    compile_kwargs={"literal_binds": True},
+                )
+            )
+            query_estimate_count_links = text(
+                "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
+            )
+            query_count_links = await session.execute(
+                query_estimate_count_links,
+                {"compiled_query_text": compiled_query_text},
+            )
+            query_count_links = query_count_links.scalar()
 
             if count_query:
                 if int(os.getenv("ESTIMATE_COUNT", 0)):
-                    compiled_query_text = str(
-                        query_count.compile(
-                            dialect=engine.dialect,
-                            compile_kwargs={"literal_binds": True},
-                        )
-                    )
-                    query_estimate_count_sql = text(
-                        f"SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
-                    )
-                    query_count = await session.execute(
-                        query_estimate_count_sql,
-                        {"query_text": compiled_query_text},
-                    )
-                    query_count = query_count.scalar()
+                    query_count = query_count_links
                 else:
                     query_count = await session.execute(query_count)
                     query_count = query_count.scalar()
 
-        return main_query, count_query, query_count
+            iot_count = '"@iot.count": ' + str(query_count) + ',' if count_query and not self.single_result else ''
+            iot_nextLink = build_nextLink(self.full_path, query_count_links)
+            iot_nextLink = f'"@iot.nextLink": "{iot_nextLink}",' if iot_nextLink is not None and not self.single_result else ''
 
-async def stream_results(query, session):
-    result = await session.stream(query)
-    first = True
-    yield '{"value": ['  
-    async for partition in result.scalars().partitions(10000):
-        if not first:
-            yield ',' + ujson.dumps(
-                partition
-            )[1:-1]
+            main_query = select(main_query.columns).limit(top_value).offset(skip_value)
+            main_query = stream_results(main_query, session, query_count_links, iot_count, iot_nextLink, self.single_result)
+        return main_query
+
+async def stream_results(query, session, count_links, iot_count, iot_nextLink, single_result):
+    async with session:
+        result = await session.stream(query)
+        first_partition = True
+        start_json = ''
+        if count_links > 1 and not single_result:
+            start_json = '{'
+        start_json += iot_count + iot_nextLink
+        start_json += '"value": [' if count_links > 1 and not single_result else ''
+
+        async for partition in result.scalars().partitions(int(os.getenv("PARTITION_CHUNK", 10000))):
+            # Convert partition to JSON
+            partition_json = ujson.dumps(partition)[1:-1]
+
+            if first_partition:
+                yield start_json + partition_json
+                first_partition = False
+            else:
+                yield ',' + partition_json
+
+        if count_links > 1 and not single_result:
+            yield ']}'
+
+
+def build_nextLink(full_path, count_links):
+    nextLink = f"{os.getenv('HOSTNAME')}{full_path}"
+    new_top_value = int(os.getenv("TOP_VALUE", 100))
+
+    # Handle $top
+    if "$top" in nextLink:
+        start_index = nextLink.find("$top=") + 5
+        end_index = len(nextLink)
+        for char in ("&", ";", ")"):
+            char_index = nextLink.find(char, start_index)
+            if char_index != -1 and char_index < end_index:
+                end_index = char_index
+        top_value = int(nextLink[start_index:end_index])
+        new_top_value = top_value
+        nextLink = (
+            nextLink[:start_index]
+            + str(new_top_value)
+            + nextLink[end_index:]
+        )
+    else:
+        if "?" in nextLink:
+            nextLink = nextLink + f"&$top={new_top_value}"
         else:
-            yield ujson.dumps(
-                partition
-            )[1:-1]
-            first = False
-    yield  ']}'
+            nextLink = nextLink + f"?$top={new_top_value}"
 
+    # Handle $skip
+    if "$skip" in nextLink:
+        start_index = nextLink.find("$skip=") + 6
+        end_index = len(nextLink)
+        for char in ("&", ";", ")"):
+            char_index = nextLink.find(char, start_index)
+            if char_index != -1 and char_index < end_index:
+                end_index = char_index
+        skip_value = int(nextLink[start_index:end_index])
+        new_skip_value = skip_value + new_top_value
+        nextLink = (
+            nextLink[:start_index]
+            + str(new_skip_value)
+            + nextLink[end_index:]
+        )
+    else:
+        new_skip_value = new_top_value
+        nextLink = nextLink + f"&$skip={new_skip_value}"
+
+    # Only return the nextLink if there's more data to fetch
+    if new_top_value < count_links:
+        return nextLink
+
+    return None
