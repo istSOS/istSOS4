@@ -765,17 +765,20 @@ async def stream_results(query, session, count_links, iot_count, iot_nextLink, s
         if count_links > 1 and not single_result:
             start_json = '{'
         start_json += iot_count + iot_nextLink
-        start_json += '"value": [' if count_links > 1 and not single_result else ''
+        start_json += '"value": [' if (count_links > 1 and not single_result) or count_links == 0 else ''
+        has_rows = False
 
         async for partition in result.scalars().partitions(int(os.getenv("PARTITION_CHUNK", 10000))):
-            # Convert partition to JSON
+            has_rows = True
             partition_json = ujson.dumps(partition)[1:-1]
-
             if first_partition:
                 yield start_json + partition_json
                 first_partition = False
             else:
                 yield ',' + partition_json
+
+        if not has_rows and not single_result:
+            yield '{"value": ['
 
         if count_links > 1 and not single_result:
             yield ']}'
