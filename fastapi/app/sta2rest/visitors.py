@@ -534,9 +534,60 @@ class NodeVisitor(Visitor):
                 if expand_identifiers_path["expand"]["identifiers"]:
                     identifiers = expand_identifiers_path["expand"]["identifiers"]
 
-                    main_query = select(
-                        func.json_build_object(*json_build_object_args)
-                    )
+                    if node.result_format and node.result_format.value == "dataArray":
+                    
+                        select_query.append(getattr(main_entity, "datastream_id"))
+
+                        top_value = self.visit(node.top) if node.top else 100
+                        skip_value = self.visit(node.skip) if node.skip else 0
+
+                        sub_query = select(
+                            *select_query,
+                            func.row_number()
+                            .over(
+                                partition_by=(
+                                    getattr(main_entity, "datastream_id")
+                                ),
+                                order_by=getattr(main_entity, "id"),
+                            )
+                            .label("rank"),
+                        )
+
+                        sub_query_ranked = (
+                            select(
+                                *[col for col in sub_query.columns if col.name != "rank"]
+                            )
+                            .filter(
+                                sub_query.c.rank > skip_value,
+                                sub_query.c.rank <= (top_value + skip_value),
+                            )
+                        )
+
+                        main_query = select(
+                            func.json_build_object(
+                                "Datastream@iot.navigationLink",
+                                func.concat(
+                                    os.getenv('HOSTNAME', ''),
+                                    os.getenv('SUBPATH', ''),
+                                    os.getenv('VERSION', ''),
+                                    '/Datastreams(', 
+                                    sub_query_ranked.columns.datastream_id,
+                                    ')'
+                                ),
+                                'components',
+                                cast(components, ARRAY(String)),
+                                'dataArray@iot.count',
+                                func.count(),
+                                'dataArray',
+                                func.json_agg(
+                                    func.json_build_array(*sub_query_ranked.columns[:-1])
+                                )
+                            )
+                        ).group_by("datastream_id")
+                    else:
+                        main_query = select(
+                            func.json_build_object(*json_build_object_args)
+                        )
 
                     for i, e in enumerate(identifiers):
                         if e.subquery and e.subquery.filter:
@@ -650,9 +701,57 @@ class NodeVisitor(Visitor):
                     )
             else:
                 # Set options for main_query if select_query is not empty
-                main_query = select(
-                    func.json_build_object(*json_build_object_args)
-                )
+                if node.result_format and node.result_format.value == "dataArray":
+                    select_query.append(getattr(main_entity, "datastream_id"))
+
+                    top_value = 1
+
+                    sub_query = select(
+                        *select_query,
+                        func.row_number()
+                        .over(
+                            partition_by=(
+                                getattr(main_entity, "datastream_id")
+                            ),
+                            order_by=getattr(main_entity, "id"),
+                        )
+                        .label("rank"),
+                    )
+
+                    sub_query_ranked = (
+                        select(
+                            *[col for col in sub_query.columns if col.name != "rank"]
+                        )
+                        .filter(
+                            sub_query.c.rank <= (top_value),
+                        )
+                    )
+
+                    main_query = select(
+                        func.json_build_object(
+                            "Datastream@iot.navigationLink",
+                            func.concat(
+                                os.getenv('HOSTNAME', ''),
+                                os.getenv('SUBPATH', ''),
+                                os.getenv('VERSION', ''),
+                                '/Datastreams(', 
+                                sub_query_ranked.columns.datastream_id,
+                                ')'
+                            ),
+                            "components",
+                            cast(components, ARRAY(String)),
+                            "dataArray@iot.count",
+                            0,
+                            'dataArray',
+                            func.json_agg(
+                                func.json_build_array(*sub_query_ranked.columns[:-1])
+                            )  
+                        )
+                    ).group_by("datastream_id")
+                else:
+                    main_query = select(
+                        func.json_build_object(*json_build_object_args)
+                    )
 
             if node.filter:
                 filter, join_relationships = self.visit_FilterNode(
