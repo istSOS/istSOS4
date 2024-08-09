@@ -81,23 +81,23 @@ async def catch_all_get(
 
         result = await sta2rest.STA2REST.convert_query(full_path, db)
 
-        async def wrapped_result_generator():
-            # Buffer the first item
-            try:
-                first_item = await anext(result)
-            except StopAsyncIteration:
-                yield '{"code": 404, "type": "error", "message": "Not Found"}'
-                return
-
+        async def wrapped_result_generator(first_item):
             yield first_item
-
-            # Yield the rest of the generator
             async for item in result:
                 yield item
 
-        return StreamingResponse(
-            wrapped_result_generator(), media_type="application/json"
-        )
+        try:
+            first_item = await anext(result)
+            return StreamingResponse(
+                wrapped_result_generator(first_item),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"code": 404, "type": "error", "message": "Not Found"},
+            )
 
     except Exception as e:
         traceback.print_exc()
