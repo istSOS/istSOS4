@@ -305,15 +305,6 @@ class STA2REST:
             "valid_time",
             "parameters",
         ],
-        "ObservationDataArray": [
-            "id",
-            "phenomenon_time",
-            "result_time",
-            "result",
-            "result_quality",
-            "valid_time",
-            "parameters",
-        ],
         "ObservationTravelTime": [
             "id",
             "self_link",
