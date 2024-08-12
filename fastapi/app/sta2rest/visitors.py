@@ -576,12 +576,6 @@ class NodeVisitor(Visitor):
                             dialect=engine.dialect,
                             compile_kwargs={"literal_binds": True},
                         )
-                        json_build_object_args.append(
-                            f"{ getattr(
-                            main_entity,
-                            f"{sub_query[5].lower()}_navigation_link",
-                        ).name.split("@")[0]}"
-                        )
 
                         relationship_type = getattr(
                             main_entity, sub_query[5].lower()
@@ -602,7 +596,7 @@ class NodeVisitor(Visitor):
                                     sub_query[4],
                                     sub_query[3],
                                     True,
-                                )
+                                ).label(f"{ getattr(main_entity,f"{sub_query[5].lower()}_navigation_link").name.split("@")[0]}")
                             )
                         else:
                             if relationship_type.direction.name == "MANYTOMANY":
@@ -621,7 +615,7 @@ class NodeVisitor(Visitor):
                                         '{}_id'.format(
                                             sub_query[2]
                                         )
-                                    )
+                                    ).label(f"{ getattr(main_entity,f"{sub_query[5].lower()}_navigation_link").name.split("@")[0]}")
                                 )
                             else:
                                 json_build_object_args.append(
@@ -636,7 +630,7 @@ class NodeVisitor(Visitor):
                                         sub_query[4],
                                         sub_query[3],
                                         False,
-                                    )
+                                    ).label(f"{ getattr(main_entity,f"{sub_query[5].lower()}_navigation_link").name.split("@")[0]}")
                                 )
                     main_query = select(*json_build_object_args)
             else:
