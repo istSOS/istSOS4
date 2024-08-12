@@ -4,7 +4,7 @@ import os
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
 from odata_query.grammar import ODataLexer, ODataParser
-from sqlalchemy import asc, case, desc, func, literal, select, text
+from sqlalchemy import asc, case, desc, func, literal_column, select, text
 from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.sql.sqltypes import String, Text
@@ -478,17 +478,9 @@ class NodeVisitor(Visitor):
 
             json_build_object_args = []
             for attr in select_query:
-                if not self.value:
-                    (
-                        json_build_object_args.append(
-                            literal(attr.name, type_=String())
-                        )
-                        if attr.name != "id"
-                        else json_build_object_args.append(text("'@iot.id'"))
-                    )
                 if isinstance(attr.type, Geometry):
                     json_build_object_args.append(
-                        func.ST_AsGeoJSON(attr).cast(JSONB)
+                        func.ST_AsGeoJSON(attr).cast(JSONB).label(attr.name)
                     )
                 elif isinstance(attr.type, TSTZRANGE):
                     json_build_object_args.append(
@@ -503,18 +495,21 @@ class NodeVisitor(Visitor):
                                 ),
                             ),
                             else_=None,
-                        )
+                        ).label(attr.name)
                     )
                 else:
                     if "Link" in attr.name:
-                        json_build_object_args.append(
+                        json_build_object_args.append((
                             os.getenv("HOSTNAME")
                             + os.getenv("SUBPATH")
                             + os.getenv("VERSION")
                             + attr
-                        )
+                        ).label(attr.name))
                     else:
-                        json_build_object_args.append(attr)
+                        if attr.name != "id":
+                            json_build_object_args.append(attr.label(attr.name))
+                        else:
+                            json_build_object_args.append(attr.label("@iot.id"))
 
             # Check if we have an expand node before the other parts of the query
             if node.expand:
@@ -534,12 +529,7 @@ class NodeVisitor(Visitor):
                 if expand_identifiers_path["expand"]["identifiers"]:
                     identifiers = expand_identifiers_path["expand"]["identifiers"]
 
-                    if self.value:
-                        main_query = select(*json_build_object_args)
-                    else:
-                        main_query = select(
-                            func.json_build_object(*json_build_object_args)
-                        )
+                    main_query = select(*json_build_object_args)
 
                     for i, e in enumerate(identifiers):
                         if e.subquery and e.subquery.filter:
@@ -648,20 +638,9 @@ class NodeVisitor(Visitor):
                                         False,
                                     )
                                 )
-                    if self.value:
-                        main_query = select(*json_build_object_args)
-                    else:     
-                        main_query = select(
-                            func.json_build_object(*json_build_object_args),
-                        )
-            else:
-                if self.value:
                     main_query = select(*json_build_object_args)
-                else:
-                    # Set options for main_query if select_query is not empty
-                    main_query = select(
-                        func.json_build_object(*json_build_object_args)
-                    )
+            else:
+                main_query = select(*json_build_object_args)
 
             if node.filter:
                 filter, join_relationships = self.visit_FilterNode(
@@ -736,7 +715,10 @@ class NodeVisitor(Visitor):
                     query_count = query_count.scalar()
 
             iot_count = '"@iot.count": ' + str(query_count) + ',' if count_query and not self.single_result else ''
-            main_query = select(main_query.columns).limit(top_value).offset(skip_value)
+            main_query = select(main_query.columns).limit(top_value).offset(skip_value).alias('main_query')
+            main_query = select(func.row_to_json(literal_column('main_query')).label('json')).select_from(main_query)
+            if self.value:
+                main_query = select(main_query.c.json.op('->')(select_query[0].name)).select_from(main_query)
             main_query = stream_results(main_query, session, top_value, iot_count, self.single_result, self.full_path)
         return main_query
 
