@@ -712,12 +712,10 @@ class NodeVisitor(Visitor):
             # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
             skip_value = self.visit(node.skip) if node.skip else 0
             top_value = (
-                self.visit(node.top)
+                self.visit(node.top) + 1
                 if node.top
-                else int(os.getenv("TOP_VALUE", 100))
+                else int(os.getenv("TOP_VALUE", 100)) + 1
             )
-
-            # main_query = main_query.offset(skip_value).limit(top_value)
 
             if not node.count:
                 count_query = False
@@ -755,24 +753,28 @@ class NodeVisitor(Visitor):
             iot_nextLink = f'"@iot.nextLink": "{iot_nextLink}",' if iot_nextLink is not None and not self.single_result else ''
 
             main_query = select(main_query.columns).limit(top_value).offset(skip_value)
-            main_query = stream_results(main_query, session, query_count_links, iot_count, iot_nextLink, self.single_result)
+            main_query = stream_results(main_query, session, top_value, iot_count, iot_nextLink, self.single_result)
         return main_query
 
-async def stream_results(query, session, count_links, iot_count, iot_nextLink, single_result):
+async def stream_results(query, session, top, iot_count, iot_nextLink, single_result):
     async with session:
         result = await session.stream(query)
-        first_partition = True
         start_json = ''
-        if count_links > 1 and not single_result:
-            start_json = '{'
-        start_json += iot_count + iot_nextLink
-        start_json += '"value": [' if (count_links > 1 and not single_result) or count_links == 0 else ''
+        first_partition = True
         has_rows = False
-
+        partition_len = 0
         async for partition in result.scalars().partitions(int(os.getenv("PARTITION_CHUNK", 10000))):
             has_rows = True
+            partition_len = len(partition)
+            if partition_len > top - 1:
+                partition = partition[:-1]
+
             partition_json = ujson.dumps(partition, default=datetime.datetime.isoformat)[1:-1]
             if first_partition:
+                if partition_len > 1 and not single_result:
+                    start_json = '{'
+                    start_json += iot_count + iot_nextLink
+                    start_json += '"value": [' if (partition_len > 1 and not single_result) or partition_len == 0 else ''
                 yield start_json + partition_json
                 first_partition = False
             else:
@@ -781,7 +783,7 @@ async def stream_results(query, session, count_links, iot_count, iot_nextLink, s
         if not has_rows and not single_result:
             yield '{"value": ['
 
-        if count_links > 1 and not single_result:
+        if partition_len > 1 and not single_result:
             yield ']}'
 
 
