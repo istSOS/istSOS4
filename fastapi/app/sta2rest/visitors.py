@@ -454,17 +454,6 @@ class NodeVisitor(Visitor):
                     )
                 )
 
-            query_count_links = (
-                    select(getattr(main_entity, "id").distinct())
-                    if "TravelTime" not in self.main_entity
-                    else select(
-                        func.distinct(
-                            getattr(main_entity, "id"),
-                            getattr(main_entity, "system_time_validity"),
-                        )
-                    )
-                )
-
             if self.ref:
                 node.select = SelectNode([])
                 node.select.identifiers.append(IdentifierNode("self_link"))
@@ -726,64 +715,66 @@ class NodeVisitor(Visitor):
                 else:
                     count_query = False
 
-            compiled_query_text = str(
-                query_count_links.compile(
-                    dialect=engine.dialect,
-                    compile_kwargs={"literal_binds": True},
-                )
-            )
-            query_estimate_count_links = text(
-                "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
-            )
-            query_count_links = await session.execute(
-                query_estimate_count_links,
-                {"compiled_query_text": compiled_query_text},
-            )
-            query_count_links = query_count_links.scalar()
-
             if count_query:
                 if int(os.getenv("ESTIMATE_COUNT", 0)):
-                    query_count = query_count_links
+                    compiled_query_text = str(
+                        query_count.compile(
+                            dialect=engine.dialect,
+                            compile_kwargs={"literal_binds": True},
+                        )
+                    )
+                    query_estimate_count= text(
+                        "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
+                    )
+                    query_count = await session.execute(
+                        query_estimate_count,
+                        {"compiled_query_text": compiled_query_text},
+                    )
+                    query_count = query_count.scalar()
                 else:
                     query_count = await session.execute(query_count)
                     query_count = query_count.scalar()
 
             iot_count = '"@iot.count": ' + str(query_count) + ',' if count_query and not self.single_result else ''
-            iot_nextLink = build_nextLink(self.full_path, query_count_links)
-            iot_nextLink = f'"@iot.nextLink": "{iot_nextLink}",' if iot_nextLink is not None and not self.single_result else ''
-
             main_query = select(main_query.columns).limit(top_value).offset(skip_value)
-            main_query = stream_results(main_query, session, top_value, iot_count, iot_nextLink, self.single_result)
+            main_query = stream_results(main_query, session, top_value, iot_count, self.single_result, self.full_path)
         return main_query
 
-async def stream_results(query, session, top, iot_count, iot_nextLink, single_result):
+async def stream_results(query, session, top, iot_count, single_result, full_path):
     async with session:
         result = await session.stream(query)
         start_json = ''
-        first_partition = True
+        is_first_partition = True
         has_rows = False
-        partition_len = 0
+
         async for partition in result.scalars().partitions(int(os.getenv("PARTITION_CHUNK", 10000))):
-            has_rows = True
             partition_len = len(partition)
+            has_rows = True
+
             if partition_len > top - 1:
                 partition = partition[:-1]
 
             partition_json = ujson.dumps(partition, default=datetime.datetime.isoformat)[1:-1]
-            if first_partition:
-                if partition_len > 1 and not single_result:
+
+            if is_first_partition:
+                if partition_len > 0 and not single_result:
                     start_json = '{'
-                    start_json += iot_count + iot_nextLink
-                    start_json += '"value": [' if (partition_len > 1 and not single_result) or partition_len == 0 else ''
+                
+                next_link = build_nextLink(full_path, partition_len)
+                next_link_json = f'"@iot.nextLink": "{next_link}",' if next_link and not single_result else ''
+                
+                start_json += iot_count + next_link_json
+                start_json += '"value": [' if (partition_len > 0 and not single_result) else ''
+                
                 yield start_json + partition_json
-                first_partition = False
+                is_first_partition = False
             else:
                 yield ',' + partition_json
 
         if not has_rows and not single_result:
-            yield '{"value": ['
+            yield '{"value": []}'
 
-        if partition_len > 1 and not single_result:
+        if has_rows and not single_result:
             yield ']}'
 
 
