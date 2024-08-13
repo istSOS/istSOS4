@@ -539,7 +539,7 @@ class NodeVisitor(Visitor):
                     identifiers = expand_identifiers_path["expand"]["identifiers"]
 
                     if node.result_format and node.result_format.value == "dataArray":
-                        main_query = select(
+                         main_query = select(
                             func.json_build_object(
                                 "Datastream@iot.navigationLink",
                                 func.concat(
@@ -793,11 +793,18 @@ class NodeVisitor(Visitor):
                     query_count = query_count.scalar()
 
             iot_count = '"@iot.count": ' + str(query_count) + ',' if count_query and not self.single_result else ''
-            main_query = select(main_query.columns).limit(top_value).offset(skip_value).alias('main_query')
+
+            main_query = select(main_query.columns).limit(top_value).offset(skip_value).alias('main_query') 
             main_query = select(func.row_to_json(literal_column('main_query')).label('json')).select_from(main_query)
             if self.value:
                 main_query = select(main_query.c.json.op('->')(select_query[0].name)).select_from(main_query)
+
+            if result_format == "DataArray":
+                # select the json_build_object_1 
+                main_query = select(main_query.c.json.op('->')('json_build_object_1')).select_from(main_query)
+
             main_query = stream_results(main_query, session, top_value, iot_count, self.single_result, self.full_path)
+
         return main_query
 
 async def stream_results(query, session, top, iot_count, single_result, full_path):
