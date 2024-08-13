@@ -520,6 +520,7 @@ class NodeVisitor(Visitor):
                         else:
                             json_build_object_args.append(attr.label("@iot.id"))
 
+        
             # Check if we have an expand node before the other parts of the query
             if node.expand:
                 # get the expand identifiers that do NOT have a nested expand
@@ -645,8 +646,10 @@ class NodeVisitor(Visitor):
 
                     main_query = select(*json_build_object_args)
             else:
+
                 if result_format == "DataArray":
                     json_build_object_args.append(cast(components, ARRAY(String)).label("components"))
+
                 main_query = select(*json_build_object_args)
                 
             if node.filter:
@@ -727,17 +730,50 @@ class NodeVisitor(Visitor):
 
             main_query = select(main_query.columns).limit(top_value).offset(skip_value).alias('main_query') 
             
-            if result_format == "DataArray" and not node.expand:
-                main_query = select(
-                    main_query.c.components,
-                    literal('1').cast(Integer).label('dataArray@iot.count'),
-                    func.json_build_array(*main_query.columns[:-1]).label('dataArray')
-                ).alias('main_query')
+            if result_format == "DataArray":
+
+                print(main_query.columns)
+
+                if not node.expand:
+                    main_query = select(
+                            func.concat(
+                                os.getenv("HOSTNAME"),
+                                os.getenv("SUBPATH"),
+                                os.getenv("VERSION"),
+                                "1",
+                            ).label("Datastream@iot.navigationLink"),
+                        main_query.c.components,
+                        literal('1').cast(Integer).label('dataArray@iot.count'),
+                        func.json_build_array(*main_query.columns[:-1]).label('dataArray')
+                    ).alias('main_query')
+                else:
+                    main_query = select(
+                        func.json_build_object(
+                            "Datastream@iot.navigationLink",
+                            func.concat(
+                                os.getenv("HOSTNAME"),
+                                os.getenv("SUBPATH"),
+                                os.getenv("VERSION"),
+                                "1",
+                            ),
+                            "components",
+                            cast(components, ARRAY(String)),
+                            'dataArray@iot.count',
+                            func.count(),
+                            'dataArray',
+                            func.json_agg(
+                                func.json_build_array(*main_query.columns),
+                            )
+                        ).label('json')
+                    ).alias('main_query')
+                    
             
             main_query = select(func.row_to_json(literal_column('main_query')).label('json')).select_from(main_query)
             if self.value:
                 main_query = select(main_query.c.json.op('->')(select_query[0].name)).select_from(main_query)
-    
+            if result_format == "DataArray" and node.expand:
+                main_query = select(main_query.c.json.op('->')('json')).select_from(main_query)
+      
             main_query = stream_results(main_query, session, top_value, iot_count, self.single_result, self.full_path)
 
         return main_query
