@@ -1,15 +1,16 @@
+import datetime
 import os
-from ast import main
 
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
 from odata_query.grammar import ODataLexer, ODataParser
-from sqlalchemy import asc, case, desc, func, literal, select, text, Integer
-from sqlalchemy.dialects.postgresql.json import JSONB
+from sqlalchemy.dialects.postgresql.json import JSONB   
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.sql.sqltypes import String, Text
 from sqlalchemy.sql.expression import cast
 from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import asc, case, desc, func, literal_column, select, text, literal
+import ujson
 
 from ..models import *
 from ..models.database import engine
@@ -27,10 +28,14 @@ class NodeVisitor(Visitor):
     Constructor for the NodeVisitor class that accepts the main entity name
     """
 
-    def __init__(self, main_entity=None, db=None):
+    def __init__(self, main_entity=None, db=None, full_path=None, ref=False, value=False, single_result=False):
         super().__init__()
         self.main_entity = main_entity
         self.db = db
+        self.full_path = full_path
+        self.ref = ref
+        self.value = value
+        self.single_result = single_result
 
     """
     This class provides a visitor to convert a STA query to a PostgREST query.
@@ -456,6 +461,10 @@ class NodeVisitor(Visitor):
                     )
                 )
 
+            if self.ref:
+                node.select = SelectNode([])
+                node.select.identifiers.append(IdentifierNode("self_link"))
+
             if not node.select:
                 node.select = SelectNode([])
                 # get default columns for main entity
@@ -486,9 +495,9 @@ class NodeVisitor(Visitor):
                         if attr.name != "id"
                         else json_build_object_args.append(text("'@iot.id'"))
                     )
-                if isinstance(attr.type, Geometry):
+                elif isinstance(attr.type, Geometry):
                     json_build_object_args.append(
-                        func.ST_AsGeoJSON(attr).cast(JSONB)
+                        func.ST_AsGeoJSON(attr).cast(JSONB).label(attr.name)
                     )
                 elif isinstance(attr.type, TSTZRANGE):
                     json_build_object_args.append(
@@ -503,18 +512,21 @@ class NodeVisitor(Visitor):
                                 ),
                             ),
                             else_=None,
-                        )
+                        ).label(attr.name)
                     )
                 else:
                     if "Link" in attr.name:
-                        json_build_object_args.append(
+                        json_build_object_args.append((
                             os.getenv("HOSTNAME")
                             + os.getenv("SUBPATH")
                             + os.getenv("VERSION")
                             + attr
-                        )
+                        ).label(attr.name))
                     else:
-                        json_build_object_args.append(attr)
+                        if attr.name != "id":
+                            json_build_object_args.append(attr.label(attr.name))
+                        else:
+                            json_build_object_args.append(attr.label("@iot.id"))
 
             # Check if we have an expand node before the other parts of the query
             if node.expand:
@@ -558,9 +570,7 @@ class NodeVisitor(Visitor):
                             )
                         ).group_by("datastream_id")
                     else:
-                        main_query = select(
-                            func.json_build_object(*json_build_object_args)
-                        )
+                        main_query = select(*json_build_object_args)
 
                     for i, e in enumerate(identifiers):
                         if e.subquery and e.subquery.filter:
@@ -607,12 +617,6 @@ class NodeVisitor(Visitor):
                             dialect=engine.dialect,
                             compile_kwargs={"literal_binds": True},
                         )
-                        json_build_object_args.append(
-                            f"{ getattr(
-                            main_entity,
-                            f"{sub_query[5].lower()}_navigation_link",
-                        ).name.split("@")[0]}"
-                        )
 
                         relationship_type = getattr(
                             main_entity, sub_query[5].lower()
@@ -633,7 +637,7 @@ class NodeVisitor(Visitor):
                                     sub_query[4],
                                     sub_query[3],
                                     True,
-                                )
+                                ).label(f"{ getattr(main_entity,f"{sub_query[5].lower()}_navigation_link").name.split("@")[0]}")
                             )
                         else:
                             if relationship_type.direction.name == "MANYTOMANY":
@@ -652,7 +656,7 @@ class NodeVisitor(Visitor):
                                         '{}_id'.format(
                                             sub_query[2]
                                         )
-                                    )
+                                    ).label(f"{ getattr(main_entity,f"{sub_query[5].lower()}_navigation_link").name.split("@")[0]}")
                                 )
                             else:
                                 json_build_object_args.append(
@@ -667,13 +671,11 @@ class NodeVisitor(Visitor):
                                         sub_query[4],
                                         sub_query[3],
                                         False,
-                                    )
+                                    ).label(f"{ getattr(main_entity,f"{sub_query[5].lower()}_navigation_link").name.split("@")[0]}")
                                 )
 
 
-                    main_query = select(
-                        func.json_build_object(*json_build_object_args),
-                    )
+                    main_query = select(*json_build_object_args)
             else:
                 # Set options for main_query if select_query is not empty
                 if node.result_format and node.result_format.value == "dataArray":
@@ -723,9 +725,7 @@ class NodeVisitor(Visitor):
                         )
                     ).group_by("datastream_navigation_link")
                 else:
-                    main_query = select(
-                        func.json_build_object(*json_build_object_args)
-                    )
+                    main_query = select(*json_build_object_args)
 
             if node.filter:
                 filter, join_relationships = self.visit_FilterNode(
@@ -772,8 +772,6 @@ class NodeVisitor(Visitor):
                 else int(os.getenv("TOP_VALUE", 100)) + 1
             )
 
-            main_query = main_query.offset(skip_value).limit(top_value)
-
             if not node.count:
                 count_query = False
             else:
@@ -782,8 +780,7 @@ class NodeVisitor(Visitor):
 
                 else:
                     count_query = False
-            main_query = await session.execute(main_query)
-            main_query = main_query.scalars().all()
+
             if count_query:
                 if int(os.getenv("ESTIMATE_COUNT", 0)):
                     compiled_query_text = str(
@@ -792,16 +789,110 @@ class NodeVisitor(Visitor):
                             compile_kwargs={"literal_binds": True},
                         )
                     )
-                    query_estimate_count_sql = text(
-                        f"SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
+                    query_estimate_count= text(
+                        "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
                     )
                     query_count = await session.execute(
-                        query_estimate_count_sql,
-                        {"query_text": compiled_query_text},
+                        query_estimate_count,
+                        {"compiled_query_text": compiled_query_text},
                     )
                     query_count = query_count.scalar()
                 else:
                     query_count = await session.execute(query_count)
                     query_count = query_count.scalar()
 
-        return main_query, count_query, query_count
+            iot_count = '"@iot.count": ' + str(query_count) + ',' if count_query and not self.single_result else ''
+            main_query = select(main_query.columns).limit(top_value).offset(skip_value).alias('main_query')
+            main_query = select(func.row_to_json(literal_column('main_query')).label('json')).select_from(main_query)
+            if self.value:
+                main_query = select(main_query.c.json.op('->')(select_query[0].name)).select_from(main_query)
+            main_query = stream_results(main_query, session, top_value, iot_count, self.single_result, self.full_path)
+        return main_query
+
+async def stream_results(query, session, top, iot_count, single_result, full_path):
+    async with session:
+        result = await session.stream(query)
+        start_json = ''
+        is_first_partition = True
+        has_rows = False
+
+        async for partition in result.scalars().partitions(int(os.getenv("PARTITION_CHUNK", 10000))):
+            partition_len = len(partition)
+            has_rows = True
+
+            if partition_len > top - 1:
+                partition = partition[:-1]
+
+            partition_json = ujson.dumps(partition, default=datetime.datetime.isoformat)[1:-1]
+
+            if is_first_partition:
+                if partition_len > 0 and not single_result:
+                    start_json = '{'
+                
+                next_link = build_nextLink(full_path, partition_len)
+                next_link_json = f'"@iot.nextLink": "{next_link}",' if next_link and not single_result else ''
+                
+                start_json += iot_count + next_link_json
+                start_json += '"value": [' if (partition_len > 0 and not single_result) else ''
+                
+                yield start_json + partition_json
+                is_first_partition = False
+            else:
+                yield ',' + partition_json
+
+        if not has_rows and not single_result:
+            yield '{"value": []}'
+
+        if has_rows and not single_result:
+            yield ']}'
+
+
+def build_nextLink(full_path, count_links):
+    nextLink = f"{os.getenv('HOSTNAME')}{full_path}"
+    new_top_value = int(os.getenv("TOP_VALUE", 100))
+
+    # Handle $top
+    if "$top" in nextLink:
+        start_index = nextLink.find("$top=") + 5
+        end_index = len(nextLink)
+        for char in ("&", ";", ")"):
+            char_index = nextLink.find(char, start_index)
+            if char_index != -1 and char_index < end_index:
+                end_index = char_index
+        top_value = int(nextLink[start_index:end_index])
+        new_top_value = top_value
+        nextLink = (
+            nextLink[:start_index]
+            + str(new_top_value)
+            + nextLink[end_index:]
+        )
+    else:
+        if "?" in nextLink:
+            nextLink = nextLink + f"&$top={new_top_value}"
+        else:
+            nextLink = nextLink + f"?$top={new_top_value}"
+
+    # Handle $skip
+    if "$skip" in nextLink:
+        start_index = nextLink.find("$skip=") + 6
+        end_index = len(nextLink)
+        for char in ("&", ";", ")"):
+            char_index = nextLink.find(char, start_index)
+            if char_index != -1 and char_index < end_index:
+                end_index = char_index
+        skip_value = int(nextLink[start_index:end_index])
+        new_skip_value = skip_value + new_top_value
+        nextLink = (
+            nextLink[:start_index]
+            + str(new_skip_value)
+            + nextLink[end_index:]
+        )
+    else:
+        new_skip_value = new_top_value
+        nextLink = nextLink + f"&$skip={new_skip_value}"
+
+    # Only return the nextLink if there's more data to fetch
+    if new_top_value < count_links:
+        return nextLink
+
+    return None

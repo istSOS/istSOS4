@@ -512,21 +512,16 @@ class STA2REST:
             print(query_ast)
 
         # Visit the query ast to convert it
-        visitor = NodeVisitor(main_entity, db)
+        visitor = NodeVisitor(
+            main_entity, db, full_path, uri["ref"], uri["value"], single_result
+        )
         query_converted = await visitor.visit(query_ast)
 
         # Result format is allowed only for Observations
         if query_ast.result_format and main_entity != 'Observation':
             raise Exception("Illegal operation: $resultFormat is only valid for /Observations")
 
-        return {
-            "query": query_converted[0],
-            "count_query": query_converted[1],
-            "query_count": query_converted[2],
-            "ref": uri["ref"],
-            "value": uri["value"],
-            "single_result": single_result,
-        }
+        return query_converted
 
     @staticmethod
     def parse_entity(entity: str):

@@ -1,11 +1,10 @@
 import os
 import traceback
-from collections.abc import Iterable
 
 from app.models.database import get_db
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, Request, status
@@ -81,106 +80,25 @@ async def catch_all_get(
             full_path += "?" + request.url.query
 
         result = await sta2rest.STA2REST.convert_query(full_path, db)
-        items = result["query"]
-        query_count = result["query_count"]
-        items_len = len(items)
-        data = {}
-        if len(items) == 1 and result["single_result"]:
-            data = items[0]
-        else:
-            nextLink = f"{os.getenv('HOSTNAME')}{full_path}"
-            new_top_value = int(os.getenv("TOP_VALUE", 100))
-            if "$top" in nextLink:
-                start_index = nextLink.find("$top=") + 5
-                end_index = len(nextLink)
-                for char in ("&", ";", ")"):
-                    char_index = nextLink.find(char, start_index)
-                    if char_index != -1 and char_index < end_index:
-                        end_index = char_index
-                top_value = int(nextLink[start_index:end_index])
-                new_top_value = top_value
-                nextLink = (
-                    nextLink[:start_index]
-                    + str(new_top_value)
-                    + nextLink[end_index:]
-                )
-            else:
-                if "?" in nextLink:
-                    nextLink = nextLink + f"&$top={new_top_value}"
-                else:
-                    nextLink = nextLink + f"?$top={new_top_value}"
-            items = items[:new_top_value]
-            if "$skip" in nextLink:
-                start_index = nextLink.find("$skip=") + 6
-                end_index = len(nextLink)
-                for char in ("&", ";", ")"):
-                    char_index = nextLink.find(char, start_index)
-                    if char_index != -1 and char_index < end_index:
-                        end_index = char_index
-                skip_value = int(nextLink[start_index:end_index])
-                new_skip_value = skip_value + new_top_value
-                nextLink = (
-                    nextLink[:start_index]
-                    + str(new_skip_value)
-                    + nextLink[end_index:]
-                )
-            else:
-                new_skip_value = new_top_value
-                nextLink = nextLink + f"&$skip={new_skip_value}"
 
-            if result["count_query"]:
-                data["@iot.count"] = query_count
+        async def wrapped_result_generator(first_item):
+            yield first_item
+            async for item in result:
+                yield item
 
-            if new_top_value < items_len:
-                data["@iot.nextLink"] = nextLink
-
-            # Always included
-            data["value"] = items
-
-        if result["ref"]:
-            if "value" in data:
-                if not result["single_result"]:
-                    data["value"] = [
-                        {"@iot.selfLink": item.get("@iot.selfLink")}
-                        for item in data["value"]
-                        if "@iot.selfLink" in item
-                    ]
-                else:
-                    if "@iot.selfLink" in data["value"][0]:
-                        data["@iot.selfLink"] = data["value"][0][
-                            "@iot.selfLink"
-                        ]
-                    del data["value"]
-            else:
-                data = (
-                    {"@iot.selfLink": data.get("@iot.selfLink")}
-                    if "@iot.selfLink" in data
-                    else {}
-                )
-
-        if result["value"]:
-            if "value" in data:
-                data = data[list(data.keys())[0]][0]
-            data = data[list(data.keys())[0]]
-            if data is None:
-                if DEBUG:
-                    response2jsonfile(request, "", "requests.json")
-                return Response(status_code=status.HTTP_200_OK)
-
-        if not data or (
-            isinstance(data, Iterable)
-            and "value" in data
-            and len(data["value"]) == 0
-            and result["single_result"]
-        ):
+        try:
+            first_item = await anext(result)
+            return StreamingResponse(
+                wrapped_result_generator(first_item),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK,
+            )
+        except Exception as e:
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content={"code": 404, "type": "error", "message": "Not Found"},
             )
-        if DEBUG:
-            print(f"GET data", data)
-            response2jsonfile(request, data, "requests.json")
-        return data
+
     except Exception as e:
         traceback.print_exc()
         return JSONResponse(
