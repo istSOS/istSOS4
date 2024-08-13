@@ -487,15 +487,7 @@ class NodeVisitor(Visitor):
 
             json_build_object_args = []
             for attr in select_query:
-                if not node.result_format:
-                    (
-                        json_build_object_args.append(
-                            literal(attr.name, type_=String())
-                        )
-                        if attr.name != "id"
-                        else json_build_object_args.append(text("'@iot.id'"))
-                    )
-                elif isinstance(attr.type, Geometry):
+                if isinstance(attr.type, Geometry):
                     json_build_object_args.append(
                         func.ST_AsGeoJSON(attr).cast(JSONB).label(attr.name)
                     )
@@ -547,7 +539,6 @@ class NodeVisitor(Visitor):
                     identifiers = expand_identifiers_path["expand"]["identifiers"]
 
                     if node.result_format and node.result_format.value == "dataArray":
-                    
                         main_query = select(
                             func.json_build_object(
                                 "Datastream@iot.navigationLink",
