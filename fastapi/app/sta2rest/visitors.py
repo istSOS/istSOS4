@@ -540,25 +540,19 @@ class NodeVisitor(Visitor):
 
                     if node.result_format and node.result_format.value == "dataArray":
                          main_query = select(
-                            func.json_build_object(
-                                "Datastream@iot.navigationLink",
-                                func.concat(
-                                    os.getenv('HOSTNAME', ''),
-                                    os.getenv('SUBPATH', ''),
-                                    os.getenv('VERSION', ''),
-                                    '/Datastreams(', 
-                                    getattr(main_entity, 'datastream_id'),
-                                    ')'
-                                ),
-                                'components',
-                                cast(components, ARRAY(String)),
-                                'dataArray@iot.count',
-                                func.count(),
-                                'dataArray',
-                                func.json_agg(
-                                    func.json_build_array(*json_build_object_args)
-                                )
-                            )
+                            func.concat(
+                                os.getenv('HOSTNAME', ''),
+                                os.getenv('SUBPATH', ''),
+                                os.getenv('VERSION', ''),
+                                '/Datastreams(', 
+                                getattr(main_entity, 'datastream_id'),
+                                ')'
+                            ).label("Datastream@iot.navigationLink"),
+                            cast(components, ARRAY(String)).label("components"),
+                            func.count().label('dataArray@iot.count'),
+                            func.json_agg(
+                                func.json_build_array(*json_build_object_args)
+                            ).label('dataArray')
                         ).group_by("datastream_id")
                     else:
                         main_query = select(*json_build_object_args)
@@ -697,23 +691,17 @@ class NodeVisitor(Visitor):
                     )
 
                     main_query = select(
-                        func.json_build_object(
-                            "Datastream@iot.navigationLink",
                             func.concat(
                                 os.getenv('HOSTNAME', ''),
                                 os.getenv('SUBPATH', ''),
                                 os.getenv('VERSION', ''),
                                 sub_query_ranked.columns.datastream_navigation_link,
-                            ),
-                            "components",
-                            cast(components, ARRAY(String)),
-                            "dataArray@iot.count",
-                            func.count(),
-                            'dataArray',
+                            ).label("Datastream@iot.navigationLink"),
+                            cast(components, ARRAY(String)).label("components"),
+                            func.count().label("dataArray@iot.count"),
                             func.json_agg(
                                 func.json_build_array(*sub_query_ranked.columns[1:-1])
-                            )  
-                        )
+                            ).label('dataArray')
                     ).group_by("datastream_navigation_link")
                 else:
                     main_query = select(*json_build_object_args)
@@ -798,10 +786,6 @@ class NodeVisitor(Visitor):
             main_query = select(func.row_to_json(literal_column('main_query')).label('json')).select_from(main_query)
             if self.value:
                 main_query = select(main_query.c.json.op('->')(select_query[0].name)).select_from(main_query)
-
-            if result_format == "DataArray":
-                # select the json_build_object_1 
-                main_query = select(main_query.c.json.op('->')('json_build_object_1')).select_from(main_query)
 
             main_query = stream_results(main_query, session, top_value, iot_count, self.single_result, self.full_path)
 
