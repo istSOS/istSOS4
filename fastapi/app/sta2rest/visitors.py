@@ -736,6 +736,10 @@ class NodeVisitor(Visitor):
 
             iot_count = '"@iot.count": ' + str(query_count) + ',' if count_query and not self.single_result else ''
 
+            if result_format == "DataArray" and node.expand:
+                if top_value > 1:
+                    top_value -= 1
+                    
             main_query = select(main_query.columns).limit(top_value).offset(skip_value).alias('main_query')
             
             if result_format == "DataArray":
