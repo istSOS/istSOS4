@@ -654,6 +654,11 @@ class NodeVisitor(Visitor):
                     json_build_object_args.append(cast(components, ARRAY(String)).label("components"))
 
                 main_query = select(*json_build_object_args)
+
+                if result_format == "DataArray":
+                    main_query = main_query.order_by(
+                        "datastream_id", getattr(main_entity, "id").desc()
+                        ).distinct("datastream_id")
                 
             if node.filter:
                 filter, join_relationships = self.visit_FilterNode(
@@ -731,7 +736,7 @@ class NodeVisitor(Visitor):
 
             iot_count = '"@iot.count": ' + str(query_count) + ',' if count_query and not self.single_result else ''
 
-            main_query = select(main_query.columns).limit(top_value).offset(skip_value).alias('main_query') 
+            main_query = select(main_query.columns).limit(top_value).offset(skip_value).alias('main_query')
             
             if result_format == "DataArray":
                 if not node.expand:
