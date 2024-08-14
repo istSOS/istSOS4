@@ -296,6 +296,15 @@ class STA2REST:
             "valid_time",
             "parameters",
         ],
+        "ObservationDataArray": [
+            "id",
+            "phenomenon_time",
+            "result_time",
+            "result",
+            "result_quality",
+            "valid_time",
+            "parameters",
+        ],
         "ObservationTravelTime": [
             "id",
             "self_link",
@@ -323,6 +332,8 @@ class STA2REST:
         "resultQuality": "result_quality",
         "validTime": "valid_time",
     }
+
+    REVERSE_SELECT_MAPPING = {v: k for k, v in SELECT_MAPPING.items()}
 
     @staticmethod
     def get_default_column_names(entity: str) -> list:
@@ -389,7 +400,7 @@ class STA2REST:
 
         # Check if we have a query
         query_ast = QueryNode(
-            None, None, None, None, None, None, None, None, None, False
+            None, None, None, None, None, None, None, None, None, None, False
         )
         if query:
             lexer = Lexer(query)
@@ -448,7 +459,7 @@ class STA2REST:
             for entity in entities:
                 entity_name = entity[0]
                 sub_query = QueryNode(
-                    None, None, None, None, None, None, None, None, None, True
+                    None, None, None, None, None, None, None, None, None, None, True
                 )
                 if entity[1]:
                     sub_query.filter = FilterNode(f"id eq {entity[1]}")
@@ -502,9 +513,13 @@ class STA2REST:
 
         # Visit the query ast to convert it
         visitor = NodeVisitor(
-            main_entity, db, full_path, uri["ref"], uri["value"], single_result
+            main_entity, db, full_path, uri["ref"], uri["value"], single_result, entities
         )
         query_converted = await visitor.visit(query_ast)
+
+        # Result format is allowed only for Observations
+        if query_ast.result_format and main_entity != 'Observation':
+            raise Exception("Illegal operation: $resultFormat is only valid for /Observations")
 
         return query_converted
 

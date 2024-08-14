@@ -4,11 +4,14 @@ import os
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
 from odata_query.grammar import ODataLexer, ODataParser
-from sqlalchemy import asc, case, desc, func, literal_column, select, text
-from sqlalchemy.dialects.postgresql.json import JSONB
+from sqlalchemy.dialects.postgresql.json import JSONB   
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
-from sqlalchemy.sql.sqltypes import String, Text
+from sqlalchemy.sql.sqltypes import String, Text, Integer
+from sqlalchemy.sql.expression import cast
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import asc, case, desc, func, literal_column, select, text, literal
 import ujson
+
 from ..models import *
 from ..models.database import engine
 from .filter_visitor import FilterVisitor
@@ -25,7 +28,7 @@ class NodeVisitor(Visitor):
     Constructor for the NodeVisitor class that accepts the main entity name
     """
 
-    def __init__(self, main_entity=None, db=None, full_path=None, ref=False, value=False, single_result=False):
+    def __init__(self, main_entity=None, db=None, full_path=None, ref=False, value=False, single_result=False, entities=None):
         super().__init__()
         self.main_entity = main_entity
         self.db = db
@@ -33,6 +36,7 @@ class NodeVisitor(Visitor):
         self.ref = ref
         self.value = value
         self.single_result = single_result
+        self.entities = entities
 
     """
     This class provides a visitor to convert a STA query to a PostgREST query.
@@ -426,6 +430,11 @@ class NodeVisitor(Visitor):
             str: The converted query node.
         """
         # list to store the converted parts of the query node
+
+        result_format = "DataArray" if node.result_format and node.result_format.value == "dataArray" else None
+
+
+
         async with self.db as session:
             main_entity = globals()[self.main_entity]
             main_query = None
@@ -462,7 +471,7 @@ class NodeVisitor(Visitor):
                 node.select = SelectNode([])
                 # get default columns for main entity
                 default_columns = sta2rest.STA2REST.get_default_column_names(
-                    self.main_entity
+                    self.main_entity if not result_format else self.main_entity + result_format
                 )
                 for column in default_columns:
                     node.select.identifiers.append(IdentifierNode(column))
@@ -475,6 +484,8 @@ class NodeVisitor(Visitor):
                 for field in self.visit(node.select):
                     field_name = field.split(".")[-1]
                     select_query.append(getattr(main_entity, field_name))
+
+            components = [sta2rest.STA2REST.REVERSE_SELECT_MAPPING.get(identifier.name, identifier.name) for identifier in node.select.identifiers]
 
             json_build_object_args = []
             for attr in select_query:
@@ -511,6 +522,7 @@ class NodeVisitor(Visitor):
                         else:
                             json_build_object_args.append(attr.label("@iot.id"))
 
+        
             # Check if we have an expand node before the other parts of the query
             if node.expand:
                 # get the expand identifiers that do NOT have a nested expand
@@ -632,10 +644,22 @@ class NodeVisitor(Visitor):
                                         False,
                                     ).label(f"{ getattr(main_entity,f"{sub_query[5].lower()}_navigation_link").name.split("@")[0]}")
                                 )
+
+
                     main_query = select(*json_build_object_args)
             else:
+
+                if result_format == "DataArray":
+                    json_build_object_args.append(getattr(main_entity, "datastream_id").label("datastream_id"))
+                    json_build_object_args.append(cast(components, ARRAY(String)).label("components"))
+
                 main_query = select(*json_build_object_args)
 
+                if result_format == "DataArray":
+                    main_query = main_query.order_by(
+                        "datastream_id", getattr(main_entity, "id").desc()
+                        ).distinct("datastream_id")
+                
             if node.filter:
                 filter, join_relationships = self.visit_FilterNode(
                     node.filter, self.main_entity
@@ -668,7 +692,6 @@ class NodeVisitor(Visitor):
             else:
                 ordering = [asc(getattr(main_entity, "id"))]
 
-            # Apply ordering to main_query
             main_query = main_query.order_by(*ordering)
 
             # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
@@ -709,11 +732,63 @@ class NodeVisitor(Visitor):
                     query_count = query_count.scalar()
 
             iot_count = '"@iot.count": ' + str(query_count) + ',' if count_query and not self.single_result else ''
+
+            if result_format == "DataArray" and node.expand:
+                if top_value > 1:
+                    top_value -= 1
+
             main_query = select(main_query.columns).limit(top_value).offset(skip_value).alias('main_query')
+            
+            if result_format == "DataArray":
+                if not node.expand:
+                    main_query = select(
+                            func.concat(
+                                os.getenv("HOSTNAME"),
+                                os.getenv("SUBPATH"),
+                                os.getenv("VERSION"),
+                                "/Datastreams(",
+                                main_query.c.datastream_id,
+                                ")",
+                            ).label("Datastream@iot.navigationLink"),
+                        main_query.c.components,
+                        literal('1').cast(Integer).label('dataArray@iot.count'),
+                        func.json_build_array(*main_query.columns[:-2]).label('dataArray')
+                    ).alias('main_query')
+                else:
+
+                    entity_id = self.entities[0][1]
+
+                    main_query = select(
+                        func.json_build_object(
+                            "Datastream@iot.navigationLink",
+                            func.concat(
+                                os.getenv("HOSTNAME"),
+                                os.getenv("SUBPATH"),
+                                os.getenv("VERSION"),
+                                "/Datastreams(",
+                                entity_id,
+                                ")",
+                            ),
+                            "components",
+                            cast(components, ARRAY(String)),
+                            'dataArray@iot.count',
+                            func.count(),
+                            'dataArray',
+                            func.json_agg(
+                                func.json_build_array(*main_query.columns),
+                            )
+                        ).label('json')
+                    ).alias('main_query')
+                    
+            
             main_query = select(func.row_to_json(literal_column('main_query')).label('json')).select_from(main_query)
             if self.value:
                 main_query = select(main_query.c.json.op('->')(select_query[0].name)).select_from(main_query)
+            if result_format == "DataArray" and node.expand:
+                main_query = select(main_query.c.json.op('->')('json')).select_from(main_query)
+      
             main_query = stream_results(main_query, session, top_value, iot_count, self.single_result, self.full_path)
+
         return main_query
 
 async def stream_results(query, session, top, iot_count, single_result, full_path):

@@ -18,6 +18,67 @@ try:
 except:
     DEBUG = 0
 
+@v1.api_route("/CreateObservations", methods=["POST"])
+async def create_observations(request: Request, pgpool=Depends(get_pool)):
+    try:
+        body = await request.json()
+        if not isinstance(body, list):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"code": 400, "type": "error", "message": "Invalid payload format. Expected a list of observations."}
+            )
+
+        response_urls = []
+
+        async with pgpool.acquire() as conn:
+            async with conn.transaction():
+                for observation_set in body:
+                    datastream_id = observation_set.get("Datastream", {}).get("@iot.id")
+                    components = observation_set.get("components", [])
+                    data_array = observation_set.get("dataArray", [])
+
+                    if not datastream_id:
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={"code": 400, "type": "error", "message": "Missing 'datastream_id' in Datastream."}
+                        )
+
+                    # Check that at least phenomenonTime and result are present
+                    if "phenomenonTime" not in components or "result" not in components:
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={"code": 400, "type": "error", "message": "Missing required properties 'phenomenonTime' or 'result' in components."}
+                        )
+
+                    for data in data_array:
+                        try:
+                            observation_payload = {components[i]: data[i] if i < len(data) else None for i in range(len(components))}
+
+                            observation_payload["datastream_id"] = datastream_id
+                            
+                            if "FeatureOfInterest/id" in observation_payload:
+                                observation_payload["FeatureOfInterest"] = {"@iot.id": observation_payload.pop("FeatureOfInterest/id")}
+                            else:
+                                await generate_feature_of_interest(observation_payload, conn)
+
+                            _, observation_selfLink = await insertObservation(observation_payload, conn)
+                            response_urls.append(observation_selfLink)
+                        except Exception as e:
+                            response_urls.append("error")
+                            if DEBUG:
+                                print(f"Error inserting observation: {str(e)}")
+                                traceback.print_exc()
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content=response_urls
+        )
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"code": 400, "type": "error", "message": str(e)}
+        )
+
 
 @v1.api_route("/{path_name:path}", methods=["POST"])
 async def catch_all_post(
