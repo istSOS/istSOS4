@@ -28,7 +28,7 @@ class NodeVisitor(Visitor):
     Constructor for the NodeVisitor class that accepts the main entity name
     """
 
-    def __init__(self, main_entity=None, db=None, full_path=None, ref=False, value=False, single_result=False):
+    def __init__(self, main_entity=None, db=None, full_path=None, ref=False, value=False, single_result=False, entities=None):
         super().__init__()
         self.main_entity = main_entity
         self.db = db
@@ -36,6 +36,7 @@ class NodeVisitor(Visitor):
         self.ref = ref
         self.value = value
         self.single_result = single_result
+        self.entities = entities
 
     """
     This class provides a visitor to convert a STA query to a PostgREST query.
@@ -433,6 +434,7 @@ class NodeVisitor(Visitor):
         result_format = "DataArray" if node.result_format and node.result_format.value == "dataArray" else None
 
 
+
         async with self.db as session:
             main_entity = globals()[self.main_entity]
             main_query = None
@@ -648,6 +650,7 @@ class NodeVisitor(Visitor):
             else:
 
                 if result_format == "DataArray":
+                    json_build_object_args.append(getattr(main_entity, "datastream_id").label("datastream_id"))
                     json_build_object_args.append(cast(components, ARRAY(String)).label("components"))
 
                 main_query = select(*json_build_object_args)
@@ -731,22 +734,24 @@ class NodeVisitor(Visitor):
             main_query = select(main_query.columns).limit(top_value).offset(skip_value).alias('main_query') 
             
             if result_format == "DataArray":
-
-                print(main_query.columns)
-
                 if not node.expand:
                     main_query = select(
                             func.concat(
                                 os.getenv("HOSTNAME"),
                                 os.getenv("SUBPATH"),
                                 os.getenv("VERSION"),
-                                "1",
+                                "/Datastreams(",
+                                main_query.c.datastream_id,
+                                ")",
                             ).label("Datastream@iot.navigationLink"),
                         main_query.c.components,
                         literal('1').cast(Integer).label('dataArray@iot.count'),
-                        func.json_build_array(*main_query.columns[:-1]).label('dataArray')
+                        func.json_build_array(*main_query.columns[:-2]).label('dataArray')
                     ).alias('main_query')
                 else:
+
+                    entity_id = self.entities[0][1]
+
                     main_query = select(
                         func.json_build_object(
                             "Datastream@iot.navigationLink",
@@ -754,7 +759,9 @@ class NodeVisitor(Visitor):
                                 os.getenv("HOSTNAME"),
                                 os.getenv("SUBPATH"),
                                 os.getenv("VERSION"),
-                                "1",
+                                "/Datastreams(",
+                                entity_id,
+                                ")",
                             ),
                             "components",
                             cast(components, ARRAY(String)),

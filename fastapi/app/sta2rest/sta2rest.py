@@ -513,7 +513,7 @@ class STA2REST:
 
         # Visit the query ast to convert it
         visitor = NodeVisitor(
-            main_entity, db, full_path, uri["ref"], uri["value"], single_result
+            main_entity, db, full_path, uri["ref"], uri["value"], single_result, entities
         )
         query_converted = await visitor.visit(query_ast)
 
