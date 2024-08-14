@@ -692,10 +692,7 @@ class NodeVisitor(Visitor):
             else:
                 ordering = [asc(getattr(main_entity, "id"))]
 
-            # Apply ordering to main_query
-            if not (node.result_format and node.result_format.value == "dataArray"):
-                # TODO: Fix ordering for dataArray format queries
-                main_query = main_query.order_by(*ordering)
+            main_query = main_query.order_by(*ordering)
 
             # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
             skip_value = self.visit(node.skip) if node.skip else 0
@@ -739,7 +736,7 @@ class NodeVisitor(Visitor):
             if result_format == "DataArray" and node.expand:
                 if top_value > 1:
                     top_value -= 1
-                    
+
             main_query = select(main_query.columns).limit(top_value).offset(skip_value).alias('main_query')
             
             if result_format == "DataArray":
