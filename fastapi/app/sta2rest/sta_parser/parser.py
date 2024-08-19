@@ -270,7 +270,7 @@ class Parser:
         value2 = self.current_token.value
         self.match("TIMESTAMP")
         return ast.FromToNode(value1, value2)
-    
+
     def parse_result_format(self):
         """
         Parse a result format expression.
@@ -278,11 +278,11 @@ class Parser:
         Returns:
             ast.ResultFormatNode: The parsed result format expression.
         """
-        self.match('RESULT_FORMAT')
+        self.match("RESULT_FORMAT")
         value = self.current_token.value
-        self.match('RESULT_FORMAT_VALUE')
+        self.match("RESULT_FORMAT_VALUE")
         return ast.ResultFormatNode(value)
-    
+
     def parse_subquery(self):
         """
         Parse a subquery.
@@ -334,11 +334,23 @@ class Parser:
             else:
                 break
 
-        if (self.check_token('RIGHT_PAREN')):
-            self.match('RIGHT_PAREN')
+        if self.check_token("RIGHT_PAREN"):
+            self.match("RIGHT_PAREN")
 
         # Subquery cannot have a $resultFormat option
-        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, asof, fromto, None, True)
+        return ast.QueryNode(
+            select,
+            filter,
+            expand,
+            orderby,
+            skip,
+            top,
+            count,
+            asof,
+            fromto,
+            None,
+            True,
+        )
 
     def parse_query(self):
         """
@@ -378,7 +390,7 @@ class Parser:
                 asof = self.parse_asof()
             elif self.current_token.type == "FROMTO":
                 fromto = self.parse_fromto()
-            elif self.current_token.type == 'RESULT_FORMAT':
+            elif self.current_token.type == "RESULT_FORMAT":
                 result_format = self.parse_result_format()
             else:
                 raise Exception(f"Unexpected token: {self.current_token.type}")
@@ -386,7 +398,18 @@ class Parser:
             if self.current_token != None:
                 self.match("OPTIONS_SEPARATOR")
 
-        return ast.QueryNode(select, filter, expand, orderby, skip, top, count, asof, fromto, result_format)
+        return ast.QueryNode(
+            select,
+            filter,
+            expand,
+            orderby,
+            skip,
+            top,
+            count,
+            asof,
+            fromto,
+            result_format,
+        )
 
     def parse(self):
         """
