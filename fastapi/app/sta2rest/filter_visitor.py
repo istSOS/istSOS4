@@ -7,16 +7,16 @@ This module provides a visitor for the filter AST.
 """
 
 import operator
-from datetime import datetime, timezone
 from typing import Any, Callable, List, Optional, Union
 
 from geoalchemy2 import WKTElement
 from odata_query import ast
 from odata_query import exceptions as ex
 from odata_query import visitor
-from sqlalchemy import DateTime, Float, Integer, String, Text, cast
+from sqlalchemy import JSON, Float, Integer, String, Text, cast
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm.attributes import InstrumentedAttribute
+from sqlalchemy.orm.properties import ColumnProperty
 from sqlalchemy.orm.relationships import RelationshipProperty
 from sqlalchemy.sql import functions
 from sqlalchemy.sql.expression import (
@@ -190,9 +190,30 @@ class FilterVisitor(visitor.NodeVisitor):
             raise ex.InvalidFieldException(node.name)
 
     def visit_Attribute(self, node: ast.Attribute) -> ColumnClause:
-        rel_attr = self.visit(node.owner)
+        attributes = []
+        owner = node.owner
+
+        while not isinstance(owner, ast.Identifier):
+            attributes.append(owner.attr)
+            owner = owner.owner
+
+        name = owner.name
+        attributes = attributes[::-1]
+        rel_attr = self.visit(owner)
         prop_inspect = inspect(rel_attr).property
-        if not isinstance(prop_inspect, RelationshipProperty):
+
+        # Check if the property is a JSON column
+        if isinstance(prop_inspect, ColumnProperty) and isinstance(
+            rel_attr.type, JSON
+        ):
+            name = SELECT_MAPPING.get(name, name)
+            table_attr = getattr(globals()[str(rel_attr.table.name)], name)
+
+            for attribute in attributes:
+                table_attr = table_attr.op("->")(attribute)
+            table_attr = table_attr.op("->>")(node.attr)
+            return table_attr
+        elif not isinstance(prop_inspect, RelationshipProperty):
             raise ValueError(f"Not a relationship: {node.owner}")
         self.join_relationships.append(rel_attr)
         owner_cls = prop_inspect.entity.class_
