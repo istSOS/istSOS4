@@ -459,7 +459,17 @@ class STA2REST:
             for entity in entities:
                 entity_name = entity[0]
                 sub_query = QueryNode(
-                    None, None, None, None, None, None, None, None, None, None, True
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    True,
                 )
                 if entity[1]:
                     sub_query.filter = FilterNode(f"id eq {entity[1]}")
@@ -513,14 +523,21 @@ class STA2REST:
 
         # Visit the query ast to convert it
         visitor = NodeVisitor(
-            main_entity, db, full_path, uri["ref"], uri["value"], single_result, entities
+            main_entity,
+            db,
+            full_path,
+            uri["ref"],
+            uri["value"],
+            single_result,
+            entities,
         )
         query_converted = await visitor.visit(query_ast)
 
         # Result format is allowed only for Observations
-        if query_ast.result_format and main_entity != 'Observation':
-            raise Exception("Illegal operation: $resultFormat is only valid for /Observations")
-
+        if query_ast.result_format and main_entity != "Observation":
+            raise Exception(
+                "Illegal operation: $resultFormat is only valid for /Observations"
+            )
         return query_converted
 
     @staticmethod
@@ -572,10 +589,10 @@ class STA2REST:
 
         # Check all the entities in the uri
         entities = []
-        property_name = None
+        property_name = ""
         ref = False
         value = False
-        for entity in parts:
+        for index, entity in enumerate(parts):
             # Parse the entity
             result = STA2REST.parse_entity(entity)
             if result:
@@ -594,8 +611,13 @@ class STA2REST:
                         "Error parsing uri: $value without property name"
                     )
             else:
-                property_name = entity
-
+                property_name += entity
+                if (
+                    index < len(parts) - 1
+                    and parts[index + 1] != "$ref"
+                    and parts[index + 1] != "$value"
+                ):
+                    property_name += "/"
         # Reverse order of entities
         if entities:
             entities = entities[::-1]
