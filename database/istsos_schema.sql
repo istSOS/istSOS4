@@ -342,10 +342,13 @@ BEFORE DELETE ON sensorthings."Location"
 FOR EACH ROW
 EXECUTE FUNCTION delete_related_historical_locations();
 
-create or replace function sensorthings.count_estimate(query text)
-  returns integer
-  language plpgsql as
-$func$
+CREATE OR REPLACE FUNCTION sensorthings.count_estimate(
+	query text)
+    RETURNS integer
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
 declare
     rec record;
 
@@ -363,15 +366,16 @@ end loop;
 
 return rows;
 end
-$func$;
+$BODY$;
 
-CREATE OR REPLACE FUNCTION sensorthings.expand(
+CREATE OR REPLACE FUNCTION sensorthings.basic_expand(
     query_ text,
     fk_field_ text,
     fk_id_ integer,
     limit_ integer DEFAULT 100,
     offset_ integer DEFAULT 0,
-    one_to_many_ boolean DEFAULT true)
+    one_to_many_ boolean DEFAULT true,
+	show_id boolean DEFAULT false)
     RETURNS json
     LANGUAGE 'plpgsql'
     COST 100
@@ -381,51 +385,206 @@ DECLARE
     result json;
 BEGIN
     IF one_to_many_ THEN
-        -- Execute the query for one-to-many relationship
-        EXECUTE format(
-            'SELECT jsonb_agg(row_to_json(t)::jsonb - %L - %L) 
-            FROM (SELECT id as "@iot.id", * 
-                  FROM (%s) d 
-                  WHERE d.%s = %s 
-                  LIMIT %s OFFSET %s) t', 
-            fk_field_, 'id', query_, fk_field_, fk_id_, limit_, offset_
-        ) INTO result;
 
-        -- Handle NULL result for one-to-many
-        IF result IS NULL THEN
-            result := '[]'::json;
-        END IF;
+        IF show_id THEN
+	        -- Execute the query for one-to-many relationship and aggregate the result
+	        EXECUTE format(
+	            'SELECT COALESCE(jsonb_agg(row_to_json(t)::jsonb - %L - %L), ''[]'')
+	            FROM (SELECT * 
+	                  FROM (%s) d 
+	                  WHERE d.%s = %s 
+	                  LIMIT %s OFFSET %s) t',
+	            fk_field_, 'id', query_, fk_field_, fk_id_, limit_, offset_
+	        ) INTO result;
+		ELSE
+			-- Execute the query for one-to-many relationship and aggregate the result
+	        EXECUTE format(
+	            'SELECT COALESCE(jsonb_agg(row_to_json(t)::jsonb - %L - %L), ''[]'')
+	            FROM (SELECT id as "@iot.id", * 
+	                  FROM (%s) d 
+	                  WHERE d.%s = %s 
+	                  LIMIT %s OFFSET %s) t',
+	            fk_field_, 'id', query_, fk_field_, fk_id_, limit_, offset_
+	        ) INTO result;
+		END IF;
+
     ELSE
-        -- Execute the query for one-to-one relationship
-        EXECUTE format(
-            'SELECT row_to_json(t)::jsonb - %L 
-            FROM (SELECT id as "@iot.id", * 
-                  FROM (%s) d 
-                  WHERE d.%s = %s 
-                  LIMIT %s OFFSET %s) t', 
-            'id', query_, fk_field_, fk_id_, limit_, offset_
-        ) INTO result;
 
-        -- Handle NULL result for one-to-one
-        IF result IS NULL THEN
-            result := '{}'::json;
-        END IF;
-    END IF;
+        IF show_id THEN
+	        -- Execute the query for many-to-one relationship
+	        EXECUTE format(
+	            'SELECT COALESCE(row_to_json(t)::jsonb - %L, ''{}'')
+	            FROM (SELECT * 
+	                  FROM (%s) d 
+	                  WHERE d.%s = %s 
+	                  LIMIT %s OFFSET %s) t',
+	            'id', query_, fk_field_, fk_id_, limit_, offset_
+	        ) INTO result;
+		ELSE
+			-- Execute the query for many-to-one relationship
+	        EXECUTE format(
+	            'SELECT COALESCE(row_to_json(t)::jsonb - %L, ''{}'')
+	            FROM (SELECT id as "@iot.id", * 
+	                  FROM (%s) d 
+	                  WHERE d.%s = %s 
+	                  LIMIT %s OFFSET %s) t',
+	            'id', query_, fk_field_, fk_id_, limit_, offset_
+	        ) INTO result;
+		END IF;
+		
+	END IF;
 
     -- Return the result
     RETURN result;
 END;
 $BODY$;
 
+CREATE OR REPLACE FUNCTION sensorthings.advanced_expand(
+	query_ text,
+	fk_field_ text,
+	fk_id_ integer,
+	limit_ integer DEFAULT 100,
+	offset_ integer DEFAULT 0,
+	one_to_many_ boolean DEFAULT true,
+	show_id boolean DEFAULT false,
+	table_ text DEFAULT ''::text,
+	count_mode_ text DEFAULT 'FULL'::text,
+	count_estimate_threshold_ integer DEFAULT 10000,
+	is_count_ boolean DEFAULT false)
+    RETURNS json
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+DECLARE
+    result json;
+    preliminary_count integer;
+    total_count integer;
+	base_json jsonb;
+BEGIN
+    IF one_to_many_ THEN
 
-CREATE OR REPLACE FUNCTION sensorthings.expand_many2many(
+		IF show_id THEN
+	        -- Execute the query for one-to-many relationship and aggregate the result
+	        EXECUTE format(
+	            'SELECT COALESCE(jsonb_agg(row_to_json(t)::jsonb - %L - %L), ''[]'')
+	            FROM (SELECT * 
+	                  FROM (%s) d 
+	                  WHERE d.%s = %s 
+	                  LIMIT %s OFFSET %s) t',
+	            fk_field_, 'id', query_, fk_field_, fk_id_, limit_, offset_
+	        ) INTO result;
+		ELSE
+			-- Execute the query for one-to-many relationship and aggregate the result
+	        EXECUTE format(
+	            'SELECT COALESCE(jsonb_agg(row_to_json(t)::jsonb - %L - %L), ''[]'')
+	            FROM (SELECT id as "@iot.id", * 
+	                  FROM (%s) d 
+	                  WHERE d.%s = %s 
+	                  LIMIT %s OFFSET %s) t',
+	            fk_field_, 'id', query_, fk_field_, fk_id_, limit_, offset_
+	        ) INTO result;
+		END IF;
+
+        -- Handle count based on count_mode_
+        IF count_mode_ = 'FULL' THEN
+            -- Full count mode: get the exact count
+            EXECUTE format(
+                'SELECT COUNT(*) FROM (%s) d WHERE d.%s = %s',
+                query_, fk_field_, fk_id_
+            ) INTO total_count;
+        
+        ELSIF count_mode_ = 'LIMIT_ESTIMATE' THEN
+            -- Limit estimate mode: get preliminary count with a limit
+            EXECUTE format(
+                'SELECT COUNT(*) FROM (%s) d WHERE d.%s = %s LIMIT %s',
+                query_, fk_field_, fk_id_, count_estimate_threshold_
+            ) INTO preliminary_count;
+
+            IF preliminary_count == count_estimate_threshold_ THEN
+                -- Use count estimate if preliminary count exceeds threshold
+                EXECUTE format(
+                    'SELECT sensorthings.count_estimate(
+                        ''SELECT 1 FROM (%s) d WHERE d.%s = %s'')',
+                    replace(query_, '''', ''''''), fk_field_, fk_id_
+                ) INTO total_count;
+            ELSE
+                -- Use preliminary count if below threshold
+                total_count := preliminary_count;
+            END IF;
+
+        ELSIF count_mode_ = 'ESTIMATE_LIMIT' THEN
+            -- Estimate limit mode: perform count estimate first
+            EXECUTE format(
+                'SELECT sensorthings.count_estimate(
+                    ''SELECT 1 FROM (%s) d WHERE d.%s = %s'')',
+                replace(query_, '''', ''''''), fk_field_, fk_id_
+            ) INTO total_count;
+
+            -- Perform a precise count with limit if the estimate is below threshold
+            IF total_count < count_estimate_threshold_ THEN
+                EXECUTE format(
+                    'SELECT COUNT(*) FROM (%s) d WHERE d.%s = %s LIMIT %s',
+                    query_, fk_field_, fk_id_, count_estimate_threshold_
+                ) INTO total_count;
+            END IF;
+        END IF;
+
+		base_json := jsonb_build_object('data', result);
+
+        -- Return result with or without pagination
+        IF total_count > limit_ THEN
+	        base_json := base_json || jsonb_build_object(
+	            table_ || '@iot.nextLink', table_ || '?$top=' || limit_ || '&$skip=' || (offset_ + limit_)
+	        );
+	    END IF;
+
+	    -- Add count information if is_count_ is true
+	    IF is_count_ THEN
+	        base_json := base_json || jsonb_build_object(
+	            table_ || '@iot.count', total_count
+	        );
+	    END IF;
+
+		RETURN base_json;
+    ELSE
+
+		IF show_id THEN
+	        -- Execute the query for many-to-one relationship
+	        EXECUTE format(
+	            'SELECT COALESCE(row_to_json(t)::jsonb - %L, ''{}'')
+	            FROM (SELECT * 
+	                  FROM (%s) d 
+	                  WHERE d.%s = %s 
+	                  LIMIT %s OFFSET %s) t',
+	            'id', query_, fk_field_, fk_id_, limit_, offset_
+	        ) INTO result;
+		ELSE
+			-- Execute the query for many-to-one relationship
+	        EXECUTE format(
+	            'SELECT COALESCE(row_to_json(t)::jsonb - %L, ''{}'')
+	            FROM (SELECT id as "@iot.id", * 
+	                  FROM (%s) d 
+	                  WHERE d.%s = %s 
+	                  LIMIT %s OFFSET %s) t',
+	            'id', query_, fk_field_, fk_id_, limit_, offset_
+	        ) INTO result;
+		END IF;
+
+        RETURN result;
+    END IF;
+END;
+$BODY$;
+
+CREATE OR REPLACE FUNCTION sensorthings.basic_expand_many2many(
 	query_ text,
 	join_table_ text,
 	fk_id_ integer,
 	related_fk_field1_ text,
 	related_fk_field2_ text,
 	limit_ integer DEFAULT 100,
-	offset_ integer DEFAULT 0)
+	offset_ integer DEFAULT 0,
+    show_id boolean DEFAULT false)
     RETURNS json
     LANGUAGE 'plpgsql'
     COST 100
@@ -435,19 +594,173 @@ DECLARE
     query text;
     result json;
 BEGIN
-	EXECUTE format(
-		'SELECT jsonb_agg(row_to_json(t)::jsonb - %L)
-		FROM (SELECT m.id as "@iot.id", m.* FROM (%s) m
-		      JOIN %s jt ON m.id = jt.%s
-		      WHERE jt.%s = %s
-		      LIMIT %s OFFSET %s ) t', 
-		'id', query_, join_table_, related_fk_field1_, related_fk_field2_, fk_id_, limit_, offset_
-	) INTO result;
-
-	IF result IS NULL THEN
-        result := '[]'::json;
-    END IF;
+	IF show_id THEN
+	    -- Execute the query for many-to-many relationship and aggregate the result
+	    EXECUTE format(
+	        'SELECT COALESCE(jsonb_agg(row_to_json(t)::jsonb - %L), ''[]'')
+	        FROM (SELECT m.* 
+	              FROM (%s) m
+	              JOIN %s jt ON m.id = jt.%s
+	              WHERE jt.%s = %s
+	              LIMIT %s OFFSET %s) t',
+	        'id', query_, join_table_, related_fk_field1_, related_fk_field2_, fk_id_, limit_, offset_
+	    ) INTO result;
+	ELSE
+		EXECUTE format(
+	        'SELECT COALESCE(jsonb_agg(row_to_json(t)::jsonb - %L), ''[]'')
+	        FROM (SELECT m.id as "@iot.id", m.* 
+	              FROM (%s) m
+	              JOIN %s jt ON m.id = jt.%s
+	              WHERE jt.%s = %s
+	              LIMIT %s OFFSET %s) t',
+	        'id', query_, join_table_, related_fk_field1_, related_fk_field2_, fk_id_, limit_, offset_
+	    ) INTO result;
+	END IF;
 
     RETURN result;
+END;
+$BODY$;
+
+CREATE OR REPLACE FUNCTION sensorthings.advanced_expand_many2many(
+	query_ text,
+	join_table_ text,
+	fk_id_ integer,
+	related_fk_field1_ text,
+	related_fk_field2_ text,
+	limit_ integer DEFAULT 100,
+	offset_ integer DEFAULT 0,
+	show_id boolean DEFAULT false,
+	table_ text DEFAULT ''::text,
+	count_mode_ text DEFAULT 'FULL'::text,
+	count_estimate_threshold_ integer DEFAULT 10000,
+	is_count_ boolean DEFAULT false)
+    RETURNS json
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+DECLARE
+    result json;
+    preliminary_count integer;
+    total_count integer;
+	base_json jsonb;
+BEGIN
+
+	IF show_id THEN
+	    -- Execute the query for many-to-many relationship and aggregate the result
+	    EXECUTE format(
+	        'SELECT COALESCE(jsonb_agg(row_to_json(t)::jsonb - %L), ''[]'')
+	        FROM (SELECT m.* 
+	              FROM (%s) m
+	              JOIN %s jt ON m.id = jt.%s
+	              WHERE jt.%s = %s
+	              LIMIT %s OFFSET %s) t',
+	        'id', query_, join_table_, related_fk_field1_, related_fk_field2_, fk_id_, limit_, offset_
+	    ) INTO result;
+	ELSE
+		EXECUTE format(
+	        'SELECT COALESCE(jsonb_agg(row_to_json(t)::jsonb - %L), ''[]'')
+	        FROM (SELECT m.id as "@iot.id", m.* 
+	              FROM (%s) m
+	              JOIN %s jt ON m.id = jt.%s
+	              WHERE jt.%s = %s
+	              LIMIT %s OFFSET %s) t',
+	        'id', query_, join_table_, related_fk_field1_, related_fk_field2_, fk_id_, limit_, offset_
+	    ) INTO result;
+	END IF;
+
+	-- Handle count based on count_mode_
+	IF count_mode_ = 'FULL' THEN
+		-- Full count mode: get the exact count
+		EXECUTE format(
+			'SELECT COUNT(*) FROM (%s) m 
+		     JOIN %s jt ON m.id = jt.%s
+		     WHERE jt.%s = %s',
+			query_,
+		    join_table_,
+		    related_fk_field1_,
+		    related_fk_field2_,
+		    fk_id_
+		) INTO total_count;
+
+	ELSIF count_mode_ = 'LIMIT_ESTIMATE' THEN
+		-- Limit estimate mode: get preliminary count with a limit
+		EXECUTE format(
+			'SELECT COUNT(*) FROM (%s) m 
+			 JOIN %s jt ON m.id = jt.%s
+			 WHERE jt.%s = %s
+			 LIMIT %s',
+			query_,
+			join_table_,
+			related_fk_field1_,
+			related_fk_field2_,
+			fk_id_,
+			count_estimate_threshold_
+		) INTO preliminary_count;
+
+		IF preliminary_count == count_estimate_threshold_ THEN
+			-- Use count estimate if preliminary count exceeds threshold
+			EXECUTE format(
+				'SELECT sensorthings.count_estimate(''SELECT 1 FROM (%s) m 
+				 JOIN %s jt ON m.id = jt.%s
+				 WHERE jt.%s = %s'')',
+				replace(query_, '''', ''''''),
+				join_table_,
+				related_fk_field1_,
+				related_fk_field2_,
+				fk_id_
+			) INTO total_count;
+		ELSE
+			-- Use preliminary count if below threshold
+			total_count := preliminary_count;
+		END IF;
+
+	ELSIF count_mode_ = 'ESTIMATE_LIMIT' THEN
+		-- Estimate limit mode: perform count estimate first
+		EXECUTE format(
+			'SELECT sensorthings.count_estimate(''SELECT 1 FROM (%s) m 
+			 JOIN %s jt ON m.id = jt.%s
+			 WHERE jt.%s = %s'')',
+			replace(query_, '''', ''''''),
+			join_table_,
+			related_fk_field1_,
+			related_fk_field2_,
+			fk_id_
+		) INTO total_count;
+
+		-- Perform a precise count with limit if the estimate is below threshold
+		IF total_count < count_estimate_threshold_ THEN
+			EXECUTE format(
+				'SELECT COUNT(*) FROM (%s) m 
+				 JOIN %s jt ON m.id = jt.%s
+				 WHERE jt.%s = %s
+				 LIMIT %s',
+				query_,
+				join_table_,
+				related_fk_field1_,
+				related_fk_field2_,
+				fk_id_,
+				count_estimate_threshold_
+			) INTO total_count;
+		END IF;
+	END IF;
+
+	base_json := jsonb_build_object('data', result);
+	
+	-- Return result with or without pagination
+	IF total_count > limit_ THEN
+		base_json := base_json || jsonb_build_object(
+			table_ || '@iot.nextLink', table_ || '?$top=' || limit_ || '&$skip=' || (offset_ + limit_)
+		);
+	END IF;
+
+	-- Add count information if is_count_ is true
+	IF is_count_ THEN
+		base_json := base_json || jsonb_build_object(
+			table_ || '@iot.count', total_count
+		);
+	END IF;
+
+	RETURN base_json;
 END;
 $BODY$;
