@@ -849,8 +849,6 @@ class NodeVisitor(Visitor):
                             filter
                         )
 
-                is_count = bool(node.count and node.count.value)
-
                 # here we create the sub queries for the expand identifiers
                 if node.expand.identifiers:
                     # Visit the expand node
@@ -1158,6 +1156,8 @@ class NodeVisitor(Visitor):
             skip_value = self.visit(node.skip) if node.skip else 0
 
             top_value = self.visit(node.top) if node.top else TOP_VALUE
+
+            is_count = bool(node.count and node.count.value)
 
             async def execute_query(session, query, parameters=None):
                 result = await session.execute(query, parameters)
