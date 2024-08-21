@@ -1,7 +1,7 @@
 import json
-import os
 import traceback
 
+from app import DEBUG, HOSTNAME, SUBPATH, VERSION
 from app.db.db import get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
@@ -12,11 +12,12 @@ from fastapi import APIRouter, Depends, Request, status
 v1 = APIRouter()
 
 try:
-    DEBUG = int(os.getenv("DEBUG"))
+    DEBUG = DEBUG
     if DEBUG:
         from app.utils.utils import response2jsonfile
 except:
     DEBUG = 0
+
 
 @v1.api_route("/CreateObservations", methods=["POST"])
 async def create_observations(request: Request, pgpool=Depends(get_pool)):
@@ -25,7 +26,11 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
         if not isinstance(body, list):
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                content={"code": 400, "type": "error", "message": "Invalid payload format. Expected a list of observations."}
+                content={
+                    "code": 400,
+                    "type": "error",
+                    "message": "Invalid payload format. Expected a list of observations.",
+                },
             )
 
         response_urls = []
@@ -33,35 +38,63 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
         async with pgpool.acquire() as conn:
             async with conn.transaction():
                 for observation_set in body:
-                    datastream_id = observation_set.get("Datastream", {}).get("@iot.id")
+                    datastream_id = observation_set.get("Datastream", {}).get(
+                        "@iot.id"
+                    )
                     components = observation_set.get("components", [])
                     data_array = observation_set.get("dataArray", [])
 
                     if not datastream_id:
                         return JSONResponse(
                             status_code=status.HTTP_400_BAD_REQUEST,
-                            content={"code": 400, "type": "error", "message": "Missing 'datastream_id' in Datastream."}
+                            content={
+                                "code": 400,
+                                "type": "error",
+                                "message": "Missing 'datastream_id' in Datastream.",
+                            },
                         )
 
                     # Check that at least phenomenonTime and result are present
-                    if "phenomenonTime" not in components or "result" not in components:
+                    if (
+                        "phenomenonTime" not in components
+                        or "result" not in components
+                    ):
                         return JSONResponse(
                             status_code=status.HTTP_400_BAD_REQUEST,
-                            content={"code": 400, "type": "error", "message": "Missing required properties 'phenomenonTime' or 'result' in components."}
+                            content={
+                                "code": 400,
+                                "type": "error",
+                                "message": "Missing required properties 'phenomenonTime' or 'result' in components.",
+                            },
                         )
 
                     for data in data_array:
                         try:
-                            observation_payload = {components[i]: data[i] if i < len(data) else None for i in range(len(components))}
+                            observation_payload = {
+                                components[i]: (
+                                    data[i] if i < len(data) else None
+                                )
+                                for i in range(len(components))
+                            }
 
-                            observation_payload["datastream_id"] = datastream_id
-                            
+                            observation_payload["datastream_id"] = (
+                                datastream_id
+                            )
+
                             if "FeatureOfInterest/id" in observation_payload:
-                                observation_payload["FeatureOfInterest"] = {"@iot.id": observation_payload.pop("FeatureOfInterest/id")}
+                                observation_payload["FeatureOfInterest"] = {
+                                    "@iot.id": observation_payload.pop(
+                                        "FeatureOfInterest/id"
+                                    )
+                                }
                             else:
-                                await generate_feature_of_interest(observation_payload, conn)
+                                await generate_feature_of_interest(
+                                    observation_payload, conn
+                                )
 
-                            _, observation_selfLink = await insertObservation(observation_payload, conn)
+                            _, observation_selfLink = await insertObservation(
+                                observation_payload, conn
+                            )
                             response_urls.append(observation_selfLink)
                         except Exception as e:
                             response_urls.append("error")
@@ -69,14 +102,13 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
                                 print(f"Error inserting observation: {str(e)}")
                                 traceback.print_exc()
         return JSONResponse(
-            status_code=status.HTTP_201_CREATED,
-            content=response_urls
+            status_code=status.HTTP_201_CREATED, content=response_urls
         )
 
     except Exception as e:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)}
+            content={"code": 400, "type": "error", "message": str(e)},
         )
 
 
@@ -220,8 +252,8 @@ async def insert_record(payload, conn, table):
     if table == "ObservedProperty":
         table = "ObservedProperties"
     elif table != "FeaturesOfInterest":
-        table = f"{table}s"    
-    insert_selfLink = f"{os.getenv('HOSTNAME')}{os.getenv("SUBPATH")}{os.getenv("VERSION")}/{table}({insert_id})"
+        table = f"{table}s"
+    insert_selfLink = f"{HOSTNAME}{SUBPATH}{VERSION}/{table}({insert_id})"
     return (insert_id, insert_selfLink)
 
 
@@ -257,10 +289,10 @@ async def insertLocation(payload, conn):
                     f"${i+1}" for i in range(len(item))
                 )
                 query = f'INSERT INTO sensorthings."Location" ({keys}, "gen_foi_id") VALUES ({values_placeholders}, NULL) RETURNING id'
-                location_id = await conn.fetchval(
-                    query, *item.values()
+                location_id = await conn.fetchval(query, *item.values())
+                location_selfLink = (
+                    f"{HOSTNAME}{SUBPATH}{VERSION}/Locations({location_id})"
                 )
-                location_selfLink = f"{os.getenv('HOSTNAME')}{os.getenv("SUBPATH")}{os.getenv("VERSION")}/Locations({location_id})"
                 location_ids.append(location_id)
                 location_selfLinks.append(location_selfLink)
 
@@ -540,7 +572,9 @@ async def insertDatastream(payload, conn, thing_id=None):
                     )
 
             datastream_id = result[0]["id"]
-            datastream_selfLink = f"{os.getenv('HOSTNAME')}{os.getenv("SUBPATH")}{os.getenv("VERSION")}/Datastreams({datastream_id})"
+            datastream_selfLink = (
+                f"{HOSTNAME}{SUBPATH}{VERSION}/Datastreams({datastream_id})"
+            )
             return (datastream_id, datastream_selfLink)
 
     except Exception as e:
@@ -615,7 +649,9 @@ async def insertObservation(payload, conn, datastream_id=None):
             result = await conn.fetch(insert_sql, *values)
 
             observation_id = result[0]["id"]
-            observation_selfLink = f"{os.getenv('HOSTNAME')}{os.getenv("SUBPATH")}{os.getenv("VERSION")}/Observations({observation_id})"
+            observation_selfLink = (
+                f"{HOSTNAME}{SUBPATH}{VERSION}/Observations({observation_id})"
+            )
             return (observation_id, observation_selfLink)
 
     except Exception as e:

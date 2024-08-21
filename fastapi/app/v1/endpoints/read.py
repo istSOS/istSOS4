@@ -1,6 +1,6 @@
-import os
 import traceback
 
+from app import DEBUG, HOSTNAME, SUBPATH, VERSION
 from app.models.database import get_db
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Request, status
 v1 = APIRouter()
 
 try:
-    DEBUG = int(os.getenv("DEBUG"))
+    DEBUG = DEBUG
     if DEBUG:
         from app.utils.utils import response2jsonfile
 except:
@@ -35,9 +35,7 @@ def __handle_root(request: Request):
         value.append(
             {
                 "name": table,
-                "url": f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}"
-                + "/"
-                + table,
+                "url": f"{HOSTNAME}{SUBPATH}{VERSION}" + "/" + table,
             }
         )
 
