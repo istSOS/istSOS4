@@ -1,16 +1,26 @@
 import datetime
 import os
 
+import ujson
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
 from odata_query.grammar import ODataLexer, ODataParser
-from sqlalchemy.dialects.postgresql.json import JSONB   
-from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
-from sqlalchemy.sql.sqltypes import String, Text, Integer
-from sqlalchemy.sql.expression import cast
+from sqlalchemy import (
+    asc,
+    case,
+    desc,
+    func,
+    literal,
+    literal_column,
+    select,
+    text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy import asc, case, desc, func, literal_column, select, text, literal
-import ujson
+from sqlalchemy.dialects.postgresql.json import JSONB
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
+from sqlalchemy.orm.attributes import InstrumentedAttribute
+from sqlalchemy.sql.expression import cast
+from sqlalchemy.sql.sqltypes import Integer, String, Text
 
 from ..models import *
 from ..models.database import engine
@@ -28,7 +38,16 @@ class NodeVisitor(Visitor):
     Constructor for the NodeVisitor class that accepts the main entity name
     """
 
-    def __init__(self, main_entity=None, db=None, full_path=None, ref=False, value=False, single_result=False, entities=None):
+    def __init__(
+        self,
+        main_entity=None,
+        db=None,
+        full_path=None,
+        ref=False,
+        value=False,
+        single_result=False,
+        entities=None,
+    ):
         super().__init__()
         self.main_entity = main_entity
         self.db = db
@@ -53,11 +72,9 @@ class NodeVisitor(Visitor):
             str: The converted identifier.
         """
 
-        # Replace / with -> for json columns
-        node.name = node.name.replace("/", ".")
-        for old_key, new_key in sta2rest.STA2REST.SELECT_MAPPING.items():
-            if old_key == node.name:
-                node.name = new_key
+        prefix, *suffix = node.name.split("/", 1)
+        new_name = sta2rest.STA2REST.SELECT_MAPPING.get(prefix, prefix)
+        node.name = new_name + (f"/{suffix[0]}" if suffix else "")
         return node.name
 
     def visit_SelectNode(self, node: SelectNode):
@@ -220,35 +237,41 @@ class NodeVisitor(Visitor):
             for field in identifiers:
                 tmpField = getattr(sub_entity, field)
                 if isinstance(tmpField.type, Geometry):
-                    select_fields.append((
-                        func.ST_AsGeoJSON(tmpField).cast(JSONB)
-                    ).label(tmpField.name))
+                    select_fields.append(
+                        (func.ST_AsGeoJSON(tmpField).cast(JSONB)).label(
+                            tmpField.name
+                        )
+                    )
                 elif isinstance(tmpField.type, TSTZRANGE):
-                    select_fields.append((
-                        case(
-                            (
-                                func.lower(tmpField).isnot(None)
-                                & func.upper(tmpField).isnot(None),
-                                func.concat(
-                                    func.lower(tmpField),
-                                    "/",
-                                    func.upper(tmpField),
+                    select_fields.append(
+                        (
+                            case(
+                                (
+                                    func.lower(tmpField).isnot(None)
+                                    & func.upper(tmpField).isnot(None),
+                                    func.concat(
+                                        func.lower(tmpField),
+                                        "/",
+                                        func.upper(tmpField),
+                                    ),
                                 ),
-                            ),
-                            else_=None,
-                        ).label(tmpField.name))
+                                else_=None,
+                            ).label(tmpField.name)
+                        )
                     )
                 else:
                     if "Link" in tmpField.name:
-                        select_fields.append((
-                            os.getenv("HOSTNAME")
-                            + os.getenv("SUBPATH")
-                            + os.getenv("VERSION")
-                            + tmpField
-                        ).label(tmpField.name))
+                        select_fields.append(
+                            (
+                                os.getenv("HOSTNAME")
+                                + os.getenv("SUBPATH")
+                                + os.getenv("VERSION")
+                                + tmpField
+                            ).label(tmpField.name)
+                        )
                     else:
                         select_fields.append(tmpField)
-            
+
             if parent:
                 relationship_entity = getattr(
                     globals()[parent], expand_identifier.identifier.lower()
@@ -318,8 +341,18 @@ class NodeVisitor(Visitor):
                         compile_kwargs={"literal_binds": True},
                     )
                     relationship_nested = getattr(
-                        globals()[nested_sub_query[2]], nested_sub_query[5].lower()
+                        globals()[nested_sub_query[2]],
+                        nested_sub_query[5].lower(),
                     ).property
+
+                    navigation_link_attr = (
+                        f"{nested_sub_query[5].lower()}_navigation_link"
+                    )
+                    navigation_link_value = getattr(
+                        sub_entity, navigation_link_attr
+                    )
+                    label_name = navigation_link_value.name.split("@")[0]
+
                     if nested_sub_query[1] is not None:
                         json_expands.append(
                             func.sensorthings.expand(
@@ -335,10 +368,7 @@ class NodeVisitor(Visitor):
                                 nested_sub_query[4],
                                 nested_sub_query[3],
                                 True,
-                            ).label(f"{ getattr(
-                            sub_entity,
-                            f"{nested_sub_query[5].lower()}_navigation_link",
-                        ).name.split("@")[0]}")
+                            ).label(label_name)
                         )
                     else:
                         if relationship_nested.direction.name == "MANYTOMANY":
@@ -351,16 +381,9 @@ class NodeVisitor(Visitor):
                                             nested_sub_query[2]
                                         )
                                     ),
-                                    '{}_id'.format(
-                                        nested_sub_query[5]
-                                    ),
-                                    '{}_id'.format(
-                                        nested_sub_query[2]
-                                    )
-                                ).label(f"{ getattr(
-                                sub_entity,
-                                f"{nested_sub_query[5].lower()}_navigation_link",
-                            ).name.split("@")[0]}")
+                                    "{}_id".format(nested_sub_query[5]),
+                                    "{}_id".format(nested_sub_query[2]),
+                                ).label(label_name)
                             )
                         else:
                             json_expands.append(
@@ -376,16 +399,15 @@ class NodeVisitor(Visitor):
                                     nested_sub_query[4],
                                     nested_sub_query[3],
                                     False,
-                                ).label(f"{ getattr(
-                                sub_entity,
-                                f"{nested_sub_query[5].lower()}_navigation_link",
-                            ).name.split("@")[0]}")
+                                ).label(label_name)
                             )
             if fk_parent is not None:
                 select_fields.append(fk_parent)
 
             # Combine select fields and json expands
-            query_fields = select_fields + json_expands if json_expands else select_fields
+            query_fields = (
+                select_fields + json_expands if json_expands else select_fields
+            )
 
             sub_query = select(*query_fields).order_by(*ordering)
 
@@ -431,37 +453,38 @@ class NodeVisitor(Visitor):
         """
         # list to store the converted parts of the query node
 
-        result_format = "DataArray" if node.result_format and node.result_format.value == "dataArray" else None
-
-
+        result_format = (
+            "DataArray"
+            if node.result_format and node.result_format.value == "dataArray"
+            else None
+        )
 
         async with self.db as session:
             main_entity = globals()[self.main_entity]
             main_query = None
-            if int(os.getenv("ESTIMATE_COUNT", 0)):
-                query_count = (
-                    select(getattr(main_entity, "id").distinct())
-                    if "TravelTime" not in self.main_entity
-                    else select(
+            query_count = (
+                select(func.count(getattr(main_entity, "id").distinct()))
+                if "TravelTime" not in self.main_entity
+                else select(
+                    func.count(
                         func.distinct(
                             getattr(main_entity, "id"),
                             getattr(main_entity, "system_time_validity"),
                         )
                     )
                 )
-            else:
-                query_count = (
-                    select(func.count(getattr(main_entity, "id").distinct()))
-                    if "TravelTime" not in self.main_entity
-                    else select(
-                        func.count(
-                            func.distinct(
-                                getattr(main_entity, "id"),
-                                getattr(main_entity, "system_time_validity"),
-                            )
-                        )
+            )
+
+            query_estimate_count = (
+                select(getattr(main_entity, "id").distinct())
+                if "TravelTime" not in self.main_entity
+                else select(
+                    func.distinct(
+                        getattr(main_entity, "id"),
+                        getattr(main_entity, "system_time_validity"),
                     )
                 )
+            )
 
             if self.ref:
                 node.select = SelectNode([])
@@ -471,7 +494,9 @@ class NodeVisitor(Visitor):
                 node.select = SelectNode([])
                 # get default columns for main entity
                 default_columns = sta2rest.STA2REST.get_default_column_names(
-                    self.main_entity if not result_format else self.main_entity + result_format
+                    self.main_entity
+                    if not result_format
+                    else self.main_entity + result_format
                 )
                 for column in default_columns:
                     node.select.identifiers.append(IdentifierNode(column))
@@ -482,16 +507,36 @@ class NodeVisitor(Visitor):
 
                 # Iterate over fields in node.select
                 for field in self.visit(node.select):
-                    field_name = field.split(".")[-1]
-                    select_query.append(getattr(main_entity, field_name))
+                    field_name = field.split(".", 1)[-1]
+                    if "/" in field_name:
+                        field, *field_parts = field_name.split("/", 1)
+                        field_parts = (
+                            field_parts[0].split("/") if field_parts else []
+                        )
+                        json_path = getattr(main_entity, field)
+                        for part in field_parts:
+                            json_path = json_path.op("->")(part)
+                        select_query.append(json_path)
+                    else:
+                        select_query.append(getattr(main_entity, field_name))
 
-            components = [sta2rest.STA2REST.REVERSE_SELECT_MAPPING.get(identifier.name, identifier.name) for identifier in node.select.identifiers]
+            components = [
+                sta2rest.STA2REST.REVERSE_SELECT_MAPPING.get(
+                    identifier.name, identifier.name
+                )
+                for identifier in node.select.identifiers
+            ]
 
             json_build_object_args = []
             for attr in select_query:
+                name = (
+                    attr.name
+                    if isinstance(attr, InstrumentedAttribute)
+                    else attr.right.value
+                )
                 if isinstance(attr.type, Geometry):
                     json_build_object_args.append(
-                        func.ST_AsGeoJSON(attr).cast(JSONB).label(attr.name)
+                        func.ST_AsGeoJSON(attr).cast(JSONB).label(name)
                     )
                 elif isinstance(attr.type, TSTZRANGE):
                     json_build_object_args.append(
@@ -506,23 +551,26 @@ class NodeVisitor(Visitor):
                                 ),
                             ),
                             else_=None,
-                        ).label(attr.name)
+                        ).label(name)
                     )
                 else:
-                    if "Link" in attr.name:
-                        json_build_object_args.append((
-                            os.getenv("HOSTNAME")
-                            + os.getenv("SUBPATH")
-                            + os.getenv("VERSION")
-                            + attr
-                        ).label(attr.name))
+                    if "Link" in name:
+                        json_build_object_args.append(
+                            (
+                                os.getenv("HOSTNAME")
+                                + os.getenv("SUBPATH")
+                                + os.getenv("VERSION")
+                                + attr
+                            ).label(name)
+                        )
                     else:
-                        if attr.name != "id":
-                            json_build_object_args.append(attr.label(attr.name))
+                        if name != "id":
+                            json_build_object_args.append(attr.label(name))
                         else:
-                            json_build_object_args.append(attr.label("@iot.id"))
+                            json_build_object_args.append(
+                                attr.label("@iot.id")
+                            )
 
-        
             # Check if we have an expand node before the other parts of the query
             if node.expand:
                 # get the expand identifiers that do NOT have a nested expand
@@ -539,7 +587,9 @@ class NodeVisitor(Visitor):
                 ]
 
                 if expand_identifiers_path["expand"]["identifiers"]:
-                    identifiers = expand_identifiers_path["expand"]["identifiers"]
+                    identifiers = expand_identifiers_path["expand"][
+                        "identifiers"
+                    ]
 
                     main_query = select(*json_build_object_args)
 
@@ -550,11 +600,17 @@ class NodeVisitor(Visitor):
                             )
                             main_query = main_query.filter(filter)
                             query_count = query_count.filter(filter)
+                            query_estimate_count = query_estimate_count.filter(
+                                filter
+                            )
                             if join_relationships:
                                 for rel in join_relationships:
                                     main_query = main_query.join(rel)
                                     query_count = query_count.join(rel)
-                        
+                                    query_estimate_count = (
+                                        query_estimate_count.join(rel)
+                                    )
+
                         if i > 0:
                             identifier = e.identifier
                             nested_identifier = identifiers[i - 1].identifier
@@ -562,20 +618,42 @@ class NodeVisitor(Visitor):
                             identifier = self.main_entity
                             nested_identifier = e.identifier
 
-                        relationship = getattr(globals()[identifier], nested_identifier.lower()).property
+                        relationship = getattr(
+                            globals()[identifier], nested_identifier.lower()
+                        ).property
 
                         if relationship.direction.name == "MANYTOONE":
-                            filter = getattr(globals()[identifier], f"{nested_identifier.lower()}_id") == getattr(globals()[nested_identifier], "id")
+                            filter = getattr(
+                                globals()[identifier],
+                                f"{nested_identifier.lower()}_id",
+                            ) == getattr(globals()[nested_identifier], "id")
                         elif relationship.direction.name == "ONETOMANY":
-                            filter = getattr(globals()[nested_identifier], f"{identifier.lower()}_id") == getattr(globals()[identifier], "id")
+                            filter = getattr(
+                                globals()[nested_identifier],
+                                f"{identifier.lower()}_id",
+                            ) == getattr(globals()[identifier], "id")
                         else:
-                            filter = getattr(globals()[identifier], "id") == relationship.secondary.columns.get(f"{identifier.lower()}_id")
+                            filter = getattr(
+                                globals()[identifier], "id"
+                            ) == relationship.secondary.columns.get(
+                                f"{identifier.lower()}_id"
+                            )
                             main_query = main_query.filter(filter)
                             query_count = query_count.filter(filter)
-                            filter = getattr(globals()[nested_identifier], "id") == relationship.secondary.columns.get(f"{nested_identifier.lower()}_id")
-                        
+                            query_estimate_count = query_estimate_count.filter(
+                                filter
+                            )
+                            filter = getattr(
+                                globals()[nested_identifier], "id"
+                            ) == relationship.secondary.columns.get(
+                                f"{nested_identifier.lower()}_id"
+                            )
+
                         main_query = main_query.filter(filter)
                         query_count = query_count.filter(filter)
+                        query_estimate_count = query_estimate_count.filter(
+                            filter
+                        )
 
                 # here we create the sub queries for the expand identifiers
                 if node.expand.identifiers:
@@ -592,7 +670,15 @@ class NodeVisitor(Visitor):
                         relationship_type = getattr(
                             main_entity, sub_query[5].lower()
                         ).property
-                        
+
+                        navigation_link_attr = (
+                            f"{sub_query[5].lower()}_navigation_link"
+                        )
+                        navigation_link_value = getattr(
+                            main_entity, navigation_link_attr
+                        )
+                        label_name = navigation_link_value.name.split("@")[0]
+
                         if sub_query[1] is not None:
                             json_build_object_args.append(
                                 func.sensorthings.expand(
@@ -601,17 +687,18 @@ class NodeVisitor(Visitor):
                                         sub_query[1].name,
                                     ),
                                     text(
-                                        '"{}".id::integer'.format(
-                                            sub_query[2]
-                                        )
+                                        '"{}".id::integer'.format(sub_query[2])
                                     ),
                                     sub_query[4],
                                     sub_query[3],
                                     True,
-                                ).label(f"{ getattr(main_entity,f"{sub_query[5].lower()}_navigation_link").name.split("@")[0]}")
+                                ).label(label_name)
                             )
                         else:
-                            if relationship_type.direction.name == "MANYTOMANY":
+                            if (
+                                relationship_type.direction.name
+                                == "MANYTOMANY"
+                            ):
                                 json_build_object_args.append(
                                     func.sensorthings.expand_many2many(
                                         str(compiled_query_text),
@@ -621,13 +708,9 @@ class NodeVisitor(Visitor):
                                                 sub_query[2]
                                             )
                                         ),
-                                        '{}_id'.format(
-                                            sub_query[5]
-                                        ),
-                                        '{}_id'.format(
-                                            sub_query[2]
-                                        )
-                                    ).label(f"{ getattr(main_entity,f"{sub_query[5].lower()}_navigation_link").name.split("@")[0]}")
+                                        "{}_id".format(sub_query[5]),
+                                        "{}_id".format(sub_query[2]),
+                                    ).label(label_name)
                                 )
                             else:
                                 json_build_object_args.append(
@@ -642,24 +725,27 @@ class NodeVisitor(Visitor):
                                         sub_query[4],
                                         sub_query[3],
                                         False,
-                                    ).label(f"{ getattr(main_entity,f"{sub_query[5].lower()}_navigation_link").name.split("@")[0]}")
+                                    ).label(label_name)
                                 )
-
-
                     main_query = select(*json_build_object_args)
             else:
-
                 if result_format == "DataArray":
-                    json_build_object_args.append(getattr(main_entity, "datastream_id").label("datastream_id"))
-                    json_build_object_args.append(cast(components, ARRAY(String)).label("components"))
+                    json_build_object_args.append(
+                        getattr(main_entity, "datastream_id").label(
+                            "datastream_id"
+                        )
+                    )
+                    json_build_object_args.append(
+                        cast(components, ARRAY(String)).label("components")
+                    )
 
                 main_query = select(*json_build_object_args)
 
                 if result_format == "DataArray":
                     main_query = main_query.order_by(
                         "datastream_id", getattr(main_entity, "id").desc()
-                        ).distinct("datastream_id")
-                
+                    ).distinct("datastream_id")
+
             if node.filter:
                 filter, join_relationships = self.visit_FilterNode(
                     node.filter, self.main_entity
@@ -668,6 +754,7 @@ class NodeVisitor(Visitor):
                     main_query = main_query.join(rel)
                 main_query = main_query.filter(filter)
                 query_count = query_count.filter(filter)
+                query_estimate_count = query_estimate_count.filter(filter)
 
             ordering = []
             if node.orderby:
@@ -692,14 +779,15 @@ class NodeVisitor(Visitor):
             else:
                 ordering = [asc(getattr(main_entity, "id"))]
 
+            # Apply ordering to main_query
             main_query = main_query.order_by(*ordering)
 
             # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
             skip_value = self.visit(node.skip) if node.skip else 0
             top_value = (
-                self.visit(node.top) + 1
+                self.visit(node.top)
                 if node.top
-                else int(os.getenv("TOP_VALUE", 100)) + 1
+                else int(os.getenv("TOP_VALUE", 100))
             )
 
             if not node.count:
@@ -711,49 +799,104 @@ class NodeVisitor(Visitor):
                 else:
                     count_query = False
 
-            if count_query:
-                if int(os.getenv("ESTIMATE_COUNT", 0)):
-                    compiled_query_text = str(
-                        query_count.compile(
-                            dialect=engine.dialect,
-                            compile_kwargs={"literal_binds": True},
-                        )
+            count_mode = os.getenv("COUNT_MODE", "FULL")
+            count_estimate_threshold = int(
+                os.getenv("COUNT_ESTIMATE_THRESHOLD", 10000)
+            )
+
+            async def execute_query(session, query, parameters=None):
+                result = await session.execute(query, parameters)
+                return result.scalar()
+
+            if count_mode in {"LIMIT_ESTIMATE", "ESTIMATE_LIMIT"}:
+                compiled_query_text = str(
+                    query_estimate_count.compile(
+                        dialect=engine.dialect,
+                        compile_kwargs={"literal_binds": True},
                     )
-                    query_estimate_count= text(
-                        "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
-                    )
-                    query_count = await session.execute(
-                        query_estimate_count,
+                )
+
+            if count_mode == "LIMIT_ESTIMATE":
+                query_estimate = await execute_query(
+                    session,
+                    select(func.count()).select_from(
+                        query_estimate_count.limit(count_estimate_threshold)
+                    ),
+                )
+                if query_estimate >= count_estimate_threshold:
+                    query_estimate = await execute_query(
+                        session,
+                        text(
+                            "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
+                        ),
                         {"compiled_query_text": compiled_query_text},
                     )
-                    query_count = query_count.scalar()
-                else:
-                    query_count = await session.execute(query_count)
-                    query_count = query_count.scalar()
+            elif count_mode == "ESTIMATE_LIMIT":
+                query_estimate = await execute_query(
+                    session,
+                    text(
+                        "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
+                    ),
+                    {"compiled_query_text": compiled_query_text},
+                )
+                if query_estimate < count_estimate_threshold:
+                    query_estimate = await execute_query(
+                        session,
+                        select(func.count()).select_from(
+                            query_estimate_count.limit(
+                                count_estimate_threshold
+                            )
+                        ),
+                    )
 
-            iot_count = '"@iot.count": ' + str(query_count) + ',' if count_query and not self.single_result else ''
+            query_count = (
+                await execute_query(session, query_count)
+                if count_mode == "FULL"
+                else query_estimate
+            )
+
+            iot_count = (
+                '"@iot.count": ' + str(query_count) + ","
+                if count_query and not self.single_result
+                else ""
+            )
+            iot_next_link = build_nextLink(self.full_path, query_count)
+            iot_next_link = (
+                f'"@iot.nextLink": "{iot_next_link}",'
+                if iot_next_link and not self.single_result
+                else ""
+            )
 
             if result_format == "DataArray" and node.expand:
                 if top_value > 1:
                     top_value -= 1
 
-            main_query = select(main_query.columns).limit(top_value).offset(skip_value).alias('main_query')
-            
+            main_query = (
+                select(main_query.columns)
+                .limit(top_value)
+                .offset(skip_value)
+                .alias("main_query")
+            )
+
             if result_format == "DataArray":
                 if not node.expand:
                     main_query = select(
-                            func.concat(
-                                os.getenv("HOSTNAME"),
-                                os.getenv("SUBPATH"),
-                                os.getenv("VERSION"),
-                                "/Datastreams(",
-                                main_query.c.datastream_id,
-                                ")",
-                            ).label("Datastream@iot.navigationLink"),
+                        func.concat(
+                            os.getenv("HOSTNAME"),
+                            os.getenv("SUBPATH"),
+                            os.getenv("VERSION"),
+                            "/Datastreams(",
+                            main_query.c.datastream_id,
+                            ")",
+                        ).label("Datastream@iot.navigationLink"),
                         main_query.c.components,
-                        literal('1').cast(Integer).label('dataArray@iot.count'),
-                        func.json_build_array(*main_query.columns[:-2]).label('dataArray')
-                    ).alias('main_query')
+                        literal("1")
+                        .cast(Integer)
+                        .label("dataArray@iot.count"),
+                        func.json_build_array(*main_query.columns[:-2]).label(
+                            "dataArray"
+                        ),
+                    ).alias("main_query")
                 else:
 
                     entity_id = self.entities[0][1]
@@ -771,62 +914,80 @@ class NodeVisitor(Visitor):
                             ),
                             "components",
                             cast(components, ARRAY(String)),
-                            'dataArray@iot.count',
+                            "dataArray@iot.count",
                             func.count(),
-                            'dataArray',
+                            "dataArray",
                             func.json_agg(
                                 func.json_build_array(*main_query.columns),
-                            )
-                        ).label('json')
-                    ).alias('main_query')
-                    
-            
-            main_query = select(func.row_to_json(literal_column('main_query')).label('json')).select_from(main_query)
+                            ),
+                        ).label("json")
+                    ).alias("main_query")
+
+            main_query = select(
+                func.row_to_json(literal_column("main_query")).label("json")
+            ).select_from(main_query)
+
             if self.value:
-                main_query = select(main_query.c.json.op('->')(select_query[0].name)).select_from(main_query)
-            if result_format == "DataArray" and node.expand:
-                main_query = select(main_query.c.json.op('->')('json')).select_from(main_query)
-      
-            main_query = stream_results(main_query, session, top_value, iot_count, self.single_result, self.full_path)
+                value = None
+                if isinstance(select_query[0], InstrumentedAttribute):
+                    value = select_query[0].name
+                else:
+                    value = select_query[0].right
+                main_query = select(
+                    main_query.c.json.op("->")(value)
+                ).select_from(main_query)
+
+            main_query = stream_results(
+                main_query,
+                session,
+                iot_count,
+                iot_next_link,
+                self.single_result,
+            )
 
         return main_query
 
-async def stream_results(query, session, top, iot_count, single_result, full_path):
+
+async def stream_results(
+    query, session, iot_count, iot_next_link, single_result
+):
     async with session:
         result = await session.stream(query)
-        start_json = ''
+        start_json = ""
         is_first_partition = True
         has_rows = False
 
-        async for partition in result.scalars().partitions(int(os.getenv("PARTITION_CHUNK", 10000))):
+        async for partition in result.scalars().partitions(
+            int(os.getenv("PARTITION_CHUNK", 10000))
+        ):
             partition_len = len(partition)
             has_rows = True
 
-            if partition_len > top - 1:
-                partition = partition[:-1]
-
-            partition_json = ujson.dumps(partition, default=datetime.datetime.isoformat)[1:-1]
+            partition_json = ujson.dumps(
+                partition, default=datetime.datetime.isoformat
+            )[1:-1]
 
             if is_first_partition:
                 if partition_len > 0 and not single_result:
-                    start_json = '{'
-                
-                next_link = build_nextLink(full_path, partition_len)
-                next_link_json = f'"@iot.nextLink": "{next_link}",' if next_link and not single_result else ''
-                
-                start_json += iot_count + next_link_json
-                start_json += '"value": [' if (partition_len > 0 and not single_result) else ''
-                
+                    start_json = "{"
+
+                start_json += iot_count + iot_next_link
+                start_json += (
+                    '"value": ['
+                    if (partition_len > 0 and not single_result)
+                    else ""
+                )
+
                 yield start_json + partition_json
                 is_first_partition = False
             else:
-                yield ',' + partition_json
+                yield "," + partition_json
 
         if not has_rows and not single_result:
             yield '{"value": []}'
 
         if has_rows and not single_result:
-            yield ']}'
+            yield "]}"
 
 
 def build_nextLink(full_path, count_links):
@@ -844,9 +1005,7 @@ def build_nextLink(full_path, count_links):
         top_value = int(nextLink[start_index:end_index])
         new_top_value = top_value
         nextLink = (
-            nextLink[:start_index]
-            + str(new_top_value)
-            + nextLink[end_index:]
+            nextLink[:start_index] + str(new_top_value) + nextLink[end_index:]
         )
     else:
         if "?" in nextLink:
@@ -865,9 +1024,7 @@ def build_nextLink(full_path, count_links):
         skip_value = int(nextLink[start_index:end_index])
         new_skip_value = skip_value + new_top_value
         nextLink = (
-            nextLink[:start_index]
-            + str(new_skip_value)
-            + nextLink[end_index:]
+            nextLink[:start_index] + str(new_skip_value) + nextLink[end_index:]
         )
     else:
         new_skip_value = new_top_value

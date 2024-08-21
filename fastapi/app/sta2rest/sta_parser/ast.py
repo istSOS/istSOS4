@@ -295,6 +295,7 @@ class FromToNode(Node):
         self.value1 = value1
         self.value2 = value2
 
+
 class ResultFormatNode(Node):
     """
     A class representing a result format node.
@@ -314,6 +315,7 @@ class ResultFormatNode(Node):
         """
         self.value = value
 
+
 class QueryNode(Node):
     """
     A class representing a query node.
@@ -331,8 +333,20 @@ class QueryNode(Node):
     is_subquery (bool): Indicates if the query is a subquery.
     """
 
-    def __init__(self, select=None, filter=None, expand=None, orderby=None, skip=None, top=None, count=None,
-                 as_of=None, from_to=None, result_format=None, is_subquery=False):
+    def __init__(
+        self,
+        select=None,
+        filter=None,
+        expand=None,
+        orderby=None,
+        skip=None,
+        top=None,
+        count=None,
+        as_of=None,
+        from_to=None,
+        result_format=None,
+        is_subquery=False,
+    ):
         """
         Initializes a QueryNode object.
 
