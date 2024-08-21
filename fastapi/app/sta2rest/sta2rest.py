@@ -7,9 +7,9 @@ This module provides utility functions to convert various elements used in Senso
 representations in a REST API.
 """
 
-import os
 import re
 
+from app import DEBUG, VERSION
 from odata_query import grammar
 
 from .sta_parser.ast import *
@@ -65,7 +65,7 @@ grammar.ODATA_FUNCTIONS = ODATA_FUNCTIONS
 
 
 try:
-    DEBUG = int(os.getenv("DEBUG"))
+    DEBUG = DEBUG
 except:
     DEBUG = 0
 
@@ -562,7 +562,7 @@ class STA2REST:
     @staticmethod
     def parse_uri(uri: str) -> str:
         # Split the uri by the '/' character
-        version = os.getenv("VERSION")
+        version = VERSION
         parts = uri.split(version)
         parts = parts[1]
         parts = parts.split("/")

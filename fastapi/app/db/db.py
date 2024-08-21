@@ -1,6 +1,13 @@
-import os
-
 import asyncpg
+from app import (
+    PG_POOL_SIZE,
+    PG_POOL_TIMEOUT,
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_PORT,
+    POSTGRES_USER,
+)
 
 pgpool: asyncpg.Pool | None = None
 
@@ -8,18 +15,13 @@ pgpool: asyncpg.Pool | None = None
 async def get_pool():
     global pgpool
     if not pgpool:
-        user = os.getenv("POSTGRES_USER")
-        password = os.getenv("POSTGRES_PASSWORD")
-        db = os.getenv("POSTGRES_DB")
-        host = os.getenv("POSTGRES_HOST", "database")
-        port = os.getenv("POSTGRES_PORT", "5432")
-        dsn = f"postgresql://{user}:{password}@{host}:{port}/{db}"
+        dsn = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
         pgpool = await asyncpg.create_pool(
             dsn=dsn,
-            min_size=int(os.getenv("PG_POOL_SIZE", 10)),
-            max_size=int(os.getenv("PG_POOL_SIZE", 10)),
-            timeout=float(os.getenv("PG_POOL_TIMEOUT", 30)),
+            min_size=PG_POOL_SIZE,
+            max_size=PG_POOL_SIZE,
+            timeout=PG_POOL_TIMEOUT,
             max_queries=50000,
             max_inactive_connection_lifetime=3600,
         )

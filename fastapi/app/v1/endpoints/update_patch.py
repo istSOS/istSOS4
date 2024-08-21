@@ -1,7 +1,7 @@
 import json
-import os
 import traceback
 
+from app import DEBUG
 from app.db.db import get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Request, status
 v1 = APIRouter()
 
 try:
-    DEBUG = int(os.getenv("DEBUG"))
+    DEBUG = DEBUG
     if DEBUG:
         from app.utils.utils import response2jsonfile
 except:

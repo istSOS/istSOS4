@@ -1,9 +1,8 @@
-import os
-
+from app import HOSTNAME, SUBPATH, VERSION
 from app.settings import serverSettings, tables
 from app.v1 import api
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 
 app = FastAPI(debug=True)
 
@@ -16,9 +15,7 @@ def __handle_root():
         value.append(
             {
                 "name": table,
-                "url": f"{os.getenv('HOSTNAME')}{os.getenv('SUBPATH')}{os.getenv('VERSION')}"
-                + "/"
-                + table,
+                "url": f"{HOSTNAME}{SUBPATH}{VERSION}" + "/" + table,
             }
         )
 
@@ -29,12 +26,9 @@ def __handle_root():
     return response
 
 
-@app.get(f"{os.getenv('SUBPATH')}{os.getenv('VERSION')}")
+@app.get(f"{SUBPATH}{VERSION}")
 async def read_root():
     return __handle_root()
 
 
-app.mount(f"{os.getenv('SUBPATH')}{os.getenv('VERSION')}", api.v1)
-
-# API SERVIZI
-# app.mount("/admin", api.admin)
+app.mount(f"{SUBPATH}{VERSION}", api.v1)
