@@ -24,19 +24,21 @@ services:
   api:
     image: gitlab-edu.supsi.ch:5050/dacd-ist/geomatica/iststa/istsos-miu-fastapi:0.0.1
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
       VERSION: ${VERSION}
       DEBUG: ${DEBUG}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       PG_MAX_OVERFLOW: ${PG_MAX_OVERFLOW}
       PG_POOL_SIZE: ${PG_POOL_SIZE}
       PG_POOL_TIMEOUT: ${PG_POOL_TIMEOUT}
       COUNT_MODE: ${COUNT_MODE}
       COUNT_ESTIMATE_THRESHOLD: ${COUNT_ESTIMATE_THRESHOLD}
       TOP_VALUE: ${TOP_VALUE}
+      PARTITION_CHUNK: ${PARTITION_CHUNK}
+      EXPAND_MODE: ${EXPAND_MODE}
     command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - 8018:5000
