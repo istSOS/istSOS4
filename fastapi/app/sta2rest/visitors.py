@@ -1181,7 +1181,7 @@ class NodeVisitor(Visitor):
                             ),
                         )
                         query_count = query_estimate.scalar()
-                        if query_estimate == COUNT_ESTIMATE_THRESHOLD:
+                        if query_count == COUNT_ESTIMATE_THRESHOLD:
                             query_estimate = await session.execute(
                                 text(
                                     "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
@@ -1197,7 +1197,7 @@ class NodeVisitor(Visitor):
                             {"compiled_query_text": compiled_query_text},
                         )
                         query_count = query_estimate.scalar()
-                        if query_estimate < COUNT_ESTIMATE_THRESHOLD:
+                        if query_count < COUNT_ESTIMATE_THRESHOLD:
                             query_estimate = await session.execute(
                                 select(func.count()).select_from(
                                     query_estimate_count.limit(
