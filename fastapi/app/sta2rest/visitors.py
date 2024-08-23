@@ -331,7 +331,7 @@ class NodeVisitor(Visitor):
                 expand_identifier.subquery.top.count
                 if expand_identifier.subquery
                 and expand_identifier.subquery.top
-                else TOP_VALUE
+                else TOP_VALUE + 1
             )
 
             # Process count clause
@@ -383,7 +383,7 @@ class NodeVisitor(Visitor):
                                             nested_sub_query[2]
                                         )
                                     ),
-                                    nested_sub_query[4],
+                                    nested_sub_query[4] - 1,
                                     nested_sub_query[3],
                                     True,
                                     nested_sub_query[7],
@@ -484,7 +484,7 @@ class NodeVisitor(Visitor):
                                         ),
                                         "{}_id".format(nested_sub_query[5]),
                                         "{}_id".format(nested_sub_query[2]),
-                                        nested_sub_query[4],
+                                        nested_sub_query[4] - 1,
                                         nested_sub_query[3],
                                         nested_sub_query[7],
                                     ).label(label_name)
@@ -592,7 +592,7 @@ class NodeVisitor(Visitor):
                                             nested_sub_query[5],
                                         )
                                     ),
-                                    nested_sub_query[4],
+                                    nested_sub_query[4] - 1,
                                     nested_sub_query[3],
                                     False,
                                     nested_sub_query[7],
@@ -885,7 +885,7 @@ class NodeVisitor(Visitor):
                                                 sub_query[2]
                                             )
                                         ),
-                                        sub_query[4],
+                                        sub_query[4] - 1,
                                         sub_query[3],
                                         True,
                                     ).label(label_name)
@@ -989,7 +989,7 @@ class NodeVisitor(Visitor):
                                             ),
                                             "{}_id".format(sub_query[5]),
                                             "{}_id".format(sub_query[2]),
-                                            sub_query[4],
+                                            sub_query[4] - 1,
                                             sub_query[3],
                                             sub_query[7],
                                         ).label(
@@ -1091,7 +1091,7 @@ class NodeVisitor(Visitor):
                                                 sub_query[2], sub_query[5]
                                             )
                                         ),
-                                        sub_query[4],
+                                        sub_query[4] - 1,
                                         sub_query[3],
                                         False,
                                         sub_query[7],
@@ -1155,72 +1155,66 @@ class NodeVisitor(Visitor):
             # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
             skip_value = self.visit(node.skip) if node.skip else 0
 
-            top_value = self.visit(node.top) if node.top else TOP_VALUE
+            top_value = self.visit(node.top) if node.top else TOP_VALUE + 1
 
             is_count = bool(node.count and node.count.value)
 
-            async def execute_query(session, query, parameters=None):
-                result = await session.execute(query, parameters)
-                return result.scalar()
-
-            if COUNT_MODE in {"LIMIT_ESTIMATE", "ESTIMATE_LIMIT"}:
-                compiled_query_text = str(
-                    query_estimate_count.compile(
-                        dialect=engine.dialect,
-                        compile_kwargs={"literal_binds": True},
+            if is_count:
+                if COUNT_MODE in {"LIMIT_ESTIMATE", "ESTIMATE_LIMIT"}:
+                    compiled_query_text = str(
+                        query_estimate_count.compile(
+                            dialect=engine.dialect,
+                            compile_kwargs={"literal_binds": True},
+                        )
                     )
-                )
 
-            if COUNT_MODE == "LIMIT_ESTIMATE":
-                query_estimate = await execute_query(
-                    session,
-                    select(func.count()).select_from(
-                        query_estimate_count.limit(COUNT_ESTIMATE_THRESHOLD)
-                    ),
-                )
-                if query_estimate == COUNT_ESTIMATE_THRESHOLD:
-                    query_estimate = await execute_query(
-                        session,
-                        text(
-                            "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
-                        ),
-                        {"compiled_query_text": compiled_query_text},
-                    )
-            elif COUNT_MODE == "ESTIMATE_LIMIT":
-                query_estimate = await execute_query(
-                    session,
-                    text(
-                        "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
-                    ),
-                    {"compiled_query_text": compiled_query_text},
-                )
-                if query_estimate < COUNT_ESTIMATE_THRESHOLD:
-                    query_estimate = await execute_query(
-                        session,
-                        select(func.count()).select_from(
-                            query_estimate_count.limit(
-                                COUNT_ESTIMATE_THRESHOLD
+                    if COUNT_MODE == "LIMIT_ESTIMATE":
+                        query_estimate = await session.execute(
+                            select(func.count()).select_from(
+                                query_estimate_count.limit(
+                                    COUNT_ESTIMATE_THRESHOLD
+                                )
+                            ),
+                        )
+                        query_count = query_estimate.scalar()
+                        if query_estimate == COUNT_ESTIMATE_THRESHOLD:
+                            query_estimate = await session.execute(
+                                text(
+                                    "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
+                                ),
+                                {"compiled_query_text": compiled_query_text},
                             )
-                        ),
-                    )
-
-            query_count = (
-                await execute_query(session, query_count)
-                if COUNT_MODE == "FULL"
-                else query_estimate
-            )
+                            query_count = query_estimate.scalar()
+                    elif COUNT_MODE == "ESTIMATE_LIMIT":
+                        query_estimate = await session.execute(
+                            text(
+                                "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
+                            ),
+                            {"compiled_query_text": compiled_query_text},
+                        )
+                        query_count = query_estimate.scalar()
+                        if query_estimate < COUNT_ESTIMATE_THRESHOLD:
+                            query_estimate = await session.execute(
+                                select(func.count()).select_from(
+                                    query_estimate_count.limit(
+                                        COUNT_ESTIMATE_THRESHOLD
+                                    )
+                                ),
+                            )
+                            query_count = query_estimate.scalar()
+                else:
+                    query_count = await session.execute(query_count)
+                    query_count = query_count.scalar()
 
             iot_count = (
                 '"@iot.count": ' + str(query_count) + ","
                 if is_count and not self.single_result
                 else ""
             )
-            iot_next_link = build_nextLink(self.full_path, query_count)
-            iot_next_link = (
-                f'"@iot.nextLink": "{iot_next_link}",'
-                if iot_next_link and not self.single_result
-                else ""
-            )
+
+            if result_format == "DataArray" and node.expand:
+                if top_value > 1:
+                    top_value -= 1
 
             main_query = (
                 select(main_query.columns)
@@ -1291,16 +1285,17 @@ class NodeVisitor(Visitor):
             main_query = stream_results(
                 main_query,
                 session,
+                top_value,
                 iot_count,
-                iot_next_link,
                 self.single_result,
+                self.full_path,
             )
 
         return main_query
 
 
 async def stream_results(
-    query, session, iot_count, iot_next_link, single_result
+    query, session, top, iot_count, single_result, full_path
 ):
     async with session:
         result = await session.stream(query)
@@ -1312,6 +1307,9 @@ async def stream_results(
             partition_len = len(partition)
             has_rows = True
 
+            if partition_len > top - 1:
+                partition = partition[:-1]
+
             partition_json = ujson.dumps(
                 partition, default=datetime.datetime.isoformat
             )[1:-1]
@@ -1320,7 +1318,14 @@ async def stream_results(
                 if partition_len > 0 and not single_result:
                     start_json = "{"
 
-                start_json += iot_count + iot_next_link
+                next_link = build_nextLink(full_path, partition_len)
+                next_link_json = (
+                    f'"@iot.nextLink": "{next_link}",'
+                    if next_link and not single_result
+                    else ""
+                )
+
+                start_json += iot_count + next_link_json
                 start_json += (
                     '"value": ['
                     if (partition_len > 0 and not single_result)
