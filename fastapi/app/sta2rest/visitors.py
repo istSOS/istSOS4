@@ -617,9 +617,10 @@ class NodeVisitor(Visitor):
                     expand_identifier.subquery.filter,
                     expand_identifier.identifier,
                 )
-                for rel in join_relationships:
-                    sub_query = sub_query.join(rel)
                 sub_query = sub_query.filter(filter)
+                if join_relationships:
+                    for rel in join_relationships:
+                        sub_query = sub_query.join(rel)
 
             expand_queries.append(
                 [
@@ -1120,11 +1121,14 @@ class NodeVisitor(Visitor):
                 filter, join_relationships = self.visit_FilterNode(
                     node.filter, self.main_entity
                 )
-                for rel in join_relationships:
-                    main_query = main_query.join(rel)
                 main_query = main_query.filter(filter)
                 query_count = query_count.filter(filter)
                 query_estimate_count = query_estimate_count.filter(filter)
+                if join_relationships:
+                    for rel in join_relationships:
+                        main_query = main_query.join(rel)
+                        query_count = query_count.join(rel)
+                        query_estimate_count = query_estimate_count.join(rel)
 
             ordering = []
             if node.orderby:
