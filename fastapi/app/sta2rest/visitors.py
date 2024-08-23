@@ -328,7 +328,7 @@ class NodeVisitor(Visitor):
 
             # Process top clause
             top_value = (
-                expand_identifier.subquery.top.count
+                expand_identifier.subquery.top.count + 1
                 if expand_identifier.subquery
                 and expand_identifier.subquery.top
                 else TOP_VALUE + 1
@@ -1155,7 +1155,7 @@ class NodeVisitor(Visitor):
             # Determine skip and top values, defaulting to 0 and 100 respectively if not specified
             skip_value = self.visit(node.skip) if node.skip else 0
 
-            top_value = self.visit(node.top) if node.top else TOP_VALUE + 1
+            top_value = self.visit(node.top) + 1 if node.top else TOP_VALUE + 1
 
             is_count = bool(node.count and node.count.value)
 
