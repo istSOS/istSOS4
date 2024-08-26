@@ -6,313 +6,69 @@ Author: Filippo Finke
 This module provides utility functions to convert various elements used in SensorThings queries to their corresponding
 representations in a REST API.
 """
+
 import re
-from .filter_visitor import FilterVisitor
-from odata_query.grammar import ODataLexer
-from odata_query.grammar import ODataParser
+
+from app import DEBUG, VERSION
+from odata_query import grammar
+
 from .sta_parser.ast import *
 from .sta_parser.lexer import Lexer
-from .sta_parser.visitor import Visitor
 from .sta_parser.parser import Parser
+from .visitors import NodeVisitor
 
-# Create the OData lexer and parser
-odata_filter_lexer = ODataLexer()
-odata_filter_parser = ODataParser()
+ODATA_FUNCTIONS = {
+    # String functions
+    "substringof": 2,
+    "endswith": 2,
+    "startswith": 2,
+    "length": 1,
+    "indexof": 2,
+    "substring": (2, 3),
+    "tolower": 1,
+    "toupper": 1,
+    "trim": 1,
+    "concat": 2,
+    # Datetime functions
+    "year": 1,
+    "month": 1,
+    "day": 1,
+    "hour": 1,
+    "minute": 1,
+    "second": 1,
+    "fractionalseconds": 1,
+    "date": 1,
+    "time": 1,
+    "totaloffsetminutes": 1,
+    "now": 0,
+    "mindatetime": 0,
+    "maxdatetime": 0,
+    # Math functions
+    "round": 1,
+    "floor": 1,
+    "ceiling": 1,
+    # Geo functions
+    "geo.distance": 2,
+    "geo.length": 1,
+    "geo.intersects": 2,
+    "st_equals": 2,
+    "st_disjoint": 2,
+    "st_touches": 2,
+    "st_within": 2,
+    "st_overlaps": 2,
+    "st_crosses": 2,
+    "st_intersects": 2,
+    "st_contains": 2,
+    "st_relate": (2, 3),
+}
+grammar.ODATA_FUNCTIONS = ODATA_FUNCTIONS
 
-class NodeVisitor(Visitor):
 
-    main_entity = None
+try:
+    DEBUG = DEBUG
+except:
+    DEBUG = 0
 
-    """ 
-    Constructor for the NodeVisitor class that accepts the main entity name
-    """
-    def __init__(self, main_entity=None):
-        super().__init__()
-        self.main_entity = main_entity
-
-    """
-    This class provides a visitor to convert a STA query to a PostgREST query.
-    """
-    
-    def visit_IdentifierNode(self, node: IdentifierNode):
-        """
-        Visit an identifier node.
-
-        Args:
-            node (ast.IdentifierNode): The identifier node to visit.
-
-        Returns:
-            str: The converted identifier.
-        """
-
-        # if the identifier starts with @ add a double quote
-        if node.name.startswith('@'):
-            return f'"{node.name}"'
-        
-        # Replace / with -> for json columns
-        node.name = node.name.replace('/', '->>')
-
-        return node.name
-
-    def visit_SelectNode(self, node: SelectNode):
-        """
-        Visit a select node.
-
-        Args:
-            node (ast.SelectNode): The select node to visit.
-
-        Returns:
-            str: The converted select node.
-        """
-
-        identifiers = ','.join([self.visit(identifier) for identifier in node.identifiers])
-        return f'select={identifiers}'
-
-    def visit_FilterNode(self, node: FilterNode):
-        """
-        Visit a filter node.
-
-        Args:
-            node (ast.FilterNode): The filter node to visit.
-        
-        Returns:
-            str: The converted filter node.
-        """
-
-        # replace @iot.id with id
-        node.filter = node.filter.replace("@iot.id", "id")
-
-        # Parse the filter using the OData lexer and parser
-        ast = odata_filter_parser.parse(odata_filter_lexer.tokenize(node.filter))
-        # Visit the tree to convert the filter
-        res = FilterVisitor().visit(ast)
-        return res
-
-    def visit_OrderByNodeIdentifier(self, node: OrderByNodeIdentifier):
-        """
-        Visit an orderby node identifier.
-
-        Args:
-            node (ast.OrderByNodeIdentifier): The orderby node identifier to visit.
-
-        Returns:
-            str: The converted orderby node identifier.
-        """
-
-        # Convert the identifier to the format name.order
-        return f'{node.identifier}.{node.order}'
-
-    def visit_OrderByNode(self, node: OrderByNode):
-        """
-        Visit an orderby node.
-
-        Args:
-            node (ast.OrderByNode): The orderby node to visit.
-        
-        Returns:
-            str: The converted orderby node.
-        """
-        identifiers = ','.join([self.visit(identifier) for identifier in node.identifiers])
-        return f'order={identifiers}'
-
-    def visit_SkipNode(self, node: SkipNode):
-        """
-        Visit a skip node.
-
-        Args:
-            node (ast.SkipNode): The skip node to visit.
-        
-        Returns:
-            str: The converted skip node.
-        """
-        return f'offset={node.count}'
-
-    def visit_TopNode(self, node: TopNode):
-        """
-        Visit a top node.
-
-        Args:
-            node (ast.TopNode): The top node to visit.
-        
-        Returns:
-            str: The converted top node.
-        """
-        return f'limit={node.count}'
-
-    def visit_CountNode(self, node: CountNode):
-        """
-        Visit a count node.
-
-        Args:
-            node (ast.CountNode): The count node to visit.
-        
-        Returns:
-            str: The converted count node.
-        """
-        return f'count={node.value}'
-    
-    def visit_ExpandNode(self, node: ExpandNode, parent=None):
-        """
-        Visit an expand node.
-        
-        Args:
-            node (ast.ExpandNode): The expand node to visit.
-            parent (str): The parent entity name.
-        
-        Returns:
-            dict: The converted expand node.
-        """
-
-        # dict to store the converted parts of the expand node
-        select = None
-        filter = ""
-        orderby = ""
-        skip = ""
-        top = ""
-        count = ""
-
-        # Visit the identifiers in the expand node
-        for expand_identifier in node.identifiers:
-                # Convert the table name
-                expand_identifier.identifier = STA2REST.convert_entity(expand_identifier.identifier)
-                
-                # Check if we had a parent entity
-                prefix = ""
-                if parent:
-                    prefix = parent
-                prefix += expand_identifier.identifier + "."
-        
-                # Check if we have a subquery
-                if expand_identifier.subquery:
-
-                    # check if we have a select, filter, orderby, skip, top or count in the subquery
-                    if expand_identifier.subquery.select:
-                        if not select:
-                            select = SelectNode([])
-                        identifiers = ','.join([self.visit(identifier) for identifier in expand_identifier.subquery.select.identifiers])
-                        select.identifiers.append(IdentifierNode(f'{expand_identifier.identifier}({identifiers})'))
-                    if expand_identifier.subquery.filter:
-                        result = self.visit_FilterNode(expand_identifier.subquery.filter)
-                        filter = prefix + result
-                    if expand_identifier.subquery.orderby:
-                        orderby = prefix + "order=" + ','.join([self.visit(identifier) for identifier in expand_identifier.subquery.orderby.identifiers])
-                    if expand_identifier.subquery.skip:
-                        skip = prefix + "offset=" + str(expand_identifier.subquery.skip.count)
-                    if expand_identifier.subquery.top:
-                        top = prefix + "limit=" + str(expand_identifier.subquery.top.count)
-                    if expand_identifier.subquery.count:
-                        count = prefix + "count=" + str(expand_identifier.subquery.count.value).lower()
-
-                    # check if we have a subquery in the subquery
-                    if expand_identifier.subquery.expand:
-                        result = self.visit_ExpandNode(expand_identifier.subquery.expand, prefix)
-
-                        # merge the results
-                        if result['select']:
-                            if not select:
-                                select = SelectNode([])
-                            select.identifiers.extend(result['select'].identifiers)
-                        if result['orderby']:
-                            if orderby:
-                                orderby += "&"
-                            orderby += result['orderby']
-                        if result['skip']:
-                            if skip:
-                                skip += "&"
-                            skip += result['skip']
-                        if result['top']:
-                            if top:
-                                top += "&"
-                            top += result['top']
-                        if result['count']:
-                            if count:
-                                count += "&"
-                            count += result['count']
-                        if result['filter']:
-                            if filter:
-                                filter += "&"
-                            filter += result['filter']
-                
-                # If we don't have a subquery, we add the identifier to the select node
-                if not expand_identifier.subquery or not expand_identifier.subquery.select:
-                    if not select:
-                        select = SelectNode([])
-                    default_columns = STA2REST.get_default_column_names(expand_identifier.identifier)
-                    # join default columns as single string
-                    default_columns = ','.join(default_columns)
-                    select.identifiers.append(IdentifierNode(f'{expand_identifier.identifier}({default_columns})'))
-        
-        # Return the converted expand node
-        return {
-            'select': select,
-            'filter': filter,
-            'orderby': orderby,
-            'skip': skip,
-            'top': top,
-            'count': count
-        }
-
-    def visit_QueryNode(self, node: QueryNode):
-        """
-        Visit a query node.
-
-        Args:
-            node (ast.QueryNode): The query node to visit.
-        
-        Returns:
-            str: The converted query node.
-        """
-
-        # list to store the converted parts of the query node
-        query_parts = []
-
-        # Check if we have an expand node before the other parts of the query
-        if node.expand:
-            # Visit the expand node
-            result = self.visit(node.expand)
-
-            # Merge the results with the other parts of the query
-            if result['select']:
-                if not node.select:
-                    node.select = SelectNode([])
-                node.select.identifiers.extend(result['select'].identifiers)
-            if result['orderby']:
-                query_parts.append(result['orderby'])
-            if result['skip']:
-                query_parts.append(result['skip'])
-            if result['top']:
-                query_parts.append(result['top'])
-            if result['count']:
-                query_parts.append(result['count'])
-            if result['filter']:
-                query_parts.append(result['filter'])
-
-        if not node.select:
-            node.select = SelectNode([])
-            # Add "@iot.id", "@iot.selfLink" and "*" to the select node
-
-            # get default columns for main entity
-            default_columns = STA2REST.get_default_column_names(self.main_entity)
-            for column in default_columns:
-                node.select.identifiers.append(IdentifierNode(column))
-
-        # Check if we have a select, filter, orderby, skip, top or count in the query
-        if node.select:
-            query_parts.append(self.visit(node.select))
-        if node.filter:
-            query_parts.append(self.visit(node.filter))
-        if node.orderby:
-            query_parts.append(self.visit(node.orderby))
-        if node.skip:
-            query_parts.append(self.visit(node.skip))
-        if node.top:
-            query_parts.append(self.visit(node.top))
-        if node.count:
-            query_parts.append(self.visit(node.count).lower())
-
-        
-        # Join the converted parts of the query
-        return '&'.join(query_parts)
 
 class STA2REST:
     """
@@ -322,6 +78,7 @@ class STA2REST:
 
     # Mapping from SensorThings entities to their corresponding database table names
     ENTITY_MAPPING = {
+        "Commits": "Commit",
         "Things": "Thing",
         "Locations": "Location",
         "Sensors": "Sensor",
@@ -330,97 +87,253 @@ class STA2REST:
         "Observations": "Observation",
         "FeaturesOfInterest": "FeaturesOfInterest",
         "HistoricalLocations": "HistoricalLocation",
-
+        "Commit": "Commit",
         "Thing": "Thing",
         "Location": "Location",
         "Sensor": "Sensor",
         "ObservedProperty": "ObservedProperty",
         "Datastream": "Datastream",
-        "Observation": "Observation",  
+        "Observation": "Observation",
         "FeatureOfInterest": "FeaturesOfInterest",
         "HistoricalLocation": "HistoricalLocation",
     }
 
     # Default columns for each entity
     DEFAULT_SELECT = {
-        "Thing": [
-            '"@iot.id"',
-            '"@iot.selfLink"',
-            '"@iot.navigationLink"',
-            'name',
-            'description',
-            'properties',
+        "Commit": [
+            "id",
+            "self_link",
+            "location_navigation_link",
+            "thing_navigation_link",
+            "historicallocation_navigation_link",
+            "observedproperty_navigation_link",
+            "sensor_navigation_link",
+            "datastream_navigation_link",
+            "featuresofinterest_navigation_link",
+            "observation_navigation_link",
+            "author",
+            "encoding_type",
+            "message",
+            "date",
         ],
         "Location": [
-            '"@iot.id"',
-            '"@iot.selfLink"',
-            '"@iot.navigationLink"',
-            'name',
-            'description',
-            'encodingType',
-            'location',
-            'properties',
+            "id",
+            "self_link",
+            "thing_navigation_link",
+            "historicallocation_navigation_link",
+            "commit_navigation_link",
+            "name",
+            "description",
+            "encoding_type",
+            "location",
+            "properties",
         ],
-        "Sensor": [
-            '"@iot.id"',
-            '"@iot.selfLink"',
-            '"@iot.navigationLink"',
-            'name',
-            'description',
-            'encodingType',
-            'metadata',
-            'properties',
+        "LocationTravelTime": [
+            "id",
+            "self_link",
+            "thing_navigation_link",
+            "historicallocation_navigation_link",
+            "commit_navigation_link",
+            "name",
+            "description",
+            "encoding_type",
+            "location",
+            "properties",
+            "system_time_validity",
         ],
-        "ObservedProperty": [
-            '"@iot.id"',
-            '"@iot.selfLink"',
-            '"@iot.navigationLink"',
-            'name',
-            'description',
-            'definition',
-            'properties',
+        "Thing": [
+            "id",
+            "self_link",
+            "location_navigation_link",
+            "historicallocation_navigation_link",
+            "datastream_navigation_link",
+            "commit_navigation_link",
+            "name",
+            "description",
+            "properties",
         ],
-        "Datastream": [
-            '"@iot.id"',
-            '"@iot.selfLink"',
-            '"@iot.navigationLink"',
-            'name',
-            'description',
-            'unitOfMeasurement',
-            'observationType',
-            'observedArea',
-            'phenomenonTime',
-            'resultTime',
-            'properties',
-        ],
-        "Observation": [
-            '"@iot.id"',
-            '"@iot.selfLink"',
-            '"@iot.navigationLink"',
-            'phenomenonTime',
-            'resultTime',
-            'result',
-            'resultQuality',
-            'validTime',
-            'parameters',
-        ],
-        "FeaturesOfInterest": [
-            '"@iot.id"',
-            '"@iot.selfLink"',
-            '"@iot.navigationLink"',
-            'name',
-            'description',
-            'encodingType',
-            'feature',
-            'properties',
+        "ThingTravelTime": [
+            "id",
+            "self_link",
+            "location_navigation_link",
+            "historicallocation_navigation_link",
+            "datastream_navigation_link",
+            "commit_navigation_link",
+            "name",
+            "description",
+            "properties",
+            "system_time_validity",
         ],
         "HistoricalLocation": [
-            '"@iot.id"',
-            '"@iot.selfLink"',
-            '"@iot.navigationLink"',
-            'time',  
+            "id",
+            "self_link",
+            "location_navigation_link",
+            "thing_navigation_link",
+            "commit_navigation_link",
+            "time",
+        ],
+        "HistoricalLocationTravelTime": [
+            "id",
+            "self_link",
+            "location_navigation_link",
+            "thing_navigation_link",
+            "commit_navigation_link",
+            "time",
+            "system_time_validity",
+        ],
+        "ObservedProperty": [
+            "id",
+            "self_link",
+            "datastream_navigation_link",
+            "commit_navigation_link",
+            "name",
+            "description",
+            "definition",
+            "properties",
+        ],
+        "ObservedPropertyTravelTime": [
+            "id",
+            "self_link",
+            "datastream_navigation_link",
+            "commit_navigation_link",
+            "name",
+            "description",
+            "definition",
+            "properties",
+            "system_time_validity",
+        ],
+        "Sensor": [
+            "id",
+            "self_link",
+            "datastream_navigation_link",
+            "commit_navigation_link",
+            "name",
+            "description",
+            "encoding_type",
+            "sensor_metadata",
+            "properties",
+        ],
+        "SensorTravelTime": [
+            "id",
+            "self_link",
+            "datastream_navigation_link",
+            "commit_navigation_link",
+            "name",
+            "description",
+            "encoding_type",
+            "sensor_metadata",
+            "properties",
+            "system_time_validity",
+        ],
+        "Datastream": [
+            "id",
+            "self_link",
+            "thing_navigation_link",
+            "sensor_navigation_link",
+            "observedproperty_navigation_link",
+            "observation_navigation_link",
+            "commit_navigation_link",
+            "name",
+            "description",
+            "unit_of_measurement",
+            "observation_type",
+            "observed_area",
+            "phenomenon_time",
+            "result_time",
+            "properties",
+        ],
+        "DatastreamTravelTime": [
+            "id",
+            "self_link",
+            "thing_navigation_link",
+            "sensor_navigation_link",
+            "observedproperty_navigation_link",
+            "observation_navigation_link",
+            "commit_navigation_link",
+            "name",
+            "description",
+            "unit_of_measurement",
+            "observation_type",
+            "observed_area",
+            "phenomenon_time",
+            "result_time",
+            "properties",
+            "system_time_validity",
+        ],
+        "FeaturesOfInterest": [
+            "id",
+            "self_link",
+            "observation_navigation_link",
+            "commit_navigation_link",
+            "name",
+            "description",
+            "encoding_type",
+            "feature",
+            "properties",
+        ],
+        "FeaturesOfInterestTravelTime": [
+            "id",
+            "self_link",
+            "observation_navigation_link",
+            "commit_navigation_link",
+            "name",
+            "description",
+            "encoding_type",
+            "feature",
+            "properties",
+            "system_time_validity",
+        ],
+        "Observation": [
+            "id",
+            "self_link",
+            "featuresofinterest_navigation_link",
+            "datastream_navigation_link",
+            "commit_navigation_link",
+            "phenomenon_time",
+            "result_time",
+            "result",
+            "result_quality",
+            "valid_time",
+            "parameters",
+        ],
+        "ObservationDataArray": [
+            "id",
+            "phenomenon_time",
+            "result_time",
+            "result",
+            "result_quality",
+            "valid_time",
+            "parameters",
+        ],
+        "ObservationTravelTime": [
+            "id",
+            "self_link",
+            "featuresofinterest_navigation_link",
+            "datastream_navigation_link",
+            "commit_navigation_link",
+            "phenomenon_time",
+            "result_time",
+            "result",
+            "result_quality",
+            "valid_time",
+            "parameters",
+            "system_time_validity",
         ],
     }
+
+    SELECT_MAPPING = {
+        "encodingType": "encoding_type",
+        "metadata": "sensor_metadata",
+        "unitOfMeasurement": "unit_of_measurement",
+        "observationType": "observation_type",
+        "observedArea": "observed_area",
+        "phenomenonTime": "phenomenon_time",
+        "resultTime": "result_time",
+        "resultQuality": "result_quality",
+        "validTime": "valid_time",
+    }
+
+    REVERSE_SELECT_MAPPING = {v: k for k, v in SELECT_MAPPING.items()}
 
     @staticmethod
     def get_default_column_names(entity: str) -> list:
@@ -433,7 +346,12 @@ class STA2REST:
         Returns:
             list: The default column names.
         """
-        return STA2REST.DEFAULT_SELECT.get(entity, ["*"])
+        select = STA2REST.DEFAULT_SELECT.get(entity, ["*"])
+        for old_key, new_key in STA2REST.SELECT_MAPPING.items():
+            if old_key in select:
+                select.remove(old_key)
+                select.append(new_key)
+        return select
 
     @staticmethod
     def convert_entity(entity: str) -> str:
@@ -447,7 +365,7 @@ class STA2REST:
             str: The converted entity name in REST format.
         """
         return STA2REST.ENTITY_MAPPING.get(entity, entity)
-    
+
     @staticmethod
     def convert_to_database_id(entity: str) -> str:
         # First we convert the entity to lower case
@@ -455,13 +373,13 @@ class STA2REST:
         return entity + "_id"
 
     @staticmethod
-    def convert_query(full_path: str) -> str:
+    async def convert_query(full_path: str, db) -> str:
         """
         Converts a STA query to a PostgREST query.
 
         Args:
             sta_query (str): The STA query.
-        
+
         Returns:
             str: The converted PostgREST query.
         """
@@ -470,102 +388,127 @@ class STA2REST:
         path = full_path
         query = None
         single_result = False
-        if '?' in full_path:
+        if "?" in full_path:
             # Split the query from the path
-            path, query = full_path.split('?')
+            path, query = full_path.split("?")
 
         # Parse the uri
         uri = STA2REST.parse_uri(path)
-        
+
         if not uri:
             raise Exception("Error parsing uri")
-    
 
         # Check if we have a query
-        query_ast = QueryNode(None, None, None, None, None, None, None, False)
+        query_ast = QueryNode(
+            None, None, None, None, None, None, None, None, None, None, False
+        )
         if query:
             lexer = Lexer(query)
             tokens = lexer.tokenize()
             parser = Parser(tokens)
             query_ast = parser.parse()
 
+        main_entity, main_entity_id = uri["entity"]
+        entities = uri["entities"]
 
-        main_entity, main_entity_id = uri['entity']
-        entities = uri['entities']
+        if query_ast.as_of:
+            if len(entities) == 0 and not query_ast.expand:
+                main_entity += "TravelTime"
+                as_of_filter = (
+                    f"system_time_validity eq {query_ast.as_of.value}"
+                )
+                query_ast.filter = FilterNode(
+                    query_ast.filter.filter + f" and {as_of_filter}"
+                    if query_ast.filter
+                    else as_of_filter
+                )
+            else:
+                raise Exception(
+                    "AS_OF function available only for single entity"
+                )
+            # if query_ast.expand:
+            #     for identifier in query_ast.expand.identifiers:
+            #         identifier.identifier = identifier.identifier + "TravelTime"
+            #         identifier.subquery = QueryNode(None, None, None, None, None, None, None, None, None, True) if identifier.subquery is None else identifier.subquery
+            #         identifier.subquery.filter = FilterNode(identifier.subquery.filter + f" and {as_of_filter}" if identifier.subquery.filter else as_of_filter)
 
-        # Check if size of entities is bigger than 2
-        if len(entities) > 1:
-            # Replace the main entity with the first entity
-            m = entities.pop(0)
-            main_entity = m[0]
-            main_entity_id = m[1]
-            single_result = True
+        if query_ast.from_to:
+            if len(entities) == 0 and not query_ast.expand:
+                main_entity += "TravelTime"
+                from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
+                query_ast.filter = FilterNode(
+                    query_ast.filter.filter + f" and {from_to_filter}"
+                    if query_ast.filter
+                    else from_to_filter
+                )
+            else:
+                raise Exception(
+                    "FROM_TO function available only for single entity"
+                )
 
-        url = f"/{main_entity}"
-
+        if DEBUG:
+            print(f"Main entity: {main_entity}")
 
         if entities:
             if not query_ast.expand:
                 query_ast.expand = ExpandNode([])
-            
+
             index = 0
 
             # Merge the entities with the query
             for entity in entities:
                 entity_name = entity[0]
-                sub_query = QueryNode(None, None, None, None, None, None, None, True)
+                sub_query = QueryNode(
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    True,
+                )
                 if entity[1]:
-                    single_result = True
                     sub_query.filter = FilterNode(f"id eq {entity[1]}")
-
                 # Check if we are the last entity
                 if index == len(entities) - 1:
                     # Check if we have a property name
-                    if uri['property_name']:
+                    if uri["property_name"]:
+                        single_result = True
                         # Add the property name to the select node
-                        if not sub_query.select:
-                            sub_query.select = SelectNode([])
-                        sub_query.select.identifiers.append(IdentifierNode(uri['property_name']))
+                        if not query_ast.select:
+                            query_ast.select = SelectNode([])
+                            query_ast.select.identifiers.append(
+                                IdentifierNode(uri["property_name"])
+                            )
 
-                    # Merge the query with the subquery
-                    if query_ast.select:
-                        sub_query.select = query_ast.select
-                        query_ast.select = None
-
-                    if query_ast.filter:
-                        sub_query.filter = query_ast.filter
-                        query_ast.filter = None
-
-                    if query_ast.orderby:
-                        sub_query.orderby = query_ast.orderby
-                        query_ast.orderby = None
-
-                    if query_ast.skip:
-                        sub_query.skip = query_ast.skip
-                        query_ast.skip = None
-
-                    if query_ast.top:
-                        sub_query.top = query_ast.top
-                        query_ast.top = None
-
-                    if query_ast.count:
-                        sub_query.count = query_ast.count
-                        query_ast.count = None
-
-                query_ast.expand.identifiers.append(ExpandNodeIdentifier(entity_name, sub_query))
+                query_ast.expand.identifiers.append(
+                    ExpandNodeIdentifier(entity_name, sub_query, False)
+                )
                 index += 1
         else:
-            if uri['property_name']:
+            if uri["property_name"]:
                 if not query_ast.select:
                     query_ast.select = SelectNode([])
-                query_ast.select.identifiers.append(IdentifierNode(uri['property_name']))
+                query_ast.select.identifiers.append(
+                    IdentifierNode(uri["property_name"])
+                )
 
         # Check if we have a filter in the query
         if main_entity_id:
-            query_ast.filter = FilterNode(query_ast.filter.filter + f" and id eq {main_entity_id}" if query_ast.filter else f"id eq {main_entity_id}")
+            query_ast.filter = FilterNode(
+                query_ast.filter.filter + f" and id eq {main_entity_id}"
+                if query_ast.filter
+                else f"id eq {main_entity_id}"
+            )
 
-            if not entities:
-                single_result = True
+            single_result = True
+
+        if uri["single"]:
+            single_result = True
 
         # Check if query has an expand but not a select and does not have sub entities
         if query_ast.expand and not query_ast.select and not entities:
@@ -575,21 +518,32 @@ class STA2REST:
             for column in default_columns:
                 query_ast.select.identifiers.append(IdentifierNode(column))
 
-        # Visit the query ast to convert it
-        visitor = NodeVisitor(main_entity)
-        query_converted = visitor.visit(query_ast)
+        if DEBUG:
+            print(query_ast)
 
-        return {
-            'url': url + "?" + query_converted if query_converted else url,
-            'ref': uri['ref'],
-            'value': uri['value'],
-            'single_result': single_result
-        }
+        # Visit the query ast to convert it
+        visitor = NodeVisitor(
+            main_entity,
+            db,
+            full_path,
+            uri["ref"],
+            uri["value"],
+            single_result,
+            entities,
+        )
+        query_converted = await visitor.visit(query_ast)
+
+        # Result format is allowed only for Observations
+        if query_ast.result_format and main_entity != "Observation":
+            raise Exception(
+                "Illegal operation: $resultFormat is only valid for /Observations"
+            )
+        return query_converted
 
     @staticmethod
     def parse_entity(entity: str):
         # Check if we have an id in the entity and match only the number
-        match = re.search(r'\(\d+\)', entity)
+        match = re.search(r"\(\d+\)", entity)
         id = None
         if match:
             # Get the id from the match without the brackets
@@ -604,17 +558,30 @@ class STA2REST:
             return None
 
         return (entity, id)
-    
+
     @staticmethod
     def parse_uri(uri: str) -> str:
         # Split the uri by the '/' character
-        parts = uri.split('/')
+        version = VERSION
+        parts = uri.split(version)
+        parts = parts[1]
+        parts = parts.split("/")
+
         # Remove the first part
         parts.pop(0)
 
-        # Check if we have a version number
-        version = parts.pop(0)
-
+        if parts[-1] == "$ref":
+            entity_name = parts[-2]
+        elif parts[-1] == "$value":
+            entity_name = parts[-3]
+        else:
+            entity_name = parts[-1]
+        single = False
+        keys_list = list(STA2REST.ENTITY_MAPPING.keys())
+        if entity_name in keys_list:
+            index = keys_list.index(entity_name)
+            if index > 8:
+                single = True
         # Parse first entity
         main_entity = STA2REST.parse_entity(parts.pop(0))
         if not main_entity:
@@ -622,33 +589,50 @@ class STA2REST:
 
         # Check all the entities in the uri
         entities = []
-        property_name = None
+        property_name = ""
         ref = False
         value = False
-        for entity in parts:
+        for index, entity in enumerate(parts):
             # Parse the entity
             result = STA2REST.parse_entity(entity)
             if result:
                 entities.append(result)
             elif entity == "$ref":
                 if property_name:
-                    raise Exception("Error parsing uri: $ref after property name")
+                    raise Exception(
+                        "Error parsing uri: $ref after property name"
+                    )
                 ref = True
             elif entity == "$value":
                 if property_name:
                     value = True
                 else:
-                    raise Exception("Error parsing uri: $value without property name")
+                    raise Exception(
+                        "Error parsing uri: $value without property name"
+                    )
             else:
-                property_name = entity
+                property_name += entity
+                if (
+                    index < len(parts) - 1
+                    and parts[index + 1] != "$ref"
+                    and parts[index + 1] != "$value"
+                ):
+                    property_name += "/"
+        # Reverse order of entities
+        if entities:
+            entities = entities[::-1]
+            entities.append(main_entity)
+            main_entity = entities[0]
+            entities.pop(0)
 
         return {
-            'version': version,
-            'entity': main_entity,
-            'entities': entities,
-            'property_name': property_name,
-            'ref': ref,
-            'value': value
+            "version": version,
+            "entity": main_entity,
+            "entities": entities,
+            "property_name": property_name,
+            "ref": ref,
+            "value": value,
+            "single": single,
         }
 
 

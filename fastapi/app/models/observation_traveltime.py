@@ -1,18 +1,16 @@
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql.schema import Column, ForeignKey
+from sqlalchemy.sql.schema import Column, ForeignKey, PrimaryKeyConstraint
 from sqlalchemy.sql.sqltypes import Boolean, Float, Integer, Text
 
 from .database import SCHEMA_NAME, Base
 
 
-class Observation(Base):
-    __tablename__ = "Observation"
-    __table_args__ = {"schema": SCHEMA_NAME}
+class ObservationTravelTime(Base):
+    __tablename__ = "Observation_traveltime"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
     featuresofinterest_navigation_link = Column(
         "FeatureOfInterest@iot.navigationLink", Text
@@ -30,19 +28,18 @@ class Observation(Base):
     result_quality = Column("resultQuality", JSON)
     valid_time = Column("validTime", TSTZRANGE)
     parameters = Column(JSON)
+    datastream_id = Column(
+        Integer, ForeignKey(f"{SCHEMA_NAME}.Datastream.id"), nullable=False
+    )
     featuresofinterest_id = Column(
         Integer,
         ForeignKey(f"{SCHEMA_NAME}.FeaturesOfInterest.id"),
         nullable=False,
     )
-    datastream_id = Column(
-        Integer,
-        ForeignKey(f"{SCHEMA_NAME}.Datastream.id"),
-        nullable=False,
-    )
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
-    featuresofinterest = relationship(
-        "FeaturesOfInterest", back_populates="observation"
+    system_time_validity = Column(TSTZRANGE)
+
+    __table_args__ = (
+        PrimaryKeyConstraint(id, system_time_validity),
+        {"schema": SCHEMA_NAME},
     )
-    datastream = relationship("Datastream", back_populates="observation")
-    commit = relationship("Commit", back_populates="observation")
