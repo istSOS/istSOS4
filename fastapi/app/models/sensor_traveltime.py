@@ -1,16 +1,15 @@
 from sqlalchemy.dialects.postgresql.json import JSON
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql.schema import Column, ForeignKey
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
+from sqlalchemy.sql.schema import Column, ForeignKey, PrimaryKeyConstraint
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
 from .database import SCHEMA_NAME, Base
 
 
-class Sensor(Base):
-    __tablename__ = "Sensor"
-    __table_args__ = {"schema": SCHEMA_NAME}
+class SensorTravelTime(Base):
+    __tablename__ = "Sensor_traveltime"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer)
     self_link = Column("@iot.selfLink", Text)
     datastream_navigation_link = Column("Datastreams@iot.navigationLink", Text)
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
@@ -19,6 +18,10 @@ class Sensor(Base):
     encoding_type = Column("encodingType", String(100), nullable=False)
     sensor_metadata = Column("metadata", JSON, nullable=False)
     properties = Column(JSON)
+    system_time_validity = Column(TSTZRANGE)
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
-    datastream = relationship("Datastream", back_populates="sensor")
-    commit = relationship("Commit", back_populates="sensor")
+
+    __table_args__ = (
+        PrimaryKeyConstraint(id, system_time_validity),
+        {"schema": SCHEMA_NAME},
+    )

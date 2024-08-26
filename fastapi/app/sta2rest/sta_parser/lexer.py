@@ -7,31 +7,36 @@ Author: Filippo Finke
 import re
 import urllib.parse
 
-
 # Define the token types
 TOKEN_TYPES = {
-    'COUNT': r'\$count=',
-    'TOP': r'\$top=',
-    'SKIP': r'\$skip=',
-    'SELECT': r'\$select=',
-    'FILTER': r'\$filter=',
-    'EXPAND': r'\$expand=',
-    'ORDERBY': r'\$orderby=',
-    'SUBQUERY_SEPARATOR': r';',
-    'VALUE_SEPARATOR': r',',
-    'OPTIONS_SEPARATOR': r'&',
-    'EQUALS': r'\beq\b',
-    'AND': r'\band\b',
-    'OR': r'\bor\b',
-    'ORDER': r'\basc\b|\bdesc\b',
-    'BOOL': r'\btrue\b|\bfalse\b',
-    'IDENTIFIER': r'@{0,1}[a-zA-Z_][.a-zA-Z0-9_/]*',
-    'FLOAT': r'[0-9]+\.[0-9]+',
-    'INTEGER': r'[0-9]+',
-    'STRING': r"'[^']*'",
-    'LEFT_PAREN': r'\(',
-    'RIGHT_PAREN': r'\)',
-    'WHITESPACE': r'\s+',
+    "COUNT": r"\$count=",
+    "TOP": r"\$top=",
+    "SKIP": r"\$skip=",
+    "SELECT": r"\$select=",
+    "FILTER": r"\$filter=",
+    "EXPAND": r"\$expand=",
+    "ORDERBY": r"\$orderby=",
+    "ASOF": r"\$asof=",
+    "FROMTO": r"\$fromto=",
+    "RESULT_FORMAT": r"\$resultFormat=",
+    "RESULT_FORMAT_VALUE": r"\bdataArray\b",
+    "SUBQUERY_SEPARATOR": r";",
+    "VALUE_SEPARATOR": r",",
+    "OPTIONS_SEPARATOR": r"&",
+    "ORDER": r"\basc\b|\bdesc\b",
+    "BOOL": r"\btrue\b|\bfalse\b",
+    "TIMESTAMP": r"[1-9]\d{3}-(?:0\d|1[0-2])-(?:[0-2]\d|3[01])"
+    + r"T"
+    + r"(?:[01]\d|2[0-3]):[0-5]\d(:?:[0-5]\d(?:\.\d{1,12})?)"
+    + r"?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?",
+    "EXPAND_IDENTIFIER": r"[a-zA-Z_][.a-zA-Z0-9_]*",
+    "IDENTIFIER": r"[a-zA-Z_][.a-zA-Z0-9_/]*",
+    "INTEGER": r"[0-9]+",
+    "STRING": r"'[^']*'",
+    "LEFT_PAREN": r"\(",
+    "RIGHT_PAREN": r"\)",
+    "WHITESPACE": r"\s+",
+    "EXPAND_SEPARATOR": r"\/",
 }
 
 
@@ -56,7 +61,7 @@ class Token:
         Returns:
             str: The string representation of the token.
         """
-        return f'Token({self.type}, {self.value})'
+        return f"Token({self.type}, {self.value})"
 
 
 class Lexer:
@@ -97,7 +102,9 @@ class Lexer:
                     break
 
             if not match:
-                raise Exception(f'Invalid character at position {position}: {self.text[position]}')
+                raise Exception(
+                    f"Invalid character at position {position}: {self.text[position]}"
+                )
 
         return tokens
 
@@ -108,11 +115,11 @@ class Lexer:
         Returns:
             str: The string representation of the lexer.
         """
-        return '\n'.join(str(token) for token in self.tokens)
+        return "\n".join(str(token) for token in self.tokens)
 
 
 # Example usage
-if __name__ == '__main__':
-    text = '''$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))'''
+if __name__ == "__main__":
+    text = """$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))"""
     lexer = Lexer(text)
     print(lexer)
