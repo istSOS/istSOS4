@@ -3,7 +3,7 @@
 ## Clone the istSOSm repository
 
 ```sh
-git clone -b sta https://github.com/istSOS/istsos-miu.git
+git clone https://github.com/istSOS/istSOS4.git
 ```
 
 ## Start DEV environment

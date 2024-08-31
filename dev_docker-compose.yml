@@ -73,6 +73,16 @@ services:
     depends_on:
       database:
         condition: service_healthy
+  
+  docs:
+    build:
+      context: ./istsos4_docs/mkdocs
+      dockerfile: dockerfile
+    #restart: always
+    ports:
+      - 8019:8000
+    volumes:
+      - ./istsos4_docs/mkdocs:/docs
 
 volumes:
   v-istsos-miu-database-data:
