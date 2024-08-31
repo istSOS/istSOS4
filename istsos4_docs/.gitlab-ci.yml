@@ -1,0 +1,18 @@
+stages:
+  - build
+pages:
+  stage: build
+  image: 
+      name: squidfunk/mkdocs-material
+      entrypoint: [""]
+  before_script:
+    - pip install mkdocs-video mkdocs-bibtex
+  script:
+    - cd mkdocs && mkdocs build
+    - mv site ../public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
