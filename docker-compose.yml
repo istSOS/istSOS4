@@ -12,7 +12,7 @@ services:
     ports:
       - "45432:5432"
     volumes:
-      - v-istsos-miu-database-data:/var/lib/postgresql/data
+      - v-istsos4-database-data:/var/lib/postgresql/data
     env_file:
       - .env
     healthcheck:
@@ -66,5 +66,5 @@ services:
         condition: service_healthy
 
 volumes:
-  v-istsos-miu-database-data:
-    name: v-istsos-miu-database-data
+  v-istsos4-database-data:
+    name: v-istsos4-database-data
