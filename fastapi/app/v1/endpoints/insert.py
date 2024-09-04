@@ -1,5 +1,6 @@
 import json
 import traceback
+from datetime import datetime
 
 from app import DEBUG, HOSTNAME, SUBPATH, VERSION
 from app.db.db import get_pool
@@ -330,7 +331,7 @@ async def insertThing(payload, conn):
                 if "@iot.id" in payload["Locations"]:
                     location_id = payload["Locations"]["@iot.id"]
                 else:
-                    location_id, location_selfLink = await insertLocation(
+                    location_id, _ = await insertLocation(
                         payload["Locations"], conn
                     )
                     new_location = True
@@ -533,6 +534,8 @@ async def insertDatastream(payload, conn, thing_id=None):
 
                 if "Observations" in ds:
                     observations.append(ds.pop("Observations", {}))
+                else:
+                    observations.append([])
 
                 handle_datetime_fields(ds)
 
@@ -542,7 +545,6 @@ async def insertDatastream(payload, conn, thing_id=None):
                     all_keys.add(key)
 
             all_keys = list(all_keys)
-
             for ds in payload:
                 ds_tuple = []
                 for key in all_keys:
@@ -564,13 +566,12 @@ async def insertDatastream(payload, conn, thing_id=None):
                 value for datastream in datastreams for value in datastream
             ]
             result = await conn.fetch(insert_sql, *values)
-            if observations:
-                for index, row in enumerate(result):
-                    datastream_id = row["id"]
+            for index, row in enumerate(result):
+                datastream_id = row["id"]
+                if observations[index]:
                     await insertObservation(
                         observations[index], conn, datastream_id
                     )
-
             datastream_id = result[0]["id"]
             datastream_selfLink = (
                 f"{HOSTNAME}{SUBPATH}{VERSION}/Datastreams({datastream_id})"
@@ -618,6 +619,9 @@ async def insertObservation(payload, conn, datastream_id=None):
                 handle_datetime_fields(obs)
                 handle_result_field(obs)
 
+                if obs.get("phenomenonTime") is None:
+                    obs["phenomenonTime"] = datetime.now()
+
                 for key, value in obs.items():
                     if isinstance(value, dict):
                         obs[key] = json.dumps(value)
@@ -640,7 +644,7 @@ async def insertObservation(payload, conn, datastream_id=None):
             insert_sql = f"""
             INSERT INTO sensorthings."Observation" ({keys})
             VALUES {values_placeholders}
-            RETURNING id
+            RETURNING id, "phenomenonTime", datastream_id
             """
 
             values = [
@@ -648,6 +652,22 @@ async def insertObservation(payload, conn, datastream_id=None):
             ]
             result = await conn.fetch(insert_sql, *values)
 
+            phenomenon_times = [record["phenomenonTime"] for record in result]
+
+            update_sql = """
+                UPDATE sensorthings."Datastream"
+                SET "phenomenonTime" = tstzrange(
+                    LEAST($1::timestamptz, lower("phenomenonTime")),
+                    GREATEST($2::timestamptz, upper("phenomenonTime"))
+                )
+                WHERE id = $3::bigint
+            """
+            await conn.execute(
+                update_sql,
+                min(phenomenon_times),
+                max(phenomenon_times),
+                result[0]["datastream_id"],
+            )
             observation_id = result[0]["id"]
             observation_selfLink = (
                 f"{HOSTNAME}{SUBPATH}{VERSION}/Observations({observation_id})"
@@ -725,7 +745,7 @@ async def generate_feature_of_interest(payload, conn):
 
             update_query = f"""
                 UPDATE sensorthings."Location" 
-                SET "gen_foi_id" = $1::bigint 
+                SET "gen_foi_id" = $1::bigint
                 WHERE id = $2::bigint
             """
             await conn.execute(update_query, foi_id, location_id)

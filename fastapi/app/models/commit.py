@@ -26,7 +26,7 @@ class Commit(Base):
         "FeatureOfInterest@iot.navigationLink", Text
     )
     observation_navigation_link = Column(
-        "Observation@iot.navigationLink", Text
+        "Observations@iot.navigationLink", Text
     )
     author = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100))
