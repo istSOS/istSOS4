@@ -379,53 +379,39 @@ class NodeVisitor(Visitor):
                     )
                     label_name = navigation_link_value.name.split("@")[0]
 
-                    if nested_sub_query[1] is not None:
-                        if EXPAND_MODE == "BASIC":
-                            json_expands.append(
-                                func.sensorthings.basic_expand(
-                                    str(compiled_query_text),
-                                    "{}".format(
-                                        nested_sub_query[1].name,
+                    if relationship_nested.direction.name != "MANYTOMANY":
+                        json_expands.append(
+                            func.sensorthings.expand(
+                                str(compiled_query_text),
+                                "{}".format(
+                                    (
+                                        nested_sub_query[1].name
+                                        if nested_sub_query[1] is not None
+                                        else "id"
                                     ),
-                                    text(
-                                        '"{}".id::integer'.format(
-                                            globals()[
-                                                nested_sub_query[2]
-                                            ].__tablename__
-                                        )
-                                    ),
-                                    nested_sub_query[4] - 1,
-                                    nested_sub_query[3],
-                                    True,
-                                    nested_sub_query[7],
-                                ).label(label_name)
-                            )
-                        else:
-                            json_expands.append(
-                                func.sensorthings.advanced_expand(
-                                    str(compiled_query_text),
-                                    "{}".format(
-                                        nested_sub_query[1].name,
-                                    ),
-                                    text(
-                                        '"{}".id::integer'.format(
-                                            globals()[
-                                                nested_sub_query[2]
-                                            ].__tablename__
-                                        )
-                                    ),
-                                    nested_sub_query[4],
-                                    nested_sub_query[3],
-                                    True,
-                                    nested_sub_query[7],
-                                    label_name,
-                                    COUNT_MODE,
-                                    COUNT_ESTIMATE_THRESHOLD,
-                                    nested_sub_query[8],
-                                )
-                                .op("->")("data")
-                                .label(label_name)
-                            )
+                                ),
+                                text(
+                                    '"{}".id::integer'.format(
+                                        globals()[
+                                            nested_sub_query[2]
+                                        ].__tablename__
+                                    )
+                                ),
+                                nested_sub_query[4] - 1,
+                                nested_sub_query[3],
+                                (
+                                    True
+                                    if nested_sub_query[1] is not None
+                                    else False
+                                ),
+                                nested_sub_query[7],
+                            ).label(label_name)
+                        )
+                        if (
+                            EXPAND_MODE == "ADVANCED"
+                            and relationship_nested.direction.name
+                            == "ONETOMANY"
+                        ):
                             json_expands.append(
                                 (
                                     HOSTNAME
@@ -436,7 +422,7 @@ class NodeVisitor(Visitor):
                                         "self_link",
                                     )
                                     + "/"
-                                    + func.sensorthings.advanced_expand(
+                                    + func.sensorthings.next_link_expand(
                                         str(compiled_query_text),
                                         "{}".format(
                                             nested_sub_query[1].name,
@@ -450,19 +436,14 @@ class NodeVisitor(Visitor):
                                         ),
                                         nested_sub_query[4],
                                         nested_sub_query[3],
-                                        True,
-                                        nested_sub_query[7],
                                         label_name,
-                                        COUNT_MODE,
-                                        COUNT_ESTIMATE_THRESHOLD,
-                                        nested_sub_query[8],
-                                    ).op("->>")(label_name + "@iot.nextLink")
-                                ).label(label_name + "@iot.nextLink")
+                                    )
+                                ).label(label_name + "@iot.nextLink"),
                             )
                             if nested_sub_query[8]:
                                 json_expands.append(
                                     (
-                                        func.sensorthings.advanced_expand(
+                                        func.sensorthings.count_expand(
                                             str(compiled_query_text),
                                             "{}".format(
                                                 nested_sub_query[1].name,
@@ -474,51 +455,50 @@ class NodeVisitor(Visitor):
                                                     ].__tablename__
                                                 )
                                             ),
-                                            nested_sub_query[4],
-                                            nested_sub_query[3],
-                                            True,
-                                            nested_sub_query[7],
-                                            label_name,
                                             COUNT_MODE,
                                             COUNT_ESTIMATE_THRESHOLD,
-                                            nested_sub_query[8],
                                         )
-                                        .op("->>")(label_name + "@iot.count")
-                                        .cast(Integer)
                                     ).label(label_name + "@iot.count"),
                                 )
                     else:
-                        if relationship_nested.direction.name == "MANYTOMANY":
-                            if EXPAND_MODE == "BASIC":
-                                json_expands.append(
-                                    func.sensorthings.basic_expand_many2many(
-                                        str(compiled_query_text),
-                                        f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
-                                        text(
-                                            '"{}".id::integer'.format(
-                                                globals()[
-                                                    nested_sub_query[2]
-                                                ].__tablename__
-                                            )
-                                        ),
-                                        "{}_id".format(
-                                            nested_sub_query[5].replace(
-                                                "TravelTime", ""
-                                            )
-                                        ),
-                                        "{}_id".format(
-                                            nested_sub_query[2].replace(
-                                                "TravelTime", ""
-                                            )
-                                        ),
-                                        nested_sub_query[4] - 1,
-                                        nested_sub_query[3],
-                                        nested_sub_query[7],
-                                    ).label(label_name)
-                                )
-                            else:
-                                json_expands.append(
-                                    func.sensorthings.advanced_expand_many2many(
+                        json_expands.append(
+                            func.sensorthings.expand_many2many(
+                                str(compiled_query_text),
+                                f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
+                                text(
+                                    '"{}".id::integer'.format(
+                                        globals()[
+                                            nested_sub_query[2]
+                                        ].__tablename__
+                                    )
+                                ),
+                                "{}_id".format(
+                                    nested_sub_query[5].replace(
+                                        "TravelTime", ""
+                                    )
+                                ),
+                                "{}_id".format(
+                                    nested_sub_query[2].replace(
+                                        "TravelTime", ""
+                                    )
+                                ),
+                                nested_sub_query[4] - 1,
+                                nested_sub_query[3],
+                                nested_sub_query[7],
+                            ).label(label_name)
+                        )
+                        if EXPAND_MODE == "ADVANCED":
+                            json_expands.append(
+                                (
+                                    HOSTNAME
+                                    + SUBPATH
+                                    + VERSION
+                                    + getattr(
+                                        globals()[nested_sub_query[2]],
+                                        "self_link",
+                                    )
+                                    + "/"
+                                    + func.sensorthings.next_link_expand_many2many(
                                         str(compiled_query_text),
                                         f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
                                         text(
@@ -540,26 +520,13 @@ class NodeVisitor(Visitor):
                                         ),
                                         nested_sub_query[4],
                                         nested_sub_query[3],
-                                        nested_sub_query[7],
-                                        label_name,
-                                        COUNT_MODE,
-                                        COUNT_ESTIMATE_THRESHOLD,
-                                        nested_sub_query[8],
                                     )
-                                    .op("->")("data")
-                                    .label(label_name)
-                                )
+                                ).label(label_name + "@iot.nextLink"),
+                            )
+                            if nested_sub_query[8]:
                                 json_expands.append(
                                     (
-                                        HOSTNAME
-                                        + SUBPATH
-                                        + VERSION
-                                        + getattr(
-                                            globals()[nested_sub_query[2]],
-                                            "self_link",
-                                        )
-                                        + "/"
-                                        + func.sensorthings.advanced_expand_many2many(
+                                        func.sensorthings.count_expand_many2many(
                                             str(compiled_query_text),
                                             f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
                                             text(
@@ -579,78 +546,11 @@ class NodeVisitor(Visitor):
                                                     "TravelTime", ""
                                                 )
                                             ),
-                                            nested_sub_query[4],
-                                            nested_sub_query[3],
-                                            nested_sub_query[7],
-                                            label_name,
                                             COUNT_MODE,
                                             COUNT_ESTIMATE_THRESHOLD,
-                                            nested_sub_query[8],
-                                        ).op(
-                                            "->>"
-                                        )(
-                                            label_name + "@iot.nextLink"
                                         )
-                                    ).label(label_name + "@iot.nextLink"),
+                                    ).label(label_name + "@iot.count"),
                                 )
-                                if nested_sub_query[8]:
-                                    json_expands.append(
-                                        (
-                                            func.sensorthings.advanced_expand_many2many(
-                                                str(compiled_query_text),
-                                                f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
-                                                text(
-                                                    '"{}".id::integer'.format(
-                                                        globals()[
-                                                            nested_sub_query[2]
-                                                        ].__tablename__
-                                                    )
-                                                ),
-                                                "{}_id".format(
-                                                    nested_sub_query[
-                                                        5
-                                                    ].replace("TravelTime", "")
-                                                ),
-                                                "{}_id".format(
-                                                    nested_sub_query[
-                                                        2
-                                                    ].replace("TravelTime", "")
-                                                ),
-                                                nested_sub_query[4],
-                                                nested_sub_query[3],
-                                                nested_sub_query[7],
-                                                label_name,
-                                                COUNT_MODE,
-                                                COUNT_ESTIMATE_THRESHOLD,
-                                                nested_sub_query[8],
-                                            )
-                                            .op("->>")(
-                                                label_name + "@iot.count"
-                                            )
-                                            .cast(Integer)
-                                        ).label(label_name + "@iot.count"),
-                                    )
-                        else:
-                            json_expands.append(
-                                func.sensorthings.basic_expand(
-                                    str(compiled_query_text),
-                                    "id",
-                                    text(
-                                        '"{}".{}_id::integer'.format(
-                                            globals()[
-                                                nested_sub_query[2]
-                                            ].__tablename__,
-                                            nested_sub_query[5].replace(
-                                                "TravelTime", ""
-                                            ),
-                                        )
-                                    ),
-                                    nested_sub_query[4] - 1,
-                                    nested_sub_query[3],
-                                    False,
-                                    nested_sub_query[7],
-                                ).label(label_name)
-                            )
             if fk_parent is not None:
                 select_fields.append(fk_parent)
 
@@ -967,52 +867,40 @@ class NodeVisitor(Visitor):
                             main_entity, navigation_link_attr
                         )
                         label_name = navigation_link_value.name.split("@")[0]
-                        if sub_query[1] is not None:
-                            if EXPAND_MODE == "BASIC":
-                                json_build_object_args.append(
-                                    func.sensorthings.basic_expand(
-                                        str(compiled_query_text),
-                                        "{}".format(
-                                            sub_query[1].name,
+
+                        if relationship_type.direction.name != "MANYTOMANY":
+                            json_build_object_args.append(
+                                func.sensorthings.expand(
+                                    str(compiled_query_text),
+                                    "{}".format(
+                                        (
+                                            sub_query[1].name
+                                            if sub_query[1] is not None
+                                            else "id"
                                         ),
-                                        text(
-                                            '"{}".id::integer'.format(
-                                                globals()[
-                                                    sub_query[2]
-                                                ].__tablename__
-                                            )
-                                        ),
-                                        sub_query[4] - 1,
-                                        sub_query[3],
-                                        True,
-                                    ).label(label_name)
-                                )
-                            else:
-                                json_build_object_args.append(
-                                    func.sensorthings.advanced_expand(
-                                        str(compiled_query_text),
-                                        "{}".format(
-                                            sub_query[1].name,
-                                        ),
-                                        text(
-                                            '"{}".id::integer'.format(
-                                                globals()[
-                                                    sub_query[2]
-                                                ].__tablename__
-                                            )
-                                        ),
-                                        sub_query[4],
-                                        sub_query[3],
-                                        True,
-                                        sub_query[7],
-                                        label_name,
-                                        COUNT_MODE,
-                                        COUNT_ESTIMATE_THRESHOLD,
-                                        sub_query[8],
-                                    )
-                                    .op("->")("data")
-                                    .label(label_name)
-                                )
+                                    ),
+                                    text(
+                                        '"{}".id::integer'.format(
+                                            globals()[
+                                                sub_query[2]
+                                            ].__tablename__
+                                        )
+                                    ),
+                                    sub_query[4] - 1,
+                                    sub_query[3],
+                                    (
+                                        True
+                                        if sub_query[1] is not None
+                                        else False
+                                    ),
+                                    sub_query[7],
+                                ).label(label_name)
+                            )
+                            if (
+                                EXPAND_MODE == "ADVANCED"
+                                and relationship_type.direction.name
+                                == "ONETOMANY"
+                            ):
                                 json_build_object_args.append(
                                     (
                                         HOSTNAME
@@ -1020,7 +908,7 @@ class NodeVisitor(Visitor):
                                         + VERSION
                                         + getattr(main_entity, "self_link")
                                         + "/"
-                                        + func.sensorthings.advanced_expand(
+                                        + func.sensorthings.next_link_expand(
                                             str(compiled_query_text),
                                             "{}".format(
                                                 sub_query[1].name,
@@ -1034,21 +922,14 @@ class NodeVisitor(Visitor):
                                             ),
                                             sub_query[4],
                                             sub_query[3],
-                                            True,
-                                            sub_query[7],
                                             label_name,
-                                            COUNT_MODE,
-                                            COUNT_ESTIMATE_THRESHOLD,
-                                            sub_query[8],
-                                        ).op("->>")(
-                                            label_name + "@iot.nextLink"
                                         )
                                     ).label(label_name + "@iot.nextLink"),
                                 )
                                 if sub_query[8]:
                                     json_build_object_args.append(
                                         (
-                                            func.sensorthings.advanced_expand(
+                                            func.sensorthings.count_expand(
                                                 str(compiled_query_text),
                                                 "{}".format(
                                                     sub_query[1].name,
@@ -1060,58 +941,43 @@ class NodeVisitor(Visitor):
                                                         ].__tablename__
                                                     )
                                                 ),
-                                                sub_query[4],
-                                                sub_query[3],
-                                                True,
-                                                sub_query[7],
-                                                label_name,
                                                 COUNT_MODE,
                                                 COUNT_ESTIMATE_THRESHOLD,
-                                                sub_query[8],
                                             )
-                                            .op("->>")(
-                                                label_name + "@iot.count"
-                                            )
-                                            .cast(Integer)
                                         ).label(label_name + "@iot.count"),
                                     )
                         else:
-                            if (
-                                relationship_type.direction.name
-                                == "MANYTOMANY"
-                            ):
-                                if EXPAND_MODE == "BASIC":
-                                    json_build_object_args.append(
-                                        func.sensorthings.basic_expand_many2many(
-                                            str(compiled_query_text),
-                                            f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
-                                            text(
-                                                '"{}".id::integer'.format(
-                                                    globals()[
-                                                        sub_query[2]
-                                                    ].__tablename__
-                                                )
-                                            ),
-                                            "{}_id".format(
-                                                sub_query[5].replace(
-                                                    "TravelTime", ""
-                                                )
-                                            ),
-                                            "{}_id".format(
-                                                sub_query[2].replace(
-                                                    "TravelTime", ""
-                                                )
-                                            ),
-                                            sub_query[4] - 1,
-                                            sub_query[3],
-                                            sub_query[7],
-                                        ).label(
-                                            label_name
+                            json_build_object_args.append(
+                                func.sensorthings.expand_many2many(
+                                    str(compiled_query_text),
+                                    f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
+                                    text(
+                                        '"{}".id::integer'.format(
+                                            globals()[
+                                                sub_query[2]
+                                            ].__tablename__
                                         )
-                                    )
-                                else:
-                                    json_build_object_args.append(
-                                        func.sensorthings.advanced_expand_many2many(
+                                    ),
+                                    "{}_id".format(
+                                        sub_query[5].replace("TravelTime", "")
+                                    ),
+                                    "{}_id".format(
+                                        sub_query[2].replace("TravelTime", "")
+                                    ),
+                                    sub_query[4] - 1,
+                                    sub_query[3],
+                                    sub_query[7],
+                                ).label(label_name)
+                            )
+                            if EXPAND_MODE == "ADVANCED":
+                                json_build_object_args.append(
+                                    (
+                                        HOSTNAME
+                                        + SUBPATH
+                                        + VERSION
+                                        + getattr(main_entity, "self_link")
+                                        + "/"
+                                        + func.sensorthings.next_link_expand_many2many(
                                             str(compiled_query_text),
                                             f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
                                             text(
@@ -1133,23 +999,13 @@ class NodeVisitor(Visitor):
                                             ),
                                             sub_query[4],
                                             sub_query[3],
-                                            sub_query[7],
-                                            label_name,
-                                            COUNT_MODE,
-                                            COUNT_ESTIMATE_THRESHOLD,
-                                            sub_query[8],
                                         )
-                                        .op("->")("data")
-                                        .label(label_name)
-                                    )
+                                    ).label(label_name + "@iot.nextLink"),
+                                )
+                                if sub_query[8]:
                                     json_build_object_args.append(
                                         (
-                                            HOSTNAME
-                                            + SUBPATH
-                                            + VERSION
-                                            + getattr(main_entity, "self_link")
-                                            + "/"
-                                            + func.sensorthings.advanced_expand_many2many(
+                                            func.sensorthings.count_expand_many2many(
                                                 str(compiled_query_text),
                                                 f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
                                                 text(
@@ -1169,78 +1025,11 @@ class NodeVisitor(Visitor):
                                                         "TravelTime", ""
                                                     )
                                                 ),
-                                                sub_query[4],
-                                                sub_query[3],
-                                                sub_query[7],
-                                                label_name,
                                                 COUNT_MODE,
                                                 COUNT_ESTIMATE_THRESHOLD,
-                                                sub_query[8],
-                                            ).op(
-                                                "->>"
-                                            )(
-                                                label_name + "@iot.nextLink"
                                             )
-                                        ).label(label_name + "@iot.nextLink"),
+                                        ).label(label_name + "@iot.count"),
                                     )
-                                    if sub_query[8]:
-                                        json_build_object_args.append(
-                                            (
-                                                func.sensorthings.advanced_expand_many2many(
-                                                    str(compiled_query_text),
-                                                    f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
-                                                    text(
-                                                        '"{}".id::integer'.format(
-                                                            globals()[
-                                                                sub_query[2]
-                                                            ].__tablename__
-                                                        )
-                                                    ),
-                                                    "{}_id".format(
-                                                        sub_query[5].replace(
-                                                            "TravelTime", ""
-                                                        )
-                                                    ),
-                                                    "{}_id".format(
-                                                        sub_query[2].replace(
-                                                            "TravelTime", ""
-                                                        )
-                                                    ),
-                                                    sub_query[4],
-                                                    sub_query[3],
-                                                    sub_query[7],
-                                                    label_name,
-                                                    COUNT_MODE,
-                                                    COUNT_ESTIMATE_THRESHOLD,
-                                                    sub_query[8],
-                                                )
-                                                .op("->>")(
-                                                    label_name + "@iot.count"
-                                                )
-                                                .cast(Integer)
-                                            ).label(label_name + "@iot.count"),
-                                        )
-                            else:
-                                json_build_object_args.append(
-                                    func.sensorthings.basic_expand(
-                                        str(compiled_query_text),
-                                        "id",
-                                        text(
-                                            '"{}".{}_id::integer'.format(
-                                                globals()[
-                                                    sub_query[2]
-                                                ].__tablename__,
-                                                sub_query[5].replace(
-                                                    "TravelTime", ""
-                                                ),
-                                            )
-                                        ),
-                                        sub_query[4] - 1,
-                                        sub_query[3],
-                                        False,
-                                        sub_query[7],
-                                    ).label(label_name)
-                                )
                     main_query = select(*json_build_object_args)
             else:
                 if result_format == "DataArray":
@@ -1463,66 +1252,65 @@ async def stream_results(
     single_result,
     full_path,
 ):
-    async with session:
-        result = await session.stream(query)
-        start_json = ""
-        is_first_partition = True
-        has_rows = False
+    result = await session.stream(query)
+    start_json = ""
+    is_first_partition = True
+    has_rows = False
 
-        async for partition in result.scalars().partitions(PARTITION_CHUNK):
-            partition_len = len(partition)
-            has_rows = True
+    async for partition in result.scalars().partitions(PARTITION_CHUNK):
+        partition_len = len(partition)
+        has_rows = True
 
-            if partition_len > top - 1:
-                partition = partition[:-1]
+        if partition_len > top - 1:
+            partition = partition[:-1]
 
-            if (
-                VERSIONING
-                and single_result
-                and partition_len == 1
-                and entity != "Commit"
-                and not from_to_value
-            ):
-                partition[0]["@iot.as_of"] = as_of_value
+        if (
+            VERSIONING
+            and single_result
+            and partition_len == 1
+            and entity != "Commit"
+            and not from_to_value
+        ):
+            partition[0]["@iot.as_of"] = as_of_value
 
-            partition_json = ujson.dumps(
-                partition,
-                default=datetime.isoformat,
-                escape_forward_slashes=False,
-            )[1:-1]
+        partition_json = ujson.dumps(
+            partition,
+            default=datetime.isoformat,
+            escape_forward_slashes=False,
+        )[1:-1]
 
-            if is_first_partition:
-                if partition_len > 0 and not single_result:
-                    start_json = "{"
+        if is_first_partition:
+            if partition_len > 0 and not single_result:
+                start_json = "{"
 
-                next_link = build_nextLink(full_path, partition_len)
-                next_link_json = (
-                    f'"@iot.nextLink": "{next_link}",'
-                    if next_link and not single_result
-                    else ""
-                )
-                as_of = (
-                    f'"@iot.as_of": "{as_of_value}",'
-                    if VERSIONING and not single_result and not from_to_value
-                    else ""
-                )
-                start_json += as_of + iot_count + next_link_json
-                start_json += (
-                    '"value": ['
-                    if (partition_len > 0 and not single_result)
-                    else ""
-                )
+            next_link = build_nextLink(full_path, partition_len)
+            next_link_json = (
+                f'"@iot.nextLink": "{next_link}",'
+                if next_link and not single_result
+                else ""
+            )
+            as_of = (
+                f'"@iot.as_of": "{as_of_value}",'
+                if VERSIONING and not single_result and not from_to_value
+                else ""
+            )
+            start_json += as_of + iot_count + next_link_json
+            start_json += (
+                '"value": ['
+                if (partition_len > 0 and not single_result)
+                else ""
+            )
 
-                yield start_json + partition_json
-                is_first_partition = False
-            else:
-                yield "," + partition_json
+            yield start_json + partition_json
+            is_first_partition = False
+        else:
+            yield "," + partition_json
 
-        if not has_rows and not single_result:
-            yield '{"value": []}'
+    if not has_rows and not single_result:
+        yield '{"value": []}'
 
-        if has_rows and not single_result:
-            yield "]}"
+    if has_rows and not single_result:
+        yield "]}"
 
 
 def build_nextLink(full_path, count_links):
