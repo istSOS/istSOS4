@@ -1,7 +1,7 @@
 import json
 import traceback
 
-from app import DEBUG
+from app import DEBUG, VERSIONING
 from app.db.db import get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
@@ -28,8 +28,18 @@ ALLOWED_KEYS = {
         "properties",
         "Things",
     },
-    "Thing": {"name", "description", "properties", "Locations", "Datastreams"},
-    "HistoricalLocation": {"time", "Thing", "Locations"},
+    "Thing": {
+        "name",
+        "description",
+        "properties",
+        "Locations",
+        "Datastreams",
+    },
+    "HistoricalLocation": {
+        "time",
+        "Thing",
+        "Locations",
+    },
     "Sensor": {
         "name",
         "description",
@@ -121,6 +131,10 @@ async def catch_all_update(
                 b = copy.deepcopy(body)
             except:
                 b = ""
+        
+        if VERSIONING:
+            ALLOWED_KEYS["Commit"] = {"message", "author", "encodingType"}
+            ALLOWED_KEYS[name].add("Commit")
 
         if name in ALLOWED_KEYS:
             allowed_keys = ALLOWED_KEYS[name]
@@ -208,6 +222,13 @@ async def update_record(payload, conn, table, record_id):
     """
     try:
         async with conn.transaction():
+            if VERSIONING:
+                query = f'SELECT id FROM sensorthings."{table}" WHERE id = {record_id};';
+                selected_id = await conn.fetchval(query)
+                if selected_id:
+                    payload ["commit_id"] = await insertCommit(payload["Commit"], conn)
+                    payload.pop("Commit")
+
             payload = {
                 key: json.dumps(value) if isinstance(value, dict) else value
                 for key, value in payload.items()
@@ -215,21 +236,10 @@ async def update_record(payload, conn, table, record_id):
             set_clause = ", ".join(
                 [f'"{key}" = ${i + 1}' for i, key in enumerate(payload.keys())]
             )
-            query = f'UPDATE sensorthings."{table}" SET {set_clause} WHERE id = ${len(payload) + 1} RETURNING ID;'
-            updated_id = await conn.fetchval(
-                query, *payload.values(), int(record_id)
+            query = f'UPDATE sensorthings."{table}" SET {set_clause} WHERE id = {record_id} RETURNING ID;'
+            return await conn.fetchval(
+                query, *payload.values()
             )
-            if not updated_id:
-                return JSONResponse(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    content={
-                        "code": 404,
-                        "type": "error",
-                        "message": "No entity found for the given id.",
-                    },
-                )
-
-            return updated_id
     except Exception:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -288,6 +298,12 @@ async def updateLocation(payload, conn, location_id):
                 historicallocation_id,
             )
         payload.pop("Things")
+    
+    payload["gen_foi_id"] = None
+
+    if VERSIONING:
+        check_commit_versioning(payload)
+
     return await update_record(payload, conn, "Location", location_id)
 
 
@@ -338,9 +354,14 @@ async def updateThing(payload, conn, thing_id):
                 historicallocation_id,
             )
         payload.pop("Locations")
+
     await handle_nested_entities(
         payload, conn, thing_id, "Datastreams", "thing_id", "Datastream"
     )
+
+    if VERSIONING:
+        check_commit_versioning(payload)
+
     return await update_record(payload, conn, "Thing", thing_id)
 
 
@@ -382,8 +403,13 @@ async def updateHistoricalLocation(payload, conn, historicallocation_id):
                     location_id,
                 )
         payload.pop("Locations")
+
     handle_datetime_fields(payload)
     handle_associations(payload, ["Thing"])
+
+    if VERSIONING:
+        check_commit_versioning(payload)
+
     return await update_record(
         payload, conn, "HistoricalLocation", historicallocation_id
     )
@@ -407,6 +433,10 @@ async def updateSensor(payload, conn, sensor_id):
     await handle_nested_entities(
         payload, conn, sensor_id, "Datastreams", "sensor_id", "Datastream"
     )
+
+    if VERSIONING:
+        check_commit_versioning(payload)
+
     return await update_record(payload, conn, "Sensor", sensor_id)
 
 
@@ -433,6 +463,10 @@ async def updateObservedProperty(payload, conn, observedproperty_id):
         "observedproperty_id",
         "Datastream",
     )
+
+    if VERSIONING:
+        check_commit_versioning(payload)
+
     return await update_record(
         payload, conn, "ObservedProperty", observedproperty_id
     )
@@ -458,6 +492,10 @@ async def updateFeaturesOfInterest(payload, conn, featuresofinterest_id):
         "featuresofinterest_id",
         "Observation",
     )
+
+    if VERSIONING:
+        check_commit_versioning(payload)
+
     return await update_record(
         payload, conn, "FeaturesOfInterest", featuresofinterest_id
     )
@@ -486,6 +524,10 @@ async def updateDatastream(payload, conn, datastream_id):
         "datastream_id",
         "Observation",
     )
+
+    if VERSIONING:
+        check_commit_versioning(payload)
+
     return await update_record(payload, conn, "Datastream", datastream_id)
 
 
@@ -505,6 +547,10 @@ async def updateObservation(payload, conn, observation_id):
     handle_datetime_fields(payload)
     handle_result_field(payload)
     handle_associations(payload, ["Datastream", "FeatureOfInterest"])
+
+    if VERSIONING:
+        check_commit_versioning(payload)
+
     return await update_record(payload, conn, "Observation", observation_id)
 
 
@@ -566,3 +612,54 @@ def handle_associations(payload, keys):
             id_field = f"{key.lower()}_id"
             payload[id_field] = payload[key]["@iot.id"]
             payload.pop(key)
+
+
+def check_commit_versioning(payload):
+    """
+    Check the versioning of the payload.
+
+    Args:
+        payload (dict): The payload to be checked.
+
+    Raises:
+        Exception: If the "Commit" field is missing in the payload.
+        Exception: If there are invalid keys in the payload for "Commit".
+        Exception: If the "message" field is missing in the "Commit" field.
+
+    """
+    if "Commit" not in payload:
+        raise Exception("Commit field is required for versioning update.")
+
+    if "Commit" in ALLOWED_KEYS:
+        allowed_keys = ALLOWED_KEYS["Commit"]
+        invalid_keys = [
+            key
+            for key in payload["Commit"].keys()
+            if key not in allowed_keys
+        ]
+        if invalid_keys:
+            raise Exception(
+                f"Invalid keys in payload for {payload["Commit"]}: {', '.join(invalid_keys)}"
+            )
+
+    if "message" not in payload["Commit"]:
+        raise Exception(
+            "Commit message is required for versioning update."
+        )
+
+    if "author" not in payload["Commit"]:
+        payload["Commit"]["author"] = "anonymous"
+
+    if "encodingType" not in payload["Commit"]:
+        payload["Commit"]["encodingType"] = "text/plain"
+
+async def insertCommit(payload, conn):
+    for key in list(payload.keys()):
+        if isinstance(payload[key], dict):
+            payload[key] = json.dumps(payload[key])
+
+    keys = ", ".join(f'"{key}"' for key in payload.keys())
+    values_placeholders = ", ".join(f"${i+1}" for i in range(len(payload)))
+    query = f'INSERT INTO sensorthings."Commit" ({keys}) VALUES ({values_placeholders}) RETURNING id;'
+    return await conn.fetchval(query, *payload.values())
+    

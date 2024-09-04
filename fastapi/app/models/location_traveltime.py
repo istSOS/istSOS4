@@ -1,7 +1,7 @@
 from geoalchemy2 import Geometry
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
-from sqlalchemy.sql.schema import Column, ForeignKey, PrimaryKeyConstraint
+from sqlalchemy.sql.schema import Column, PrimaryKeyConstraint
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
 from .database import SCHEMA_NAME, Base
@@ -24,8 +24,12 @@ class LocationTravelTime(Base):
         Geometry(geometry_type="GEOMETRY", srid=4326), nullable=False
     )
     properties = Column(JSON)
-    system_time_validity = Column(TSTZRANGE)
-    commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
+    commit_id = Column(Integer)
+
+    thing = Column("Thing")
+    historicallocation = Column("HistoricalLocation")
+    commit = Column("Commit")
+    system_time_validity = Column("systemTimeValidity", TSTZRANGE)
 
     __table_args__ = (
         PrimaryKeyConstraint(id, system_time_validity),

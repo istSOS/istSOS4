@@ -1,5 +1,4 @@
-import datetime
-import os
+from datetime import datetime
 
 import ujson
 from app import (
@@ -11,6 +10,7 @@ from app import (
     SUBPATH,
     TOP_VALUE,
     VERSION,
+    VERSIONING,
 )
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
@@ -283,10 +283,16 @@ class NodeVisitor(Visitor):
 
             if parent:
                 relationship_entity = getattr(
-                    globals()[parent], expand_identifier.identifier.lower()
+                    globals()[parent.replace("TravelTime", "")],
+                    expand_identifier.identifier.replace(
+                        "TravelTime", ""
+                    ).lower(),
                 ).property
                 if relationship_entity.direction.name == "ONETOMANY":
-                    fk_parent = getattr(sub_entity, f"{parent.lower()}_id")
+                    fk_parent = getattr(
+                        sub_entity,
+                        parent.replace("TravelTime", "").lower() + "_id",
+                    )
 
             # Process orderby clause
             ordering = []
@@ -358,12 +364,15 @@ class NodeVisitor(Visitor):
                         compile_kwargs={"literal_binds": True},
                     )
                     relationship_nested = getattr(
-                        globals()[nested_sub_query[2]],
-                        nested_sub_query[5].lower(),
+                        globals()[
+                            nested_sub_query[2].replace("TravelTime", "")
+                        ],
+                        nested_sub_query[5].replace("TravelTime", "").lower(),
                     ).property
 
                     navigation_link_attr = (
-                        f"{nested_sub_query[5].lower()}_navigation_link"
+                        nested_sub_query[5].replace("TravelTime", "").lower()
+                        + "_navigation_link"
                     )
                     navigation_link_value = getattr(
                         sub_entity, navigation_link_attr
@@ -380,7 +389,9 @@ class NodeVisitor(Visitor):
                                     ),
                                     text(
                                         '"{}".id::integer'.format(
-                                            nested_sub_query[2]
+                                            globals()[
+                                                nested_sub_query[2]
+                                            ].__tablename__
                                         )
                                     ),
                                     nested_sub_query[4] - 1,
@@ -398,7 +409,9 @@ class NodeVisitor(Visitor):
                                     ),
                                     text(
                                         '"{}".id::integer'.format(
-                                            nested_sub_query[2]
+                                            globals()[
+                                                nested_sub_query[2]
+                                            ].__tablename__
                                         )
                                     ),
                                     nested_sub_query[4],
@@ -430,7 +443,9 @@ class NodeVisitor(Visitor):
                                         ),
                                         text(
                                             '"{}".id::integer'.format(
-                                                nested_sub_query[2]
+                                                globals()[
+                                                    nested_sub_query[2]
+                                                ].__tablename__
                                             )
                                         ),
                                         nested_sub_query[4],
@@ -454,7 +469,9 @@ class NodeVisitor(Visitor):
                                             ),
                                             text(
                                                 '"{}".id::integer'.format(
-                                                    nested_sub_query[2]
+                                                    globals()[
+                                                        nested_sub_query[2]
+                                                    ].__tablename__
                                                 )
                                             ),
                                             nested_sub_query[4],
@@ -479,11 +496,21 @@ class NodeVisitor(Visitor):
                                         f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
                                         text(
                                             '"{}".id::integer'.format(
-                                                nested_sub_query[2]
+                                                globals()[
+                                                    nested_sub_query[2]
+                                                ].__tablename__
                                             )
                                         ),
-                                        "{}_id".format(nested_sub_query[5]),
-                                        "{}_id".format(nested_sub_query[2]),
+                                        "{}_id".format(
+                                            nested_sub_query[5].replace(
+                                                "TravelTime", ""
+                                            )
+                                        ),
+                                        "{}_id".format(
+                                            nested_sub_query[2].replace(
+                                                "TravelTime", ""
+                                            )
+                                        ),
                                         nested_sub_query[4] - 1,
                                         nested_sub_query[3],
                                         nested_sub_query[7],
@@ -496,11 +523,21 @@ class NodeVisitor(Visitor):
                                         f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
                                         text(
                                             '"{}".id::integer'.format(
-                                                nested_sub_query[2]
+                                                globals()[
+                                                    nested_sub_query[2]
+                                                ].__tablename__
                                             )
                                         ),
-                                        "{}_id".format(nested_sub_query[5]),
-                                        "{}_id".format(nested_sub_query[2]),
+                                        "{}_id".format(
+                                            nested_sub_query[5].replace(
+                                                "TravelTime", ""
+                                            )
+                                        ),
+                                        "{}_id".format(
+                                            nested_sub_query[2].replace(
+                                                "TravelTime", ""
+                                            )
+                                        ),
                                         nested_sub_query[4],
                                         nested_sub_query[3],
                                         nested_sub_query[7],
@@ -527,14 +564,20 @@ class NodeVisitor(Visitor):
                                             f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
                                             text(
                                                 '"{}".id::integer'.format(
-                                                    nested_sub_query[2]
+                                                    globals()[
+                                                        nested_sub_query[2]
+                                                    ].__tablename__
                                                 )
                                             ),
                                             "{}_id".format(
-                                                nested_sub_query[5]
+                                                nested_sub_query[5].replace(
+                                                    "TravelTime", ""
+                                                )
                                             ),
                                             "{}_id".format(
-                                                nested_sub_query[2]
+                                                nested_sub_query[2].replace(
+                                                    "TravelTime", ""
+                                                )
                                             ),
                                             nested_sub_query[4],
                                             nested_sub_query[3],
@@ -558,14 +601,20 @@ class NodeVisitor(Visitor):
                                                 f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
                                                 text(
                                                     '"{}".id::integer'.format(
-                                                        nested_sub_query[2]
+                                                        globals()[
+                                                            nested_sub_query[2]
+                                                        ].__tablename__
                                                     )
                                                 ),
                                                 "{}_id".format(
-                                                    nested_sub_query[5]
+                                                    nested_sub_query[
+                                                        5
+                                                    ].replace("TravelTime", "")
                                                 ),
                                                 "{}_id".format(
-                                                    nested_sub_query[2]
+                                                    nested_sub_query[
+                                                        2
+                                                    ].replace("TravelTime", "")
                                                 ),
                                                 nested_sub_query[4],
                                                 nested_sub_query[3],
@@ -588,8 +637,12 @@ class NodeVisitor(Visitor):
                                     "id",
                                     text(
                                         '"{}".{}_id::integer'.format(
-                                            nested_sub_query[2],
-                                            nested_sub_query[5],
+                                            globals()[
+                                                nested_sub_query[2]
+                                            ].__tablename__,
+                                            nested_sub_query[5].replace(
+                                                "TravelTime", ""
+                                            ),
                                         )
                                     ),
                                     nested_sub_query[4] - 1,
@@ -755,9 +808,23 @@ class NodeVisitor(Visitor):
                     )
                 else:
                     if "Link" in name:
-                        json_build_object_args.append(
-                            (HOSTNAME + SUBPATH + VERSION + attr).label(name)
-                        )
+                        if node.as_of and name != "Commit@iot.navigationLink":
+                            json_build_object_args.append(
+                                (
+                                    HOSTNAME
+                                    + SUBPATH
+                                    + VERSION
+                                    + attr
+                                    + "?$as_of="
+                                    + node.as_of.value
+                                ).label(name)
+                            )
+                        else:
+                            json_build_object_args.append(
+                                (HOSTNAME + SUBPATH + VERSION + attr).label(
+                                    name
+                                )
+                            )
                     else:
                         if name != "id":
                             json_build_object_args.append(attr.label(name))
@@ -814,24 +881,31 @@ class NodeVisitor(Visitor):
                             nested_identifier = e.identifier
 
                         relationship = getattr(
-                            globals()[identifier], nested_identifier.lower()
+                            globals()[identifier.replace("TravelTime", "")],
+                            nested_identifier.replace(
+                                "TravelTime", ""
+                            ).lower(),
                         ).property
-
                         if relationship.direction.name == "MANYTOONE":
                             filter = getattr(
                                 globals()[identifier],
-                                f"{nested_identifier.lower()}_id",
+                                nested_identifier.replace(
+                                    "TravelTime", ""
+                                ).lower()
+                                + "_id",
                             ) == getattr(globals()[nested_identifier], "id")
                         elif relationship.direction.name == "ONETOMANY":
                             filter = getattr(
                                 globals()[nested_identifier],
-                                f"{identifier.lower()}_id",
+                                identifier.replace("TravelTime", "").lower()
+                                + "_id",
                             ) == getattr(globals()[identifier], "id")
                         else:
                             filter = getattr(
                                 globals()[identifier], "id"
                             ) == relationship.secondary.columns.get(
-                                f"{identifier.lower()}_id"
+                                identifier.replace("TravelTime", "").lower()
+                                + "_id"
                             )
                             main_query = main_query.filter(filter)
                             query_count = query_count.filter(filter)
@@ -841,7 +915,10 @@ class NodeVisitor(Visitor):
                             filter = getattr(
                                 globals()[nested_identifier], "id"
                             ) == relationship.secondary.columns.get(
-                                f"{nested_identifier.lower()}_id"
+                                nested_identifier.replace(
+                                    "TravelTime", ""
+                                ).lower()
+                                + "_id"
                             )
 
                         main_query = main_query.filter(filter)
@@ -849,6 +926,19 @@ class NodeVisitor(Visitor):
                         query_estimate_count = query_estimate_count.filter(
                             filter
                         )
+
+                        if node.as_of:
+                            filter_node = FilterNode(
+                                f"system_time_validity eq {node.as_of.value}"
+                            )
+                            filter, _ = self.visit_FilterNode(
+                                filter_node, nested_identifier
+                            )
+                            main_query = main_query.filter(filter)
+                            query_count = query_count.filter(filter)
+                            query_estimate_count = query_estimate_count.filter(
+                                filter
+                            )
 
                 # here we create the sub queries for the expand identifiers
                 if node.expand.identifiers:
@@ -863,11 +953,15 @@ class NodeVisitor(Visitor):
                         )
 
                         relationship_type = getattr(
-                            main_entity, sub_query[5].lower()
+                            globals()[
+                                self.main_entity.replace("TravelTime", "")
+                            ],
+                            sub_query[5].replace("TravelTime", "").lower(),
                         ).property
 
                         navigation_link_attr = (
-                            f"{sub_query[5].lower()}_navigation_link"
+                            sub_query[5].replace("TravelTime", "").lower()
+                            + "_navigation_link"
                         )
                         navigation_link_value = getattr(
                             main_entity, navigation_link_attr
@@ -883,7 +977,9 @@ class NodeVisitor(Visitor):
                                         ),
                                         text(
                                             '"{}".id::integer'.format(
-                                                sub_query[2]
+                                                globals()[
+                                                    sub_query[2]
+                                                ].__tablename__
                                             )
                                         ),
                                         sub_query[4] - 1,
@@ -900,7 +996,9 @@ class NodeVisitor(Visitor):
                                         ),
                                         text(
                                             '"{}".id::integer'.format(
-                                                sub_query[2]
+                                                globals()[
+                                                    sub_query[2]
+                                                ].__tablename__
                                             )
                                         ),
                                         sub_query[4],
@@ -929,7 +1027,9 @@ class NodeVisitor(Visitor):
                                             ),
                                             text(
                                                 '"{}".id::integer'.format(
-                                                    sub_query[2]
+                                                    globals()[
+                                                        sub_query[2]
+                                                    ].__tablename__
                                                 )
                                             ),
                                             sub_query[4],
@@ -955,7 +1055,9 @@ class NodeVisitor(Visitor):
                                                 ),
                                                 text(
                                                     '"{}".id::integer'.format(
-                                                        sub_query[2]
+                                                        globals()[
+                                                            sub_query[2]
+                                                        ].__tablename__
                                                     )
                                                 ),
                                                 sub_query[4],
@@ -985,11 +1087,21 @@ class NodeVisitor(Visitor):
                                             f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
                                             text(
                                                 '"{}".id::integer'.format(
-                                                    sub_query[2]
+                                                    globals()[
+                                                        sub_query[2]
+                                                    ].__tablename__
                                                 )
                                             ),
-                                            "{}_id".format(sub_query[5]),
-                                            "{}_id".format(sub_query[2]),
+                                            "{}_id".format(
+                                                sub_query[5].replace(
+                                                    "TravelTime", ""
+                                                )
+                                            ),
+                                            "{}_id".format(
+                                                sub_query[2].replace(
+                                                    "TravelTime", ""
+                                                )
+                                            ),
                                             sub_query[4] - 1,
                                             sub_query[3],
                                             sub_query[7],
@@ -1004,11 +1116,21 @@ class NodeVisitor(Visitor):
                                             f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
                                             text(
                                                 '"{}".id::integer'.format(
-                                                    sub_query[2]
+                                                    globals()[
+                                                        sub_query[2]
+                                                    ].__tablename__
                                                 )
                                             ),
-                                            "{}_id".format(sub_query[5]),
-                                            "{}_id".format(sub_query[2]),
+                                            "{}_id".format(
+                                                sub_query[5].replace(
+                                                    "TravelTime", ""
+                                                )
+                                            ),
+                                            "{}_id".format(
+                                                sub_query[2].replace(
+                                                    "TravelTime", ""
+                                                )
+                                            ),
                                             sub_query[4],
                                             sub_query[3],
                                             sub_query[7],
@@ -1032,11 +1154,21 @@ class NodeVisitor(Visitor):
                                                 f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
                                                 text(
                                                     '"{}".id::integer'.format(
-                                                        sub_query[2]
+                                                        globals()[
+                                                            sub_query[2]
+                                                        ].__tablename__
                                                     )
                                                 ),
-                                                "{}_id".format(sub_query[5]),
-                                                "{}_id".format(sub_query[2]),
+                                                "{}_id".format(
+                                                    sub_query[5].replace(
+                                                        "TravelTime", ""
+                                                    )
+                                                ),
+                                                "{}_id".format(
+                                                    sub_query[2].replace(
+                                                        "TravelTime", ""
+                                                    )
+                                                ),
                                                 sub_query[4],
                                                 sub_query[3],
                                                 sub_query[7],
@@ -1059,14 +1191,20 @@ class NodeVisitor(Visitor):
                                                     f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
                                                     text(
                                                         '"{}".id::integer'.format(
-                                                            sub_query[2]
+                                                            globals()[
+                                                                sub_query[2]
+                                                            ].__tablename__
                                                         )
                                                     ),
                                                     "{}_id".format(
-                                                        sub_query[5]
+                                                        sub_query[5].replace(
+                                                            "TravelTime", ""
+                                                        )
                                                     ),
                                                     "{}_id".format(
-                                                        sub_query[2]
+                                                        sub_query[2].replace(
+                                                            "TravelTime", ""
+                                                        )
                                                     ),
                                                     sub_query[4],
                                                     sub_query[3],
@@ -1089,7 +1227,12 @@ class NodeVisitor(Visitor):
                                         "id",
                                         text(
                                             '"{}".{}_id::integer'.format(
-                                                sub_query[2], sub_query[5]
+                                                globals()[
+                                                    sub_query[2]
+                                                ].__tablename__,
+                                                sub_query[5].replace(
+                                                    "TravelTime", ""
+                                                ),
                                             )
                                         ),
                                         sub_query[4] - 1,
@@ -1276,6 +1419,14 @@ class NodeVisitor(Visitor):
                 func.row_to_json(literal_column("main_query")).label("json")
             ).select_from(main_query)
 
+            as_of_value = (
+                node.as_of.value
+                if node.as_of
+                else datetime.now() if VERSIONING else ""
+            )
+
+            from_to_value = True if node.from_to else False
+
             if self.value:
                 value = None
                 if isinstance(select_query[0], InstrumentedAttribute):
@@ -1287,10 +1438,13 @@ class NodeVisitor(Visitor):
                 ).select_from(main_query)
 
             main_query = stream_results(
+                self.main_entity,
                 main_query,
                 session,
                 top_value,
                 iot_count,
+                as_of_value,
+                from_to_value,
                 self.single_result,
                 self.full_path,
             )
@@ -1299,7 +1453,15 @@ class NodeVisitor(Visitor):
 
 
 async def stream_results(
-    query, session, top, iot_count, single_result, full_path
+    entity,
+    query,
+    session,
+    top,
+    iot_count,
+    as_of_value,
+    from_to_value,
+    single_result,
+    full_path,
 ):
     async with session:
         result = await session.stream(query)
@@ -1314,8 +1476,19 @@ async def stream_results(
             if partition_len > top - 1:
                 partition = partition[:-1]
 
+            if (
+                VERSIONING
+                and single_result
+                and partition_len == 1
+                and entity != "Commit"
+                and not from_to_value
+            ):
+                partition[0]["@iot.as_of"] = as_of_value
+
             partition_json = ujson.dumps(
-                partition, default=datetime.datetime.isoformat
+                partition,
+                default=datetime.isoformat,
+                escape_forward_slashes=False,
             )[1:-1]
 
             if is_first_partition:
@@ -1328,8 +1501,12 @@ async def stream_results(
                     if next_link and not single_result
                     else ""
                 )
-
-                start_json += iot_count + next_link_json
+                as_of = (
+                    f'"@iot.as_of": "{as_of_value}",'
+                    if VERSIONING and not single_result and not from_to_value
+                    else ""
+                )
+                start_json += as_of + iot_count + next_link_json
                 start_json += (
                     '"value": ['
                     if (partition_len > 0 and not single_result)

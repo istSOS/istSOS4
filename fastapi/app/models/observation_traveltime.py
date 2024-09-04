@@ -1,7 +1,7 @@
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
-from sqlalchemy.sql.schema import Column, ForeignKey, PrimaryKeyConstraint
+from sqlalchemy.sql.schema import Column, PrimaryKeyConstraint
 from sqlalchemy.sql.sqltypes import Boolean, Float, Integer, Text
 
 from .database import SCHEMA_NAME, Base
@@ -28,16 +28,14 @@ class ObservationTravelTime(Base):
     result_quality = Column("resultQuality", JSON)
     valid_time = Column("validTime", TSTZRANGE)
     parameters = Column(JSON)
-    datastream_id = Column(
-        Integer, ForeignKey(f"{SCHEMA_NAME}.Datastream.id"), nullable=False
-    )
-    featuresofinterest_id = Column(
-        Integer,
-        ForeignKey(f"{SCHEMA_NAME}.FeaturesOfInterest.id"),
-        nullable=False,
-    )
-    commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
-    system_time_validity = Column(TSTZRANGE)
+    datastream_id = Column(Integer)
+    featuresofinterest_id = Column(Integer)
+    commit_id = Column(Integer)
+
+    featuresofinterest = Column("FeaturesOfInterest")
+    datastream = Column("Datastream")
+    commit = Column("Commit")
+    system_time_validity = Column("systemTimeValidity", TSTZRANGE)
 
     __table_args__ = (
         PrimaryKeyConstraint(id, system_time_validity),

@@ -1,12 +1,13 @@
 import os
 
-HOSTNAME = os.getenv("HOSTNAME")
-SUBPATH = os.getenv("SUBPATH")
-VERSION = os.getenv("VERSION")
-DEBUG = int(os.getenv("DEBUG"))
-POSTGRES_DB = os.getenv("POSTGRES_DB")
-POSTGRES_USER = os.getenv("POSTGRES_USER")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+HOSTNAME = os.getenv("HOSTNAME", "http://localhost:8018")
+SUBPATH = os.getenv("SUBPATH", "/istsos4")
+VERSION = os.getenv("VERSION", "/v1.1")
+DEBUG = int(os.getenv("DEBUG"), 0)
+VERSIONING = os.getenv("VERSIONING", "false") == "true"
+POSTGRES_DB = os.getenv("POSTGRES_DB", "istsos4")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "admin")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "admin")
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "database")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
 PG_MAX_OVERFLOW = int(os.getenv("PG_MAX_OVERFLOW", 0))
