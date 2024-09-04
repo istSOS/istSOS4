@@ -3,7 +3,7 @@
 ## Clone the istSOS4repository
 
 ```sh
-git clone -b sta https://github.com/istSOS/istSOS4.git
+git clone -b traveltime https://github.com/istSOS/istSOS4.git
 ```
 
 ## Start DEV environment
