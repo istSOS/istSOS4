@@ -383,18 +383,29 @@ class NodeVisitor(Visitor):
                         json_expands.append(
                             func.sensorthings.expand(
                                 str(compiled_query_text),
-                                "{}".format(
-                                    (
-                                        nested_sub_query[1].name
-                                        if nested_sub_query[1] is not None
-                                        else "id"
-                                    ),
+                                (
+                                    "{}".format(nested_sub_query[1].name)
+                                    if nested_sub_query[1] is not None
+                                    else "id"
                                 ),
-                                text(
-                                    '"{}".id::integer'.format(
-                                        globals()[
-                                            nested_sub_query[2]
-                                        ].__tablename__
+                                (
+                                    text(
+                                        '"{}".id::integer'.format(
+                                            globals()[
+                                                nested_sub_query[2]
+                                            ].__tablename__
+                                        )
+                                    )
+                                    if nested_sub_query[1] is not None
+                                    else text(
+                                        '"{}".{}_id::integer'.format(
+                                            globals()[
+                                                nested_sub_query[2]
+                                            ].__tablename__,
+                                            nested_sub_query[5].replace(
+                                                "TravelTime", ""
+                                            ),
+                                        )
                                     )
                                 ),
                                 nested_sub_query[4] - 1,
@@ -872,18 +883,29 @@ class NodeVisitor(Visitor):
                             json_build_object_args.append(
                                 func.sensorthings.expand(
                                     str(compiled_query_text),
-                                    "{}".format(
-                                        (
-                                            sub_query[1].name
-                                            if sub_query[1] is not None
-                                            else "id"
-                                        ),
+                                    (
+                                        "{}".format((sub_query[1].name))
+                                        if sub_query[1] is not None
+                                        else "id"
                                     ),
-                                    text(
-                                        '"{}".id::integer'.format(
-                                            globals()[
-                                                sub_query[2]
-                                            ].__tablename__
+                                    (
+                                        text(
+                                            '"{}".id::integer'.format(
+                                                globals()[
+                                                    sub_query[2]
+                                                ].__tablename__
+                                            )
+                                        )
+                                        if sub_query[1] is not None
+                                        else text(
+                                            '"{}".{}_id::integer'.format(
+                                                globals()[
+                                                    sub_query[2]
+                                                ].__tablename__,
+                                                sub_query[5].replace(
+                                                    "TravelTime", ""
+                                                ),
+                                            )
                                         )
                                     ),
                                     sub_query[4] - 1,
