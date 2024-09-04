@@ -1252,65 +1252,66 @@ async def stream_results(
     single_result,
     full_path,
 ):
-    result = await session.stream(query)
-    start_json = ""
-    is_first_partition = True
-    has_rows = False
+    async with session.begin():
+        result = await session.stream(query)
+        start_json = ""
+        is_first_partition = True
+        has_rows = False
 
-    async for partition in result.scalars().partitions(PARTITION_CHUNK):
-        partition_len = len(partition)
-        has_rows = True
+        async for partition in result.scalars().partitions(PARTITION_CHUNK):
+            partition_len = len(partition)
+            has_rows = True
 
-        if partition_len > top - 1:
-            partition = partition[:-1]
+            if partition_len > top - 1:
+                partition = partition[:-1]
 
-        if (
-            VERSIONING
-            and single_result
-            and partition_len == 1
-            and entity != "Commit"
-            and not from_to_value
-        ):
-            partition[0]["@iot.as_of"] = as_of_value
+            if (
+                VERSIONING
+                and single_result
+                and partition_len == 1
+                and entity != "Commit"
+                and not from_to_value
+            ):
+                partition[0]["@iot.as_of"] = as_of_value
 
-        partition_json = ujson.dumps(
-            partition,
-            default=datetime.isoformat,
-            escape_forward_slashes=False,
-        )[1:-1]
+            partition_json = ujson.dumps(
+                partition,
+                default=datetime.isoformat,
+                escape_forward_slashes=False,
+            )[1:-1]
 
-        if is_first_partition:
-            if partition_len > 0 and not single_result:
-                start_json = "{"
+            if is_first_partition:
+                if partition_len > 0 and not single_result:
+                    start_json = "{"
 
-            next_link = build_nextLink(full_path, partition_len)
-            next_link_json = (
-                f'"@iot.nextLink": "{next_link}",'
-                if next_link and not single_result
-                else ""
-            )
-            as_of = (
-                f'"@iot.as_of": "{as_of_value}",'
-                if VERSIONING and not single_result and not from_to_value
-                else ""
-            )
-            start_json += as_of + iot_count + next_link_json
-            start_json += (
-                '"value": ['
-                if (partition_len > 0 and not single_result)
-                else ""
-            )
+                next_link = build_nextLink(full_path, partition_len)
+                next_link_json = (
+                    f'"@iot.nextLink": "{next_link}",'
+                    if next_link and not single_result
+                    else ""
+                )
+                as_of = (
+                    f'"@iot.as_of": "{as_of_value}",'
+                    if VERSIONING and not single_result and not from_to_value
+                    else ""
+                )
+                start_json += as_of + iot_count + next_link_json
+                start_json += (
+                    '"value": ['
+                    if (partition_len > 0 and not single_result)
+                    else ""
+                )
 
-            yield start_json + partition_json
-            is_first_partition = False
-        else:
-            yield "," + partition_json
+                yield start_json + partition_json
+                is_first_partition = False
+            else:
+                yield "," + partition_json
 
-    if not has_rows and not single_result:
-        yield '{"value": []}'
+        if not has_rows and not single_result:
+            yield '{"value": []}'
 
-    if has_rows and not single_result:
-        yield "]}"
+        if has_rows and not single_result:
+            yield "]}"
 
 
 def build_nextLink(full_path, count_links):
