@@ -5,7 +5,7 @@ SUBPATH = os.getenv("SUBPATH", "/istsos4")
 VERSION = os.getenv("VERSION", "/v1.1")
 DEBUG = int(os.getenv("DEBUG"), 0)
 VERSIONING = os.getenv("VERSIONING", "false") == "true"
-POSTGRES_DB = os.getenv("POSTGRES_DB", "istsos4")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "istsos")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "admin")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "admin")
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "database")
