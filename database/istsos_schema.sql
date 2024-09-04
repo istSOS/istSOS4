@@ -272,7 +272,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION sensorthings.expand(
     query_ text,
     fk_field_ text,
-    fk_id_ integer,
+    fk_id_ text,
     limit_ integer DEFAULT 100,
     offset_ integer DEFAULT 0,
     one_to_many_ boolean DEFAULT true,
@@ -339,7 +339,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION sensorthings.next_link_expand(
     query_ text,
     fk_field_ text,
-    fk_id_ integer,
+    fk_id_ text,
     limit_ integer DEFAULT 101,
     offset_ integer DEFAULT 0,
 	table_ text DEFAULT ''::text)
@@ -378,7 +378,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION sensorthings.count_expand(
     query_ text,
     fk_field_ text,
-    fk_id_ integer,
+    fk_id_ text,
 	count_mode_ text DEFAULT 'FULL'::text,
 	count_estimate_threshold_ integer DEFAULT 10000)
     RETURNS integer
@@ -442,7 +442,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION sensorthings.expand_many2many(
 	query_ text,
 	join_table_ text,
-	fk_id_ integer,
+	fk_id_ text,
 	related_fk_field1_ text,
 	related_fk_field2_ text,
 	limit_ integer DEFAULT 100,
@@ -481,7 +481,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION sensorthings.next_link_expand_many2many(
 	query_ text,
 	join_table_ text,
-	fk_id_ integer,
+	fk_id_ text,
 	related_fk_field1_ text,
 	related_fk_field2_ text,
 	limit_ integer DEFAULT 101,
@@ -523,7 +523,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION sensorthings.count_expand_many2many(
 	query_ text,
 	join_table_ text,
-	fk_id_ integer,
+	fk_id_ text,
 	related_fk_field1_ text,
 	related_fk_field2_ text,
 	count_mode_ text DEFAULT 'FULL'::text,
