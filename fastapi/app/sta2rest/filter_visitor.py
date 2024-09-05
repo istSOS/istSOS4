@@ -7,7 +7,6 @@ This module provides a visitor for the filter AST.
 """
 
 import operator
-import urllib.parse
 from typing import Any, Callable, List, Optional, Union
 
 from geoalchemy2 import WKTElement
@@ -82,7 +81,7 @@ class FilterVisitor(visitor.NodeVisitor):
         return false()
 
     def visit_String(self, node: ast.String) -> BindParameter:
-        return literal(urllib.parse.unquote_plus(node.py_val))
+        return literal(node.py_val)
 
     def visit_DateTime(self, node: ast.DateTime) -> BindParameter:
         return literal(node.py_val)
