@@ -26,9 +26,9 @@ TOKEN_TYPES = {
     "ORDER": r"\basc\b|\bdesc\b",
     "BOOL": r"\btrue\b|\bfalse\b",
     "TIMESTAMP": r"[1-9]\d{3}-(?:0\d|1[0-2])-(?:[0-2]\d|3[01])"
-    + r"[T| ]"
+    + r"T"
     + r"(?:[01]\d|2[0-3]):[0-5]\d(:?:[0-5]\d(?:\.\d{1,12})?)"
-    + r"?(Z|z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?",
+    + r"?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?",
     "EXPAND_IDENTIFIER": r"[a-zA-Z_][.a-zA-Z0-9_]*",
     "IDENTIFIER": r"[a-zA-Z_][.a-zA-Z0-9_/]*",
     "INTEGER": r"[0-9]+",
