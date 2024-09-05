@@ -1,5 +1,6 @@
 import json
 
+from app import HOSTNAME, TOP_VALUE
 from asyncpg.types import Range
 from dateutil import parser
 
@@ -118,3 +119,50 @@ def response2jsonfile(request, response, filename, body="", status_code=200):
             }
         )
         f.write(json.dumps(r, indent=4))
+
+
+def build_nextLink(full_path, count_links):
+    nextLink = f"{HOSTNAME}{full_path}"
+    new_top_value = TOP_VALUE
+
+    # Handle $top
+    if "$top" in nextLink:
+        start_index = nextLink.find("$top=") + 5
+        end_index = len(nextLink)
+        for char in ("&", ";", ")"):
+            char_index = nextLink.find(char, start_index)
+            if char_index != -1 and char_index < end_index:
+                end_index = char_index
+        top_value = int(nextLink[start_index:end_index])
+        new_top_value = top_value
+        nextLink = (
+            nextLink[:start_index] + str(new_top_value) + nextLink[end_index:]
+        )
+    else:
+        if "?" in nextLink:
+            nextLink = nextLink + f"&$top={new_top_value}"
+        else:
+            nextLink = nextLink + f"?$top={new_top_value}"
+
+    # Handle $skip
+    if "$skip" in nextLink:
+        start_index = nextLink.find("$skip=") + 6
+        end_index = len(nextLink)
+        for char in ("&", ";", ")"):
+            char_index = nextLink.find(char, start_index)
+            if char_index != -1 and char_index < end_index:
+                end_index = char_index
+        skip_value = int(nextLink[start_index:end_index])
+        new_skip_value = skip_value + new_top_value
+        nextLink = (
+            nextLink[:start_index] + str(new_skip_value) + nextLink[end_index:]
+        )
+    else:
+        new_skip_value = new_top_value
+        nextLink = nextLink + f"&$skip={new_skip_value}"
+
+    # Only return the nextLink if there's more data to fetch
+    if new_top_value < count_links:
+        return nextLink
+
+    return None

@@ -13,6 +13,7 @@ from app import (
     VERSIONING,
 )
 from app.sta2rest import sta2rest
+from app.utils.utils import build_nextLink
 from geoalchemy2 import Geometry
 from odata_query.grammar import ODataLexer, ODataParser
 from sqlalchemy import (
@@ -381,42 +382,11 @@ class NodeVisitor(Visitor):
 
                     if relationship_nested.direction.name != "MANYTOMANY":
                         json_expands.append(
-                            func.sensorthings.expand(
-                                str(compiled_query_text),
-                                (
-                                    "{}".format(nested_sub_query[1].name)
-                                    if nested_sub_query[1] is not None
-                                    else "id"
-                                ),
-                                (
-                                    text(
-                                        '"{}".id::integer'.format(
-                                            globals()[
-                                                nested_sub_query[2]
-                                            ].__tablename__
-                                        )
-                                    )
-                                    if nested_sub_query[1] is not None
-                                    else text(
-                                        '"{}".{}_id::integer'.format(
-                                            globals()[
-                                                nested_sub_query[2]
-                                            ].__tablename__,
-                                            nested_sub_query[5].replace(
-                                                "TravelTime", ""
-                                            ),
-                                        )
-                                    )
-                                ),
-                                nested_sub_query[4] - 1,
-                                nested_sub_query[3],
-                                (
-                                    True
-                                    if nested_sub_query[1] is not None
-                                    else False
-                                ),
-                                nested_sub_query[7],
-                            ).label(label_name)
+                            expand_function(
+                                compiled_query_text,
+                                nested_sub_query,
+                                label_name,
+                            )
                         )
                         if (
                             EXPAND_MODE == "ADVANCED"
@@ -433,70 +403,29 @@ class NodeVisitor(Visitor):
                                         "self_link",
                                     )
                                     + "/"
-                                    + func.sensorthings.next_link_expand(
-                                        str(compiled_query_text),
-                                        "{}".format(
-                                            nested_sub_query[1].name,
-                                        ),
-                                        text(
-                                            '"{}".id::integer'.format(
-                                                globals()[
-                                                    nested_sub_query[2]
-                                                ].__tablename__
-                                            )
-                                        ),
-                                        nested_sub_query[4],
-                                        nested_sub_query[3],
+                                    + next_link_expand_function(
+                                        compiled_query_text,
+                                        nested_sub_query,
                                         label_name,
                                     )
                                 ).label(label_name + "@iot.nextLink"),
                             )
                             if nested_sub_query[8]:
                                 json_expands.append(
-                                    (
-                                        func.sensorthings.count_expand(
-                                            str(compiled_query_text),
-                                            "{}".format(
-                                                nested_sub_query[1].name,
-                                            ),
-                                            text(
-                                                '"{}".id::integer'.format(
-                                                    globals()[
-                                                        nested_sub_query[2]
-                                                    ].__tablename__
-                                                )
-                                            ),
-                                            COUNT_MODE,
-                                            COUNT_ESTIMATE_THRESHOLD,
-                                        )
-                                    ).label(label_name + "@iot.count"),
+                                    count_expand_function(
+                                        compiled_query_text,
+                                        nested_sub_query,
+                                        label_name,
+                                    )
                                 )
                     else:
                         json_expands.append(
-                            func.sensorthings.expand_many2many(
-                                str(compiled_query_text),
-                                f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
-                                text(
-                                    '"{}".id::integer'.format(
-                                        globals()[
-                                            nested_sub_query[2]
-                                        ].__tablename__
-                                    )
-                                ),
-                                "{}_id".format(
-                                    nested_sub_query[5].replace(
-                                        "TravelTime", ""
-                                    )
-                                ),
-                                "{}_id".format(
-                                    nested_sub_query[2].replace(
-                                        "TravelTime", ""
-                                    )
-                                ),
-                                nested_sub_query[4] - 1,
-                                nested_sub_query[3],
-                                nested_sub_query[7],
-                            ).label(label_name)
+                            expand_many2many_function(
+                                compiled_query_text,
+                                nested_sub_query,
+                                label_name,
+                                relationship_nested,
+                            )
                         )
                         if EXPAND_MODE == "ADVANCED":
                             json_expands.append(
@@ -509,56 +438,21 @@ class NodeVisitor(Visitor):
                                         "self_link",
                                     )
                                     + "/"
-                                    + func.sensorthings.next_link_expand_many2many(
-                                        str(compiled_query_text),
-                                        f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
-                                        text(
-                                            '"{}".id::integer'.format(
-                                                globals()[
-                                                    nested_sub_query[2]
-                                                ].__tablename__
-                                            )
-                                        ),
-                                        "{}_id".format(
-                                            nested_sub_query[5].replace(
-                                                "TravelTime", ""
-                                            )
-                                        ),
-                                        "{}_id".format(
-                                            nested_sub_query[2].replace(
-                                                "TravelTime", ""
-                                            )
-                                        ),
-                                        nested_sub_query[4],
-                                        nested_sub_query[3],
+                                    + next_link_expand_many2many_function(
+                                        compiled_query_text,
+                                        nested_sub_query,
+                                        relationship_nested,
                                     )
                                 ).label(label_name + "@iot.nextLink"),
                             )
                             if nested_sub_query[8]:
                                 json_expands.append(
                                     (
-                                        func.sensorthings.count_expand_many2many(
-                                            str(compiled_query_text),
-                                            f'{relationship_nested.secondary.schema}."{relationship_nested.secondary.name}"',
-                                            text(
-                                                '"{}".id::integer'.format(
-                                                    globals()[
-                                                        nested_sub_query[2]
-                                                    ].__tablename__
-                                                )
-                                            ),
-                                            "{}_id".format(
-                                                nested_sub_query[5].replace(
-                                                    "TravelTime", ""
-                                                )
-                                            ),
-                                            "{}_id".format(
-                                                nested_sub_query[2].replace(
-                                                    "TravelTime", ""
-                                                )
-                                            ),
-                                            COUNT_MODE,
-                                            COUNT_ESTIMATE_THRESHOLD,
+                                        count_expand_many2many_function(
+                                            compiled_query_text,
+                                            nested_sub_query,
+                                            label_name,
+                                            relationship_nested,
                                         )
                                     ).label(label_name + "@iot.count"),
                                 )
@@ -881,42 +775,11 @@ class NodeVisitor(Visitor):
 
                         if relationship_type.direction.name != "MANYTOMANY":
                             json_build_object_args.append(
-                                func.sensorthings.expand(
-                                    str(compiled_query_text),
-                                    (
-                                        "{}".format((sub_query[1].name))
-                                        if sub_query[1] is not None
-                                        else "id"
-                                    ),
-                                    (
-                                        text(
-                                            '"{}".id::integer'.format(
-                                                globals()[
-                                                    sub_query[2]
-                                                ].__tablename__
-                                            )
-                                        )
-                                        if sub_query[1] is not None
-                                        else text(
-                                            '"{}".{}_id::integer'.format(
-                                                globals()[
-                                                    sub_query[2]
-                                                ].__tablename__,
-                                                sub_query[5].replace(
-                                                    "TravelTime", ""
-                                                ),
-                                            )
-                                        )
-                                    ),
-                                    sub_query[4] - 1,
-                                    sub_query[3],
-                                    (
-                                        True
-                                        if sub_query[1] is not None
-                                        else False
-                                    ),
-                                    sub_query[7],
-                                ).label(label_name)
+                                expand_function(
+                                    compiled_query_text,
+                                    sub_query,
+                                    label_name,
+                                )
                             )
                             if (
                                 EXPAND_MODE == "ADVANCED"
@@ -930,66 +793,29 @@ class NodeVisitor(Visitor):
                                         + VERSION
                                         + getattr(main_entity, "self_link")
                                         + "/"
-                                        + func.sensorthings.next_link_expand(
-                                            str(compiled_query_text),
-                                            "{}".format(
-                                                sub_query[1].name,
-                                            ),
-                                            text(
-                                                '"{}".id::integer'.format(
-                                                    globals()[
-                                                        sub_query[2]
-                                                    ].__tablename__
-                                                )
-                                            ),
-                                            sub_query[4],
-                                            sub_query[3],
+                                        + next_link_expand_function(
+                                            compiled_query_text,
+                                            sub_query,
                                             label_name,
                                         )
                                     ).label(label_name + "@iot.nextLink"),
                                 )
                                 if sub_query[8]:
                                     json_build_object_args.append(
-                                        (
-                                            func.sensorthings.count_expand(
-                                                str(compiled_query_text),
-                                                "{}".format(
-                                                    sub_query[1].name,
-                                                ),
-                                                text(
-                                                    '"{}".id::integer'.format(
-                                                        globals()[
-                                                            sub_query[2]
-                                                        ].__tablename__
-                                                    )
-                                                ),
-                                                COUNT_MODE,
-                                                COUNT_ESTIMATE_THRESHOLD,
-                                            )
-                                        ).label(label_name + "@iot.count"),
+                                        count_expand_function(
+                                            compiled_query_text,
+                                            sub_query,
+                                            label_name,
+                                        )
                                     )
                         else:
                             json_build_object_args.append(
-                                func.sensorthings.expand_many2many(
-                                    str(compiled_query_text),
-                                    f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
-                                    text(
-                                        '"{}".id::integer'.format(
-                                            globals()[
-                                                sub_query[2]
-                                            ].__tablename__
-                                        )
-                                    ),
-                                    "{}_id".format(
-                                        sub_query[5].replace("TravelTime", "")
-                                    ),
-                                    "{}_id".format(
-                                        sub_query[2].replace("TravelTime", "")
-                                    ),
-                                    sub_query[4] - 1,
-                                    sub_query[3],
-                                    sub_query[7],
-                                ).label(label_name)
+                                expand_many2many_function(
+                                    compiled_query_text,
+                                    sub_query,
+                                    label_name,
+                                    relationship_type,
+                                )
                             )
                             if EXPAND_MODE == "ADVANCED":
                                 json_build_object_args.append(
@@ -999,58 +825,21 @@ class NodeVisitor(Visitor):
                                         + VERSION
                                         + getattr(main_entity, "self_link")
                                         + "/"
-                                        + func.sensorthings.next_link_expand_many2many(
-                                            str(compiled_query_text),
-                                            f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
-                                            text(
-                                                '"{}".id::integer'.format(
-                                                    globals()[
-                                                        sub_query[2]
-                                                    ].__tablename__
-                                                )
-                                            ),
-                                            "{}_id".format(
-                                                sub_query[5].replace(
-                                                    "TravelTime", ""
-                                                )
-                                            ),
-                                            "{}_id".format(
-                                                sub_query[2].replace(
-                                                    "TravelTime", ""
-                                                )
-                                            ),
-                                            sub_query[4],
-                                            sub_query[3],
+                                        + next_link_expand_many2many_function(
+                                            compiled_query_text,
+                                            sub_query,
+                                            relationship_type,
                                         )
                                     ).label(label_name + "@iot.nextLink"),
                                 )
                                 if sub_query[8]:
                                     json_build_object_args.append(
-                                        (
-                                            func.sensorthings.count_expand_many2many(
-                                                str(compiled_query_text),
-                                                f'{relationship_type.secondary.schema}."{relationship_type.secondary.name}"',
-                                                text(
-                                                    '"{}".id::integer'.format(
-                                                        globals()[
-                                                            sub_query[2]
-                                                        ].__tablename__
-                                                    )
-                                                ),
-                                                "{}_id".format(
-                                                    sub_query[5].replace(
-                                                        "TravelTime", ""
-                                                    )
-                                                ),
-                                                "{}_id".format(
-                                                    sub_query[2].replace(
-                                                        "TravelTime", ""
-                                                    )
-                                                ),
-                                                COUNT_MODE,
-                                                COUNT_ESTIMATE_THRESHOLD,
-                                            )
-                                        ).label(label_name + "@iot.count"),
+                                        count_expand_many2many_function(
+                                            compiled_query_text,
+                                            sub_query,
+                                            label_name,
+                                            relationship_type,
+                                        )
                                     )
                     main_query = select(*json_build_object_args)
             else:
@@ -1336,48 +1125,94 @@ async def stream_results(
             yield "]}"
 
 
-def build_nextLink(full_path, count_links):
-    nextLink = f"{HOSTNAME}{full_path}"
-    new_top_value = TOP_VALUE
+def expand_function(compiled_query, sub_query, label_name):
+    return func.sensorthings.expand(
+        str(compiled_query),
+        ("{}".format(sub_query[1].name) if sub_query[1] is not None else "id"),
+        (
+            text(
+                '"{}".id::integer'.format(
+                    globals()[sub_query[2]].__tablename__
+                )
+            )
+            if sub_query[1] is not None
+            else text(
+                '"{}".{}_id::integer'.format(
+                    globals()[sub_query[2]].__tablename__,
+                    sub_query[5].replace("TravelTime", ""),
+                )
+            )
+        ),
+        sub_query[4] - 1,
+        sub_query[3],
+        (True if sub_query[1] is not None else False),
+        sub_query[7],
+    ).label(label_name)
 
-    # Handle $top
-    if "$top" in nextLink:
-        start_index = nextLink.find("$top=") + 5
-        end_index = len(nextLink)
-        for char in ("&", ";", ")"):
-            char_index = nextLink.find(char, start_index)
-            if char_index != -1 and char_index < end_index:
-                end_index = char_index
-        top_value = int(nextLink[start_index:end_index])
-        new_top_value = top_value
-        nextLink = (
-            nextLink[:start_index] + str(new_top_value) + nextLink[end_index:]
-        )
-    else:
-        if "?" in nextLink:
-            nextLink = nextLink + f"&$top={new_top_value}"
-        else:
-            nextLink = nextLink + f"?$top={new_top_value}"
 
-    # Handle $skip
-    if "$skip" in nextLink:
-        start_index = nextLink.find("$skip=") + 6
-        end_index = len(nextLink)
-        for char in ("&", ";", ")"):
-            char_index = nextLink.find(char, start_index)
-            if char_index != -1 and char_index < end_index:
-                end_index = char_index
-        skip_value = int(nextLink[start_index:end_index])
-        new_skip_value = skip_value + new_top_value
-        nextLink = (
-            nextLink[:start_index] + str(new_skip_value) + nextLink[end_index:]
-        )
-    else:
-        new_skip_value = new_top_value
-        nextLink = nextLink + f"&$skip={new_skip_value}"
+def next_link_expand_function(compiled_query, sub_query, label_name):
+    return func.sensorthings.next_link_expand(
+        str(compiled_query),
+        "{}".format(
+            sub_query[1].name,
+        ),
+        text('"{}".id::integer'.format(globals()[sub_query[2]].__tablename__)),
+        sub_query[4],
+        sub_query[3],
+        label_name,
+    )
 
-    # Only return the nextLink if there's more data to fetch
-    if new_top_value < count_links:
-        return nextLink
 
-    return None
+def count_expand_function(compiled_query, sub_query, label_name):
+    return func.sensorthings.count_expand(
+        str(compiled_query),
+        "{}".format(
+            sub_query[1].name,
+        ),
+        text('"{}".id::integer'.format(globals()[sub_query[2]].__tablename__)),
+        COUNT_MODE,
+        COUNT_ESTIMATE_THRESHOLD,
+    ).label(label_name + "@iot.count")
+
+
+def expand_many2many_function(
+    compiled_query, sub_query, label_name, relationship
+):
+    return func.sensorthings.expand_many2many(
+        str(compiled_query),
+        f'{relationship.secondary.schema}."{relationship.secondary.name}"',
+        text('"{}".id::integer'.format(globals()[sub_query[2]].__tablename__)),
+        "{}_id".format(sub_query[5].replace("TravelTime", "")),
+        "{}_id".format(sub_query[2].replace("TravelTime", "")),
+        sub_query[4] - 1,
+        sub_query[3],
+        sub_query[7],
+    ).label(label_name)
+
+
+def next_link_expand_many2many_function(
+    compiled_query, sub_query, relationship
+):
+    return func.sensorthings.next_link_expand_many2many(
+        str(compiled_query),
+        f'{relationship.secondary.schema}."{relationship.secondary.name}"',
+        text('"{}".id::integer'.format(globals()[sub_query[2]].__tablename__)),
+        "{}_id".format(sub_query[5].replace("TravelTime", "")),
+        "{}_id".format(sub_query[2].replace("TravelTime", "")),
+        sub_query[4],
+        sub_query[3],
+    )
+
+
+def count_expand_many2many_function(
+    compiled_query, sub_query, label_name, relationship
+):
+    return func.sensorthings.count_expand_many2many(
+        str(compiled_query),
+        f'{relationship.secondary.schema}."{relationship.secondary.name}"',
+        text('"{}".id::integer'.format(globals()[sub_query[2]].__tablename__)),
+        "{}_id".format(sub_query[5].replace("TravelTime", "")),
+        "{}_id".format(sub_query[2].replace("TravelTime", "")),
+        COUNT_MODE,
+        COUNT_ESTIMATE_THRESHOLD,
+    ).label(label_name + "@iot.count")
