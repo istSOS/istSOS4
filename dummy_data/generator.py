@@ -1,8 +1,8 @@
+import asyncio
 import json
 import os
 import random
 from datetime import datetime, time
-import asyncio
 
 import asyncpg
 import isodate
@@ -22,6 +22,7 @@ chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL"))
 
 pgpool = None
 
+
 async def get_pool():
     """
     Retrieves or creates a connection pool to the PostgreSQL database.
@@ -32,10 +33,9 @@ async def get_pool():
     global pgpool
     if not pgpool:
         pgpool = await asyncpg.create_pool(
-            dsn=f"postgresql://{os.getenv("POSTGRES_USER")}:{os.getenv("POSTGRES_PASSWORD")}@database:5432/{os.getenv("POSTGRES_DB")}"
+            dsn=f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@database:5432/{os.getenv('POSTGRES_DB')}"
         )
     return pgpool
-
 
 
 async def generate_things(conn):
@@ -279,6 +279,41 @@ async def generate_featuresofinterest(conn):
     """
     await conn.executemany(insert_sql, featuresofinterest)
 
+
+async def insert_observations(conn, observations):
+    await conn.copy_records_to_table(
+        "Observation",
+        records=observations,
+        schema_name="sensorthings",
+        columns=[
+            "phenomenonTime",
+            "resultInteger",
+            "resultType",
+            "datastream_id",
+            "featuresofinterest_id",
+        ],
+    )
+
+
+async def update_datastream_phenomenon_time(conn, observations, datastream_id):
+    phenomenon_times = [record[0] for record in observations]
+
+    update_sql = """
+        UPDATE sensorthings."Datastream"
+        SET "phenomenonTime" = tstzrange(
+            LEAST($1::timestamptz, lower("phenomenonTime")),
+            GREATEST($2::timestamptz, upper("phenomenonTime"))
+        )
+        WHERE id = $3::bigint
+    """
+    await conn.execute(
+        update_sql,
+        min(phenomenon_times),
+        max(phenomenon_times),
+        datastream_id,
+    )
+
+
 async def generate_observations(conn):
     """
     Generates observations and inserts them into the database.
@@ -312,16 +347,19 @@ async def generate_observations(conn):
                 )
             )
             if phenomenonTime >= (check_date + chunk):
-                await conn.copy_records_to_table('Observation', records=observations, schema_name='sensorthings', columns=[
-                    'phenomenonTime', 'resultInteger', 'resultType', 'datastream_id', 'featuresofinterest_id'
-                ])
+                await insert_observations(conn, observations)
+                await update_datastream_phenomenon_time(
+                    conn, observations, datastream_id
+                )
                 check_date = phenomenonTime
                 observations = []
 
     if observations:
-        await conn.copy_records_to_table('Observation', records=observations, schema_name='sensorthings', columns=[
-            'phenomenonTime', 'resultInteger', 'resultType', 'datastream_id', 'featuresofinterest_id'
-        ])
+        await insert_observations(conn, observations)
+        await update_datastream_phenomenon_time(
+            conn, observations, datastream_id
+        )
+
 
 async def create_data():
     """
@@ -375,18 +413,26 @@ async def delete_data():
     After the deletion is complete, the database connection is closed.
     """
     pool = await get_pool()
-    async with  pool.acquire() as conn:
+    async with pool.acquire() as conn:
         async with conn.transaction():
             try:
                 await conn.execute('DELETE FROM sensorthings."Thing"')
                 await conn.execute('DELETE FROM sensorthings."Location"')
                 await conn.execute('DELETE FROM sensorthings."Thing_Location"')
-                await conn.execute('DELETE FROM sensorthings."HistoricalLocation"')
-                await conn.execute('DELETE FROM sensorthings."Location_HistoricalLocation"')
-                await conn.execute('DELETE FROM sensorthings."ObservedProperty"')
+                await conn.execute(
+                    'DELETE FROM sensorthings."HistoricalLocation"'
+                )
+                await conn.execute(
+                    'DELETE FROM sensorthings."Location_HistoricalLocation"'
+                )
+                await conn.execute(
+                    'DELETE FROM sensorthings."ObservedProperty"'
+                )
                 await conn.execute('DELETE FROM sensorthings."Sensor"')
                 await conn.execute('DELETE FROM sensorthings."Datastream"')
-                await conn.execute('DELETE FROM sensorthings."FeaturesOfInterest"')
+                await conn.execute(
+                    'DELETE FROM sensorthings."FeaturesOfInterest"'
+                )
                 await conn.execute('DELETE FROM sensorthings."Observation"')
             except Exception as e:
                 print(f"An error occurred: {e}")
