@@ -321,6 +321,13 @@ class STA2REST:
 
     REVERSE_SELECT_MAPPING = {v: k for k, v in SELECT_MAPPING.items()}
 
+    if VERSIONING:
+        for key in DEFAULT_SELECT:
+            if key != "Commit":
+                DEFAULT_SELECT[key].append("commit_navigation_link")
+
+    print(DEFAULT_SELECT)
+
     @staticmethod
     def get_default_column_names(entity: str) -> list:
         """
@@ -337,9 +344,6 @@ class STA2REST:
             if old_key in select:
                 select.remove(old_key)
                 select.append(new_key)
-
-        if VERSIONING:
-            select.append("commit_navigation_link")
 
         return select
 
