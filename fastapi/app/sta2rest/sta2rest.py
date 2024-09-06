@@ -326,8 +326,6 @@ class STA2REST:
             if key != "Commit":
                 DEFAULT_SELECT[key].append("commit_navigation_link")
 
-    print(DEFAULT_SELECT)
-
     @staticmethod
     def get_default_column_names(entity: str) -> list:
         """
