@@ -44,6 +44,7 @@ services:
       TOP_VALUE: ${TOP_VALUE}
       PARTITION_CHUNK: ${PARTITION_CHUNK}
       EXPAND_MODE: ${EXPAND_MODE}
+      REDIS_CACHE_EXPIRATION: ${REDIS_CACHE_EXPIRATION}
     command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - 8018:5000
