@@ -3,7 +3,7 @@ import traceback
 
 import redis
 import ujson
-from app import DEBUG, HOSTNAME, SUBPATH, VERSION
+from app import DEBUG, HOSTNAME, REDIS_CACHE_EXPIRATION, SUBPATH, VERSION
 from app.models.database import get_db
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
