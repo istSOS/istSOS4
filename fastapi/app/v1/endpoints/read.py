@@ -1,5 +1,8 @@
+import datetime
 import traceback
 
+import redis
+import ujson
 from app import DEBUG, HOSTNAME, SUBPATH, VERSION
 from app.models.database import get_db
 from app.settings import serverSettings, tables
@@ -10,6 +13,10 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request, status
 
 v1 = APIRouter()
+
+# for redis
+# Redis client bound to single connection (no auto reconnection).
+redis = redis.Redis(host="redis", port=6379, db=0)
 
 try:
     DEBUG = DEBUG
@@ -77,24 +84,43 @@ async def catch_all_get(
         if request.url.query:
             full_path += "?" + request.url.query
 
-        result = await sta2rest.STA2REST.convert_query(full_path, db)
+        result = redis.get(full_path)
 
-        async def wrapped_result_generator(first_item):
-            yield first_item
-            async for item in result:
-                yield item
+        if not result:
+            result = await sta2rest.STA2REST.convert_query(full_path, db)
 
-        try:
-            first_item = await anext(result)
-            return StreamingResponse(
-                wrapped_result_generator(first_item),
-                media_type="application/json",
-                status_code=status.HTTP_200_OK,
-            )
-        except Exception as e:
+            async def wrapped_result_generator(first_item):
+                accumulator = [first_item]
+                yield first_item
+                async for item in result:
+                    accumulator.append(item)
+                    yield item
+                full_response = "".join(accumulator)
+                redis.set(full_path, full_response)
+                redis.expire(full_path, 10000)
+
+            try:
+                first_item = await anext(result)
+                return StreamingResponse(
+                    wrapped_result_generator(first_item),
+                    media_type="application/json",
+                    status_code=status.HTTP_200_OK,
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "code": 404,
+                        "type": "error",
+                        "message": "Not Found",
+                    },
+                )
+        else:
+            print("Cache hit")
+            result = ujson.loads(result.decode("utf-8"))
             return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={"code": 404, "type": "error", "message": "Not Found"},
+                status_code=status.HTTP_200_OK,
+                content=result,
             )
 
     except Exception as e:

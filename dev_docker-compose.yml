@@ -51,6 +51,17 @@ services:
       - ./fastapi/app:/code/app
     working_dir: /code
 
+  redis:
+    image: redis:7.4.0-alpine3.20
+    restart: always
+    ports:
+      - 6379:6379
+    environment:
+      - REDIS_PASSWORD=my-password
+      - REDIS_PORT=6379
+    volumes:
+      - v-istsos4-redis-data:/data
+
   dummy_data:
     build:
       context: ./dummy_data
@@ -78,3 +89,5 @@ services:
 volumes:
   v-istsos4-database-data:
     name: v-istsos4-database-data
+  v-istsos4-redis-data:
+    name: v-istsos4-redis-data

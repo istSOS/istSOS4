@@ -6,3 +6,4 @@ odata-query==0.10.0b1
 sqlalchemy>=1.4.0
 geoalchemy2
 ujson
+redis==5.0.3
