@@ -83,8 +83,11 @@ async def catch_all_get(
         full_path = request.url.path
         if request.url.query:
             full_path += "?" + request.url.query
-
-        result = redis.get(full_path)
+        try:
+            result = redis.get(full_path)
+        except Exception as e:
+            print(e)
+            result = None
 
         if not result:
             result = await sta2rest.STA2REST.convert_query(full_path, db)
@@ -96,8 +99,11 @@ async def catch_all_get(
                     accumulator.append(item)
                     yield item
                 full_response = "".join(accumulator)
-                redis.set(full_path, full_response)
-                redis.expire(full_path, 10000)
+                try:
+                    redis.set(full_path, full_response)
+                    redis.expire(full_path, 10000)
+                except Exception as e:
+                    print(e)
 
             try:
                 first_item = await anext(result)
