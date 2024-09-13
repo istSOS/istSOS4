@@ -1,0 +1,1 @@
+docker run -p 10000:8888 --rm -v /home/maxi/GIT/istsos4/istsos4_docs/tutorials:/home/jovyan/work jupyter/scipy-notebook:807999a41207

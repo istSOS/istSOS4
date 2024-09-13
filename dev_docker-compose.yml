@@ -1,4 +1,3 @@
-version: "3.7"
 services:
   database:
     build:
@@ -73,7 +72,7 @@ services:
     depends_on:
       database:
         condition: service_healthy
-  
+
   docs:
     build:
       context: ./istsos4_docs/mkdocs
@@ -84,6 +83,17 @@ services:
     volumes:
       - ./istsos4_docs/mkdocs:/docs
 
+  tutorials:
+    image: quay.io/jupyter/scipy-notebook
+    ports:
+      - "10000:8888"
+    volumes:
+      - ./istsos4_docs/tutorials:/home/jovyan/work
+
 volumes:
   v-istsos-miu-database-data:
     name: v-istsos-miu-database-data
+    
+networks:
+  default:
+    name: istsos4
