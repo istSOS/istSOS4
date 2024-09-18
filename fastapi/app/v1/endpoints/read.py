@@ -8,6 +8,7 @@ from app.models.database import get_db
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
 from fastapi.responses import JSONResponse, StreamingResponse
+from sqlalchemy.exc import TimeoutError
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, Request, status
@@ -111,6 +112,15 @@ async def catch_all_get(
                     wrapped_result_generator(first_item),
                     media_type="application/json",
                     status_code=status.HTTP_200_OK,
+                )
+            except TimeoutError:
+                return JSONResponse(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    content={
+                        "code": 503,
+                        "type": "error",
+                        "message": "Service Unavailable",
+                    },
                 )
             except Exception as e:
                 return JSONResponse(
