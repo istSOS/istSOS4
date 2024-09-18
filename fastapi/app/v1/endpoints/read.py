@@ -102,7 +102,7 @@ async def catch_all_get(
                 full_response = "".join(accumulator)
                 try:
                     redis.set(full_path, full_response)
-                    redis.expire(full_path, 10000)
+                    redis.expire(full_path, REDIS_CACHE_EXPIRATION)
                 except Exception as e:
                     print(e)
 
