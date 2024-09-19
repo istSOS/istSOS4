@@ -2,6 +2,7 @@ import json
 import traceback
 from datetime import datetime
 
+import redis
 from app import DEBUG, HOSTNAME, SUBPATH, VERSION
 from app.db.db import get_pool
 from app.sta2rest import sta2rest
@@ -18,6 +19,34 @@ try:
         from app.utils.utils import response2jsonfile
 except:
     DEBUG = 0
+
+# for redis
+# Redis client bound to single connection (no auto reconnection).
+redis = redis.Redis(host="redis", port=6379, db=0)
+
+
+def remove_cache(path):
+    """
+    Remove the cache for the specified path.
+
+    Args:
+        path (str): The path to remove the cache for.
+
+    Returns:
+        None
+    """
+    # Pattern da cercare nelle chiavi (ad esempio 'testop')
+    pattern = "*{}*".format(path)
+
+    # Itera su tutte le chiavi che corrispondono al pattern
+    cursor = 0
+    while True:
+        cursor, keys = redis.scan(cursor=cursor, match=pattern)
+        if keys:
+            # Cancella le chiavi trovate
+            redis.delete(*keys)
+        if cursor == 0:
+            break
 
 
 @v1.api_route("/CreateObservations", methods=["POST"])
@@ -190,7 +219,9 @@ async def catch_all_post(
             response2jsonfile(request, "", "requests.json", b, res.status_code)
             return res
         else:
-            return await insert(main_table, body, pgpool)
+            r = await insert(main_table, body, pgpool)
+            remove_cache(full_path)
+            return r
     except Exception as e:
         traceback.print_exc()
         return JSONResponse(
