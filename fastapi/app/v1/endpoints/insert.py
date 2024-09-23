@@ -689,7 +689,8 @@ async def insertObservation(payload, conn, datastream_id=None):
                 UPDATE sensorthings."Datastream"
                 SET "phenomenonTime" = tstzrange(
                     LEAST($1::timestamptz, lower("phenomenonTime")),
-                    GREATEST($2::timestamptz, upper("phenomenonTime"))
+                    GREATEST($2::timestamptz, upper("phenomenonTime")),
+                    '[]'
                 )
                 WHERE id = $3::bigint
             """
