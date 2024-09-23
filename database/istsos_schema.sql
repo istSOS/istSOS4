@@ -222,6 +222,33 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DO $$
+BEGIN
+    IF NOT current_setting('custom.duplicates', false)::boolean THEN
+        -- Add the UNIQUE constraint on the 'name' column
+        EXECUTE 'ALTER TABLE sensorthings."Location"
+                 ADD CONSTRAINT unique_location_name UNIQUE ("name");';
+
+        EXECUTE 'ALTER TABLE sensorthings."Thing"
+                 ADD CONSTRAINT unique_thing_name UNIQUE ("name");';
+
+        EXECUTE 'ALTER TABLE sensorthings."ObservedProperty"
+                 ADD CONSTRAINT unique_observedProperty_name UNIQUE ("name");';
+
+        EXECUTE 'ALTER TABLE sensorthings."Sensor"
+                 ADD CONSTRAINT unique_sensor_name UNIQUE ("name");';
+
+        EXECUTE 'ALTER TABLE sensorthings."Datastream"
+                 ADD CONSTRAINT unique_datastream_name UNIQUE ("name");';
+
+        EXECUTE 'ALTER TABLE sensorthings."FeaturesOfInterest"
+                 ADD CONSTRAINT unique_featuresOfInterest_name UNIQUE ("name");';
+
+        EXECUTE 'ALTER TABLE sensorthings."Observation"
+                 ADD CONSTRAINT unique_observation_phenomenonTime_datastreamId UNIQUE ("phenomenonTime", "datastream_id");';
+    END IF;
+END $$;
+
 -- Create the trigger function
 CREATE OR REPLACE FUNCTION delete_related_historical_locations() RETURNS TRIGGER AS $$
 BEGIN
