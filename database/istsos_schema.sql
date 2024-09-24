@@ -8,9 +8,10 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "location" geometry(geometry, 4326) NOT NULL,
+    "location" geometry NOT NULL,
     "properties" jsonb DEFAULT NULL,
-    "gen_foi_id" BIGINT
+    "gen_foi_id" BIGINT,
+    CONSTRAINT enforce_srid CHECK (st_srid("location") = current_setting('custom.epsg')::int)
 );
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Location") RETURNS text AS $$
@@ -126,13 +127,17 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "description" TEXT NOT NULL,
     "unitOfMeasurement" jsonb NOT NULL,
     "observationType" VARCHAR(100) NOT NULL,
-    "observedArea" geometry(Polygon, 4326),
+    "observedArea" geometry,
     "phenomenonTime" tstzrange,
     "resultTime" tstzrange,
     "properties" jsonb DEFAULT NULL,
     "thing_id" BIGINT NOT NULL REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
     "sensor_id" BIGINT NOT NULL REFERENCES sensorthings."Sensor"(id) ON DELETE CASCADE,
-    "observedproperty_id" BIGINT NOT NULL REFERENCES sensorthings."ObservedProperty"(id) ON DELETE CASCADE
+    "observedproperty_id" BIGINT NOT NULL REFERENCES sensorthings."ObservedProperty"(id) ON DELETE CASCADE,
+    CONSTRAINT enforce_srid CHECK (st_srid("observedArea") = current_setting('custom.epsg')::int),
+    CONSTRAINT enforce_stype CHECK (
+        ST_GeometryType("observedArea") IN ('ST_Polygon', 'ST_PolygonZ')
+    )
 );
 
 CREATE INDEX IF NOT EXISTS "idx_datastream_thing_id" ON sensorthings."Datastream" USING btree ("thing_id" ASC NULLS LAST) TABLESPACE pg_default;
@@ -164,8 +169,9 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
     "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "feature" geometry(geometry, 4326) NOT NULL,
-    "properties" jsonb DEFAULT NULL
+    "feature" geometry NOT NULL,
+    "properties" jsonb DEFAULT NULL,
+    CONSTRAINT enforce_srid CHECK (st_srid("feature") = current_setting('custom.epsg')::int)
 );
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."FeaturesOfInterest") RETURNS text AS $$

@@ -27,9 +27,7 @@ class Datastream(Base):
     description = Column(Text, nullable=False)
     unit_of_measurement = Column("unitOfMeasurement", JSON, nullable=False)
     observation_type = Column("observationType", String(100), nullable=False)
-    observed_area = Column(
-        "observedArea", Geometry(geometry_type="POLYGON", srid=4326)
-    )
+    observed_area = Column("observedArea", Geometry)
     phenomenon_time = Column("phenomenonTime", TSTZRANGE)
     result_time = Column("resultTime", TSTZRANGE)
     properties = Column(JSON)
