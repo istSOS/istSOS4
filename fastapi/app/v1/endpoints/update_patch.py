@@ -2,7 +2,7 @@ import json
 import traceback
 
 import redis
-from app import DEBUG, VERSIONING
+from app import DEBUG, EPSG, VERSIONING
 from app.db.db import get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
@@ -119,6 +119,7 @@ def remove_cache(path):
         if cursor == 0:
             break
 
+
 @v1.api_route("/{path_name:path}", methods=["PATCH"])
 async def catch_all_update(
     request: Request, path_name: str, pgpool=Depends(get_pool)
@@ -160,7 +161,7 @@ async def catch_all_update(
                 b = copy.deepcopy(body)
             except:
                 b = ""
-        
+
         if VERSIONING:
             ALLOWED_KEYS["Commit"] = {"message", "author", "encodingType"}
             ALLOWED_KEYS[name].add("Commit")
@@ -254,10 +255,12 @@ async def update_record(payload, conn, table, record_id):
     try:
         async with conn.transaction():
             if VERSIONING:
-                query = f'SELECT id FROM sensorthings."{table}" WHERE id = {record_id};';
+                query = f'SELECT id FROM sensorthings."{table}" WHERE id = {record_id};'
                 selected_id = await conn.fetchval(query)
                 if selected_id:
-                    payload ["commit_id"] = await insertCommit(payload["Commit"], conn)
+                    payload["commit_id"] = await insertCommit(
+                        payload["Commit"], conn
+                    )
                     payload.pop("Commit")
 
             payload = {
@@ -265,12 +268,17 @@ async def update_record(payload, conn, table, record_id):
                 for key, value in payload.items()
             }
             set_clause = ", ".join(
-                [f'"{key}" = ${i + 1}' for i, key in enumerate(payload.keys())]
+                [
+                    (
+                        f'"{key}" = ${i + 1}'
+                        if key != "location" and key != "feature"
+                        else f'"{key}" = ST_GeomFromGeoJSON(${i + 1})'
+                    )
+                    for i, key in enumerate(payload.keys())
+                ]
             )
             query = f'UPDATE sensorthings."{table}" SET {set_clause} WHERE id = {record_id} RETURNING ID;'
-            return await conn.fetchval(
-                query, *payload.values()
-            )
+            return await conn.fetchval(query, *payload.values())
     except Exception:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -329,8 +337,17 @@ async def updateLocation(payload, conn, location_id):
                 historicallocation_id,
             )
         payload.pop("Things")
-    
+
     payload["gen_foi_id"] = None
+
+    if payload["location"]:
+        crs = payload["location"].get("crs")
+        if crs is not None:
+            epsg_code = int(crs["properties"].get("name").split(":")[1])
+            if epsg_code != EPSG:
+                raise ValueError(
+                    f"Invalid EPSG code. Expected {EPSG}, got {epsg_code}"
+                )
 
     if VERSIONING:
         check_commit_versioning(payload)
@@ -527,6 +544,15 @@ async def updateFeaturesOfInterest(payload, conn, featuresofinterest_id):
     if VERSIONING:
         check_commit_versioning(payload)
 
+    if payload["feature"]:
+        crs = payload["feature"].get("crs")
+        if crs is not None:
+            epsg_code = int(crs["properties"].get("name").split(":")[1])
+            if epsg_code != EPSG:
+                raise ValueError(
+                    f"Invalid EPSG code. Expected {EPSG}, got {epsg_code}"
+                )
+
     return await update_record(
         payload, conn, "FeaturesOfInterest", featuresofinterest_id
     )
@@ -664,25 +690,22 @@ def check_commit_versioning(payload):
     if "Commit" in ALLOWED_KEYS:
         allowed_keys = ALLOWED_KEYS["Commit"]
         invalid_keys = [
-            key
-            for key in payload["Commit"].keys()
-            if key not in allowed_keys
+            key for key in payload["Commit"].keys() if key not in allowed_keys
         ]
         if invalid_keys:
             raise Exception(
-                f"Invalid keys in payload for {payload["Commit"]}: {', '.join(invalid_keys)}"
+                f'Invalid keys in payload for {payload["Commit"]}: {", ".join(invalid_keys)}'
             )
 
     if "message" not in payload["Commit"]:
-        raise Exception(
-            "Commit message is required for versioning update."
-        )
+        raise Exception("Commit message is required for versioning update.")
 
     if "author" not in payload["Commit"]:
         payload["Commit"]["author"] = "anonymous"
 
     if "encodingType" not in payload["Commit"]:
         payload["Commit"]["encodingType"] = "text/plain"
+
 
 async def insertCommit(payload, conn):
     for key in list(payload.keys()):
@@ -693,4 +716,3 @@ async def insertCommit(payload, conn):
     values_placeholders = ", ".join(f"${i+1}" for i in range(len(payload)))
     query = f'INSERT INTO sensorthings."Commit" ({keys}) VALUES ({values_placeholders}) RETURNING id;'
     return await conn.fetchval(query, *payload.values())
-    
