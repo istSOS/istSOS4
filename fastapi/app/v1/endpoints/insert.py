@@ -3,7 +3,7 @@ import traceback
 from datetime import datetime
 
 import redis
-from app import DEBUG, EPSG, HOSTNAME, REDIS_CACHE_EXPIRATION, SUBPATH, VERSION
+from app import DEBUG, EPSG, HOSTNAME, SUBPATH, VERSION
 from app.db.db import get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
@@ -211,6 +211,7 @@ async def catch_all_post(
         result = sta2rest.STA2REST.parse_uri(full_path)
         # get json body
         body = await request.json()
+        body_cache = (await request.body()).decode("utf-8")
 
         main_table = result["entity"][0]
 
@@ -253,8 +254,15 @@ async def catch_all_post(
             r = await insert(main_table, body, pgpool)
             allowed_keys = ALLOWED_KEYS.get(main_table, set())
             for key in allowed_keys:
-                if key in body:
+                if key in body_cache:
                     remove_cache(key)
+                    allowed_keys_deep = ALLOWED_KEYS.get(
+                        sta2rest.STA2REST.ENTITY_MAPPING.get(key, key), set()
+                    )
+                    for key_deep in allowed_keys_deep:
+                        if key_deep in body_cache:
+                            remove_cache(key_deep)
+
             remove_cache(full_path.split("/")[-1])
             return r
     except Exception as e:
