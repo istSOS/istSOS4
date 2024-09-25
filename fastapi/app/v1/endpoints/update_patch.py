@@ -185,7 +185,12 @@ async def catch_all_update(
             return r
         else:
             r = await update(name, int(id), body, pgpool)
-            remove_cache(full_path)
+            entities = full_path.split("/")
+            for entity in entities:
+                if "Things" in entity:
+                    redis.flushall()
+                else:
+                    remove_cache(entity)
             return r
     except Exception as e:
         traceback.print_exc()

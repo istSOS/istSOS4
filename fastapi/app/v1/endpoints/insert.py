@@ -220,7 +220,12 @@ async def catch_all_post(
             return res
         else:
             r = await insert(main_table, body, pgpool)
-            remove_cache(full_path)
+            entities = full_path.split("/")
+            for entity in entities:
+                if "Things" in entity:
+                    redis.flushall()
+                else:
+                    remove_cache(entity)
             return r
     except Exception as e:
         traceback.print_exc()
