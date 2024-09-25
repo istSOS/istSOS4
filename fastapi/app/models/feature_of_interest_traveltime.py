@@ -19,9 +19,7 @@ class FeaturesOfInterestTravelTime(Base):
     name = Column(String(255), nullable=False)
     description = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
-    feature = Column(
-        Geometry(geometry_type="GEOMETRY", srid=4326), nullable=False
-    )
+    feature = Column(Geometry, nullable=False)
     properties = Column(JSON)
     commit_id = Column(Integer)
 

@@ -23,9 +23,7 @@ class Location(Base):
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
-    location = Column(
-        Geometry(geometry_type="GEOMETRY", srid=4326), nullable=False
-    )
+    location = Column(Geometry, nullable=False)
     properties = Column(JSON)
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
     thing = relationship(
