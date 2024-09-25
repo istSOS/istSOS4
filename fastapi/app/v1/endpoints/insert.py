@@ -3,7 +3,7 @@ import traceback
 from datetime import datetime
 
 import redis
-from app import DEBUG, HOSTNAME, SUBPATH, VERSION
+from app import DEBUG, EPSG, HOSTNAME, SUBPATH, VERSION
 from app.db.db import get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
@@ -288,7 +288,7 @@ async def insert_record(payload, conn, table):
     insert_id = await conn.fetchval(query, *payload.values())
     if table == "ObservedProperty":
         table = "ObservedProperties"
-    elif table != "FeaturesOfInterest":
+    else:
         table = f"{table}s"
     insert_selfLink = f"{HOSTNAME}{SUBPATH}{VERSION}/{table}({insert_id})"
     return (insert_id, insert_selfLink)
@@ -318,12 +318,27 @@ async def insertLocation(payload, conn):
             location_selfLinks = []
             for item in payload:
                 for key, value in item.items():
+                    if key == "location":
+                        crs = item[key].get("crs")
+                        if crs is not None:
+                            epsg_code = int(
+                                crs["properties"].get("name").split(":")[1]
+                            )
+                            if epsg_code != EPSG:
+                                raise ValueError(
+                                    f"Invalid EPSG code. Expected {EPSG}, got {epsg_code}"
+                                )
                     if isinstance(value, dict):
                         item[key] = json.dumps(value)
 
                 keys = ", ".join(f'"{key}"' for key in item.keys())
                 values_placeholders = ", ".join(
-                    f"${i+1}" for i in range(len(item))
+                    (
+                        f"${i+1}"
+                        if key != "location"
+                        else f"ST_GeomFromGeoJSON(${i+1})"
+                    )
+                    for i, key in enumerate(item.keys())
                 )
                 query = f'INSERT INTO sensorthings."Location" ({keys}, "gen_foi_id") VALUES ({values_placeholders}, NULL) RETURNING id'
                 location_id = await conn.fetchval(query, *item.values())
@@ -524,9 +539,34 @@ async def insertFeaturesOfInterest(payload, conn):
     """
     try:
         async with conn.transaction():
-            featureofinterest_id, featureofinterest_selfLink = (
-                await insert_record(payload, conn, "FeaturesOfInterest")
+            for key in list(payload.keys()):
+                if key == "feature":
+                    crs = payload[key].get("crs")
+                    if crs is not None:
+                        epsg_code = int(
+                            crs["properties"].get("name").split(":")[1]
+                        )
+                        if epsg_code != EPSG:
+                            raise ValueError(
+                                f"Invalid EPSG code. Expected {EPSG}, got {epsg_code}"
+                            )
+                if isinstance(payload[key], dict):
+                    payload[key] = json.dumps(payload[key])
+
+            keys = ", ".join(f'"{key}"' for key in payload.keys())
+            values_placeholders = ", ".join(
+                (
+                    f"${i+1}"
+                    if key != "feature"
+                    else f"ST_GeomFromGeoJSON(${i+1})"
+                )
+                for i, key in enumerate(payload.keys())
             )
+            query = f'INSERT INTO sensorthings."FeaturesOfInterest" ({keys}) VALUES ({values_placeholders}) RETURNING id'
+            featureofinterest_id = await conn.fetchval(
+                query, *payload.values()
+            )
+            featureofinterest_selfLink = f"{HOSTNAME}{SUBPATH}{VERSION}/FeaturesOfInterest({featureofinterest_id})"
             return (featureofinterest_id, featureofinterest_selfLink)
 
     except Exception as e:
@@ -694,7 +734,8 @@ async def insertObservation(payload, conn, datastream_id=None):
                 UPDATE sensorthings."Datastream"
                 SET "phenomenonTime" = tstzrange(
                     LEAST($1::timestamptz, lower("phenomenonTime")),
-                    GREATEST($2::timestamptz, upper("phenomenonTime"))
+                    GREATEST($2::timestamptz, upper("phenomenonTime")),
+                    '[]'
                 )
                 WHERE id = $3::bigint
             """

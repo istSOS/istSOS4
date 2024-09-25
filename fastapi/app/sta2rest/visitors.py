@@ -139,7 +139,7 @@ class NodeVisitor(Visitor):
         # Convert the identifier to the format name.order
         return f"{node.identifier}.{node.order}"
 
-    def visit_OrderByNode(self, node: OrderByNode):
+    def visit_OrderByNode(self, node: OrderByNode, entity: str):
         """
         Visit an orderby node.
 
@@ -156,9 +156,7 @@ class NodeVisitor(Visitor):
         orders = []
         for identifier in identifiers:
             attribute_name, *_, order = identifier.split(".")
-            attributes.append(
-                [getattr(globals()[self.main_entity], attribute_name)]
-            )
+            attributes.append([getattr(globals()[entity], attribute_name)])
             orders.append(order)
         return attributes, orders
 
@@ -196,7 +194,7 @@ class NodeVisitor(Visitor):
         Returns:
             str: The converted count node.
         """
-        return node.value
+        return bool(node.value)
 
     def visit_ExpandNode(self, node: ExpandNode, parent=None):
         """
@@ -301,27 +299,27 @@ class NodeVisitor(Visitor):
                 expand_identifier.subquery
                 and expand_identifier.subquery.orderby
             ):
-                identifiers = [
-                    self.visit(identifier)
-                    for identifier in expand_identifier.subquery.orderby.identifiers
-                ]
-                for field in identifiers:
-                    attr, order = field.split(".")
-                    collation = (
-                        "C" if isinstance(attr, (String, Text)) else None
-                    )
-                    if order == "asc":
-                        ordering.append(
-                            asc(attr.collate(collation))
-                            if collation
-                            else asc(attr)
+                attrs, orders = self.visit_OrderByNode(
+                    expand_identifier.subquery.orderby,
+                    expand_identifier.identifier,
+                )
+                for attr, order in zip(attrs, orders):
+                    for a in attr:
+                        collation = (
+                            "C" if isinstance(a.type, (String, Text)) else None
                         )
-                    else:
-                        ordering.append(
-                            desc(attr.collate(collation))
-                            if collation
-                            else desc(attr)
-                        )
+                        if order == "asc":
+                            ordering.append(
+                                asc(a.collate(collation))
+                                if collation
+                                else asc(a)
+                            )
+                        else:
+                            ordering.append(
+                                desc(a.collate(collation))
+                                if collation
+                                else desc(a)
+                            )
             else:
                 ordering = [asc(getattr(sub_entity, "id"))]
 
@@ -875,7 +873,9 @@ class NodeVisitor(Visitor):
 
             ordering = []
             if node.orderby:
-                attrs, orders = self.visit(node.orderby)
+                attrs, orders = self.visit_OrderByNode(
+                    node.orderby, self.main_entity
+                )
                 for attr, order in zip(attrs, orders):
                     for a in attr:
                         collation = (
@@ -904,7 +904,7 @@ class NodeVisitor(Visitor):
 
             top_value = self.visit(node.top) + 1 if node.top else TOP_VALUE + 1
 
-            is_count = bool(node.count and node.count.value)
+            is_count = self.visit(node.count) if node.count else False
 
             if is_count:
                 if COUNT_MODE in {"LIMIT_ESTIMATE", "ESTIMATE_LIMIT"}:
