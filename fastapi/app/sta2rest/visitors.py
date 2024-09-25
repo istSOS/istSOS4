@@ -636,6 +636,8 @@ class NodeVisitor(Visitor):
                                 attr.label("@iot.id")
                             )
 
+            joins = []
+            filters = []
             # Check if we have an expand node before the other parts of the query
             if node.expand:
                 # get the expand identifiers that do NOT have a nested expand
@@ -650,9 +652,6 @@ class NodeVisitor(Visitor):
                 node.expand.identifiers = [
                     e for e in node.expand.identifiers if e.expand
                 ]
-
-                joins = []
-                filters = []
 
                 if expand_identifiers_path["expand"]["identifiers"]:
                     identifiers = expand_identifiers_path["expand"][
