@@ -101,8 +101,8 @@ async def catch_all_delete(
                 )
         if DEBUG:
             response2jsonfile(request, "", "requests.json")
-        # Return okay
-        remove_cache(full_path.split("/")[-1])
+
+        remove_cache(full_path.split("/")[-1].split("(")[0])
         return Response(status_code=status.HTTP_200_OK)
 
     except Exception as e:

@@ -186,7 +186,7 @@ async def catch_all_update(
             return r
         else:
             r = await update(name, int(id), body, pgpool)
-            remove_cache(full_path.split("/")[-1])
+            remove_cache(full_path.split("/")[-1].split("(")[0])
             return r
     except Exception as e:
         traceback.print_exc()
