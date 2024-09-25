@@ -222,6 +222,7 @@ async def catch_all_post(
             r = await insert(main_table, body, pgpool)
             entities = full_path.split("/")
             for entity in entities:
+                entity = entity.split("(")[0]
                 if "Things" in entity:
                     redis.flushall()
                 else:
