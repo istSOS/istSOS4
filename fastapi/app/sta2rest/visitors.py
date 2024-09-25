@@ -651,26 +651,28 @@ class NodeVisitor(Visitor):
                     e for e in node.expand.identifiers if e.expand
                 ]
 
+                joins = []
+                filters = []
+
                 if expand_identifiers_path["expand"]["identifiers"]:
                     identifiers = expand_identifiers_path["expand"][
                         "identifiers"
                     ]
 
                     main_query = select(*json_build_object_args)
-
                     for i, e in enumerate(identifiers):
                         if e.subquery and e.subquery.filter:
                             filter, join_relationships = self.visit_FilterNode(
                                 e.subquery.filter, e.identifier
                             )
-                            main_query = main_query.filter(filter)
+                            filters.append(filter)
                             query_count = query_count.filter(filter)
                             query_estimate_count = query_estimate_count.filter(
                                 filter
                             )
                             if join_relationships:
                                 for rel in join_relationships:
-                                    main_query = main_query.join(rel)
+                                    joins.append(rel)
                                     query_count = query_count.join(rel)
                                     query_estimate_count = (
                                         query_estimate_count.join(rel)
@@ -710,7 +712,7 @@ class NodeVisitor(Visitor):
                                 identifier.replace("TravelTime", "").lower()
                                 + "_id"
                             )
-                            main_query = main_query.filter(filter)
+                            filters.append(filter)
                             query_count = query_count.filter(filter)
                             query_estimate_count = query_estimate_count.filter(
                                 filter
@@ -723,8 +725,7 @@ class NodeVisitor(Visitor):
                                 ).lower()
                                 + "_id"
                             )
-
-                        main_query = main_query.filter(filter)
+                        filters.append(filter)
                         query_count = query_count.filter(filter)
                         query_estimate_count = query_estimate_count.filter(
                             filter
@@ -737,7 +738,7 @@ class NodeVisitor(Visitor):
                             filter, _ = self.visit_FilterNode(
                                 filter_node, nested_identifier
                             )
-                            main_query = main_query.filter(filter)
+                            filters.append(filter)
                             query_count = query_count.filter(filter)
                             query_estimate_count = query_estimate_count.filter(
                                 filter
@@ -840,6 +841,12 @@ class NodeVisitor(Visitor):
                                         )
                                     )
                     main_query = select(*json_build_object_args)
+                    if filters:
+                        for filter in filters:
+                            main_query = main_query.filter(filter)
+                    if joins:
+                        for join in joins:
+                            main_query = main_query.join(join)
             else:
                 if result_format == "DataArray":
                     json_build_object_args.append(
@@ -852,6 +859,12 @@ class NodeVisitor(Visitor):
                     )
 
                 main_query = select(*json_build_object_args)
+                if filters:
+                    for filter in filters:
+                        main_query = main_query.filter(filter)
+                if joins:
+                    for join in joins:
+                        main_query = main_query.join(join)
 
                 if result_format == "DataArray":
                     main_query = main_query.order_by(
