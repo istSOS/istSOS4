@@ -96,30 +96,6 @@ ALLOWED_KEYS = {
 redis = redis.Redis(host="redis", port=6379, db=0)
 
 
-def remove_cache(path):
-    """
-    Remove the cache for the specified path.
-
-    Args:
-        path (str): The path to remove the cache for.
-
-    Returns:
-        None
-    """
-    # Pattern da cercare nelle chiavi (ad esempio 'testop')
-    pattern = "*{}*".format(path)
-
-    # Itera su tutte le chiavi che corrispondono al pattern
-    cursor = 0
-    while True:
-        cursor, keys = redis.scan(cursor=cursor, match=pattern)
-        if keys:
-            # Cancella le chiavi trovate
-            redis.delete(*keys)
-        if cursor == 0:
-            break
-
-
 @v1.api_route("/{path_name:path}", methods=["PATCH"])
 async def catch_all_update(
     request: Request, path_name: str, pgpool=Depends(get_pool)
