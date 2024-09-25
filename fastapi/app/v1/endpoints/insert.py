@@ -3,7 +3,7 @@ import traceback
 from datetime import datetime
 
 import redis
-from app import DEBUG, EPSG, HOSTNAME, SUBPATH, VERSION
+from app import DEBUG, EPSG, HOSTNAME, REDIS_CACHE_EXPIRATION, SUBPATH, VERSION
 from app.db.db import get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
@@ -20,6 +20,37 @@ try:
 except:
     DEBUG = 0
 
+ALLOWED_KEYS = {
+    "Location": {
+        "Things",
+    },
+    "Thing": {
+        "Locations",
+        "Datastreams",
+    },
+    "HistoricalLocation": {
+        "Thing",
+        "Locations",
+    },
+    "Sensor": {
+        "Datastreams",
+    },
+    "ObservedProperty": {
+        "Datastreams",
+    },
+    "FeaturesOfInterest": {
+        "Observations",
+    },
+    "Datastream": {
+        "Thing",
+        "Sensor",
+        "ObservedProperty",
+        "Observations",
+    },
+    "Observation": {
+        "FeatureOfInterest",
+    },
+}
 # for redis
 # Redis client bound to single connection (no auto reconnection).
 redis = redis.Redis(host="redis", port=6379, db=0)
@@ -220,13 +251,11 @@ async def catch_all_post(
             return res
         else:
             r = await insert(main_table, body, pgpool)
-            entities = full_path.split("/")
-            for entity in entities:
-                entity = entity.split("(")[0]
-                if "Things" in entity:
-                    redis.flushall()
-                else:
-                    remove_cache(entity)
+            allowed_keys = ALLOWED_KEYS.get(main_table, set())
+            for key in allowed_keys:
+                if key in body:
+                    remove_cache(key)
+            remove_cache(full_path.split("/")[-1])
             return r
     except Exception as e:
         traceback.print_exc()
