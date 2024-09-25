@@ -102,13 +102,7 @@ async def catch_all_delete(
         if DEBUG:
             response2jsonfile(request, "", "requests.json")
         # Return okay
-        entities = full_path.split("/")
-        for entity in entities:
-            entity = entity.split("(")[0]
-            if "Things" in entity:
-                redis.flushall()
-            else:
-                remove_cache(entity)
+        remove_cache(full_path.split("/")[-1])
         return Response(status_code=status.HTTP_200_OK)
 
     except Exception as e:
