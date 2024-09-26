@@ -665,6 +665,7 @@ class NodeVisitor(Visitor):
                                 e.subquery.filter, e.identifier
                             )
                             filters.append(filter)
+                            main_query = main_query.filter(filter)
                             query_count = query_count.filter(filter)
                             query_estimate_count = query_estimate_count.filter(
                                 filter
@@ -672,6 +673,7 @@ class NodeVisitor(Visitor):
                             if join_relationships:
                                 for rel in join_relationships:
                                     joins.append(rel)
+                                    main_query = main_query.join(rel)
                                     query_count = query_count.join(rel)
                                     query_estimate_count = (
                                         query_estimate_count.join(rel)
@@ -712,6 +714,7 @@ class NodeVisitor(Visitor):
                                 + "_id"
                             )
                             filters.append(filter)
+                            main_query = main_query.filter(filter)
                             query_count = query_count.filter(filter)
                             query_estimate_count = query_estimate_count.filter(
                                 filter
@@ -725,6 +728,7 @@ class NodeVisitor(Visitor):
                                 + "_id"
                             )
                         filters.append(filter)
+                        main_query = main_query.filter(filter)
                         query_count = query_count.filter(filter)
                         query_estimate_count = query_estimate_count.filter(
                             filter
@@ -738,6 +742,7 @@ class NodeVisitor(Visitor):
                                 filter_node, nested_identifier
                             )
                             filters.append(filter)
+                            main_query = main_query.filter(filter)
                             query_count = query_count.filter(filter)
                             query_estimate_count = query_estimate_count.filter(
                                 filter
@@ -858,12 +863,6 @@ class NodeVisitor(Visitor):
                     )
 
                 main_query = select(*json_build_object_args)
-                if filters:
-                    for filter in filters:
-                        main_query = main_query.filter(filter)
-                if joins:
-                    for join in joins:
-                        main_query = main_query.join(join)
 
                 if result_format == "DataArray":
                     main_query = main_query.order_by(
