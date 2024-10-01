@@ -308,7 +308,7 @@ async def insertLocation(payload, conn):
                     (
                         f"${i+1}"
                         if key != "location"
-                        else f"ST_Force3D(ST_GeomFromGeoJSON(${i+1}))"
+                        else f"ST_GeomFromGeoJSON(${i+1})"
                     )
                     for i, key in enumerate(item.keys())
                 )
@@ -528,7 +528,7 @@ async def insertFeaturesOfInterest(payload, conn):
                 (
                     f"${i+1}"
                     if key != "feature"
-                    else f"ST_Force3D(ST_GeomFromGeoJSON(${i+1}))"
+                    else f"ST_GeomFromGeoJSON(${i+1})"
                 )
                 for i, key in enumerate(payload.keys())
             )

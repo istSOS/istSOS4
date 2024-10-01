@@ -249,7 +249,7 @@ async def update_record(payload, conn, table, record_id):
                     (
                         f'"{key}" = ${i + 1}'
                         if key != "location" and key != "feature"
-                        else f'"{key}" = ST_Force3D(ST_GeomFromGeoJSON(${i + 1}))'
+                        else f'"{key}" = ST_GeomFromGeoJSON(${i + 1})'
                     )
                     for i, key in enumerate(payload.keys())
                 ]
@@ -695,8 +695,10 @@ def handle_associations(payload, keys):
                 raise Exception(
                     "Invalid format: Each thing dictionary should contain only the '@iot.id' key."
                 )
-            id_field = f"{key.lower()}_id"
-            payload[id_field] = payload[key]["@iot.id"]
+            if key != "FeatureOfInterest":
+                payload[f"{key.lower()}_id"] = payload[key]["@iot.id"]
+            else:
+                payload["featuresofinterest_id"] = payload[key]["@iot.id"]
             payload.pop(key)
 
 

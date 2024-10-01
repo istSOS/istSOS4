@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "location" geometry(geometryz) NOT NULL,
+    "location" geometry NOT NULL,
     "properties" jsonb DEFAULT NULL,
     "gen_foi_id" BIGINT
 );
@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "description" TEXT NOT NULL,
     "unitOfMeasurement" jsonb NOT NULL,
     "observationType" VARCHAR(100) NOT NULL,
-    "observedArea" geometry(geometryZ),
+    "observedArea" geometry,
     "phenomenonTime" tstzrange,
     "resultTime" tstzrange,
     "properties" jsonb DEFAULT NULL,
@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
     "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "feature" geometry(geometryz) NOT NULL,
+    "feature" geometry NOT NULL,
     "properties" jsonb DEFAULT NULL
 );
 

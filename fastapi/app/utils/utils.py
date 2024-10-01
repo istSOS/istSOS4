@@ -187,11 +187,9 @@ async def update_datastream_observedArea_from_obs(conn, datastream_id):
     if geometries:
         query = f"""
             UPDATE sensorthings."Datastream"
-            SET "observedArea" = ST_Force3D(
-                ST_ConvexHull(
-                    ST_Collect(
-                        ARRAY[{', '.join(f"'{g}'::geometry" for g in geometries)}]
-                    )
+            SET "observedArea" = ST_ConvexHull(
+                ST_Collect(
+                    ARRAY[{', '.join(f"'{g}'::geometry" for g in geometries)}]
                 )
             )
             WHERE id = $1;
@@ -246,11 +244,9 @@ async def update_datastream_observedArea_from_foi(
         if geometries:
             query = f"""
                 UPDATE sensorthings."Datastream"
-                SET "observedArea" = ST_Force3D(
-                    ST_ConvexHull(
-                        ST_Collect(
-                            ARRAY[{', '.join(f"'{g}'::geometry" for g in geometries)}]
-                        )
+                SET "observedArea" = ST_ConvexHull(
+                    ST_Collect(
+                        ARRAY[{', '.join(f"'{g}'::geometry" for g in geometries)}]
                     )
                 )
                 WHERE id = $1;
