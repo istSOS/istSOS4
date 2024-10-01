@@ -1,7 +1,6 @@
+from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.sql.schema import Column, ForeignKey, Table
 from sqlalchemy.sql.sqltypes import Integer
-
-from .database import SCHEMA_NAME, Base
 
 Thing_Location = Table(
     "Thing_Location",

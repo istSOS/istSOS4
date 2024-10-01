@@ -19,6 +19,7 @@ date = (
     else datetime.combine(datetime.now().today(), time.min)
 )
 chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL"))
+epsg = int(os.getenv("EPSG"))
 
 pgpool = None
 
@@ -74,15 +75,19 @@ async def generate_locations(conn):
     """
     locations = []
     for i in range(1, n_things + 1):
+        lon = random.uniform(-180, 180)
+        lat = random.uniform(-90, 90)
+        elevation = random.uniform(0, 1000)
+
         description = f"location {i}"
         name = f"location name {i}"
-        location = "0101000020E6100000BA490C022B7F52C0355EBA490C624440"
+        location = f"SRID={epsg};POINT Z({lon} {lat} {elevation})"
         encodingType = "application/pdf"
         locations.append((description, name, location, encodingType))
 
     insert_sql = """
     INSERT INTO sensorthings."Location" (description, name, location, "encodingType")
-    VALUES ($1, $2, $3, $4)
+    VALUES ($1, $2, $3::public.geometry, $4)
     """
     await conn.executemany(insert_sql, locations)
 
@@ -229,8 +234,8 @@ async def generate_datastreams(conn):
                     "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen",
                 }
             )
-            description = f"datastream {i}"
-            name = f"datastream name {i}"
+            description = f"datastream {cnt}"
+            name = f"datastream name {cnt}"
             observationType = "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"
             thing_id = i
             sensor_id = cnt
@@ -267,15 +272,19 @@ async def generate_featuresofinterest(conn):
     """
     featuresofinterest = []
     for i in range(1, n_things + 1):
+        lon = random.uniform(-180, 180)
+        lat = random.uniform(-90, 90)
+        elevation = random.uniform(0, 1000)
+
         description = f"featuresofinterest {i}"
         name = f"featuresofinterest name {i}"
         encodingType = "application/pdf"
-        feature = "0101000020E6100000BA490C022B7F52C0355EBA490C624440"
+        feature = f"SRID={epsg};POINT Z({lon} {lat} {elevation})"
         featuresofinterest.append((description, name, encodingType, feature))
 
     insert_sql = """
     INSERT INTO sensorthings."FeaturesOfInterest" (description, name, "encodingType", feature)
-    VALUES ($1, $2, $3, $4)
+    VALUES ($1, $2, $3, $4::public.geometry)
     """
     await conn.executemany(insert_sql, featuresofinterest)
 
@@ -302,7 +311,8 @@ async def update_datastream_phenomenon_time(conn, observations, datastream_id):
         UPDATE sensorthings."Datastream"
         SET "phenomenonTime" = tstzrange(
             LEAST($1::timestamptz, lower("phenomenonTime")),
-            GREATEST($2::timestamptz, upper("phenomenonTime"))
+            GREATEST($2::timestamptz, upper("phenomenonTime")),
+            '[]'
         )
         WHERE id = $3::bigint
     """
@@ -312,6 +322,44 @@ async def update_datastream_phenomenon_time(conn, observations, datastream_id):
         max(phenomenon_times),
         datastream_id,
     )
+
+
+async def update_datastream_observed_area(conn):
+    query = 'SELECT DISTINCT id FROM sensorthings."Datastream";'
+    datastream_ids = await conn.fetch(query)
+    for ds in datastream_ids:
+        ds = ds["id"]
+        # Fetch distinct featuresofinterest IDs associated with the datastream
+        query = 'SELECT DISTINCT featuresofinterest_id FROM sensorthings."Observation" WHERE "datastream_id" = $1;'
+        featuresofinterest_ids = await conn.fetch(query, ds)
+
+        # Collect the geometries for each feature of interest
+        geometries = []
+        for foi in featuresofinterest_ids:
+            foi_id = foi["featuresofinterest_id"]
+
+            # Fetch the actual geometry associated with the feature of interest
+            query = 'SELECT feature FROM sensorthings."FeaturesOfInterest" WHERE id = $1;'
+            geometry = await conn.fetchval(query, foi_id)
+
+            if geometry:
+                geometries.append(geometry)
+
+        if geometries:
+            query = f"""
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = ST_Force3D(
+                    ST_ConvexHull(
+                        ST_Collect(
+                            ARRAY[{', '.join(f"'{g}'::geometry" for g in geometries)}]
+                        )
+                    )
+                )
+                WHERE id = $1;
+            """
+
+            # Execute the update query, passing the datastream_id
+            await conn.execute(query, ds)
 
 
 async def generate_observations(conn):
@@ -359,6 +407,8 @@ async def generate_observations(conn):
         await update_datastream_phenomenon_time(
             conn, observations, datastream_id
         )
+
+    await update_datastream_observed_area(conn)
 
 
 async def create_data():

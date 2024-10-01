@@ -12,6 +12,8 @@ from app import (
     VERSION,
     VERSIONING,
 )
+from app.db.sqlalchemy_db import engine
+from app.models import *
 from app.sta2rest import sta2rest
 from app.utils.utils import build_nextLink
 from geoalchemy2 import Geometry
@@ -33,8 +35,6 @@ from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.expression import cast
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
-from ..models import *
-from ..models.database import engine
 from .filter_visitor import FilterVisitor
 from .sta_parser.ast import *
 from .sta_parser.visitor import Visitor

@@ -1,11 +1,10 @@
+from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from geoalchemy2 import Geometry
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, String, Text
-
-from .database import SCHEMA_NAME, Base
 
 
 class Datastream(Base):
