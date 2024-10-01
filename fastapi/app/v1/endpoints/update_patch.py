@@ -306,7 +306,9 @@ async def update_record(payload, conn, table, record_id):
                 updated_id = await conn.fetchval(query, *payload.values())
 
                 if table == "FeaturesOfInterest":
-                    update_datastream_observedArea_from_foi(conn, updated_id)
+                    await update_datastream_observedArea_from_foi(
+                        conn, updated_id
+                    )
             return updated_id
     except Exception:
         return JSONResponse(
