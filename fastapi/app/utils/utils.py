@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 from app import HOSTNAME, TOP_VALUE
 from asyncpg.types import Range
@@ -166,3 +167,102 @@ def build_nextLink(full_path, count_links):
         return nextLink
 
     return None
+
+
+async def update_datastream_observedArea_from_obs(conn, datastream_id):
+    print("Updating observedArea for datastream", datastream_id)
+    # Fetch distinct featuresofinterest IDs associated with the datastream
+    query = 'SELECT DISTINCT featuresofinterest_id FROM sensorthings."Observation" WHERE "datastream_id" = $1;'
+    featuresofinterest_ids = await conn.fetch(query, datastream_id)
+
+    # Collect the geometries for each feature of interest
+    geometries = []
+    for foi in featuresofinterest_ids:
+        foi_id = foi["featuresofinterest_id"]
+        query = 'SELECT feature FROM sensorthings."FeaturesOfInterest" WHERE id = $1;'
+        geometry = await conn.fetchval(query, foi_id)
+
+        if geometry:
+            geometries.append(geometry)
+
+    if geometries:
+        query = f"""
+            UPDATE sensorthings."Datastream"
+            SET "observedArea" = ST_Force3D(
+                ST_ConvexHull(
+                    ST_Collect(
+                        ARRAY[{', '.join(f"'{g}'::geometry" for g in geometries)}]
+                    )
+                )
+            )
+            WHERE id = $1;
+        """
+    else:
+        query = f"""
+            UPDATE sensorthings."Datastream"
+            SET "observedArea" = NULL
+            WHERE id = $1;
+        """
+
+    # Execute the update query, passing the datastream_id
+    await conn.execute(query, datastream_id)
+
+
+async def update_datastream_observedArea_from_foi(
+    conn, feature_id, delete=False
+):
+    print(
+        "Updating observedArea for datastreams associated with feature",
+        feature_id,
+    )
+    query = 'SELECT DISTINCT datastream_id FROM sensorthings."Observation" WHERE "featuresofinterest_id" = $1;'
+    datastream_ids = await conn.fetch(query, feature_id)
+
+    for ds in datastream_ids:
+        ds = ds["datastream_id"]
+
+        # Fetch distinct featuresofinterest IDs associated with the datastream
+        query = 'SELECT DISTINCT featuresofinterest_id FROM sensorthings."Observation" WHERE "datastream_id" = $1;'
+        featuresofinterest_ids = await conn.fetch(query, ds)
+
+        # Collect the geometries for each feature of interest
+        geometries = []
+        for foi in featuresofinterest_ids:
+            foi_id = foi["featuresofinterest_id"]
+
+            if delete:
+                if foi_id != feature_id:
+                    query = 'SELECT feature FROM sensorthings."FeaturesOfInterest" WHERE id = $1;'
+                    geometry = await conn.fetchval(query, foi_id)
+
+                    if geometry:
+                        geometries.append(geometry)
+            else:
+                query = 'SELECT feature FROM sensorthings."FeaturesOfInterest" WHERE id = $1;'
+                geometry = await conn.fetchval(query, foi_id)
+
+                if geometry:
+                    geometries.append(geometry)
+
+        if geometries:
+            query = f"""
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = ST_Force3D(
+                    ST_ConvexHull(
+                        ST_Collect(
+                            ARRAY[{', '.join(f"'{g}'::geometry" for g in geometries)}]
+                        )
+                    )
+                )
+                WHERE id = $1;
+            """
+        else:
+            if delete:
+                query = f"""
+                    UPDATE sensorthings."Datastream"
+                    SET "observedArea" = NULL
+                    WHERE id = $1;
+                """
+
+        # Execute the update query, passing the datastream_id
+        await conn.execute(query, ds)
