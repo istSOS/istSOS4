@@ -297,7 +297,7 @@ async def update_record(payload, conn, table, record_id):
                                 datastream_id,
                             )
 
-                if payload["featuresofinterest_id"]:
+                if payload.get("featuresofinterest_id"):
                     await update_datastream_observedArea_from_obs(
                         conn, datastream_id
                     )
