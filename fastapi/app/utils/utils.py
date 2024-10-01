@@ -208,10 +208,6 @@ async def update_datastream_observedArea_from_obs(conn, datastream_id):
 async def update_datastream_observedArea_from_foi(
     conn, feature_id, delete=False
 ):
-    print(
-        "Updating observedArea for datastreams associated with feature",
-        feature_id,
-    )
     query = 'SELECT DISTINCT datastream_id FROM sensorthings."Observation" WHERE "featuresofinterest_id" = $1;'
     datastream_ids = await conn.fetch(query, feature_id)
 

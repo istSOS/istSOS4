@@ -665,7 +665,7 @@ async def insertObservation(payload, conn, datastream_id=None):
                 handle_datetime_fields(obs)
                 handle_result_field(obs)
 
-                if obs["phenomenonTime"] is None:
+                if obs.get("phenomenonTime") is None:
                     obs["phenomenonTime"] = datetime.now()
 
                 for key, value in obs.items():
