@@ -170,7 +170,6 @@ def build_nextLink(full_path, count_links):
 
 
 async def update_datastream_observedArea_from_obs(conn, datastream_id):
-    print("Updating observedArea for datastream", datastream_id)
     # Fetch distinct featuresofinterest IDs associated with the datastream
     query = 'SELECT DISTINCT featuresofinterest_id FROM sensorthings."Observation" WHERE "datastream_id" = $1;'
     featuresofinterest_ids = await conn.fetch(query, datastream_id)

@@ -695,10 +695,8 @@ def handle_associations(payload, keys):
                 raise Exception(
                     "Invalid format: Each thing dictionary should contain only the '@iot.id' key."
                 )
-            if key != "FeatureOfInterest":
-                payload[f"{key.lower()}_id"] = payload[key]["@iot.id"]
-            else:
-                payload["featuresofinterest_id"] = payload[key]["@iot.id"]
+            id_field = f"{key.lower()}_id"
+            payload[id_field] = payload[key]["@iot.id"]
             payload.pop(key)
 
 
