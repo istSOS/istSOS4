@@ -1,10 +1,16 @@
-import datetime
 import traceback
 
-import redis
 import ujson
-from app import DEBUG, HOSTNAME, REDIS_CACHE_EXPIRATION, SUBPATH, VERSION
-from app.models.database import get_db
+from app import (
+    DEBUG,
+    HOSTNAME,
+    REDIS,
+    REDIS_CACHE_EXPIRATION,
+    SUBPATH,
+    VERSION,
+)
+from app.db.redis_db import redis
+from app.db.sqlalchemy_db import get_db
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -14,10 +20,6 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request, status
 
 v1 = APIRouter()
-
-# for redis
-# Redis client bound to single connection (no auto reconnection).
-redis = redis.Redis(host="redis", port=6379, db=0)
 
 try:
     DEBUG = DEBUG
@@ -84,27 +86,34 @@ async def catch_all_get(
         full_path = request.url.path
         if request.url.query:
             full_path += "?" + request.url.query
-        try:
-            result = redis.get(full_path)
-        except Exception as e:
-            print(e)
-            result = None
+
+        result = None
+        if REDIS:
+            try:
+                result = redis.get(full_path)
+            except Exception as e:
+                print(e)
+                result = None
 
         if not result:
             result = await sta2rest.STA2REST.convert_query(full_path, db)
 
             async def wrapped_result_generator(first_item):
-                accumulator = [first_item]
+                if REDIS:
+                    accumulator = [first_item]
                 yield first_item
                 async for item in result:
-                    accumulator.append(item)
+                    if REDIS:
+                        accumulator.append(item)
                     yield item
-                full_response = "".join(accumulator)
-                try:
-                    redis.set(full_path, full_response)
-                    redis.expire(full_path, REDIS_CACHE_EXPIRATION)
-                except Exception as e:
-                    print(e)
+
+                if REDIS:
+                    full_response = "".join(accumulator)
+                    try:
+                        redis.set(full_path, full_response)
+                        redis.expire(full_path, REDIS_CACHE_EXPIRATION)
+                    except Exception as e:
+                        print(e)
 
             try:
                 first_item = await anext(result)
@@ -132,12 +141,13 @@ async def catch_all_get(
                     },
                 )
         else:
-            print("Cache hit")
-            result = ujson.loads(result.decode("utf-8"))
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,
-                content=result,
-            )
+            if REDIS:
+                print("Cache hit")
+                result = ujson.loads(result.decode("utf-8"))
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=result,
+                )
 
     except Exception as e:
         traceback.print_exc()
