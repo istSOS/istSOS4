@@ -1,11 +1,16 @@
 import json
 import traceback
 
-import redis
-from app import DEBUG, EPSG, VERSIONING
-from app.db.db import get_pool
+from app import DEBUG, EPSG, REDIS, VERSIONING
+from app.db.asyncpg_db import get_pool
+from app.db.redis_db import redis
 from app.sta2rest import sta2rest
-from app.utils.utils import handle_datetime_fields, handle_result_field
+from app.utils.utils import (
+    handle_datetime_fields,
+    handle_result_field,
+    update_datastream_observedArea_from_foi,
+    update_datastream_observedArea_from_obs,
+)
 from fastapi.responses import JSONResponse, Response
 
 from fastapi import APIRouter, Depends, Request, status
@@ -91,11 +96,6 @@ ALLOWED_KEYS = {
 }
 
 
-# for redis
-# Redis client bound to single connection (no auto reconnection).
-redis = redis.Redis(host="redis", port=6379, db=0)
-
-
 @v1.api_route("/{path_name:path}", methods=["PATCH"])
 async def catch_all_update(
     request: Request, path_name: str, pgpool=Depends(get_pool)
@@ -162,7 +162,8 @@ async def catch_all_update(
             return r
         else:
             r = await update(name, int(id), body, pgpool)
-            redis.flushall()
+            if REDIS:
+                redis.flushall()
             return r
     except Exception as e:
         traceback.print_exc()
@@ -248,13 +249,65 @@ async def update_record(payload, conn, table, record_id):
                     (
                         f'"{key}" = ${i + 1}'
                         if key != "location" and key != "feature"
-                        else f'"{key}" = ST_GeomFromGeoJSON(${i + 1})'
+                        else f'"{key}" = ST_Force3D(ST_GeomFromGeoJSON(${i + 1}))'
                     )
                     for i, key in enumerate(payload.keys())
                 ]
             )
-            query = f'UPDATE sensorthings."{table}" SET {set_clause} WHERE id = {record_id} RETURNING ID;'
-            return await conn.fetchval(query, *payload.values())
+            if table == "Observation":
+                query = f'UPDATE sensorthings."{table}" SET {set_clause} WHERE id = {record_id} RETURNING id, "phenomenonTime", "datastream_id";'
+                res = await conn.fetchrow(query, *payload.values())
+                updated_id = res["id"]
+                if res:
+                    obs_phenomenon_time = res["phenomenonTime"]
+                    datastream_id = res["datastream_id"]
+
+                    datastream_query = """
+                        SELECT "phenomenonTime" 
+                        FROM sensorthings."Datastream"
+                        WHERE id = $1;
+                    """
+                    datastream_phenomenon_time = await conn.fetchval(
+                        datastream_query, datastream_id
+                    )
+                    if datastream_phenomenon_time:
+                        if (
+                            obs_phenomenon_time
+                            < datastream_phenomenon_time.lower
+                            or obs_phenomenon_time
+                            > datastream_phenomenon_time.upper
+                        ):
+                            new_lower_bound = min(
+                                obs_phenomenon_time,
+                                datastream_phenomenon_time.lower,
+                            )
+                            new_upper_bound = max(
+                                obs_phenomenon_time,
+                                datastream_phenomenon_time.upper,
+                            )
+                            update_datastream_query = """
+                                UPDATE sensorthings."Datastream"
+                                SET "phenomenonTime" = tstzrange($1, $2, '[]')
+                                WHERE id = $3;
+                            """
+                            await conn.execute(
+                                update_datastream_query,
+                                new_lower_bound,
+                                new_upper_bound,
+                                datastream_id,
+                            )
+
+                if payload["featuresofinterest_id"]:
+                    await update_datastream_observedArea_from_obs(
+                        conn, datastream_id
+                    )
+            else:
+                query = f'UPDATE sensorthings."{table}" SET {set_clause} WHERE id = {record_id} RETURNING id;'
+                updated_id = await conn.fetchval(query, *payload.values())
+
+                if table == "FeaturesOfInterest":
+                    update_datastream_observedArea_from_foi(conn, updated_id)
+            return updated_id
     except Exception:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -642,8 +695,10 @@ def handle_associations(payload, keys):
                 raise Exception(
                     "Invalid format: Each thing dictionary should contain only the '@iot.id' key."
                 )
-            id_field = f"{key.lower()}_id"
-            payload[id_field] = payload[key]["@iot.id"]
+            if key != "FeatureOfInterest":
+                payload[f"{key.lower()}_id"] = payload[key]["@iot.id"]
+            else:
+                payload["featuresofinterest_id"] = payload[key]["@iot.id"]
             payload.pop(key)
 
 

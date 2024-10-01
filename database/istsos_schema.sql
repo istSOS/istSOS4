@@ -8,11 +8,12 @@ CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "location" geometry NOT NULL,
+    "location" geometry(geometryz) NOT NULL,
     "properties" jsonb DEFAULT NULL,
-    "gen_foi_id" BIGINT,
-    CONSTRAINT enforce_srid CHECK (st_srid("location") = current_setting('custom.epsg')::int)
+    "gen_foi_id" BIGINT
 );
+
+SELECT UpdateGeometrySRID('sensorthings', 'Location', 'location', current_setting('custom.epsg')::int);
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Location") RETURNS text AS $$
     SELECT '/Locations(' || $1.id || ')';
@@ -127,18 +128,17 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "description" TEXT NOT NULL,
     "unitOfMeasurement" jsonb NOT NULL,
     "observationType" VARCHAR(100) NOT NULL,
-    "observedArea" geometry,
+    "observedArea" geometry(geometryZ),
     "phenomenonTime" tstzrange,
     "resultTime" tstzrange,
     "properties" jsonb DEFAULT NULL,
     "thing_id" BIGINT NOT NULL REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
     "sensor_id" BIGINT NOT NULL REFERENCES sensorthings."Sensor"(id) ON DELETE CASCADE,
-    "observedproperty_id" BIGINT NOT NULL REFERENCES sensorthings."ObservedProperty"(id) ON DELETE CASCADE,
-    CONSTRAINT enforce_srid CHECK (st_srid("observedArea") = current_setting('custom.epsg')::int),
-    CONSTRAINT enforce_stype CHECK (
-        ST_GeometryType("observedArea") IN ('ST_Polygon', 'ST_PolygonZ')
-    )
+    "observedproperty_id" BIGINT NOT NULL REFERENCES sensorthings."ObservedProperty"(id) ON DELETE CASCADE
 );
+
+SELECT UpdateGeometrySRID('sensorthings', 'Datastream', 'observedArea', current_setting('custom.epsg')::int);
+
 
 CREATE INDEX IF NOT EXISTS "idx_datastream_thing_id" ON sensorthings."Datastream" USING btree ("thing_id" ASC NULLS LAST) TABLESPACE pg_default;
 CREATE INDEX IF NOT EXISTS "idx_datastream_sensor_id" ON sensorthings."Datastream" USING btree ("sensor_id" ASC NULLS LAST) TABLESPACE pg_default;
@@ -169,10 +169,11 @@ CREATE TABLE IF NOT EXISTS sensorthings."FeaturesOfInterest" (
     "name" VARCHAR(255) NOT NULL,
     "description" TEXT NOT NULL,
     "encodingType" VARCHAR(100) NOT NULL,
-    "feature" geometry NOT NULL,
-    "properties" jsonb DEFAULT NULL,
-    CONSTRAINT enforce_srid CHECK (st_srid("feature") = current_setting('custom.epsg')::int)
+    "feature" geometry(geometryz) NOT NULL,
+    "properties" jsonb DEFAULT NULL
 );
+
+SELECT UpdateGeometrySRID('sensorthings', 'FeaturesOfInterest', 'feature', current_setting('custom.epsg')::int);
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."FeaturesOfInterest") RETURNS text AS $$
     SELECT '/FeaturesOfInterest(' || $1.id || ')';

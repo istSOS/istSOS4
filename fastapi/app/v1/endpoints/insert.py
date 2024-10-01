@@ -2,11 +2,15 @@ import json
 import traceback
 from datetime import datetime
 
-import redis
-from app import DEBUG, EPSG, HOSTNAME, SUBPATH, VERSION
-from app.db.db import get_pool
+from app import DEBUG, EPSG, HOSTNAME, REDIS, SUBPATH, VERSION
+from app.db.asyncpg_db import get_pool
+from app.db.redis_db import redis
 from app.sta2rest import sta2rest
-from app.utils.utils import handle_datetime_fields, handle_result_field
+from app.utils.utils import (
+    handle_datetime_fields,
+    handle_result_field,
+    update_datastream_observedArea_from_foi,
+)
 from fastapi.responses import JSONResponse, Response
 
 from fastapi import APIRouter, Depends, Request, status
@@ -19,65 +23,6 @@ try:
         from app.utils.utils import response2jsonfile
 except:
     DEBUG = 0
-
-ALLOWED_KEYS = {
-    "Location": {
-        "Things",
-    },
-    "Thing": {
-        "Locations",
-        "Datastreams",
-    },
-    "HistoricalLocation": {
-        "Thing",
-        "Locations",
-    },
-    "Sensor": {
-        "Datastreams",
-    },
-    "ObservedProperty": {
-        "Datastreams",
-    },
-    "FeaturesOfInterest": {
-        "Observations",
-    },
-    "Datastream": {
-        "Thing",
-        "Sensor",
-        "ObservedProperty",
-        "Observations",
-    },
-    "Observation": {
-        "FeatureOfInterest",
-    },
-}
-# for redis
-# Redis client bound to single connection (no auto reconnection).
-redis = redis.Redis(host="redis", port=6379, db=0)
-
-
-def remove_cache(path):
-    """
-    Remove the cache for the specified path.
-
-    Args:
-        path (str): The path to remove the cache for.
-
-    Returns:
-        None
-    """
-    # Pattern da cercare nelle chiavi (ad esempio 'testop')
-    pattern = "*{}*".format(path)
-
-    # Itera su tutte le chiavi che corrispondono al pattern
-    cursor = 0
-    while True:
-        cursor, keys = redis.scan(cursor=cursor, match=pattern)
-        if keys:
-            # Cancella le chiavi trovate
-            redis.delete(*keys)
-        if cursor == 0:
-            break
 
 
 @v1.api_route("/CreateObservations", methods=["POST"])
@@ -211,7 +156,6 @@ async def catch_all_post(
         result = sta2rest.STA2REST.parse_uri(full_path)
         # get json body
         body = await request.json()
-        body_cache = (await request.body()).decode("utf-8")
 
         main_table = result["entity"][0]
 
@@ -252,18 +196,8 @@ async def catch_all_post(
             return res
         else:
             r = await insert(main_table, body, pgpool)
-            allowed_keys = ALLOWED_KEYS.get(main_table, set())
-            for key in allowed_keys:
-                if key in body_cache:
-                    remove_cache(key)
-                    allowed_keys_deep = ALLOWED_KEYS.get(
-                        sta2rest.STA2REST.ENTITY_MAPPING.get(key, key), set()
-                    )
-                    for key_deep in allowed_keys_deep:
-                        if key_deep in body_cache:
-                            remove_cache(key_deep)
-
-            remove_cache(full_path.split("/")[-1])
+            if REDIS:
+                redis.flushall()
             return r
     except Exception as e:
         traceback.print_exc()
@@ -374,7 +308,7 @@ async def insertLocation(payload, conn):
                     (
                         f"${i+1}"
                         if key != "location"
-                        else f"ST_GeomFromGeoJSON(${i+1})"
+                        else f"ST_Force3D(ST_GeomFromGeoJSON(${i+1}))"
                     )
                     for i, key in enumerate(item.keys())
                 )
@@ -483,9 +417,7 @@ async def insertHistoricalLocation(payload, conn):
                     if "@iot.id" in location:
                         location_id = location["@iot.id"]
                     else:
-                        location_id, location_selfLink = await insertLocation(
-                            location, conn
-                        )
+                        location_id, _ = await insertLocation(location, conn)
                     if not isinstance(location_id, int):
                         raise ValueError(
                             f"Cannot deserialize value of type `int` from String: {location_id}"
@@ -596,7 +528,7 @@ async def insertFeaturesOfInterest(payload, conn):
                 (
                     f"${i+1}"
                     if key != "feature"
-                    else f"ST_GeomFromGeoJSON(${i+1})"
+                    else f"ST_Force3D(ST_GeomFromGeoJSON(${i+1}))"
                 )
                 for i, key in enumerate(payload.keys())
             )
@@ -733,7 +665,7 @@ async def insertObservation(payload, conn, datastream_id=None):
                 handle_datetime_fields(obs)
                 handle_result_field(obs)
 
-                if obs.get("phenomenonTime") is None:
+                if obs["phenomenonTime"] is None:
                     obs["phenomenonTime"] = datetime.now()
 
                 for key, value in obs.items():
@@ -758,7 +690,7 @@ async def insertObservation(payload, conn, datastream_id=None):
             insert_sql = f"""
             INSERT INTO sensorthings."Observation" ({keys})
             VALUES {values_placeholders}
-            RETURNING id, "phenomenonTime", datastream_id
+            RETURNING id, "phenomenonTime", datastream_id, featuresofinterest_id
             """
 
             values = [
@@ -767,7 +699,6 @@ async def insertObservation(payload, conn, datastream_id=None):
             result = await conn.fetch(insert_sql, *values)
 
             phenomenon_times = [record["phenomenonTime"] for record in result]
-
             update_sql = """
                 UPDATE sensorthings."Datastream"
                 SET "phenomenonTime" = tstzrange(
@@ -783,6 +714,12 @@ async def insertObservation(payload, conn, datastream_id=None):
                 max(phenomenon_times),
                 result[0]["datastream_id"],
             )
+
+            fois = [record["featuresofinterest_id"] for record in result]
+            fois = list(set(fois))
+            for foi_id in fois:
+                await update_datastream_observedArea_from_foi(conn, foi_id)
+
             observation_id = result[0]["id"]
             observation_selfLink = (
                 f"{HOSTNAME}{SUBPATH}{VERSION}/Observations({observation_id})"
