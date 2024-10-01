@@ -1,9 +1,9 @@
+from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
-from .database import SCHEMA_NAME, Base
 from .thing_location import Thing_Location
 
 

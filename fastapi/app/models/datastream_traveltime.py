@@ -1,10 +1,9 @@
+from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from geoalchemy2 import Geometry
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.sql.schema import Column, PrimaryKeyConstraint
 from sqlalchemy.sql.sqltypes import Integer, String, Text
-
-from .database import SCHEMA_NAME, Base
 
 
 class DatastreamTravelTime(Base):

@@ -1,9 +1,9 @@
+from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, Text
 
-from .database import SCHEMA_NAME, Base
 from .location_historicallocation import Location_HistoricalLocation
 
 

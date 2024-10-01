@@ -1,9 +1,8 @@
+from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.sql.schema import Column, PrimaryKeyConstraint
 from sqlalchemy.sql.sqltypes import Integer, Text
-
-from .database import SCHEMA_NAME, Base
 
 
 class HistoricalLocationTravelTime(Base):
