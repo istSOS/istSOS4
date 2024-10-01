@@ -40,6 +40,7 @@ services:
       TOP_VALUE: ${TOP_VALUE}
       PARTITION_CHUNK: ${PARTITION_CHUNK}
       EXPAND_MODE: ${EXPAND_MODE}
+      REDIS: ${REDIS}
       REDIS_CACHE_EXPIRATION: ${REDIS_CACHE_EXPIRATION}
       EPSG: ${EPSG}
     command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app
@@ -50,11 +51,6 @@ services:
   redis:
     image: redis:7.4.0-alpine3.20
     restart: always
-    ports:
-      - 6379:6379
-    environment:
-      - REDIS_PASSWORD=my-password
-      - REDIS_PORT=6379
     volumes:
       - v-istsos4-redis-data:/data
 
