@@ -1,21 +1,16 @@
+import json
 import traceback
 
-import ujson
-from app import (
-    DEBUG,
-    HOSTNAME,
-    REDIS,
-    REDIS_CACHE_EXPIRATION,
-    SUBPATH,
-    VERSION,
-)
+from app import DEBUG, HOSTNAME, REDIS, SUBPATH, VERSION
 from app.db.redis_db import redis
 from app.db.sqlalchemy_db import get_db
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
+from app.sta2rest.visitors import stream_results
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.exc import TimeoutError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import text
 
 from fastapi import APIRouter, Depends, Request, status
 
@@ -88,66 +83,68 @@ async def catch_all_get(
             full_path += "?" + request.url.query
 
         result = None
+
         if REDIS:
-            try:
-                result = redis.get(full_path)
-            except Exception as e:
-                print(e)
-                result = None
+            result = redis.get(full_path)
 
-        if not result:
-            result = await sta2rest.STA2REST.convert_query(full_path, db)
+        if result:
+            print("Cache hit")
+            data = json.loads(result)
 
-            async def wrapped_result_generator(first_item):
-                if REDIS:
-                    accumulator = [first_item]
-                yield first_item
-                async for item in result:
-                    if REDIS:
-                        accumulator.append(item)
-                    yield item
+            main_entity = data.get("main_entity")
+            main_query = data.get("main_query")
+            top_value = data.get("top_value")
+            iot_count = data.get("iot_count")
+            as_of_value = data.get("as_of_value")
+            from_to_value = data.get("from_to_value")
+            single_result = data.get("single_result")
 
-                if REDIS:
-                    full_response = "".join(accumulator)
-                    try:
-                        redis.set(full_path, full_response)
-                        redis.expire(full_path, REDIS_CACHE_EXPIRATION)
-                    except Exception as e:
-                        print(e)
-
-            try:
-                first_item = await anext(result)
-                return StreamingResponse(
-                    wrapped_result_generator(first_item),
-                    media_type="application/json",
-                    status_code=status.HTTP_200_OK,
-                )
-            except TimeoutError:
-                return JSONResponse(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    content={
-                        "code": 503,
-                        "type": "error",
-                        "message": "Service Unavailable",
-                    },
-                )
-            except Exception as e:
-                return JSONResponse(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    content={
-                        "code": 404,
-                        "type": "error",
-                        "message": "Not Found",
-                    },
+            async with db as session:
+                result = stream_results(
+                    main_entity,
+                    text(main_query),
+                    session,
+                    top_value,
+                    iot_count,
+                    as_of_value,
+                    from_to_value,
+                    single_result,
+                    full_path,
                 )
         else:
-            if REDIS:
-                print("Cache hit")
-                result = ujson.loads(result.decode("utf-8"))
-                return JSONResponse(
-                    status_code=status.HTTP_200_OK,
-                    content=result,
-                )
+            print("Cache miss")
+            result = await sta2rest.STA2REST.convert_query(full_path, db)
+
+        async def wrapped_result_generator(first_item):
+            yield first_item
+            async for item in result:
+                yield item
+
+        try:
+            first_item = await anext(result)
+            return StreamingResponse(
+                wrapped_result_generator(first_item),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK,
+            )
+        except TimeoutError:
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={
+                    "code": 503,
+                    "type": "error",
+                    "message": "Service Unavailable",
+                },
+            )
+        except Exception as e:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "code": 404,
+                    "type": "error",
+                    "message": "Not Found",
+                },
+            )
 
     except Exception as e:
         traceback.print_exc()

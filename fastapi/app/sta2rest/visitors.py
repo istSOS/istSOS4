@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 import ujson
@@ -7,11 +8,14 @@ from app import (
     EXPAND_MODE,
     HOSTNAME,
     PARTITION_CHUNK,
+    REDIS,
+    REDIS_CACHE_EXPIRATION,
     SUBPATH,
     TOP_VALUE,
     VERSION,
     VERSIONING,
 )
+from app.db.redis_db import redis
 from app.db.sqlalchemy_db import engine
 from app.models import *
 from app.sta2rest import sta2rest
@@ -1047,6 +1051,25 @@ class NodeVisitor(Visitor):
                 main_query = select(
                     main_query.c.json.op("->")(value)
                 ).select_from(main_query)
+
+            if REDIS:
+                compiled_query_text = main_query.compile(
+                    dialect=engine.dialect,
+                    compile_kwargs={"literal_binds": True},
+                )
+
+                data_to_store = {
+                    "main_entity": self.main_entity,
+                    "main_query": str(compiled_query_text),
+                    "top_value": top_value,
+                    "iot_count": iot_count,
+                    "as_of_value": as_of_value,
+                    "from_to_value": from_to_value,
+                    "single_result": self.single_result,
+                }
+
+                redis.set(self.full_path, json.dumps(data_to_store))
+                redis.expire(self.full_path, REDIS_CACHE_EXPIRATION)
 
             main_query = stream_results(
                 self.main_entity,
