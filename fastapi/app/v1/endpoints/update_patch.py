@@ -1,9 +1,8 @@
 import json
 import traceback
 
-from app import DEBUG, EPSG, REDIS, VERSIONING
+from app import DEBUG, EPSG, VERSIONING
 from app.db.asyncpg_db import get_pool
-from app.db.redis_db import redis
 from app.sta2rest import sta2rest
 from app.utils.utils import (
     handle_datetime_fields,
@@ -162,8 +161,6 @@ async def catch_all_update(
             return r
         else:
             r = await update(name, int(id), body, pgpool)
-            if REDIS:
-                redis.flushall()
             return r
     except Exception as e:
         traceback.print_exc()

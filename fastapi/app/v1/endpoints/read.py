@@ -1,7 +1,15 @@
 import json
 import traceback
 
-from app import DEBUG, HOSTNAME, REDIS, SUBPATH, VERSION
+from app import (
+    COUNT_ESTIMATE_THRESHOLD,
+    COUNT_MODE,
+    DEBUG,
+    HOSTNAME,
+    REDIS,
+    SUBPATH,
+    VERSION,
+)
 from app.db.redis_db import redis
 from app.db.sqlalchemy_db import get_db
 from app.settings import serverSettings, tables
@@ -94,12 +102,48 @@ async def catch_all_get(
             main_entity = data.get("main_entity")
             main_query = data.get("main_query")
             top_value = data.get("top_value")
-            iot_count = data.get("iot_count")
+            is_count = data.get("is_count")
+            count_queries_redis = data.get("count_queries_redis")
             as_of_value = data.get("as_of_value")
             from_to_value = data.get("from_to_value")
             single_result = data.get("single_result")
 
             async with db as session:
+                if is_count:
+                    if COUNT_MODE == "LIMIT_ESTIMATE":
+                        query_estimate = await session.execute(
+                            text(count_queries_redis[0])
+                        )
+                        query_count = query_estimate.scalar()
+                        if query_count == COUNT_ESTIMATE_THRESHOLD:
+                            query_estimate = await session.execute(
+                                text(count_queries_redis[1]["query"]),
+                                count_queries_redis[1]["params"],
+                            )
+                            query_count = query_estimate.scalar()
+                    elif COUNT_MODE == "ESTIMATE_LIMIT":
+                        query_estimate = await session.execute(
+                            text(count_queries_redis[0]["query"]),
+                            count_queries_redis[0]["params"],
+                        )
+                        query_count = query_estimate.scalar()
+                        if query_count < COUNT_ESTIMATE_THRESHOLD:
+                            query_estimate = await session.execute(
+                                text(count_queries_redis[1])
+                            )
+                            query_count = query_estimate.scalar()
+                    else:
+                        query_estimate = await session.execute(
+                            text(count_queries_redis[0])
+                        )
+                        query_count = query_estimate.scalar()
+
+                iot_count = (
+                    '"@iot.count": ' + str(query_count) + ","
+                    if is_count and not single_result
+                    else ""
+                )
+
                 result = stream_results(
                     main_entity,
                     text(main_query),
@@ -112,7 +156,8 @@ async def catch_all_get(
                     full_path,
                 )
         else:
-            print("Cache miss")
+            if REDIS:
+                print("Cache miss")
             result = await sta2rest.STA2REST.convert_query(full_path, db)
 
         async def wrapped_result_generator(first_item):

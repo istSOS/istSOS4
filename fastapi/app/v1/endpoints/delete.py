@@ -1,8 +1,7 @@
 import traceback
 
-from app import DEBUG, REDIS
+from app import DEBUG
 from app.db.asyncpg_db import get_pool
-from app.db.redis_db import redis
 from app.sta2rest import sta2rest
 from app.utils.utils import (
     update_datastream_observedArea_from_foi,
@@ -163,9 +162,6 @@ async def catch_all_delete(
                 )
         if DEBUG:
             response2jsonfile(request, "", "requests.json")
-
-        if REDIS:
-            redis.flushall()
 
         return Response(status_code=status.HTTP_200_OK)
 

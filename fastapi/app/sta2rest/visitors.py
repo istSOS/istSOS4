@@ -9,7 +9,6 @@ from app import (
     HOSTNAME,
     PARTITION_CHUNK,
     REDIS,
-    REDIS_CACHE_EXPIRATION,
     SUBPATH,
     TOP_VALUE,
     VERSION,
@@ -921,6 +920,7 @@ class NodeVisitor(Visitor):
 
             is_count = self.visit(node.count) if node.count else False
 
+            count_queries_redis = []
             if is_count:
                 if COUNT_MODE in {"LIMIT_ESTIMATE", "ESTIMATE_LIMIT"}:
                     compiled_query_text = str(
@@ -931,6 +931,22 @@ class NodeVisitor(Visitor):
                     )
 
                     if COUNT_MODE == "LIMIT_ESTIMATE":
+                        if REDIS:
+                            count_queries_redis.append(
+                                str(
+                                    select(func.count())
+                                    .select_from(
+                                        query_estimate_count.limit(
+                                            COUNT_ESTIMATE_THRESHOLD
+                                        )
+                                    )
+                                    .compile(
+                                        dialect=engine.dialect,
+                                        compile_kwargs={"literal_binds": True},
+                                    )
+                                )
+                            )
+
                         query_estimate = await session.execute(
                             select(func.count()).select_from(
                                 query_estimate_count.limit(
@@ -940,6 +956,18 @@ class NodeVisitor(Visitor):
                         )
                         query_count = query_estimate.scalar()
                         if query_count == COUNT_ESTIMATE_THRESHOLD:
+                            if REDIS:
+                                count_queries_redis.append(
+                                    {
+                                        "query": "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count",
+                                        "params": {
+                                            "compiled_query_text": str(
+                                                compiled_query_text
+                                            )
+                                        },
+                                    }
+                                )
+
                             query_estimate = await session.execute(
                                 text(
                                     "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
@@ -948,6 +976,17 @@ class NodeVisitor(Visitor):
                             )
                             query_count = query_estimate.scalar()
                     elif COUNT_MODE == "ESTIMATE_LIMIT":
+                        if REDIS:
+                            count_queries_redis.append(
+                                {
+                                    "query": "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count",
+                                    "params": {
+                                        "compiled_query_text": str(
+                                            compiled_query_text
+                                        )
+                                    },
+                                }
+                            )
                         query_estimate = await session.execute(
                             text(
                                 "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count"
@@ -956,6 +995,23 @@ class NodeVisitor(Visitor):
                         )
                         query_count = query_estimate.scalar()
                         if query_count < COUNT_ESTIMATE_THRESHOLD:
+                            if REDIS:
+                                count_queries_redis.append(
+                                    str(
+                                        select(func.count())
+                                        .select_from(
+                                            query_estimate_count.limit(
+                                                COUNT_ESTIMATE_THRESHOLD
+                                            )
+                                        )
+                                        .compile(
+                                            dialect=engine.dialect,
+                                            compile_kwargs={
+                                                "literal_binds": True
+                                            },
+                                        )
+                                    )
+                                )
                             query_estimate = await session.execute(
                                 select(func.count()).select_from(
                                     query_estimate_count.limit(
@@ -965,6 +1021,16 @@ class NodeVisitor(Visitor):
                             )
                             query_count = query_estimate.scalar()
                 else:
+                    if REDIS:
+                        count_queries_redis.append(
+                            str(
+                                query_count.compile(
+                                    dialect=engine.dialect,
+                                    compile_kwargs={"literal_binds": True},
+                                )
+                            )
+                        )
+
                     query_count = await session.execute(query_count)
                     query_count = query_count.scalar()
 
@@ -1062,14 +1128,14 @@ class NodeVisitor(Visitor):
                     "main_entity": self.main_entity,
                     "main_query": str(compiled_query_text),
                     "top_value": top_value,
-                    "iot_count": iot_count,
+                    "is_count": is_count,
+                    "count_queries_redis": count_queries_redis,
                     "as_of_value": as_of_value,
                     "from_to_value": from_to_value,
                     "single_result": self.single_result,
                 }
 
                 redis.set(self.full_path, json.dumps(data_to_store))
-                redis.expire(self.full_path, REDIS_CACHE_EXPIRATION)
 
             main_query = stream_results(
                 self.main_entity,

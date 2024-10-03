@@ -77,12 +77,12 @@ async def generate_locations(conn):
     for i in range(1, n_things + 1):
         lon = random.uniform(-180, 180)
         lat = random.uniform(-90, 90)
-        elevation = random.uniform(0, 1000)
+        # elevation = random.uniform(0, 1000)
 
         description = f"location {i}"
         name = f"location name {i}"
-        location = f"SRID={epsg};POINT Z({lon} {lat} {elevation})"
-        encodingType = "application/pdf"
+        location = f"SRID={epsg};POINT({lon} {lat})"
+        encodingType = "application/geo+json"
         locations.append((description, name, location, encodingType))
 
     insert_sql = """
@@ -274,12 +274,12 @@ async def generate_featuresofinterest(conn):
     for i in range(1, n_things + 1):
         lon = random.uniform(-180, 180)
         lat = random.uniform(-90, 90)
-        elevation = random.uniform(0, 1000)
+        # elevation = random.uniform(0, 1000)
 
         description = f"featuresofinterest {i}"
         name = f"featuresofinterest name {i}"
-        encodingType = "application/pdf"
-        feature = f"SRID={epsg};POINT Z({lon} {lat} {elevation})"
+        encodingType = "application/geo+json"
+        feature = f"SRID={epsg};POINT({lon} {lat})"
         featuresofinterest.append((description, name, encodingType, feature))
 
     insert_sql = """
