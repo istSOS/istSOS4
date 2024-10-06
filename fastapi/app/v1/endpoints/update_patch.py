@@ -4,12 +4,7 @@ import traceback
 from app import DEBUG, EPSG, VERSIONING
 from app.db.asyncpg_db import get_pool
 from app.sta2rest import sta2rest
-from app.utils.utils import (
-    handle_datetime_fields,
-    handle_result_field,
-    update_datastream_observedArea_from_foi,
-    update_datastream_observedArea_from_obs,
-)
+from app.utils.utils import handle_datetime_fields, handle_result_field
 from fastapi.responses import JSONResponse, Response
 
 from fastapi import APIRouter, Depends, Request, status
@@ -295,17 +290,21 @@ async def update_record(payload, conn, table, record_id):
                             )
 
                 if payload.get("featuresofinterest_id"):
-                    await update_datastream_observedArea_from_obs(
-                        conn, datastream_id
-                    )
+                    await update_datastream_observedArea(conn, datastream_id)
             else:
                 query = f'UPDATE sensorthings."{table}" SET {set_clause} WHERE id = {record_id} RETURNING id;'
                 updated_id = await conn.fetchval(query, *payload.values())
 
                 if table == "FeaturesOfInterest":
-                    await update_datastream_observedArea_from_foi(
-                        conn, updated_id
-                    )
+                    query = """
+                        SELECT DISTINCT datastream_id 
+                        FROM sensorthings."Observation" 
+                        WHERE "featuresofinterest_id" = $1;
+                    """
+                    datastream_ids = await conn.fetch(query, updated_id)
+                    for ds in datastream_ids:
+                        ds = ds["datastream_id"]
+                        await update_datastream_observedArea(conn, ds)
             return updated_id
     except Exception:
         return JSONResponse(
@@ -746,3 +745,21 @@ async def insertCommit(payload, conn):
     values_placeholders = ", ".join(f"${i+1}" for i in range(len(payload)))
     query = f'INSERT INTO sensorthings."Commit" ({keys}) VALUES ({values_placeholders}) RETURNING id;'
     return await conn.fetchval(query, *payload.values())
+
+
+async def update_datastream_observedArea(conn, datastream_id):
+    query = """
+        WITH distinct_features AS (
+            SELECT DISTINCT ON (foi.id) foi.feature
+            FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
+            WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1
+        ),
+        aggregated_geometry AS (
+            SELECT ST_ConvexHull(ST_Collect(feature)) AS agg_geom
+            FROM distinct_features
+        )
+        UPDATE sensorthings."Datastream"
+        SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
+        WHERE id = $1;
+    """
+    await conn.execute(query, datastream_id)
