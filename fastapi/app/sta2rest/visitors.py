@@ -1115,7 +1115,7 @@ class NodeVisitor(Visitor):
                 else:
                     value = select_query[0].right
                 main_query = select(
-                    main_query.c.json.op("->")(str(value))
+                    main_query.c.json.op("->")(text(f"'{value}'"))
                 ).select_from(main_query)
 
             if REDIS:
