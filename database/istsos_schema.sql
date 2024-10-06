@@ -134,7 +134,8 @@ CREATE TABLE IF NOT EXISTS sensorthings."Datastream" (
     "properties" jsonb DEFAULT NULL,
     "thing_id" BIGINT NOT NULL REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
     "sensor_id" BIGINT NOT NULL REFERENCES sensorthings."Sensor"(id) ON DELETE CASCADE,
-    "observedproperty_id" BIGINT NOT NULL REFERENCES sensorthings."ObservedProperty"(id) ON DELETE CASCADE
+    "observedproperty_id" BIGINT NOT NULL REFERENCES sensorthings."ObservedProperty"(id) ON DELETE CASCADE,
+    "last_foi_id" BIGINT
 );
 
 SELECT UpdateGeometrySRID('sensorthings', 'Datastream', 'observedArea', current_setting('custom.epsg')::int);

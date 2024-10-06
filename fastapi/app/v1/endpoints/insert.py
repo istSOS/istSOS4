@@ -5,11 +5,7 @@ from datetime import datetime
 from app import DEBUG, EPSG, HOSTNAME, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool
 from app.sta2rest import sta2rest
-from app.utils.utils import (
-    handle_datetime_fields,
-    handle_result_field,
-    update_datastream_observedArea_from_foi,
-)
+from app.utils.utils import handle_datetime_fields, handle_result_field
 from fastapi.responses import JSONResponse, Response
 
 from fastapi import APIRouter, Depends, Request, status
@@ -490,7 +486,7 @@ async def insertObservedProperty(payload, conn):
         format_exception(e)
 
 
-async def insertFeaturesOfInterest(payload, conn):
+async def insertFeaturesOfInterest(payload, conn, datastream_id=None):
     """
     Inserts features of interest into the database.
 
@@ -534,6 +530,11 @@ async def insertFeaturesOfInterest(payload, conn):
                 query, *payload.values()
             )
             featureofinterest_selfLink = f"{HOSTNAME}{SUBPATH}{VERSION}/FeaturesOfInterest({featureofinterest_id})"
+
+            if datastream_id is not None:
+                await update_datastream_last_foi_id(
+                    conn, featureofinterest_id, datastream_id
+                )
             return (featureofinterest_id, featureofinterest_selfLink)
 
     except Exception as e:
@@ -685,9 +686,9 @@ async def insertObservation(payload, conn, datastream_id=None):
             )
 
             insert_sql = f"""
-            INSERT INTO sensorthings."Observation" ({keys})
-            VALUES {values_placeholders}
-            RETURNING id, "phenomenonTime", datastream_id, featuresofinterest_id
+                INSERT INTO sensorthings."Observation" ({keys})
+                VALUES {values_placeholders}
+                RETURNING id, "phenomenonTime", datastream_id, featuresofinterest_id
             """
 
             values = [
@@ -711,11 +712,6 @@ async def insertObservation(payload, conn, datastream_id=None):
                 max(phenomenon_times),
                 result[0]["datastream_id"],
             )
-
-            fois = [record["featuresofinterest_id"] for record in result]
-            fois = list(set(fois))
-            for foi_id in fois:
-                await update_datastream_observedArea_from_foi(conn, foi_id)
 
             observation_id = result[0]["id"]
             observation_selfLink = (
@@ -799,8 +795,34 @@ async def generate_feature_of_interest(payload, conn):
             """
             await conn.execute(update_query, foi_id, location_id)
 
+            await update_datastream_last_foi_id(
+                conn, foi_id, payload["datastream_id"]
+            )
+
             payload["featuresofinterest_id"] = foi_id
         else:
+            select_query = """
+                SELECT last_foi_id
+                FROM sensorthings."Datastream"
+                WHERE id = $1::bigint
+            """
+            last_foi_id = await conn.fetchval(
+                select_query, payload["datastream_id"]
+            )
+            select_query = """
+                SELECT id
+                FROM sensorthings."Observation"
+                WHERE "datastream_id" = $1::bigint
+                LIMIT 1
+                """
+            observation_ids = await conn.fetch(
+                select_query, payload["datastream_id"]
+            )
+            if last_foi_id is None or len(observation_ids) == 0:
+                await update_datastream_last_foi_id(
+                    conn, gen_foi_id, payload["datastream_id"]
+                )
+
             payload["featuresofinterest_id"] = gen_foi_id
     else:
         raise ValueError("Can not generate foi for Thing with no locations.")
@@ -837,10 +859,23 @@ async def handle_associations(payload, keys, conn):
         if key in payload:
             if "@iot.id" in payload[key]:
                 entity_id = payload[key]["@iot.id"]
+                if key == "FeatureOfInterest":
+                    select_query = f"""
+                        SELECT last_foi_id
+                        FROM sensorthings."Datastream"
+                        WHERE id = $1::bigint
+                    """
+                    last_foi_id = await conn.fetchval(
+                        select_query, payload["datastream_id"]
+                    )
+                    if last_foi_id != entity_id:
+                        await update_datastream_last_foi_id(
+                            conn, entity_id, payload.get("datastream_id")
+                        )
             else:
                 if key == "FeatureOfInterest":
                     entity_id, _ = await insertFeaturesOfInterest(
-                        payload[key], conn
+                        payload[key], conn, payload.get("datastream_id")
                     )
                 else:
                     entity_id, _ = await insert_funcs[key](payload[key], conn)
@@ -899,3 +934,31 @@ def format_exception(e):
     column_name_end = error_message.find('"', column_name_start)
     violating_column = error_message[column_name_start:column_name_end]
     raise ValueError(f"Missing required property '{violating_column}'") from e
+
+
+async def update_datastream_last_foi_id(conn, foi_id, datastream_id):
+    update_query = f"""
+        UPDATE sensorthings."Datastream" 
+        SET last_foi_id = $1::bigint
+        WHERE id = $2::bigint
+    """
+    await conn.execute(update_query, foi_id, datastream_id)
+    await update_datastream_observedArea(conn, datastream_id, foi_id)
+
+
+async def update_datastream_observedArea(conn, datastream_id, foi_id):
+    query = f"""
+        UPDATE sensorthings."Datastream"
+        SET "observedArea" = ST_ConvexHull(
+            ST_Collect(
+                "observedArea",
+                (
+                    SELECT "feature"
+                    FROM sensorthings."FeaturesOfInterest"
+                    WHERE id = $1
+                )
+            )
+        )
+        WHERE id = $2;
+    """
+    await conn.execute(query, foi_id, datastream_id)
