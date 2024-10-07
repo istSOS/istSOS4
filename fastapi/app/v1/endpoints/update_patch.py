@@ -2,7 +2,7 @@ import json
 import traceback
 
 from app import DEBUG, EPSG, VERSIONING
-from app.db.asyncpg_db import get_pool
+from app.db.asyncpg_db import get_db_connection
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
 from fastapi.responses import JSONResponse, Response
@@ -92,7 +92,7 @@ ALLOWED_KEYS = {
 
 @v1.api_route("/{path_name:path}", methods=["PATCH"])
 async def catch_all_update(
-    request: Request, path_name: str, pgpool=Depends(get_pool)
+    request: Request, path_name: str, conn=Depends(get_db_connection)
 ):
     """
     Handle PATCH requests for updating entities.
@@ -100,7 +100,7 @@ async def catch_all_update(
     Args:
         request (Request): The incoming request object.
         path_name (str): The path name extracted from the URL.
-        pgpool: The database connection pool.
+        conn: The database connection.
 
     Returns:
         Response: The HTTP response.
@@ -151,11 +151,11 @@ async def catch_all_update(
                 response2jsonfile(request, "", "requests.json", "")
             return Response(status_code=status.HTTP_200_OK)
         if DEBUG:
-            r = await update(name, int(id), body, pgpool)
+            r = await update(name, int(id), body, conn)
             response2jsonfile(request, "", "requests.json", b, r.status_code)
             return r
         else:
-            r = await update(name, int(id), body, pgpool)
+            r = await update(name, int(id), body, conn)
             return r
     except Exception as e:
         traceback.print_exc()
@@ -165,7 +165,7 @@ async def catch_all_update(
         )
 
 
-async def update(main_table, record_id, payload, pgpool):
+async def update(main_table, record_id, payload, conn):
     """
     Update function for the specified main_table.
 
@@ -173,7 +173,7 @@ async def update(main_table, record_id, payload, pgpool):
         main_table (str): The name of the main table to update.
         record_id (int): The ID of the record to update.
         payload (dict): The payload containing the updated data.
-        pgpool (asyncpg.pool.Pool): The connection pool to the PostgreSQL database.
+        conn (asyncpg.pool.Pool): The connection pool to the PostgreSQL database.
 
     Returns:
         Response: A FastAPI Response object with the appropriate status code.
@@ -193,16 +193,14 @@ async def update(main_table, record_id, payload, pgpool):
         "Observation": updateObservation,
     }
 
-    async with pgpool.acquire() as conn:
-        async with conn.transaction():
-            try:
-                await update_funcs[main_table](payload, conn, record_id)
-                return Response(status_code=status.HTTP_200_OK)
-            except Exception as e:
-                return JSONResponse(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    content={"code": 400, "type": "error", "message": str(e)},
-                )
+    try:
+        await update_funcs[main_table](payload, conn, record_id)
+        return Response(status_code=status.HTTP_200_OK)
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"code": 400, "type": "error", "message": str(e)},
+        )
 
 
 async def update_record(payload, conn, table, record_id):
