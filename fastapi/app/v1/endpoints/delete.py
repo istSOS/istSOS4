@@ -1,7 +1,7 @@
 import traceback
 
 from app import DEBUG
-from app.db.asyncpg_db import get_pool
+from app.db.asyncpg_db import get_db_connection
 from app.sta2rest import sta2rest
 from fastapi.responses import JSONResponse, Response
 
@@ -21,7 +21,7 @@ except:
 
 @v1.api_route("/{path_name:path}", methods=["DELETE"])
 async def catch_all_delete(
-    request: Request, path_name: str, pgpool=Depends(get_pool)
+    request: Request, path_name: str, conn=Depends(get_db_connection)
 ):
     """
     Delete endpoint for catching all DELETE requests.
@@ -29,7 +29,7 @@ async def catch_all_delete(
     Args:
         request (Request): The incoming request object.
         path_name (str): The path name extracted from the URL.
-        pgpool: The connection pool to the database.
+        conn: The connection to the database.
 
     Returns:
         Response: The response object indicating the status of the delete operation.
@@ -53,96 +53,99 @@ async def catch_all_delete(
         if not id:
             raise Exception("No entity id provided")
 
-        async with pgpool.acquire() as conn:
-            id_deleted = None
-            if name == "Observation":
-                delete_query = """
-                    DELETE FROM sensorthings."Observation" 
-                    WHERE id = $1 
-                    RETURNING id, "phenomenonTime", "datastream_id";
-                """
-                res = await conn.fetchrow(delete_query, int(id))
+        id_deleted = None
+        if name == "Observation":
+            delete_query = """
+                DELETE FROM sensorthings."Observation" 
+                WHERE id = $1 
+                RETURNING id, "phenomenonTime", "datastream_id";
+            """
+            res = await conn.fetchrow(delete_query, int(id))
 
-                if res:
-                    id_deleted = res["id"]
-                    obs_phenomenon_time = res["phenomenonTime"]
-                    datastream_id = res["datastream_id"]
+            if res:
+                id_deleted = res["id"]
+                obs_phenomenon_time = res["phenomenonTime"]
+                datastream_id = res["datastream_id"]
 
-                    await update_datastream_phenomenon_time(
-                        conn, obs_phenomenon_time, datastream_id
-                    )
-
-                    await update_datastream_observedArea(
-                        conn, res["datastream_id"]
-                    )
-            elif name == "FeaturesOfInterest":
-                query = """
-                    SELECT DISTINCT datastream_id
-                    FROM sensorthings."Observation"
-                    WHERE "featuresofinterest_id" = $1;
-                """
-                datastream_records = await conn.fetch(query, int(id))
-
-                for record in datastream_records:
-                    ds_id = record["datastream_id"]
-                    await update_datastream_observedArea(conn, ds_id, int(id))
-
-                query = """
-                    UPDATE sensorthings."Location"
-                    SET "gen_foi_id" = NULL
-                    WHERE "gen_foi_id" = $1;
-                """
-                await conn.execute(query, int(id))
-
-                query = f'DELETE FROM sensorthings."{name}" WHERE id = $1 RETURNING id'
-                id_deleted = await conn.fetchval(query, int(id))
-                for record in datastream_records:
-                    ds_id = record["datastream_id"]
-                    query = """
-                        WITH first_asc AS (
-                            SELECT "phenomenonTime"
-                            FROM sensorthings."Observation"
-                            WHERE "datastream_id" = $1
-                            ORDER BY "phenomenonTime" ASC
-                            LIMIT 1
-                        ),
-                        first_desc AS (
-                            SELECT "phenomenonTime"
-                            FROM sensorthings."Observation"
-                            WHERE "datastream_id" = $1
-                            ORDER BY "phenomenonTime" DESC
-                            LIMIT 1
-                        )
-                        UPDATE sensorthings."Datastream"
-                        SET "phenomenonTime" = 
-                            CASE
-                                WHEN (SELECT "phenomenonTime" FROM first_asc) IS NOT NULL
-                                AND (SELECT "phenomenonTime" FROM first_desc) IS NOT NULL
-                                THEN tstzrange(
-                                    (SELECT "phenomenonTime" FROM first_asc),
-                                    (SELECT "phenomenonTime" FROM first_desc), 
-                                    '[]'
-                                )
-                                ELSE NULL
-                            END
-                        WHERE "id" = $1;
-
-                        """
-                    await conn.execute(query, ds_id)
-
-            else:
-                query = f'DELETE FROM sensorthings."{name}" WHERE id = $1 RETURNING id'
-                id_deleted = await conn.fetchval(query, int(id))
-
-            if id_deleted is None:
-                return JSONResponse(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    content={
-                        "code": 404,
-                        "type": "error",
-                        "message": "Nothing found.",
-                    },
+                await update_datastream_phenomenon_time(
+                    conn, obs_phenomenon_time, datastream_id
                 )
+
+                await update_datastream_observedArea(
+                    conn, res["datastream_id"]
+                )
+        elif name == "FeaturesOfInterest":
+            query = """
+                SELECT DISTINCT datastream_id
+                FROM sensorthings."Observation"
+                WHERE "featuresofinterest_id" = $1;
+            """
+            datastream_records = await conn.fetch(query, int(id))
+
+            for record in datastream_records:
+                ds_id = record["datastream_id"]
+                await update_datastream_observedArea(conn, ds_id, int(id))
+
+            query = """
+                UPDATE sensorthings."Location"
+                SET "gen_foi_id" = NULL
+                WHERE "gen_foi_id" = $1;
+            """
+            await conn.execute(query, int(id))
+
+            query = (
+                f'DELETE FROM sensorthings."{name}" WHERE id = $1 RETURNING id'
+            )
+            id_deleted = await conn.fetchval(query, int(id))
+            for record in datastream_records:
+                ds_id = record["datastream_id"]
+                query = """
+                    WITH first_asc AS (
+                        SELECT "phenomenonTime"
+                        FROM sensorthings."Observation"
+                        WHERE "datastream_id" = $1
+                        ORDER BY "phenomenonTime" ASC
+                        LIMIT 1
+                    ),
+                    first_desc AS (
+                        SELECT "phenomenonTime"
+                        FROM sensorthings."Observation"
+                        WHERE "datastream_id" = $1
+                        ORDER BY "phenomenonTime" DESC
+                        LIMIT 1
+                    )
+                    UPDATE sensorthings."Datastream"
+                    SET "phenomenonTime" = 
+                        CASE
+                            WHEN (SELECT "phenomenonTime" FROM first_asc) IS NOT NULL
+                            AND (SELECT "phenomenonTime" FROM first_desc) IS NOT NULL
+                            THEN tstzrange(
+                                (SELECT "phenomenonTime" FROM first_asc),
+                                (SELECT "phenomenonTime" FROM first_desc), 
+                                '[]'
+                            )
+                            ELSE NULL
+                        END
+                    WHERE "id" = $1;
+
+                    """
+                await conn.execute(query, ds_id)
+
+        else:
+            query = (
+                f'DELETE FROM sensorthings."{name}" WHERE id = $1 RETURNING id'
+            )
+            id_deleted = await conn.fetchval(query, int(id))
+
+        if id_deleted is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "code": 404,
+                    "type": "error",
+                    "message": "Nothing found.",
+                },
+            )
         if DEBUG:
             response2jsonfile(request, "", "requests.json")
 

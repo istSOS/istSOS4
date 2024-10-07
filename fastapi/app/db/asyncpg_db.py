@@ -19,10 +19,16 @@ async def get_pool():
 
         pgpool = await asyncpg.create_pool(
             dsn=dsn,
-            min_size=PG_POOL_SIZE,
             max_size=PG_POOL_SIZE,
             timeout=PG_POOL_TIMEOUT,
             max_queries=50000,
             max_inactive_connection_lifetime=3600,
         )
     return pgpool
+
+
+async def get_db_connection():
+    pgpool = await get_pool()
+    async with pgpool.acquire() as connection:
+        async with connection.transaction():
+            yield connection
