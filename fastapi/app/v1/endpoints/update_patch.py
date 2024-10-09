@@ -2,7 +2,7 @@ import json
 import traceback
 
 from app import DEBUG, EPSG, VERSIONING
-from app.db.asyncpg_db import get_db_connection
+from app.db.asyncpg_db import get_db_connection, get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
 from fastapi.responses import JSONResponse, Response
@@ -92,7 +92,7 @@ ALLOWED_KEYS = {
 
 @v1.api_route("/{path_name:path}", methods=["PATCH"])
 async def catch_all_update(
-    request: Request, path_name: str, connection=Depends(get_db_connection)
+    request: Request, path_name: str, pgpool=Depends(get_pool)
 ):
     """
     Handle PATCH requests for updating entities.
@@ -151,11 +151,11 @@ async def catch_all_update(
                 response2jsonfile(request, "", "requests.json", "")
             return Response(status_code=status.HTTP_200_OK)
         if DEBUG:
-            r = await update(name, int(id), body, connection)
+            r = await update(name, int(id), body, pgpool)
             response2jsonfile(request, "", "requests.json", b, r.status_code)
             return r
         else:
-            r = await update(name, int(id), body, connection)
+            r = await update(name, int(id), body, pgpool)
             return r
     except Exception as e:
         traceback.print_exc()
@@ -165,7 +165,7 @@ async def catch_all_update(
         )
 
 
-async def update(main_table, record_id, payload, connection):
+async def update(main_table, record_id, payload, pgpool):
     """
     Update function for the specified main_table.
 
@@ -193,15 +193,16 @@ async def update(main_table, record_id, payload, connection):
         "Observation": updateObservation,
     }
 
-    async with connection as conn:
-        try:
-            await update_funcs[main_table](payload, conn, record_id)
-            return Response(status_code=status.HTTP_200_OK)
-        except Exception as e:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={"code": 400, "type": "error", "message": str(e)},
-            )
+    async with pgpool.acquire() as conn:
+        async with conn.transaction():
+            try:
+                await update_funcs[main_table](payload, conn, record_id)
+                return Response(status_code=status.HTTP_200_OK)
+            except Exception as e:
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={"code": 400, "type": "error", "message": str(e)},
+                )
 
 
 async def update_record(payload, conn, table, record_id):

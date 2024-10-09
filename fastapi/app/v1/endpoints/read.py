@@ -15,7 +15,7 @@ from app import (
     VERSION,
     VERSIONING,
 )
-from app.db.asyncpg_db import get_db_connection
+from app.db.asyncpg_db import get_db_connection, get_pool
 from app.db.redis_db import redis
 from app.db.sqlalchemy_db import get_db
 from app.settings import serverSettings, tables
@@ -73,7 +73,7 @@ async def catch_all_get(
     request: Request,
     path_name: str,
     db_sqlalchemy: Session = Depends(get_db),
-    db_asyncpg=Depends(get_db_connection),
+    pgpool=Depends(get_pool),
 ):
     """
     Handle GET requests for all paths.
@@ -169,7 +169,7 @@ async def catch_all_get(
                 result = asyncpg_stream_results(
                     main_entity,
                     main_query,
-                    db_asyncpg,
+                    pgpool,
                     top_value,
                     is_count,
                     count_queries_redis,
@@ -227,7 +227,7 @@ async def catch_all_get(
 async def asyncpg_stream_results(
     entity,
     query,
-    db_asyncpg,
+    pgpool,
     top,
     is_count,
     count_queries_redis,
@@ -236,98 +236,108 @@ async def asyncpg_stream_results(
     single_result,
     full_path,
 ):
-    if is_count:
-        if COUNT_MODE == "LIMIT_ESTIMATE":
-            query_count = await db_asyncpg.fetchval(count_queries_redis[0])
-            if query_count == COUNT_ESTIMATE_THRESHOLD:
-                query_count = await db_asyncpg.fetchval(
-                    "SELECT sensorthings.count_estimate($1) AS estimated_count",
-                    count_queries_redis[1]["params"]["compiled_query_text"],
+    async with pgpool.acquire() as conn:
+        async with conn.transaction():
+            if is_count:
+                if COUNT_MODE == "LIMIT_ESTIMATE":
+                    query_count = await conn.fetchval(count_queries_redis[0])
+                    if query_count == COUNT_ESTIMATE_THRESHOLD:
+                        query_count = await conn.fetchval(
+                            "SELECT sensorthings.count_estimate($1) AS estimated_count",
+                            count_queries_redis[1]["params"][
+                                "compiled_query_text"
+                            ],
+                        )
+                elif COUNT_MODE == "ESTIMATE_LIMIT":
+                    query_count = await conn.fetchval(
+                        "SELECT sensorthings.count_estimate($1) AS estimated_count",
+                        count_queries_redis[0]["params"][
+                            "compiled_query_text"
+                        ],
+                    )
+                    if query_count < COUNT_ESTIMATE_THRESHOLD:
+                        query_count = await conn.fetchval(
+                            count_queries_redis[1]
+                        )
+                else:
+                    query_count = await conn.fetchval(count_queries_redis[0])
+
+            iot_count = (
+                '"@iot.count": ' + str(query_count) + ","
+                if is_count and not single_result
+                else ""
+            )
+            await conn.execute(f"DECLARE my_cursor CURSOR FOR {query}")
+
+            start_json = ""
+            is_first_partition = True
+            has_rows = False
+
+            while True:
+                partition = await conn.fetch(
+                    f"FETCH {PARTITION_CHUNK} FROM my_cursor"
                 )
-        elif COUNT_MODE == "ESTIMATE_LIMIT":
-            query_count = await db_asyncpg.fetchval(
-                "SELECT sensorthings.count_estimate($1) AS estimated_count",
-                count_queries_redis[0]["params"]["compiled_query_text"],
-            )
-            if query_count < COUNT_ESTIMATE_THRESHOLD:
-                query_count = await db_asyncpg.fetchval(count_queries_redis[1])
-        else:
-            query_count = await db_asyncpg.fetchval(count_queries_redis[0])
+                if not partition:
+                    break
 
-    iot_count = (
-        '"@iot.count": ' + str(query_count) + ","
-        if is_count and not single_result
-        else ""
-    )
-    await db_asyncpg.execute(f"DECLARE my_cursor CURSOR FOR {query}")
+                partition_len = len(partition)
+                has_rows = True
 
-    start_json = ""
-    is_first_partition = True
-    has_rows = False
+                if partition_len > top - 1:
+                    partition = partition[:-1]
 
-    while True:
-        partition = await db_asyncpg.fetch(
-            f"FETCH {PARTITION_CHUNK} FROM my_cursor"
-        )
-        if not partition:
-            break
+                if (
+                    VERSIONING
+                    and single_result
+                    and partition_len == 1
+                    and entity != "Commit"
+                    and not from_to_value
+                ):
+                    partition[0]["@iot.as_of"] = as_of_value
 
-        partition_len = len(partition)
-        has_rows = True
+                processed_partition = [
+                    ujson.loads(record["json"]) for record in partition
+                ]
 
-        if partition_len > top - 1:
-            partition = partition[:-1]
+                partition_json = ujson.dumps(
+                    processed_partition,
+                    default=datetime.isoformat,
+                    escape_forward_slashes=False,
+                )[1:-1]
 
-        if (
-            VERSIONING
-            and single_result
-            and partition_len == 1
-            and entity != "Commit"
-            and not from_to_value
-        ):
-            partition[0]["@iot.as_of"] = as_of_value
+                if is_first_partition:
+                    if partition_len > 0 and not single_result:
+                        start_json = "{"
 
-        processed_partition = [
-            ujson.loads(record["json"]) for record in partition
-        ]
+                    next_link = build_nextLink(full_path, partition_len)
+                    next_link_json = (
+                        f'"@iot.nextLink": "{next_link}",'
+                        if next_link and not single_result
+                        else ""
+                    )
+                    as_of = (
+                        f'"@iot.as_of": "{as_of_value}",'
+                        if VERSIONING
+                        and not single_result
+                        and not from_to_value
+                        else ""
+                    )
+                    start_json += as_of + iot_count + next_link_json
+                    start_json += (
+                        '"value": ['
+                        if (partition_len > 0 and not single_result)
+                        else ""
+                    )
 
-        partition_json = ujson.dumps(
-            processed_partition,
-            default=datetime.isoformat,
-            escape_forward_slashes=False,
-        )[1:-1]
+                    yield start_json + partition_json
+                    is_first_partition = False
+                else:
+                    yield "," + partition_json
 
-        if is_first_partition:
-            if partition_len > 0 and not single_result:
-                start_json = "{"
+            if not has_rows and not single_result:
+                yield '{"value": []}'
 
-            next_link = build_nextLink(full_path, partition_len)
-            next_link_json = (
-                f'"@iot.nextLink": "{next_link}",'
-                if next_link and not single_result
-                else ""
-            )
-            as_of = (
-                f'"@iot.as_of": "{as_of_value}",'
-                if VERSIONING and not single_result and not from_to_value
-                else ""
-            )
-            start_json += as_of + iot_count + next_link_json
-            start_json += (
-                '"value": ['
-                if (partition_len > 0 and not single_result)
-                else ""
-            )
+            if has_rows and not single_result:
+                yield "]}"
 
-            yield start_json + partition_json
-            is_first_partition = False
-        else:
-            yield "," + partition_json
-
-    if not has_rows and not single_result:
-        yield '{"value": []}'
-
-    if has_rows and not single_result:
-        yield "]}"
-
-    await db_asyncpg.execute("CLOSE my_cursor")
+            await conn.execute("CLOSE my_cursor")

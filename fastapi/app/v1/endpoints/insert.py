@@ -3,7 +3,7 @@ import traceback
 from datetime import datetime
 
 from app import DEBUG, EPSG, HOSTNAME, SUBPATH, VERSION
-from app.db.asyncpg_db import get_db_connection
+from app.db.asyncpg_db import get_db_connection, get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
 from fastapi.responses import JSONResponse, Response
@@ -21,9 +21,7 @@ except:
 
 
 @v1.api_route("/CreateObservations", methods=["POST"])
-async def create_observations(
-    request: Request, connection=Depends(get_db_connection)
-):
+async def create_observations(request: Request, pgpool=Depends(get_pool)):
     try:
         body = await request.json()
         if not isinstance(body, list):
@@ -38,70 +36,75 @@ async def create_observations(
 
         response_urls = []
 
-        async with connection as conn:
-            for observation_set in body:
-                datastream_id = observation_set.get("Datastream", {}).get(
-                    "@iot.id"
-                )
-                components = observation_set.get("components", [])
-                data_array = observation_set.get("dataArray", [])
-
-                if not datastream_id:
-                    return JSONResponse(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        content={
-                            "code": 400,
-                            "type": "error",
-                            "message": "Missing 'datastream_id' in Datastream.",
-                        },
+        async with pgpool.acquire() as conn:
+            async with conn.transaction():
+                for observation_set in body:
+                    datastream_id = observation_set.get("Datastream", {}).get(
+                        "@iot.id"
                     )
+                    components = observation_set.get("components", [])
+                    data_array = observation_set.get("dataArray", [])
 
-                # Check that at least phenomenonTime and result are present
-                if (
-                    "phenomenonTime" not in components
-                    or "result" not in components
-                ):
-                    return JSONResponse(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        content={
-                            "code": 400,
-                            "type": "error",
-                            "message": "Missing required properties 'phenomenonTime' or 'result' in components.",
-                        },
-                    )
+                    if not datastream_id:
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "code": 400,
+                                "type": "error",
+                                "message": "Missing 'datastream_id' in Datastream.",
+                            },
+                        )
 
-                for data in data_array:
-                    try:
-                        observation_payload = {
-                            components[i]: (data[i] if i < len(data) else None)
-                            for i in range(len(components))
-                        }
+                    # Check that at least phenomenonTime and result are present
+                    if (
+                        "phenomenonTime" not in components
+                        or "result" not in components
+                    ):
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "code": 400,
+                                "type": "error",
+                                "message": "Missing required properties 'phenomenonTime' or 'result' in components.",
+                            },
+                        )
 
-                        observation_payload["datastream_id"] = datastream_id
-
-                        if "FeatureOfInterest/id" in observation_payload:
-                            observation_payload["FeatureOfInterest"] = {
-                                "@iot.id": observation_payload.pop(
-                                    "FeatureOfInterest/id"
+                    for data in data_array:
+                        try:
+                            observation_payload = {
+                                components[i]: (
+                                    data[i] if i < len(data) else None
                                 )
+                                for i in range(len(components))
                             }
-                        else:
-                            await generate_feature_of_interest(
-                                observation_payload, conn
+
+                            observation_payload["datastream_id"] = (
+                                datastream_id
                             )
 
-                        _, observation_selfLink = await insertObservation(
-                            observation_payload, conn
-                        )
-                        response_urls.append(observation_selfLink)
-                    except Exception as e:
-                        response_urls.append("error")
-                        if DEBUG:
-                            print(f"Error inserting observation: {str(e)}")
-                            traceback.print_exc()
-            return JSONResponse(
-                status_code=status.HTTP_201_CREATED, content=response_urls
-            )
+                            if "FeatureOfInterest/id" in observation_payload:
+                                observation_payload["FeatureOfInterest"] = {
+                                    "@iot.id": observation_payload.pop(
+                                        "FeatureOfInterest/id"
+                                    )
+                                }
+                            else:
+                                await generate_feature_of_interest(
+                                    observation_payload, conn
+                                )
+
+                            _, observation_selfLink = await insertObservation(
+                                observation_payload, conn
+                            )
+                            response_urls.append(observation_selfLink)
+                        except Exception as e:
+                            response_urls.append("error")
+                            if DEBUG:
+                                print(f"Error inserting observation: {str(e)}")
+                                traceback.print_exc()
+                return JSONResponse(
+                    status_code=status.HTTP_201_CREATED, content=response_urls
+                )
 
     except Exception as e:
         return JSONResponse(
@@ -112,7 +115,7 @@ async def create_observations(
 
 @v1.api_route("/{path_name:path}", methods=["POST"])
 async def catch_all_post(
-    request: Request, path_name: str, connection=Depends(get_db_connection)
+    request: Request, path_name: str, pgpool=Depends(get_pool)
 ):
     """
     Handle POST requests for all paths.
@@ -183,11 +186,11 @@ async def catch_all_post(
             #     body[f"{name.lower()}_id"] = int(id)
 
         if DEBUG:
-            res = await insert(main_table, body, connection)
+            res = await insert(main_table, body, pgpool)
             response2jsonfile(request, "", "requests.json", b, res.status_code)
             return res
         else:
-            r = await insert(main_table, body, connection)
+            r = await insert(main_table, body, pgpool)
             return r
     except Exception as e:
         traceback.print_exc()
@@ -197,7 +200,7 @@ async def catch_all_post(
         )
 
 
-async def insert(main_table, payload, connection):
+async def insert(main_table, payload, pgpool):
     """
     Insert data into the specified main_table using the provided payload.
 
@@ -209,22 +212,24 @@ async def insert(main_table, payload, connection):
     Returns:
         Response: A response object indicating the status of the insertion operation.
     """
-    async with connection as conn:
-        try:
-            _, header = await insert_funcs[main_table](payload, conn)
-        except ValueError as e:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={"code": 400, "type": "error", "message": str(e)},
+    async with pgpool.acquire() as conn:
+        async with conn.transaction():
+            try:
+                _, header = await insert_funcs[main_table](payload, conn)
+            except ValueError as e:
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={"code": 400, "type": "error", "message": str(e)},
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={"code": 400, "type": "error", "message": str(e)},
+                )
+            return Response(
+                status_code=status.HTTP_201_CREATED,
+                headers={"location": header},
             )
-        except Exception as e:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={"code": 400, "type": "error", "message": str(e)},
-            )
-        return Response(
-            status_code=status.HTTP_201_CREATED, headers={"location": header}
-        )
 
 
 async def insert_record(payload, conn, table):
