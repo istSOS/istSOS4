@@ -15,7 +15,7 @@ from app import (
     VERSION,
     VERSIONING,
 )
-from app.db.asyncpg_db import get_db_connection, get_pool
+from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
 from app.db.sqlalchemy_db import get_db
 from app.settings import serverSettings, tables

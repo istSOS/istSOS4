@@ -26,10 +26,3 @@ async def get_pool():
             max_inactive_connection_lifetime=3600,
         )
     return pgpool
-
-
-async def get_db_connection():
-    pgpool = await get_pool()
-    async with pgpool.acquire() as connection:
-        async with connection.transaction():
-            yield connection

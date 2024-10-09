@@ -3,7 +3,7 @@ import traceback
 from datetime import datetime
 
 from app import DEBUG, EPSG, HOSTNAME, SUBPATH, VERSION
-from app.db.asyncpg_db import get_db_connection, get_pool
+from app.db.asyncpg_db import get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
 from fastapi.responses import JSONResponse, Response
@@ -226,10 +226,10 @@ async def insert(main_table, payload, pgpool):
                     status_code=status.HTTP_400_BAD_REQUEST,
                     content={"code": 400, "type": "error", "message": str(e)},
                 )
-            return Response(
-                status_code=status.HTTP_201_CREATED,
-                headers={"location": header},
-            )
+        return Response(
+            status_code=status.HTTP_201_CREATED,
+            headers={"location": header},
+        )
 
 
 async def insert_record(payload, conn, table):

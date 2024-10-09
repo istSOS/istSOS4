@@ -2,7 +2,7 @@ import json
 import traceback
 
 from app import DEBUG, EPSG, VERSIONING
-from app.db.asyncpg_db import get_db_connection, get_pool
+from app.db.asyncpg_db import get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
 from fastapi.responses import JSONResponse, Response
