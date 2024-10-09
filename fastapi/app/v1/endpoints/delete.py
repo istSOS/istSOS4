@@ -163,71 +163,73 @@ async def catch_all_delete(
 async def update_datastream_phenomenon_time(
     conn, obs_phenomenon_time, datastream_id
 ):
-    query = """
-        WITH datastream AS (
-            SELECT "phenomenonTime"
-            FROM sensorthings."Datastream"
-            WHERE id = $1
-        ),
-        new_boundaries AS (
-            SELECT
+    async with conn.transaction():
+        query = """
+            WITH datastream AS (
+                SELECT "phenomenonTime"
+                FROM sensorthings."Datastream"
+                WHERE id = $1
+            ),
+            new_boundaries AS (
+                SELECT
+                    CASE
+                        WHEN datastream."phenomenonTime" IS NOT NULL AND lower(datastream."phenomenonTime") = $2 THEN
+                            (SELECT "phenomenonTime" FROM sensorthings."Observation" WHERE "datastream_id" = $1 ORDER BY "phenomenonTime" ASC LIMIT 1)
+                        ELSE
+                            lower(datastream."phenomenonTime")
+                    END AS new_lower_bound,
+                    CASE
+                        WHEN datastream."phenomenonTime" IS NOT NULL AND upper(datastream."phenomenonTime") = $2 THEN
+                            (SELECT "phenomenonTime" FROM sensorthings."Observation" WHERE "datastream_id" = $1 ORDER BY "phenomenonTime" DESC LIMIT 1)
+                        ELSE
+                            upper(datastream."phenomenonTime")
+                    END AS new_upper_bound
+                FROM datastream
+            )
+            UPDATE sensorthings."Datastream"
+            SET "phenomenonTime" = 
                 CASE
-                    WHEN datastream."phenomenonTime" IS NOT NULL AND lower(datastream."phenomenonTime") = $2 THEN
-                        (SELECT "phenomenonTime" FROM sensorthings."Observation" WHERE "datastream_id" = $1 ORDER BY "phenomenonTime" ASC LIMIT 1)
-                    ELSE
-                        lower(datastream."phenomenonTime")
-                END AS new_lower_bound,
-                CASE
-                    WHEN datastream."phenomenonTime" IS NOT NULL AND upper(datastream."phenomenonTime") = $2 THEN
-                        (SELECT "phenomenonTime" FROM sensorthings."Observation" WHERE "datastream_id" = $1 ORDER BY "phenomenonTime" DESC LIMIT 1)
-                    ELSE
-                        upper(datastream."phenomenonTime")
-                END AS new_upper_bound
-            FROM datastream
-        )
-        UPDATE sensorthings."Datastream"
-        SET "phenomenonTime" = 
-            CASE
-                WHEN new_lower_bound IS NOT NULL AND new_upper_bound IS NOT NULL THEN tstzrange(new_lower_bound, new_upper_bound, '[]')
-                ELSE NULL
-            END
-        FROM new_boundaries
-        WHERE id = $1;
-    """
+                    WHEN new_lower_bound IS NOT NULL AND new_upper_bound IS NOT NULL THEN tstzrange(new_lower_bound, new_upper_bound, '[]')
+                    ELSE NULL
+                END
+            FROM new_boundaries
+            WHERE id = $1;
+        """
 
-    await conn.execute(query, datastream_id, obs_phenomenon_time)
+        await conn.execute(query, datastream_id, obs_phenomenon_time)
 
 
 async def update_datastream_observedArea(conn, datastream_id, feature_id=None):
-    if feature_id is None:
-        query = """
-            WITH distinct_features AS (
-                SELECT DISTINCT ON (foi.id) foi.feature
-                FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
-                WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1
-            ),
-            aggregated_geometry AS (
-                SELECT ST_ConvexHull(ST_Collect(feature)) AS agg_geom
-                FROM distinct_features
-            )
-            UPDATE sensorthings."Datastream"
-            SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
-            WHERE id = $1;
-        """
-        await conn.execute(query, datastream_id)
-    else:
-        query = """
-            WITH distinct_features AS (
-                SELECT DISTINCT ON (foi.id) foi.feature
-                FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
-                WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1 AND foi.id != $2
-            ),
-            aggregated_geometry AS (
-                SELECT ST_ConvexHull(ST_Collect(feature)) AS agg_geom
-                FROM distinct_features
-            )
-            UPDATE sensorthings."Datastream"
-            SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
-            WHERE id = $1;
-        """
-        await conn.execute(query, datastream_id, feature_id)
+    async with conn.transaction():
+        if feature_id is None:
+            query = """
+                WITH distinct_features AS (
+                    SELECT DISTINCT ON (foi.id) foi.feature
+                    FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
+                    WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1
+                ),
+                aggregated_geometry AS (
+                    SELECT ST_ConvexHull(ST_Collect(feature)) AS agg_geom
+                    FROM distinct_features
+                )
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
+                WHERE id = $1;
+            """
+            await conn.execute(query, datastream_id)
+        else:
+            query = """
+                WITH distinct_features AS (
+                    SELECT DISTINCT ON (foi.id) foi.feature
+                    FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
+                    WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1 AND foi.id != $2
+                ),
+                aggregated_geometry AS (
+                    SELECT ST_ConvexHull(ST_Collect(feature)) AS agg_geom
+                    FROM distinct_features
+                )
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
+                WHERE id = $1;
+            """
+            await conn.execute(query, datastream_id, feature_id)

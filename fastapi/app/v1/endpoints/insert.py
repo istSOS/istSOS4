@@ -244,20 +244,22 @@ async def insert_record(payload, conn, table):
     Returns:
         tuple: A tuple containing the insert ID and self link of the inserted record.
     """
-    for key in list(payload.keys()):
-        if isinstance(payload[key], dict):
-            payload[key] = json.dumps(payload[key])
 
-    keys = ", ".join(f'"{key}"' for key in payload.keys())
-    values_placeholders = ", ".join(f"${i+1}" for i in range(len(payload)))
-    query = f'INSERT INTO sensorthings."{table}" ({keys}) VALUES ({values_placeholders}) RETURNING id'
-    insert_id = await conn.fetchval(query, *payload.values())
-    if table == "ObservedProperty":
-        table = "ObservedProperties"
-    else:
-        table = f"{table}s"
-    insert_selfLink = f"{HOSTNAME}{SUBPATH}{VERSION}/{table}({insert_id})"
-    return (insert_id, insert_selfLink)
+    async with conn.transaction():
+        for key in list(payload.keys()):
+            if isinstance(payload[key], dict):
+                payload[key] = json.dumps(payload[key])
+
+        keys = ", ".join(f'"{key}"' for key in payload.keys())
+        values_placeholders = ", ".join(f"${i+1}" for i in range(len(payload)))
+        query = f'INSERT INTO sensorthings."{table}" ({keys}) VALUES ({values_placeholders}) RETURNING id'
+        insert_id = await conn.fetchval(query, *payload.values())
+        if table == "ObservedProperty":
+            table = "ObservedProperties"
+        else:
+            table = f"{table}s"
+        insert_selfLink = f"{HOSTNAME}{SUBPATH}{VERSION}/{table}({insert_id})"
+        return (insert_id, insert_selfLink)
 
 
 async def insertLocation(payload, conn):
@@ -738,95 +740,99 @@ async def generate_feature_of_interest(payload, conn):
     Raises:
         ValueError: If no locations are found for the Thing.
     """
-    query_location_from_thing_datastream = f"""
-        SELECT
-            l.id,
-            l.name,
-            l.description,
-            l."encodingType",
-            l.location,
-            l.properties,
-            l.gen_foi_id
-        FROM
-            sensorthings."Datastream" d
-        JOIN
-            sensorthings."Thing" t ON d.thing_id = t.id
-        JOIN
-            sensorthings."Thing_Location" tl ON tl.thing_id = t.id
-        JOIN
-            sensorthings."Location" l ON l.ID = tl.location_id
-        WHERE
-            d.id = {payload["datastream_id"]}
-    """
 
-    result = await conn.fetch(query_location_from_thing_datastream)
+    async with conn.transaction():
+        query_location_from_thing_datastream = f"""
+            SELECT
+                l.id,
+                l.name,
+                l.description,
+                l."encodingType",
+                l.location,
+                l.properties,
+                l.gen_foi_id
+            FROM
+                sensorthings."Datastream" d
+            JOIN
+                sensorthings."Thing" t ON d.thing_id = t.id
+            JOIN
+                sensorthings."Thing_Location" tl ON tl.thing_id = t.id
+            JOIN
+                sensorthings."Location" l ON l.ID = tl.location_id
+            WHERE
+                d.id = {payload["datastream_id"]}
+        """
 
-    if len(result) > 0:
-        (
-            location_id,
-            name,
-            description,
-            encoding_type,
-            location,
-            properties,
-            gen_foi_id,
-        ) = result[0]
+        result = await conn.fetch(query_location_from_thing_datastream)
 
-        if gen_foi_id is None:
-            foi_payload = {
-                "name": name,
-                "description": description,
-                "encodingType": encoding_type,
-                "feature": location,
-                "properties": properties,
-            }
+        if len(result) > 0:
+            (
+                location_id,
+                name,
+                description,
+                encoding_type,
+                location,
+                properties,
+                gen_foi_id,
+            ) = result[0]
 
-            keys = ", ".join(f'"{key}"' for key in foi_payload.keys())
-            values_placeholders = ", ".join(
-                f"${i+1}" for i in range(len(foi_payload))
-            )
-            query = f'INSERT INTO sensorthings."FeaturesOfInterest" ({keys}) VALUES ({values_placeholders}) RETURNING id'
+            if gen_foi_id is None:
+                foi_payload = {
+                    "name": name,
+                    "description": description,
+                    "encodingType": encoding_type,
+                    "feature": location,
+                    "properties": properties,
+                }
 
-            foi_id = await conn.fetchval(query, *foi_payload.values())
+                keys = ", ".join(f'"{key}"' for key in foi_payload.keys())
+                values_placeholders = ", ".join(
+                    f"${i+1}" for i in range(len(foi_payload))
+                )
+                query = f'INSERT INTO sensorthings."FeaturesOfInterest" ({keys}) VALUES ({values_placeholders}) RETURNING id'
 
-            update_query = f"""
-                UPDATE sensorthings."Location" 
-                SET "gen_foi_id" = $1::bigint
-                WHERE id = $2::bigint
-            """
-            await conn.execute(update_query, foi_id, location_id)
+                foi_id = await conn.fetchval(query, *foi_payload.values())
 
-            await update_datastream_last_foi_id(
-                conn, foi_id, payload["datastream_id"]
-            )
-
-            payload["featuresofinterest_id"] = foi_id
-        else:
-            select_query = """
-                SELECT last_foi_id
-                FROM sensorthings."Datastream"
-                WHERE id = $1::bigint
-            """
-            last_foi_id = await conn.fetchval(
-                select_query, payload["datastream_id"]
-            )
-            select_query = """
-                SELECT id
-                FROM sensorthings."Observation"
-                WHERE "datastream_id" = $1::bigint
-                LIMIT 1
+                update_query = f"""
+                    UPDATE sensorthings."Location" 
+                    SET "gen_foi_id" = $1::bigint
+                    WHERE id = $2::bigint
                 """
-            observation_ids = await conn.fetch(
-                select_query, payload["datastream_id"]
-            )
-            if last_foi_id is None or len(observation_ids) == 0:
+                await conn.execute(update_query, foi_id, location_id)
+
                 await update_datastream_last_foi_id(
-                    conn, gen_foi_id, payload["datastream_id"]
+                    conn, foi_id, payload["datastream_id"]
                 )
 
-            payload["featuresofinterest_id"] = gen_foi_id
-    else:
-        raise ValueError("Can not generate foi for Thing with no locations.")
+                payload["featuresofinterest_id"] = foi_id
+            else:
+                select_query = """
+                    SELECT last_foi_id
+                    FROM sensorthings."Datastream"
+                    WHERE id = $1::bigint
+                """
+                last_foi_id = await conn.fetchval(
+                    select_query, payload["datastream_id"]
+                )
+                select_query = """
+                    SELECT id
+                    FROM sensorthings."Observation"
+                    WHERE "datastream_id" = $1::bigint
+                    LIMIT 1
+                    """
+                observation_ids = await conn.fetch(
+                    select_query, payload["datastream_id"]
+                )
+                if last_foi_id is None or len(observation_ids) == 0:
+                    await update_datastream_last_foi_id(
+                        conn, gen_foi_id, payload["datastream_id"]
+                    )
+
+                payload["featuresofinterest_id"] = gen_foi_id
+        else:
+            raise ValueError(
+                "Can not generate foi for Thing with no locations."
+            )
 
 
 insert_funcs = {
@@ -856,43 +862,47 @@ async def handle_associations(payload, keys, conn):
     Returns:
         None
     """
-    for key in keys:
-        if key in payload:
-            if "@iot.id" in payload[key]:
-                entity_id = payload[key]["@iot.id"]
-                if key == "FeatureOfInterest":
-                    select_query = f"""
-                        SELECT last_foi_id
-                        FROM sensorthings."Datastream"
-                        WHERE id = $1::bigint
-                    """
-                    last_foi_id = await conn.fetchval(
-                        select_query, payload["datastream_id"]
-                    )
-                    if last_foi_id != entity_id:
-                        await update_datastream_last_foi_id(
-                            conn, entity_id, payload.get("datastream_id")
-                        )
-            else:
-                if key == "FeatureOfInterest":
-                    entity_id, _ = await insertFeaturesOfInterest(
-                        payload[key], conn, payload.get("datastream_id")
-                    )
-                else:
-                    entity_id, _ = await insert_funcs[key](payload[key], conn)
-            if not isinstance(entity_id, int):
-                raise ValueError(
-                    f"Cannot deserialize value of type `int` from String: {entity_id}"
-                )
-            payload.pop(key)
-            if key != "FeatureOfInterest":
-                payload[f"{key.lower()}_id"] = entity_id
-            else:
-                payload["featuresofinterest_id"] = entity_id
 
-        else:
-            if key == "FeatureOfInterest":
-                await generate_feature_of_interest(payload, conn)
+    async with conn.transaction():
+        for key in keys:
+            if key in payload:
+                if "@iot.id" in payload[key]:
+                    entity_id = payload[key]["@iot.id"]
+                    if key == "FeatureOfInterest":
+                        select_query = f"""
+                            SELECT last_foi_id
+                            FROM sensorthings."Datastream"
+                            WHERE id = $1::bigint
+                        """
+                        last_foi_id = await conn.fetchval(
+                            select_query, payload["datastream_id"]
+                        )
+                        if last_foi_id != entity_id:
+                            await update_datastream_last_foi_id(
+                                conn, entity_id, payload.get("datastream_id")
+                            )
+                else:
+                    if key == "FeatureOfInterest":
+                        entity_id, _ = await insertFeaturesOfInterest(
+                            payload[key], conn, payload.get("datastream_id")
+                        )
+                    else:
+                        entity_id, _ = await insert_funcs[key](
+                            payload[key], conn
+                        )
+                if not isinstance(entity_id, int):
+                    raise ValueError(
+                        f"Cannot deserialize value of type `int` from String: {entity_id}"
+                    )
+                payload.pop(key)
+                if key != "FeatureOfInterest":
+                    payload[f"{key.lower()}_id"] = entity_id
+                else:
+                    payload["featuresofinterest_id"] = entity_id
+
+            else:
+                if key == "FeatureOfInterest":
+                    await generate_feature_of_interest(payload, conn)
 
 
 def check_missing_properties(payload, required_properties):
@@ -938,28 +948,30 @@ def format_exception(e):
 
 
 async def update_datastream_last_foi_id(conn, foi_id, datastream_id):
-    update_query = f"""
-        UPDATE sensorthings."Datastream" 
-        SET last_foi_id = $1::bigint
-        WHERE id = $2::bigint
-    """
-    await conn.execute(update_query, foi_id, datastream_id)
-    await update_datastream_observedArea(conn, datastream_id, foi_id)
+    async with conn.transaction():
+        update_query = f"""
+            UPDATE sensorthings."Datastream" 
+            SET last_foi_id = $1::bigint
+            WHERE id = $2::bigint
+        """
+        await conn.execute(update_query, foi_id, datastream_id)
+        await update_datastream_observedArea(conn, datastream_id, foi_id)
 
 
 async def update_datastream_observedArea(conn, datastream_id, foi_id):
-    query = f"""
-        UPDATE sensorthings."Datastream"
-        SET "observedArea" = ST_ConvexHull(
-            ST_Collect(
-                "observedArea",
-                (
-                    SELECT "feature"
-                    FROM sensorthings."FeaturesOfInterest"
-                    WHERE id = $1
+    async with conn.transaction():
+        query = f"""
+            UPDATE sensorthings."Datastream"
+            SET "observedArea" = ST_ConvexHull(
+                ST_Collect(
+                    "observedArea",
+                    (
+                        SELECT "feature"
+                        FROM sensorthings."FeaturesOfInterest"
+                        WHERE id = $1
+                    )
                 )
             )
-        )
-        WHERE id = $2;
-    """
-    await conn.execute(query, foi_id, datastream_id)
+            WHERE id = $2;
+        """
+        await conn.execute(query, foi_id, datastream_id)
