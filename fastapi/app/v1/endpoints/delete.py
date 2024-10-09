@@ -29,7 +29,7 @@ async def catch_all_delete(
     Args:
         request (Request): The incoming request object.
         path_name (str): The path name extracted from the URL.
-        conn: The connection to the database.
+        pgpool: The connection pool to the database.
 
     Returns:
         Response: The response object indicating the status of the delete operation.
@@ -146,10 +146,10 @@ async def catch_all_delete(
                             "message": "Nothing found.",
                         },
                     )
-                if DEBUG:
-                    response2jsonfile(request, "", "requests.json")
+            if DEBUG:
+                response2jsonfile(request, "", "requests.json")
 
-                return Response(status_code=status.HTTP_200_OK)
+            return Response(status_code=status.HTTP_200_OK)
 
     except Exception as e:
         # print stack trace
