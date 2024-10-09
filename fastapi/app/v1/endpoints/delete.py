@@ -1,7 +1,7 @@
 import traceback
 
 from app import DEBUG
-from app.db.asyncpg_db import get_db_connection, get_pool
+from app.db.asyncpg_db import get_pool
 from app.sta2rest import sta2rest
 from fastapi.responses import JSONResponse, Response
 
