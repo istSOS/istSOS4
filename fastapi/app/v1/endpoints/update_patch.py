@@ -332,54 +332,56 @@ async def updateLocation(payload, conn, location_id):
     Raises:
         Exception: If the payload format is invalid or if there is an error during the update process.
     """
-    if "Things" in payload:
-        if isinstance(payload["Things"], dict):
-            payload["Things"] = [payload["Things"]]
-        for thing in payload["Things"]:
-            if not isinstance(thing, dict) or list(thing.keys()) != [
-                "@iot.id"
-            ]:
-                raise Exception(
-                    "Invalid format: Each thing should be a dictionary with a single key '@iot.id'."
-                )
-            thing_id = thing["@iot.id"]
-            check = await conn.fetchval(
-                'UPDATE sensorthings."Thing_Location" SET thing_id = $1 WHERE location_id = $2',
-                location_id,
-                thing_id,
-            )
-            if check is None:
-                await conn.execute(
-                    'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2) ON CONFLICT ("thing_id", "location_id") DO NOTHING',
-                    thing_id,
+
+    async with conn.transaction():
+        if "Things" in payload:
+            if isinstance(payload["Things"], dict):
+                payload["Things"] = [payload["Things"]]
+            for thing in payload["Things"]:
+                if not isinstance(thing, dict) or list(thing.keys()) != [
+                    "@iot.id"
+                ]:
+                    raise Exception(
+                        "Invalid format: Each thing should be a dictionary with a single key '@iot.id'."
+                    )
+                thing_id = thing["@iot.id"]
+                check = await conn.fetchval(
+                    'UPDATE sensorthings."Thing_Location" SET thing_id = $1 WHERE location_id = $2',
                     location_id,
+                    thing_id,
                 )
-            historicallocation_id = await conn.fetchval(
-                'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id',
-                thing_id,
-            )
-            await conn.execute(
-                'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)  ON CONFLICT ("location_id", "historicallocation_id") DO NOTHING',
-                location_id,
-                historicallocation_id,
-            )
-        payload.pop("Things")
-
-    payload["gen_foi_id"] = None
-
-    if payload["location"]:
-        crs = payload["location"].get("crs")
-        if crs is not None:
-            epsg_code = int(crs["properties"].get("name").split(":")[1])
-            if epsg_code != EPSG:
-                raise ValueError(
-                    f"Invalid EPSG code. Expected {EPSG}, got {epsg_code}"
+                if check is None:
+                    await conn.execute(
+                        'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2) ON CONFLICT ("thing_id", "location_id") DO NOTHING',
+                        thing_id,
+                        location_id,
+                    )
+                historicallocation_id = await conn.fetchval(
+                    'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id',
+                    thing_id,
                 )
+                await conn.execute(
+                    'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)  ON CONFLICT ("location_id", "historicallocation_id") DO NOTHING',
+                    location_id,
+                    historicallocation_id,
+                )
+            payload.pop("Things")
 
-    if VERSIONING:
-        check_commit_versioning(payload)
+        payload["gen_foi_id"] = None
 
-    return await update_record(payload, conn, "Location", location_id)
+        if payload["location"]:
+            crs = payload["location"].get("crs")
+            if crs is not None:
+                epsg_code = int(crs["properties"].get("name").split(":")[1])
+                if epsg_code != EPSG:
+                    raise ValueError(
+                        f"Invalid EPSG code. Expected {EPSG}, got {epsg_code}"
+                    )
+
+        if VERSIONING:
+            check_commit_versioning(payload)
+
+        return await update_record(payload, conn, "Location", location_id)
 
 
 async def updateThing(payload, conn, thing_id):
@@ -397,47 +399,49 @@ async def updateThing(payload, conn, thing_id):
     Raises:
         Exception: If the payload contains invalid location format.
     """
-    if "Locations" in payload:
-        if isinstance(payload["Locations"], dict):
-            payload["Locations"] = [payload["Locations"]]
-        for location in payload["Locations"]:
-            if not isinstance(location, dict) or list(location.keys()) != [
-                "@iot.id"
-            ]:
-                raise Exception(
-                    "Invalid format: Each location should be a dictionary with a single key '@iot.id'."
-                )
-            location_id = location["@iot.id"]
-            check = await conn.fetchval(
-                'UPDATE sensorthings."Thing_Location" SET location_id = $1 WHERE thing_id = $2',
-                location_id,
-                thing_id,
-            )
-            if check is None:
-                await conn.execute(
-                    'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2) ON CONFLICT ("thing_id", "location_id") DO NOTHING',
-                    thing_id,
+
+    async with conn.transaction():
+        if "Locations" in payload:
+            if isinstance(payload["Locations"], dict):
+                payload["Locations"] = [payload["Locations"]]
+            for location in payload["Locations"]:
+                if not isinstance(location, dict) or list(location.keys()) != [
+                    "@iot.id"
+                ]:
+                    raise Exception(
+                        "Invalid format: Each location should be a dictionary with a single key '@iot.id'."
+                    )
+                location_id = location["@iot.id"]
+                check = await conn.fetchval(
+                    'UPDATE sensorthings."Thing_Location" SET location_id = $1 WHERE thing_id = $2',
                     location_id,
+                    thing_id,
                 )
-            historicallocation_id = await conn.fetchval(
-                'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id',
-                thing_id,
-            )
-            await conn.execute(
-                'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2) ON CONFLICT ("location_id", "historicallocation_id") DO NOTHING',
-                location_id,
-                historicallocation_id,
-            )
-        payload.pop("Locations")
+                if check is None:
+                    await conn.execute(
+                        'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2) ON CONFLICT ("thing_id", "location_id") DO NOTHING',
+                        thing_id,
+                        location_id,
+                    )
+                historicallocation_id = await conn.fetchval(
+                    'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id',
+                    thing_id,
+                )
+                await conn.execute(
+                    'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2) ON CONFLICT ("location_id", "historicallocation_id") DO NOTHING',
+                    location_id,
+                    historicallocation_id,
+                )
+            payload.pop("Locations")
 
-    await handle_nested_entities(
-        payload, conn, thing_id, "Datastreams", "thing_id", "Datastream"
-    )
+        await handle_nested_entities(
+            payload, conn, thing_id, "Datastreams", "thing_id", "Datastream"
+        )
 
-    if VERSIONING:
-        check_commit_versioning(payload)
+        if VERSIONING:
+            check_commit_versioning(payload)
 
-    return await update_record(payload, conn, "Thing", thing_id)
+        return await update_record(payload, conn, "Thing", thing_id)
 
 
 async def updateHistoricalLocation(payload, conn, historicallocation_id):
@@ -455,39 +459,41 @@ async def updateHistoricalLocation(payload, conn, historicallocation_id):
     Returns:
         The updated historical location record.
     """
-    if "Locations" in payload:
-        if isinstance(payload["Locations"], dict):
-            payload["Locations"] = [payload["Locations"]]
-        for location in payload["Locations"]:
-            if not isinstance(location, dict) or list(location.keys()) != [
-                "@iot.id"
-            ]:
-                raise Exception(
-                    "Invalid format: Each location should be a dictionary with a single key '@iot.id'."
-                )
-            location_id = location["@iot.id"]
-            check = await conn.fetchval(
-                'UPDATE sensorthings."Location_HistoricalLocation" SET location_id = $1 WHERE historicallocation_id = $2',
-                location_id,
-                historicallocation_id,
-            )
-            if check is None:
-                await conn.execute(
-                    'INSERT INTO sensorthings."Location_HistoricalLocation" ("historicallocation_id", "location_id") VALUES ($1, $2) ON CONFLICT ("historicallocation_id", "location_id") DO NOTHING',
-                    historicallocation_id,
+
+    async with conn.transaction():
+        if "Locations" in payload:
+            if isinstance(payload["Locations"], dict):
+                payload["Locations"] = [payload["Locations"]]
+            for location in payload["Locations"]:
+                if not isinstance(location, dict) or list(location.keys()) != [
+                    "@iot.id"
+                ]:
+                    raise Exception(
+                        "Invalid format: Each location should be a dictionary with a single key '@iot.id'."
+                    )
+                location_id = location["@iot.id"]
+                check = await conn.fetchval(
+                    'UPDATE sensorthings."Location_HistoricalLocation" SET location_id = $1 WHERE historicallocation_id = $2',
                     location_id,
+                    historicallocation_id,
                 )
-        payload.pop("Locations")
+                if check is None:
+                    await conn.execute(
+                        'INSERT INTO sensorthings."Location_HistoricalLocation" ("historicallocation_id", "location_id") VALUES ($1, $2) ON CONFLICT ("historicallocation_id", "location_id") DO NOTHING',
+                        historicallocation_id,
+                        location_id,
+                    )
+            payload.pop("Locations")
 
-    handle_datetime_fields(payload)
-    handle_associations(payload, ["Thing"])
+        handle_datetime_fields(payload)
+        handle_associations(payload, ["Thing"])
 
-    if VERSIONING:
-        check_commit_versioning(payload)
+        if VERSIONING:
+            check_commit_versioning(payload)
 
-    return await update_record(
-        payload, conn, "HistoricalLocation", historicallocation_id
-    )
+        return await update_record(
+            payload, conn, "HistoricalLocation", historicallocation_id
+        )
 
 
 async def updateSensor(payload, conn, sensor_id):
@@ -505,14 +511,16 @@ async def updateSensor(payload, conn, sensor_id):
     Raises:
         Any exceptions that occur during the update process.
     """
-    await handle_nested_entities(
-        payload, conn, sensor_id, "Datastreams", "sensor_id", "Datastream"
-    )
 
-    if VERSIONING:
-        check_commit_versioning(payload)
+    async with conn.transaction():
+        await handle_nested_entities(
+            payload, conn, sensor_id, "Datastreams", "sensor_id", "Datastream"
+        )
 
-    return await update_record(payload, conn, "Sensor", sensor_id)
+        if VERSIONING:
+            check_commit_versioning(payload)
+
+        return await update_record(payload, conn, "Sensor", sensor_id)
 
 
 async def updateObservedProperty(payload, conn, observedproperty_id):
@@ -530,21 +538,23 @@ async def updateObservedProperty(payload, conn, observedproperty_id):
     Raises:
         Any exceptions that occur during the update process.
     """
-    await handle_nested_entities(
-        payload,
-        conn,
-        observedproperty_id,
-        "Datastreams",
-        "observedproperty_id",
-        "Datastream",
-    )
 
-    if VERSIONING:
-        check_commit_versioning(payload)
+    async with conn.transaction():
+        await handle_nested_entities(
+            payload,
+            conn,
+            observedproperty_id,
+            "Datastreams",
+            "observedproperty_id",
+            "Datastream",
+        )
 
-    return await update_record(
-        payload, conn, "ObservedProperty", observedproperty_id
-    )
+        if VERSIONING:
+            check_commit_versioning(payload)
+
+        return await update_record(
+            payload, conn, "ObservedProperty", observedproperty_id
+        )
 
 
 async def updateFeaturesOfInterest(payload, conn, featuresofinterest_id):
@@ -559,30 +569,32 @@ async def updateFeaturesOfInterest(payload, conn, featuresofinterest_id):
     Returns:
         The updated record of the features of interest.
     """
-    await handle_nested_entities(
-        payload,
-        conn,
-        featuresofinterest_id,
-        "Observations",
-        "featuresofinterest_id",
-        "Observation",
-    )
 
-    if VERSIONING:
-        check_commit_versioning(payload)
+    async with conn.transaction():
+        await handle_nested_entities(
+            payload,
+            conn,
+            featuresofinterest_id,
+            "Observations",
+            "featuresofinterest_id",
+            "Observation",
+        )
 
-    if payload["feature"]:
-        crs = payload["feature"].get("crs")
-        if crs is not None:
-            epsg_code = int(crs["properties"].get("name").split(":")[1])
-            if epsg_code != EPSG:
-                raise ValueError(
-                    f"Invalid EPSG code. Expected {EPSG}, got {epsg_code}"
-                )
+        if VERSIONING:
+            check_commit_versioning(payload)
 
-    return await update_record(
-        payload, conn, "FeaturesOfInterest", featuresofinterest_id
-    )
+        if payload["feature"]:
+            crs = payload["feature"].get("crs")
+            if crs is not None:
+                epsg_code = int(crs["properties"].get("name").split(":")[1])
+                if epsg_code != EPSG:
+                    raise ValueError(
+                        f"Invalid EPSG code. Expected {EPSG}, got {epsg_code}"
+                    )
+
+        return await update_record(
+            payload, conn, "FeaturesOfInterest", featuresofinterest_id
+        )
 
 
 async def updateDatastream(payload, conn, datastream_id):
@@ -598,21 +610,23 @@ async def updateDatastream(payload, conn, datastream_id):
         dict: The updated datastream record.
 
     """
-    handle_datetime_fields(payload)
-    handle_associations(payload, ["Thing", "Sensor", "ObservedProperty"])
-    await handle_nested_entities(
-        payload,
-        conn,
-        datastream_id,
-        "Observations",
-        "datastream_id",
-        "Observation",
-    )
 
-    if VERSIONING:
-        check_commit_versioning(payload)
+    async with conn.transaction():
+        handle_datetime_fields(payload)
+        handle_associations(payload, ["Thing", "Sensor", "ObservedProperty"])
+        await handle_nested_entities(
+            payload,
+            conn,
+            datastream_id,
+            "Observations",
+            "datastream_id",
+            "Observation",
+        )
 
-    return await update_record(payload, conn, "Datastream", datastream_id)
+        if VERSIONING:
+            check_commit_versioning(payload)
+
+        return await update_record(payload, conn, "Datastream", datastream_id)
 
 
 async def updateObservation(payload, conn, observation_id):
@@ -628,14 +642,18 @@ async def updateObservation(payload, conn, observation_id):
         The updated observation record.
 
     """
-    handle_datetime_fields(payload)
-    handle_result_field(payload)
-    handle_associations(payload, ["Datastream", "FeatureOfInterest"])
 
-    if VERSIONING:
-        check_commit_versioning(payload)
+    async with conn.transaction():
+        handle_datetime_fields(payload)
+        handle_result_field(payload)
+        handle_associations(payload, ["Datastream", "FeatureOfInterest"])
 
-    return await update_record(payload, conn, "Observation", observation_id)
+        if VERSIONING:
+            check_commit_versioning(payload)
+
+        return await update_record(
+            payload, conn, "Observation", observation_id
+        )
 
 
 async def handle_nested_entities(
@@ -658,19 +676,23 @@ async def handle_nested_entities(
     Returns:
         None
     """
-    if key in payload:
-        if isinstance(payload[key], dict):
-            payload[key] = [payload[key]]
-        for item in payload[key]:
-            if not isinstance(item, dict) or list(item.keys()) != ["@iot.id"]:
-                raise Exception(
-                    f"Invalid format: Each item in '{key}' should be a dictionary with a single key '@iot.id'."
+
+    async with conn.transaction():
+        if key in payload:
+            if isinstance(payload[key], dict):
+                payload[key] = [payload[key]]
+            for item in payload[key]:
+                if not isinstance(item, dict) or list(item.keys()) != [
+                    "@iot.id"
+                ]:
+                    raise Exception(
+                        f"Invalid format: Each item in '{key}' should be a dictionary with a single key '@iot.id'."
+                    )
+                related_id = item["@iot.id"]
+                await conn.execute(
+                    f'UPDATE sensorthings."{update_table}" SET {field} = {entity_id} WHERE id = {related_id};'
                 )
-            related_id = item["@iot.id"]
-            await conn.execute(
-                f'UPDATE sensorthings."{update_table}" SET {field} = {entity_id} WHERE id = {related_id};'
-            )
-        payload.pop(key)
+            payload.pop(key)
 
 
 def handle_associations(payload, keys):
@@ -687,6 +709,7 @@ def handle_associations(payload, keys):
     Returns:
         None
     """
+
     for key in keys:
         if key in payload:
             if list(payload[key].keys()) != ["@iot.id"]:
@@ -737,29 +760,31 @@ def check_commit_versioning(payload):
 
 
 async def insertCommit(payload, conn):
-    for key in list(payload.keys()):
-        if isinstance(payload[key], dict):
-            payload[key] = json.dumps(payload[key])
+    async with conn.transaction():
+        for key in list(payload.keys()):
+            if isinstance(payload[key], dict):
+                payload[key] = json.dumps(payload[key])
 
-    keys = ", ".join(f'"{key}"' for key in payload.keys())
-    values_placeholders = ", ".join(f"${i+1}" for i in range(len(payload)))
-    query = f'INSERT INTO sensorthings."Commit" ({keys}) VALUES ({values_placeholders}) RETURNING id;'
-    return await conn.fetchval(query, *payload.values())
+        keys = ", ".join(f'"{key}"' for key in payload.keys())
+        values_placeholders = ", ".join(f"${i+1}" for i in range(len(payload)))
+        query = f'INSERT INTO sensorthings."Commit" ({keys}) VALUES ({values_placeholders}) RETURNING id;'
+        return await conn.fetchval(query, *payload.values())
 
 
 async def update_datastream_observedArea(conn, datastream_id):
-    query = """
-        WITH distinct_features AS (
-            SELECT DISTINCT ON (foi.id) foi.feature
-            FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
-            WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1
-        ),
-        aggregated_geometry AS (
-            SELECT ST_ConvexHull(ST_Collect(feature)) AS agg_geom
-            FROM distinct_features
-        )
-        UPDATE sensorthings."Datastream"
-        SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
-        WHERE id = $1;
-    """
-    await conn.execute(query, datastream_id)
+    async with conn.transaction():
+        query = """
+            WITH distinct_features AS (
+                SELECT DISTINCT ON (foi.id) foi.feature
+                FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
+                WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1
+            ),
+            aggregated_geometry AS (
+                SELECT ST_ConvexHull(ST_Collect(feature)) AS agg_geom
+                FROM distinct_features
+            )
+            UPDATE sensorthings."Datastream"
+            SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
+            WHERE id = $1;
+        """
+        await conn.execute(query, datastream_id)
