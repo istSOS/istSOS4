@@ -1,20 +1,27 @@
 import json
 import traceback
+from datetime import datetime
 
+import ujson
 from app import (
     COUNT_ESTIMATE_THRESHOLD,
     COUNT_MODE,
     DEBUG,
     HOSTNAME,
+    PARTITION_CHUNK,
     REDIS,
+    STREAMING_MODE,
     SUBPATH,
     VERSION,
+    VERSIONING,
 )
+from app.db.asyncpg_db import get_db_connection
 from app.db.redis_db import redis
 from app.db.sqlalchemy_db import get_db
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
 from app.sta2rest.visitors import stream_results
+from app.utils.utils import build_nextLink
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.exc import TimeoutError
 from sqlalchemy.orm import Session
@@ -63,7 +70,10 @@ def __handle_root(request: Request):
 
 @v1.api_route("/{path_name:path}", methods=["GET"])
 async def catch_all_get(
-    request: Request, path_name: str, db: Session = Depends(get_db)
+    request: Request,
+    path_name: str,
+    db_sqlalchemy: Session = Depends(get_db),
+    db_asyncpg=Depends(get_db_connection),
 ):
     """
     Handle GET requests for all paths.
@@ -98,7 +108,6 @@ async def catch_all_get(
         if result:
             print("Cache hit")
             data = json.loads(result)
-
             main_entity = data.get("main_entity")
             main_query = data.get("main_query")
             top_value = data.get("top_value")
@@ -108,48 +117,62 @@ async def catch_all_get(
             from_to_value = data.get("from_to_value")
             single_result = data.get("single_result")
 
-            async with db as session:
-                if is_count:
-                    if COUNT_MODE == "LIMIT_ESTIMATE":
-                        query_estimate = await session.execute(
-                            text(count_queries_redis[0])
-                        )
-                        query_count = query_estimate.scalar()
-                        if query_count == COUNT_ESTIMATE_THRESHOLD:
+            if STREAMING_MODE == "sqlalchemy":
+                async with db_sqlalchemy as session:
+                    if is_count:
+                        if COUNT_MODE == "LIMIT_ESTIMATE":
                             query_estimate = await session.execute(
-                                text(count_queries_redis[1]["query"]),
-                                count_queries_redis[1]["params"],
+                                text(count_queries_redis[0])
                             )
                             query_count = query_estimate.scalar()
-                    elif COUNT_MODE == "ESTIMATE_LIMIT":
-                        query_estimate = await session.execute(
-                            text(count_queries_redis[0]["query"]),
-                            count_queries_redis[0]["params"],
-                        )
-                        query_count = query_estimate.scalar()
-                        if query_count < COUNT_ESTIMATE_THRESHOLD:
+                            if query_count == COUNT_ESTIMATE_THRESHOLD:
+                                query_estimate = await session.execute(
+                                    text(count_queries_redis[1]["query"]),
+                                    count_queries_redis[1]["params"],
+                                )
+                                query_count = query_estimate.scalar()
+                        elif COUNT_MODE == "ESTIMATE_LIMIT":
                             query_estimate = await session.execute(
-                                text(count_queries_redis[1])
+                                text(count_queries_redis[0]["query"]),
+                                count_queries_redis[0]["params"],
                             )
                             query_count = query_estimate.scalar()
-                    else:
-                        query_estimate = await session.execute(
-                            text(count_queries_redis[0])
-                        )
-                        query_count = query_estimate.scalar()
+                            if query_count < COUNT_ESTIMATE_THRESHOLD:
+                                query_estimate = await session.execute(
+                                    text(count_queries_redis[1])
+                                )
+                                query_count = query_estimate.scalar()
+                        else:
+                            query_estimate = await session.execute(
+                                text(count_queries_redis[0])
+                            )
+                            query_count = query_estimate.scalar()
 
-                iot_count = (
-                    '"@iot.count": ' + str(query_count) + ","
-                    if is_count and not single_result
-                    else ""
-                )
+                    iot_count = (
+                        '"@iot.count": ' + str(query_count) + ","
+                        if is_count and not single_result
+                        else ""
+                    )
 
-                result = stream_results(
+                    result = stream_results(
+                        main_entity,
+                        text(main_query),
+                        session,
+                        top_value,
+                        iot_count,
+                        as_of_value,
+                        from_to_value,
+                        single_result,
+                        full_path,
+                    )
+            else:
+                result = asyncpg_stream_results(
                     main_entity,
-                    text(main_query),
-                    session,
+                    main_query,
+                    db_asyncpg,
                     top_value,
-                    iot_count,
+                    is_count,
+                    count_queries_redis,
                     as_of_value,
                     from_to_value,
                     single_result,
@@ -158,7 +181,9 @@ async def catch_all_get(
         else:
             if REDIS:
                 print("Cache miss")
-            result = await sta2rest.STA2REST.convert_query(full_path, db)
+            result = await sta2rest.STA2REST.convert_query(
+                full_path, db_sqlalchemy
+            )
 
         async def wrapped_result_generator(first_item):
             yield first_item
@@ -197,3 +222,112 @@ async def catch_all_get(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"code": 400, "type": "error", "message": str(e)},
         )
+
+
+async def asyncpg_stream_results(
+    entity,
+    query,
+    db_asyncpg,
+    top,
+    is_count,
+    count_queries_redis,
+    as_of_value,
+    from_to_value,
+    single_result,
+    full_path,
+):
+    if is_count:
+        if COUNT_MODE == "LIMIT_ESTIMATE":
+            query_count = await db_asyncpg.fetchval(count_queries_redis[0])
+            if query_count == COUNT_ESTIMATE_THRESHOLD:
+                query_count = await db_asyncpg.fetchval(
+                    "SELECT sensorthings.count_estimate($1) AS estimated_count",
+                    count_queries_redis[1]["params"]["compiled_query_text"],
+                )
+        elif COUNT_MODE == "ESTIMATE_LIMIT":
+            query_count = await db_asyncpg.fetchval(
+                "SELECT sensorthings.count_estimate($1) AS estimated_count",
+                count_queries_redis[0]["params"]["compiled_query_text"],
+            )
+            if query_count < COUNT_ESTIMATE_THRESHOLD:
+                query_count = await db_asyncpg.fetchval(count_queries_redis[1])
+        else:
+            query_count = await db_asyncpg.fetchval(count_queries_redis[0])
+
+    iot_count = (
+        '"@iot.count": ' + str(query_count) + ","
+        if is_count and not single_result
+        else ""
+    )
+    await db_asyncpg.execute(f"DECLARE my_cursor CURSOR FOR {query}")
+
+    start_json = ""
+    is_first_partition = True
+    has_rows = False
+
+    while True:
+        partition = await db_asyncpg.fetch(
+            f"FETCH {PARTITION_CHUNK} FROM my_cursor"
+        )
+        if not partition:
+            break
+
+        partition_len = len(partition)
+        has_rows = True
+
+        if partition_len > top - 1:
+            partition = partition[:-1]
+
+        if (
+            VERSIONING
+            and single_result
+            and partition_len == 1
+            and entity != "Commit"
+            and not from_to_value
+        ):
+            partition[0]["@iot.as_of"] = as_of_value
+
+        processed_partition = [
+            ujson.loads(record["json"]) for record in partition
+        ]
+
+        partition_json = ujson.dumps(
+            processed_partition,
+            default=datetime.isoformat,
+            escape_forward_slashes=False,
+        )[1:-1]
+
+        if is_first_partition:
+            if partition_len > 0 and not single_result:
+                start_json = "{"
+
+            next_link = build_nextLink(full_path, partition_len)
+            next_link_json = (
+                f'"@iot.nextLink": "{next_link}",'
+                if next_link and not single_result
+                else ""
+            )
+            as_of = (
+                f'"@iot.as_of": "{as_of_value}",'
+                if VERSIONING and not single_result and not from_to_value
+                else ""
+            )
+            start_json += as_of + iot_count + next_link_json
+            start_json += (
+                '"value": ['
+                if (partition_len > 0 and not single_result)
+                else ""
+            )
+
+            yield start_json + partition_json
+            is_first_partition = False
+        else:
+            yield "," + partition_json
+
+    if not has_rows and not single_result:
+        yield '{"value": []}'
+
+    if has_rows and not single_result:
+        yield "]}"
+
+    await db_asyncpg.execute("CLOSE my_cursor")

@@ -43,7 +43,8 @@ services:
       REDIS: ${REDIS}
       REDIS_CACHE_EXPIRATION: ${REDIS_CACHE_EXPIRATION}
       EPSG: ${EPSG}
-    command: uvicorn --reload --workers 1 --host 0.0.0.0 --port 5000 app.main:app
+      STREAMING_MODE: ${STREAMING_MODE}
+    command: uvicorn --reload --workers 1 --host 0.0.0.0 --timeout-keep-alive 60 --port 5000 app.main:app
     ports:
       - 8018:5000
     working_dir: /code
