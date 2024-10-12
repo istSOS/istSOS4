@@ -85,6 +85,11 @@ services:
 
   tutorials:
     image: quay.io/jupyter/scipy-notebook
+    profiles:
+      - profileName: "education"
+        displayName: "Education"
+        description: "This is the educational profile"
+        default: false
     ports:
       - "10000:8888"
     volumes:
