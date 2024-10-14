@@ -10,7 +10,6 @@ from app import (
     HOSTNAME,
     PARTITION_CHUNK,
     REDIS,
-    STREAMING_MODE,
     SUBPATH,
     VERSION,
     VERSIONING,
@@ -20,7 +19,6 @@ from app.db.redis_db import redis
 from app.db.sqlalchemy_db import get_db
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
-from app.sta2rest.visitors import stream_results
 from app.utils.utils import build_nextLink
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.exc import TimeoutError
@@ -78,7 +76,6 @@ async def wrapped_result_generator(first_item, result):
 async def catch_all_get(
     request: Request,
     path_name: str,
-    db_sqlalchemy: Session = Depends(get_db),
     pgpool=Depends(get_pool),
 ):
     """
@@ -106,91 +103,39 @@ async def catch_all_get(
         if request.url.query:
             full_path += "?" + request.url.query
 
-        result = None
+        data = None
 
         if REDIS:
-            result = redis.get(full_path)
-
-        if result:
             print("Cache hit")
-            data = json.loads(result)
-            main_entity = data.get("main_entity")
-            main_query = data.get("main_query")
-            top_value = data.get("top_value")
-            is_count = data.get("is_count")
-            count_queries_redis = data.get("count_queries_redis")
-            as_of_value = data.get("as_of_value")
-            from_to_value = data.get("from_to_value")
-            single_result = data.get("single_result")
+            result = redis.get(full_path)
+            if result:
+                data = json.loads(result)
 
-            if STREAMING_MODE == "sqlalchemy":
-                async with db_sqlalchemy as session:
-                    if is_count:
-                        if COUNT_MODE == "LIMIT_ESTIMATE":
-                            query_estimate = await session.execute(
-                                text(count_queries_redis[0])
-                            )
-                            query_count = query_estimate.scalar()
-                            if query_count == COUNT_ESTIMATE_THRESHOLD:
-                                query_estimate = await session.execute(
-                                    text(count_queries_redis[1]["query"]),
-                                    count_queries_redis[1]["params"],
-                                )
-                                query_count = query_estimate.scalar()
-                        elif COUNT_MODE == "ESTIMATE_LIMIT":
-                            query_estimate = await session.execute(
-                                text(count_queries_redis[0]["query"]),
-                                count_queries_redis[0]["params"],
-                            )
-                            query_count = query_estimate.scalar()
-                            if query_count < COUNT_ESTIMATE_THRESHOLD:
-                                query_estimate = await session.execute(
-                                    text(count_queries_redis[1])
-                                )
-                                query_count = query_estimate.scalar()
-                        else:
-                            query_estimate = await session.execute(
-                                text(count_queries_redis[0])
-                            )
-                            query_count = query_estimate.scalar()
+        if not data:
+            print("Cache miss")
+            data = sta2rest.STA2REST.convert_query(full_path)
 
-                    iot_count = (
-                        '"@iot.count": ' + str(query_count) + ","
-                        if is_count and not single_result
-                        else ""
-                    )
+        main_entity = data.get("main_entity")
+        main_query = data.get("main_query")
+        top_value = data.get("top_value")
+        is_count = data.get("is_count")
+        count_queries_redis = data.get("count_queries_redis")
+        as_of_value = data.get("as_of_value")
+        from_to_value = data.get("from_to_value")
+        single_result = data.get("single_result")
 
-                    result = stream_results(
-                        main_entity,
-                        text(main_query),
-                        session,
-                        top_value,
-                        iot_count,
-                        as_of_value,
-                        from_to_value,
-                        single_result,
-                        full_path,
-                    )
-            else:
-                result = asyncpg_stream_results(
-                    main_entity,
-                    main_query,
-                    pgpool,
-                    top_value,
-                    is_count,
-                    count_queries_redis,
-                    as_of_value,
-                    from_to_value,
-                    single_result,
-                    full_path,
-                )
-        else:
-            if REDIS:
-                print("Cache miss")
-
-            result = await sta2rest.STA2REST.convert_query(
-                full_path, db_sqlalchemy
-            )
+        result = asyncpg_stream_results(
+            main_entity,
+            main_query,
+            pgpool,
+            top_value,
+            is_count,
+            count_queries_redis,
+            as_of_value,
+            from_to_value,
+            single_result,
+            full_path,
+        )
 
         try:
             first_item = await anext(result)
