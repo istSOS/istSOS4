@@ -216,6 +216,10 @@ async def insert(main_table, payload, pgpool):
         async with conn.transaction():
             try:
                 _, header = await insert_funcs[main_table](payload, conn)
+                return Response(
+                    status_code=status.HTTP_201_CREATED,
+                    headers={"location": header},
+                )
             except ValueError as e:
                 return JSONResponse(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -226,10 +230,6 @@ async def insert(main_table, payload, pgpool):
                     status_code=status.HTTP_400_BAD_REQUEST,
                     content={"code": 400, "type": "error", "message": str(e)},
                 )
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
 
 
 async def insert_record(payload, conn, table):
@@ -252,13 +252,18 @@ async def insert_record(payload, conn, table):
 
         keys = ", ".join(f'"{key}"' for key in payload.keys())
         values_placeholders = ", ".join(f"${i+1}" for i in range(len(payload)))
-        query = f'INSERT INTO sensorthings."{table}" ({keys}) VALUES ({values_placeholders}) RETURNING id'
+        query = f"""
+            INSERT INTO sensorthings."{table}" ({keys})
+            VALUES ({values_placeholders})
+            RETURNING id
+        """
         insert_id = await conn.fetchval(query, *payload.values())
         if table == "ObservedProperty":
             table = "ObservedProperties"
         else:
             table = f"{table}s"
         insert_selfLink = f"{HOSTNAME}{SUBPATH}{VERSION}/{table}({insert_id})"
+
         return (insert_id, insert_selfLink)
 
 
@@ -308,7 +313,11 @@ async def insertLocation(payload, conn):
                     )
                     for i, key in enumerate(item.keys())
                 )
-                query = f'INSERT INTO sensorthings."Location" ({keys}, "gen_foi_id") VALUES ({values_placeholders}, NULL) RETURNING id'
+                query = f"""
+                    INSERT INTO sensorthings."Location" ({keys}, "gen_foi_id")
+                    VALUES ({values_placeholders}, NULL)
+                    RETURNING id
+                """
                 location_id = await conn.fetchval(query, *item.values())
                 location_selfLink = (
                     f"{HOSTNAME}{SUBPATH}{VERSION}/Locations({location_id})"
@@ -367,18 +376,28 @@ async def insertThing(payload, conn):
 
             if location_id is not None:
                 await conn.execute(
-                    'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2)',
+                    """
+                        INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id")
+                        VALUES ($1, $2);
+                    """,
                     thing_id,
                     location_id,
                 )
                 if new_location:
-                    queryHistoricalLocations = f'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id'
+                    queryHistoricalLocations = f"""
+                        INSERT INTO sensorthings."HistoricalLocation" ("thing_id")
+                        VALUES ($1)
+                        RETURNING id;
+                    """
                     historicallocation_id = await conn.fetchval(
                         queryHistoricalLocations, thing_id
                     )
                     if historicallocation_id is not None:
                         await conn.execute(
-                            'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)',
+                            """
+                                INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id")
+                                VALUES ($1, $2);
+                            """,
                             location_id,
                             historicallocation_id,
                         )
@@ -386,6 +405,7 @@ async def insertThing(payload, conn):
                 await insertDatastream(datastreams, conn, thing_id)
 
             return (thing_id, thing_selfLink)
+
     except Exception as e:
         format_exception(e)
 
@@ -428,7 +448,10 @@ async def insertHistoricalLocation(payload, conn):
 
             if location_id is not None and historicallocation_id is not None:
                 await conn.execute(
-                    'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)',
+                    """
+                        INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id")
+                        VALUES ($1, $2);
+                    """,
                     location_id,
                     historicallocation_id,
                 )
@@ -458,6 +481,7 @@ async def insertSensor(payload, conn):
             sensor_id, sensor_selfLink = await insert_record(
                 payload, conn, "Sensor"
             )
+
             return (sensor_id, sensor_selfLink)
 
     except Exception as e:
@@ -483,6 +507,7 @@ async def insertObservedProperty(payload, conn):
             observedproperty_id, observedproperty_selfLink = (
                 await insert_record(payload, conn, "ObservedProperty")
             )
+
             return (observedproperty_id, observedproperty_selfLink)
 
     except Exception as e:
@@ -528,7 +553,11 @@ async def insertFeaturesOfInterest(payload, conn, datastream_id=None):
                 )
                 for i, key in enumerate(payload.keys())
             )
-            query = f'INSERT INTO sensorthings."FeaturesOfInterest" ({keys}) VALUES ({values_placeholders}) RETURNING id'
+            query = f"""
+                INSERT INTO sensorthings."FeaturesOfInterest" ({keys})
+                VALUES ({values_placeholders})
+                RETURNING id;
+            """
             featureofinterest_id = await conn.fetchval(
                 query, *payload.values()
             )
@@ -538,6 +567,7 @@ async def insertFeaturesOfInterest(payload, conn, datastream_id=None):
                 await update_datastream_last_foi_id(
                     conn, featureofinterest_id, datastream_id
                 )
+
             return (featureofinterest_id, featureofinterest_selfLink)
 
     except Exception as e:
@@ -605,9 +635,9 @@ async def insertDatastream(payload, conn, thing_id=None):
             )
 
             insert_sql = f"""
-            INSERT INTO sensorthings."Datastream" ({keys})
-            VALUES {values_placeholders}
-            RETURNING id
+                INSERT INTO sensorthings."Datastream" ({keys})
+                VALUES {values_placeholders}
+                RETURNING id;
             """
             values = [
                 value for datastream in datastreams for value in datastream
@@ -623,6 +653,7 @@ async def insertDatastream(payload, conn, thing_id=None):
             datastream_selfLink = (
                 f"{HOSTNAME}{SUBPATH}{VERSION}/Datastreams({datastream_id})"
             )
+
             return (datastream_id, datastream_selfLink)
 
     except Exception as e:
@@ -691,7 +722,7 @@ async def insertObservation(payload, conn, datastream_id=None):
             insert_sql = f"""
                 INSERT INTO sensorthings."Observation" ({keys})
                 VALUES {values_placeholders}
-                RETURNING id, "phenomenonTime", datastream_id, featuresofinterest_id
+                RETURNING id, "phenomenonTime", datastream_id, featuresofinterest_id;
             """
 
             values = [
@@ -707,7 +738,7 @@ async def insertObservation(payload, conn, datastream_id=None):
                     GREATEST($2::timestamptz, upper("phenomenonTime")),
                     '[]'
                 )
-                WHERE id = $3::bigint
+                WHERE id = $3::bigint;
             """
             await conn.execute(
                 update_sql,
@@ -720,6 +751,7 @@ async def insertObservation(payload, conn, datastream_id=None):
             observation_selfLink = (
                 f"{HOSTNAME}{SUBPATH}{VERSION}/Observations({observation_id})"
             )
+
             return (observation_id, observation_selfLink)
 
     except Exception as e:
@@ -789,14 +821,18 @@ async def generate_feature_of_interest(payload, conn):
                 values_placeholders = ", ".join(
                     f"${i+1}" for i in range(len(foi_payload))
                 )
-                query = f'INSERT INTO sensorthings."FeaturesOfInterest" ({keys}) VALUES ({values_placeholders}) RETURNING id'
+                query = f"""
+                    INSERT INTO sensorthings."FeaturesOfInterest" ({keys})
+                    VALUES ({values_placeholders})
+                    RETURNING id;
+                """
 
                 foi_id = await conn.fetchval(query, *foi_payload.values())
 
                 update_query = f"""
                     UPDATE sensorthings."Location" 
                     SET "gen_foi_id" = $1::bigint
-                    WHERE id = $2::bigint
+                    WHERE id = $2::bigint;
                 """
                 await conn.execute(update_query, foi_id, location_id)
 
@@ -809,7 +845,7 @@ async def generate_feature_of_interest(payload, conn):
                 select_query = """
                     SELECT last_foi_id
                     FROM sensorthings."Datastream"
-                    WHERE id = $1::bigint
+                    WHERE id = $1::bigint;
                 """
                 last_foi_id = await conn.fetchval(
                     select_query, payload["datastream_id"]
@@ -818,8 +854,8 @@ async def generate_feature_of_interest(payload, conn):
                     SELECT id
                     FROM sensorthings."Observation"
                     WHERE "datastream_id" = $1::bigint
-                    LIMIT 1
-                    """
+                    LIMIT 1;
+                """
                 observation_ids = await conn.fetch(
                     select_query, payload["datastream_id"]
                 )
@@ -872,7 +908,7 @@ async def handle_associations(payload, keys, conn):
                         select_query = f"""
                             SELECT last_foi_id
                             FROM sensorthings."Datastream"
-                            WHERE id = $1::bigint
+                            WHERE id = $1::bigint;
                         """
                         last_foi_id = await conn.fetchval(
                             select_query, payload["datastream_id"]
@@ -952,7 +988,7 @@ async def update_datastream_last_foi_id(conn, foi_id, datastream_id):
         update_query = f"""
             UPDATE sensorthings."Datastream" 
             SET last_foi_id = $1::bigint
-            WHERE id = $2::bigint
+            WHERE id = $2::bigint;
         """
         await conn.execute(update_query, foi_id, datastream_id)
         await update_datastream_observedArea(conn, datastream_id, foi_id)
