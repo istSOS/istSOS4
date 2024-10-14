@@ -68,6 +68,12 @@ def __handle_root(request: Request):
     return response
 
 
+async def wrapped_result_generator(first_item, result):
+    yield first_item
+    async for item in result:
+        yield item
+
+
 @v1.api_route("/{path_name:path}", methods=["GET"])
 async def catch_all_get(
     request: Request,
@@ -181,19 +187,15 @@ async def catch_all_get(
         else:
             if REDIS:
                 print("Cache miss")
+
             result = await sta2rest.STA2REST.convert_query(
                 full_path, db_sqlalchemy
             )
 
-        async def wrapped_result_generator(first_item):
-            yield first_item
-            async for item in result:
-                yield item
-
         try:
             first_item = await anext(result)
             return StreamingResponse(
-                wrapped_result_generator(first_item),
+                wrapped_result_generator(first_item, result),
                 media_type="application/json",
                 status_code=status.HTTP_200_OK,
             )

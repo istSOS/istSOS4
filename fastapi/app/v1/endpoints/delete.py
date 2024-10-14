@@ -97,7 +97,11 @@ async def catch_all_delete(
                     """
                     await conn.execute(query, int(id))
 
-                    query = f'DELETE FROM sensorthings."{name}" WHERE id = $1 RETURNING id'
+                    query = f"""
+                        DELETE FROM sensorthings."{name}"
+                        WHERE id = $1
+                        RETURNING id;
+                    """
                     id_deleted = await conn.fetchval(query, int(id))
                     for record in datastream_records:
                         ds_id = record["datastream_id"]
@@ -129,12 +133,15 @@ async def catch_all_delete(
                                     ELSE NULL
                                 END
                             WHERE "id" = $1;
-
-                            """
+                        """
                         await conn.execute(query, ds_id)
 
                 else:
-                    query = f'DELETE FROM sensorthings."{name}" WHERE id = $1 RETURNING id'
+                    query = f"""
+                        DELETE FROM sensorthings."{name}"
+                        WHERE id = $1
+                        RETURNING id;
+                    """
                     id_deleted = await conn.fetchval(query, int(id))
 
                 if id_deleted is None:
@@ -195,7 +202,6 @@ async def update_datastream_phenomenon_time(
             FROM new_boundaries
             WHERE id = $1;
         """
-
         await conn.execute(query, datastream_id, obs_phenomenon_time)
 
 

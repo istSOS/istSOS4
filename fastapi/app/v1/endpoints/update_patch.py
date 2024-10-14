@@ -221,100 +221,103 @@ async def update_record(payload, conn, table, record_id):
     Raises:
         JSONResponse: If no entity is found for the given ID or if an internal server error occurs.
     """
-    try:
-        async with conn.transaction():
-            if VERSIONING:
-                query = f'SELECT id FROM sensorthings."{table}" WHERE id = {record_id};'
-                selected_id = await conn.fetchval(query)
-                if selected_id:
-                    payload["commit_id"] = await insertCommit(
-                        payload["Commit"], conn
-                    )
-                    payload.pop("Commit")
+    async with conn.transaction():
+        if VERSIONING:
+            query = f"""
+                SELECT id
+                FROM sensorthings."{table}"
+                WHERE id = {record_id};
+            """
+            selected_id = await conn.fetchval(query)
+            if selected_id:
+                payload["commit_id"] = await insertCommit(
+                    payload["Commit"], conn
+                )
+                payload.pop("Commit")
 
-            payload = {
-                key: json.dumps(value) if isinstance(value, dict) else value
-                for key, value in payload.items()
-            }
-            set_clause = ", ".join(
-                [
-                    (
-                        f'"{key}" = ${i + 1}'
-                        if key != "location" and key != "feature"
-                        else f'"{key}" = ST_GeomFromGeoJSON(${i + 1})'
-                    )
-                    for i, key in enumerate(payload.keys())
-                ]
-            )
-            if table == "Observation":
-                query = f'UPDATE sensorthings."{table}" SET {set_clause} WHERE id = {record_id} RETURNING id, "phenomenonTime", "datastream_id";'
-                res = await conn.fetchrow(query, *payload.values())
-                updated_id = res["id"]
-                if res:
-                    obs_phenomenon_time = res["phenomenonTime"]
-                    datastream_id = res["datastream_id"]
-
-                    datastream_query = """
-                        SELECT "phenomenonTime" 
-                        FROM sensorthings."Datastream"
-                        WHERE id = $1;
-                    """
-                    datastream_phenomenon_time = await conn.fetchval(
-                        datastream_query, datastream_id
-                    )
-                    if datastream_phenomenon_time:
-                        if (
-                            obs_phenomenon_time
-                            < datastream_phenomenon_time.lower
-                            or obs_phenomenon_time
-                            > datastream_phenomenon_time.upper
-                        ):
-                            new_lower_bound = min(
-                                obs_phenomenon_time,
-                                datastream_phenomenon_time.lower,
-                            )
-                            new_upper_bound = max(
-                                obs_phenomenon_time,
-                                datastream_phenomenon_time.upper,
-                            )
-                            update_datastream_query = """
-                                UPDATE sensorthings."Datastream"
-                                SET "phenomenonTime" = tstzrange($1, $2, '[]')
-                                WHERE id = $3;
-                            """
-                            await conn.execute(
-                                update_datastream_query,
-                                new_lower_bound,
-                                new_upper_bound,
-                                datastream_id,
-                            )
-
-                if payload.get("featuresofinterest_id"):
-                    await update_datastream_observedArea(conn, datastream_id)
-            else:
-                query = f'UPDATE sensorthings."{table}" SET {set_clause} WHERE id = {record_id} RETURNING id;'
-                updated_id = await conn.fetchval(query, *payload.values())
-
-                if table == "FeaturesOfInterest":
-                    query = """
-                        SELECT DISTINCT datastream_id 
-                        FROM sensorthings."Observation" 
-                        WHERE "featuresofinterest_id" = $1;
-                    """
-                    datastream_ids = await conn.fetch(query, updated_id)
-                    for ds in datastream_ids:
-                        ds = ds["datastream_id"]
-                        await update_datastream_observedArea(conn, ds)
-            return updated_id
-    except Exception:
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "code": 500,
-                "type": "error",
-                "message": "An internal server error occurred.",
-            },
+        payload = {
+            key: json.dumps(value) if isinstance(value, dict) else value
+            for key, value in payload.items()
+        }
+        set_clause = ", ".join(
+            [
+                (
+                    f'"{key}" = ${i + 1}'
+                    if key != "location" and key != "feature"
+                    else f'"{key}" = ST_GeomFromGeoJSON(${i + 1})'
+                )
+                for i, key in enumerate(payload.keys())
+            ]
         )
+        if table == "Observation":
+            query = f"""
+                UPDATE sensorthings."{table}"
+                SET {set_clause}
+                WHERE id = {record_id}
+                RETURNING id, "phenomenonTime", "datastream_id";
+            """
+            res = await conn.fetchrow(query, *payload.values())
+            updated_id = res["id"]
+            if res:
+                obs_phenomenon_time = res["phenomenonTime"]
+                datastream_id = res["datastream_id"]
+
+                datastream_query = """
+                    SELECT "phenomenonTime"
+                    FROM sensorthings."Datastream"
+                    WHERE id = $1;
+                """
+                datastream_phenomenon_time = await conn.fetchval(
+                    datastream_query, datastream_id
+                )
+                if datastream_phenomenon_time:
+                    if (
+                        obs_phenomenon_time < datastream_phenomenon_time.lower
+                        or obs_phenomenon_time
+                        > datastream_phenomenon_time.upper
+                    ):
+                        new_lower_bound = min(
+                            obs_phenomenon_time,
+                            datastream_phenomenon_time.lower,
+                        )
+                        new_upper_bound = max(
+                            obs_phenomenon_time,
+                            datastream_phenomenon_time.upper,
+                        )
+                        update_datastream_query = """
+                            UPDATE sensorthings."Datastream"
+                            SET "phenomenonTime" = tstzrange($1, $2, '[]')
+                            WHERE id = $3;
+                        """
+                        await conn.execute(
+                            update_datastream_query,
+                            new_lower_bound,
+                            new_upper_bound,
+                            datastream_id,
+                        )
+
+            if payload.get("featuresofinterest_id"):
+                await update_datastream_observedArea(conn, datastream_id)
+        else:
+            query = f"""
+                UPDATE sensorthings."{table}"
+                SET {set_clause}
+                WHERE id = {record_id}
+                RETURNING id;
+            """
+            updated_id = await conn.fetchval(query, *payload.values())
+
+            if table == "FeaturesOfInterest":
+                query = """
+                    SELECT DISTINCT datastream_id
+                    FROM sensorthings."Observation"
+                    WHERE "featuresofinterest_id" = $1;
+                """
+                datastream_ids = await conn.fetch(query, updated_id)
+                for ds in datastream_ids:
+                    ds = ds["datastream_id"]
+                    await update_datastream_observedArea(conn, ds)
+        return updated_id
 
 
 async def updateLocation(payload, conn, location_id):
@@ -346,22 +349,38 @@ async def updateLocation(payload, conn, location_id):
                     )
                 thing_id = thing["@iot.id"]
                 check = await conn.fetchval(
-                    'UPDATE sensorthings."Thing_Location" SET thing_id = $1 WHERE location_id = $2',
+                    """
+                        UPDATE sensorthings."Thing_Location"
+                        SET thing_id = $1
+                        WHERE location_id = $2;
+                    """,
                     location_id,
                     thing_id,
                 )
                 if check is None:
                     await conn.execute(
-                        'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2) ON CONFLICT ("thing_id", "location_id") DO NOTHING',
+                        """
+                            INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id")
+                            VALUES ($1, $2)
+                            ON CONFLICT ("thing_id", "location_id") DO NOTHING;
+                        """,
                         thing_id,
                         location_id,
                     )
                 historicallocation_id = await conn.fetchval(
-                    'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id',
+                    """
+                        INSERT INTO sensorthings."HistoricalLocation" ("thing_id")
+                        VALUES ($1)
+                        RETURNING id;
+                    """,
                     thing_id,
                 )
                 await conn.execute(
-                    'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2)  ON CONFLICT ("location_id", "historicallocation_id") DO NOTHING',
+                    """
+                        INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id")
+                        VALUES ($1, $2)
+                        ON CONFLICT ("location_id", "historicallocation_id") DO NOTHING;
+                    """,
                     location_id,
                     historicallocation_id,
                 )
@@ -413,22 +432,38 @@ async def updateThing(payload, conn, thing_id):
                     )
                 location_id = location["@iot.id"]
                 check = await conn.fetchval(
-                    'UPDATE sensorthings."Thing_Location" SET location_id = $1 WHERE thing_id = $2',
+                    """
+                        UPDATE sensorthings."Thing_Location"
+                        SET location_id = $1
+                        WHERE thing_id = $2;
+                    """,
                     location_id,
                     thing_id,
                 )
                 if check is None:
                     await conn.execute(
-                        'INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id") VALUES ($1, $2) ON CONFLICT ("thing_id", "location_id") DO NOTHING',
+                        """
+                            INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id")
+                            VALUES ($1, $2)
+                            ON CONFLICT ("thing_id", "location_id") DO NOTHING;
+                        """,
                         thing_id,
                         location_id,
                     )
                 historicallocation_id = await conn.fetchval(
-                    'INSERT INTO sensorthings."HistoricalLocation" ("thing_id") VALUES ($1) RETURNING id',
+                    """
+                        INSERT INTO sensorthings."HistoricalLocation" ("thing_id")
+                        VALUES ($1)
+                        RETURNING id;
+                    """,
                     thing_id,
                 )
                 await conn.execute(
-                    'INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id") VALUES ($1, $2) ON CONFLICT ("location_id", "historicallocation_id") DO NOTHING',
+                    """
+                        INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id")
+                        VALUES ($1, $2)
+                        ON CONFLICT ("location_id", "historicallocation_id") DO NOTHING;
+                    """,
                     location_id,
                     historicallocation_id,
                 )
@@ -473,13 +508,21 @@ async def updateHistoricalLocation(payload, conn, historicallocation_id):
                     )
                 location_id = location["@iot.id"]
                 check = await conn.fetchval(
-                    'UPDATE sensorthings."Location_HistoricalLocation" SET location_id = $1 WHERE historicallocation_id = $2',
+                    """
+                        UPDATE sensorthings."Location_HistoricalLocation"
+                        SET location_id = $1
+                        WHERE historicallocation_id = $2;
+                    """,
                     location_id,
                     historicallocation_id,
                 )
                 if check is None:
                     await conn.execute(
-                        'INSERT INTO sensorthings."Location_HistoricalLocation" ("historicallocation_id", "location_id") VALUES ($1, $2) ON CONFLICT ("historicallocation_id", "location_id") DO NOTHING',
+                        """
+                            INSERT INTO sensorthings."Location_HistoricalLocation" ("historicallocation_id", "location_id")
+                            VALUES ($1, $2)
+                            ON CONFLICT ("historicallocation_id", "location_id") DO NOTHING;
+                        """,
                         historicallocation_id,
                         location_id,
                     )
@@ -736,6 +779,7 @@ def check_commit_versioning(payload):
         Exception: If the "message" field is missing in the "Commit" field.
 
     """
+
     if "Commit" not in payload:
         raise Exception("Commit field is required for versioning update.")
 
@@ -767,7 +811,11 @@ async def insertCommit(payload, conn):
 
         keys = ", ".join(f'"{key}"' for key in payload.keys())
         values_placeholders = ", ".join(f"${i+1}" for i in range(len(payload)))
-        query = f'INSERT INTO sensorthings."Commit" ({keys}) VALUES ({values_placeholders}) RETURNING id;'
+        query = f"""
+            INSERT INTO sensorthings."Commit" ({keys})
+            VALUES ({values_placeholders})
+            RETURNING id;
+        """
         return await conn.fetchval(query, *payload.values())
 
 
