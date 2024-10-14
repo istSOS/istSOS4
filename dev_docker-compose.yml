@@ -96,18 +96,6 @@ services:
     volumes:
       - ./istsos4_docs/mkdocs:/docs
 
-  tutorials:
-    image: quay.io/jupyter/scipy-notebook
-    profiles:
-      - profileName: "education"
-        displayName: "Education"
-        description: "This is the educational profile"
-        default: false
-    ports:
-      - "10000:8888"
-    volumes:
-      - ./istsos4_docs/tutorials:/home/jovyan/work
-
 volumes:
   v-istsos4-database-data:
     name: v-istsos4-database-data
