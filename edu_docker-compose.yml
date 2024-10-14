@@ -1,4 +1,3 @@
-version: "3.7"
 services:
   database:
     build:
@@ -28,7 +27,7 @@ services:
       context: ./fastapi
       dockerfile: Dockerfile
     environment:
-      HOSTNAME: ${HOSTNAME}
+      HOSTNAME: http://api:5000
       SUBPATH: ${SUBPATH}
       VERSION: ${VERSION}
       DEBUG: ${DEBUG}
@@ -98,11 +97,6 @@ services:
 
   tutorials:
     image: quay.io/jupyter/scipy-notebook
-    profiles:
-      - profileName: "education"
-        displayName: "Education"
-        description: "This is the educational profile"
-        default: false
     ports:
       - "10000:8888"
     volumes:

@@ -17,8 +17,20 @@ docker compose -f dev_docker-compose.yml up -d
 To switch off the services:
 
 ```sh
-docker compose -f dev-docker-compose.yml down
+docker compose -f dev_docker-compose.yml down
 ```
+## Start EDU environment for tutorial and learning
+
+```sh
+docker compose -f edu_docker-compose.yml up -d
+```
+
+To switch off the services:
+
+```sh
+docker compose -f edu_docker-compose.yml down
+```
+
 
 ## Use Sensor Things APIs
 

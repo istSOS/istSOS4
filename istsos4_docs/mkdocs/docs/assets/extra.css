@@ -1,0 +1,52 @@
+/* p { */
+/* color: #008558; */
+/* font-size: large; */
+/* font-family: "supsibook"; */
+[data-md-color-scheme="istsos"] {
+  /* --md-primary-fg-color: #008558; */
+  --md-primary-fg-color: hsl(140, 90%, 36%);
+  --md-default-bg-color: #f0f4f8;
+  /* --md-secondary-fg-color: #56647e; */
+  --md-secondary-fg-color: #f0ec07;
+  --md-accent-fg-color: rgb(144, 180, 254);
+  /* --md-default-fg-color--light: #008558; */
+  --md-default-fg-color--light: #051226;
+  /* --md-footer-bg-color--dark: #051226; */
+  --md-default-bg-color: #f0f4f8;
+  --md-footer-fg-color: #f0f4f8;
+  --md-footer-fg-color--lighter: #f0f4f8;
+  --md-typeset-a-color: #e11a27;
+
+  --md-footer-fg-color: #ffffff;
+  --md-footer-fg-color--light: #ffffff;
+  --md-footer-fg-color--lighter: #ffffff;
+  --md-footer-bg-color: #051226;
+  --md-footer-bg-color--dark: hsla(0, 0%, 0%, 0.32);
+}
+
+.md-typeset h1 {
+  color: hsl(140, 90%, 36%);
+}
+
+h2 {
+  color: #313237;
+  font-size: x-large;
+  /* font-family: ""; */
+}
+
+
+p {
+  font-size: 18px;
+  text-align: justify;
+}
+
+tbody {
+  font-size: 16px;
+}
+thead {
+  font-size: 16px;
+}
+
+r { color: Red }
+o { color: Orange }
+g { color: Green }
