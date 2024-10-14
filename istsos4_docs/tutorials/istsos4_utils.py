@@ -36,7 +36,7 @@ class sta:
     def query_api(
         self,
         entity: str,
-        entity_id: Optional[int] = None,
+        # entity_id: Optional[int] = None,
         params: Optional[Dict] = None,
     ) -> List[Dict]:
         """
