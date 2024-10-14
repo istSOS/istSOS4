@@ -1,5 +1,3 @@
-from contextlib import asynccontextmanager
-
 from app import (
     PG_MAX_OVERFLOW,
     PG_POOL_SIZE,
@@ -10,9 +8,8 @@ from app import (
     POSTGRES_PORT,
     POSTGRES_USER,
 )
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 
 dsn = f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
@@ -25,24 +22,6 @@ engine = create_async_engine(
     pool_pre_ping=True,
 )
 
-# Create the asynchronous session
-SessionLocal = sessionmaker(
-    autocommit=False, autoflush=False, bind=engine, class_=AsyncSession
-)
-
 Base = declarative_base()
 
 SCHEMA_NAME = "sensorthings"
-
-
-@asynccontextmanager
-async def get_db():
-    async with SessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()

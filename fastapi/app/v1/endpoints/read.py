@@ -16,7 +16,6 @@ from app import (
 )
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
-from app.db.sqlalchemy_db import get_db
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
 from app.utils.utils import build_nextLink
@@ -84,7 +83,7 @@ async def catch_all_get(
     Args:
         request (Request): The incoming request object.
         path_name (str): The path name extracted from the URL.
-        db (Session, optional): The database session. Defaults to Depends(get_db).
+        pgpool (Session): The database session.
 
     Returns:
         dict: The response data.
@@ -106,13 +105,14 @@ async def catch_all_get(
         data = None
 
         if REDIS:
-            print("Cache hit")
             result = redis.get(full_path)
             if result:
                 data = json.loads(result)
+                print("Cache hit")
+            else:
+                print("Cache miss")
 
         if not data:
-            print("Cache miss")
             data = sta2rest.STA2REST.convert_query(full_path)
 
         main_entity = data.get("main_entity")
