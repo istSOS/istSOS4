@@ -96,9 +96,13 @@ services:
       - ./istsos4_docs/mkdocs:/docs
 
   tutorials:
-    image: quay.io/jupyter/scipy-notebook
+    # image: quay.io/jupyter/scipy-notebook
+    build:
+      context: ./istsos4_docs/tutorials
+      dockerfile: dockerfile
     ports:
       - "10000:8888"
+    command: start-notebook.py --IdentityProvider.token=''
     volumes:
       - ./istsos4_docs/tutorials:/home/jovyan/work
 
