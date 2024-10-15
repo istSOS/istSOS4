@@ -10,17 +10,14 @@ from app import (
     HOSTNAME,
     PARTITION_CHUNK,
     REDIS,
-    STREAMING_MODE,
     SUBPATH,
     VERSION,
     VERSIONING,
 )
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
-from app.db.sqlalchemy_db import get_db
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
-from app.sta2rest.visitors import stream_results
 from app.utils.utils import build_nextLink
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.exc import TimeoutError
@@ -68,11 +65,16 @@ def __handle_root(request: Request):
     return response
 
 
+async def wrapped_result_generator(first_item, result):
+    yield first_item
+    async for item in result:
+        yield item
+
+
 @v1.api_route("/{path_name:path}", methods=["GET"])
 async def catch_all_get(
     request: Request,
     path_name: str,
-    db_sqlalchemy: Session = Depends(get_db),
     pgpool=Depends(get_pool),
 ):
     """
@@ -81,7 +83,7 @@ async def catch_all_get(
     Args:
         request (Request): The incoming request object.
         path_name (str): The path name extracted from the URL.
-        db (Session, optional): The database session. Defaults to Depends(get_db).
+        pgpool (Session): The database session.
 
     Returns:
         dict: The response data.
@@ -100,100 +102,45 @@ async def catch_all_get(
         if request.url.query:
             full_path += "?" + request.url.query
 
-        result = None
+        data = None
 
         if REDIS:
             result = redis.get(full_path)
-
-        if result:
-            print("Cache hit")
-            data = json.loads(result)
-            main_entity = data.get("main_entity")
-            main_query = data.get("main_query")
-            top_value = data.get("top_value")
-            is_count = data.get("is_count")
-            count_queries_redis = data.get("count_queries_redis")
-            as_of_value = data.get("as_of_value")
-            from_to_value = data.get("from_to_value")
-            single_result = data.get("single_result")
-
-            if STREAMING_MODE == "sqlalchemy":
-                async with db_sqlalchemy as session:
-                    if is_count:
-                        if COUNT_MODE == "LIMIT_ESTIMATE":
-                            query_estimate = await session.execute(
-                                text(count_queries_redis[0])
-                            )
-                            query_count = query_estimate.scalar()
-                            if query_count == COUNT_ESTIMATE_THRESHOLD:
-                                query_estimate = await session.execute(
-                                    text(count_queries_redis[1]["query"]),
-                                    count_queries_redis[1]["params"],
-                                )
-                                query_count = query_estimate.scalar()
-                        elif COUNT_MODE == "ESTIMATE_LIMIT":
-                            query_estimate = await session.execute(
-                                text(count_queries_redis[0]["query"]),
-                                count_queries_redis[0]["params"],
-                            )
-                            query_count = query_estimate.scalar()
-                            if query_count < COUNT_ESTIMATE_THRESHOLD:
-                                query_estimate = await session.execute(
-                                    text(count_queries_redis[1])
-                                )
-                                query_count = query_estimate.scalar()
-                        else:
-                            query_estimate = await session.execute(
-                                text(count_queries_redis[0])
-                            )
-                            query_count = query_estimate.scalar()
-
-                    iot_count = (
-                        '"@iot.count": ' + str(query_count) + ","
-                        if is_count and not single_result
-                        else ""
-                    )
-
-                    result = stream_results(
-                        main_entity,
-                        text(main_query),
-                        session,
-                        top_value,
-                        iot_count,
-                        as_of_value,
-                        from_to_value,
-                        single_result,
-                        full_path,
-                    )
+            if result:
+                data = json.loads(result)
+                print("Cache hit")
             else:
-                result = asyncpg_stream_results(
-                    main_entity,
-                    main_query,
-                    pgpool,
-                    top_value,
-                    is_count,
-                    count_queries_redis,
-                    as_of_value,
-                    from_to_value,
-                    single_result,
-                    full_path,
-                )
-        else:
-            if REDIS:
                 print("Cache miss")
-            result = await sta2rest.STA2REST.convert_query(
-                full_path, db_sqlalchemy
-            )
 
-        async def wrapped_result_generator(first_item):
-            yield first_item
-            async for item in result:
-                yield item
+        if not data:
+            data = sta2rest.STA2REST.convert_query(full_path)
+
+        main_entity = data.get("main_entity")
+        main_query = data.get("main_query")
+        top_value = data.get("top_value")
+        is_count = data.get("is_count")
+        count_queries_redis = data.get("count_queries_redis")
+        as_of_value = data.get("as_of_value")
+        from_to_value = data.get("from_to_value")
+        single_result = data.get("single_result")
+
+        result = asyncpg_stream_results(
+            main_entity,
+            main_query,
+            pgpool,
+            top_value,
+            is_count,
+            count_queries_redis,
+            as_of_value,
+            from_to_value,
+            single_result,
+            full_path,
+        )
 
         try:
             first_item = await anext(result)
             return StreamingResponse(
-                wrapped_result_generator(first_item),
+                wrapped_result_generator(first_item, result),
                 media_type="application/json",
                 status_code=status.HTTP_200_OK,
             )

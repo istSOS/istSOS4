@@ -365,7 +365,7 @@ class STA2REST:
         return entity + "_id"
 
     @staticmethod
-    async def convert_query(full_path: str, db) -> str:
+    def convert_query(full_path: str) -> str:
         """
         Converts a STA query to a PostgREST query.
 
@@ -543,14 +543,13 @@ class STA2REST:
         # Visit the query ast to convert it
         visitor = NodeVisitor(
             main_entity,
-            db,
             full_path,
             uri["ref"],
             uri["value"],
             single_result,
             entities,
         )
-        query_converted = await visitor.visit(query_ast)
+        query_converted = visitor.visit(query_ast)
 
         # Result format is allowed only for Observations
         if query_ast.result_format and main_entity != "Observation":
