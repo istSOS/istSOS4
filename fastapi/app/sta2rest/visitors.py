@@ -897,69 +897,33 @@ class NodeVisitor(Visitor):
 
         is_count = self.visit(node.count) if node.count else False
 
-        count_queries_redis = []
+        count_queries = []
         if is_count:
             if COUNT_MODE in {"LIMIT_ESTIMATE", "ESTIMATE_LIMIT"}:
-                compiled_query_text = str(
+                estimate_query_str = str(
                     query_estimate_count.compile(
                         dialect=engine.dialect,
                         compile_kwargs={"literal_binds": True},
                     )
                 )
-
+                limited_count_query_str = str(
+                    select(func.count())
+                    .select_from(
+                        query_estimate_count.limit(COUNT_ESTIMATE_THRESHOLD)
+                    )
+                    .compile(
+                        dialect=engine.dialect,
+                        compile_kwargs={"literal_binds": True},
+                    )
+                )
                 if COUNT_MODE == "LIMIT_ESTIMATE":
-                    count_queries_redis.append(
-                        str(
-                            select(func.count())
-                            .select_from(
-                                query_estimate_count.limit(
-                                    COUNT_ESTIMATE_THRESHOLD
-                                )
-                            )
-                            .compile(
-                                dialect=engine.dialect,
-                                compile_kwargs={"literal_binds": True},
-                            )
-                        )
-                    )
-
-                    if query_count == COUNT_ESTIMATE_THRESHOLD:
-                        count_queries_redis.append(
-                            {
-                                "query": "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count",
-                                "params": {
-                                    "compiled_query_text": str(
-                                        compiled_query_text
-                                    )
-                                },
-                            }
-                        )
+                    count_queries.append(limited_count_query_str)
+                    count_queries.append(str(estimate_query_str))
                 elif COUNT_MODE == "ESTIMATE_LIMIT":
-                    count_queries_redis.append(
-                        {
-                            "query": "SELECT sensorthings.count_estimate(:compiled_query_text) as estimated_count",
-                            "params": {
-                                "compiled_query_text": str(compiled_query_text)
-                            },
-                        }
-                    )
-                    if query_count < COUNT_ESTIMATE_THRESHOLD:
-                        count_queries_redis.append(
-                            str(
-                                select(func.count())
-                                .select_from(
-                                    query_estimate_count.limit(
-                                        COUNT_ESTIMATE_THRESHOLD
-                                    )
-                                )
-                                .compile(
-                                    dialect=engine.dialect,
-                                    compile_kwargs={"literal_binds": True},
-                                )
-                            )
-                        )
+                    count_queries.append(str(estimate_query_str))
+                    count_queries.append(limited_count_query_str)
             else:
-                count_queries_redis.append(
+                count_queries.append(
                     str(
                         query_count.compile(
                             dialect=engine.dialect,
@@ -1035,7 +999,6 @@ class NodeVisitor(Visitor):
         from_to_value = True if node.from_to else False
 
         if self.value:
-            print(self.value)
             value = None
             if isinstance(select_query[0], InstrumentedAttribute):
                 value = select_query[0].name
@@ -1045,17 +1008,19 @@ class NodeVisitor(Visitor):
                 main_query.c.json.op("->")(text(f"'{value}'"))
             ).select_from(main_query)
 
-        compiled_query_text = main_query.compile(
-            dialect=engine.dialect,
-            compile_kwargs={"literal_binds": True},
+        main_query_str = str(
+            main_query.compile(
+                dialect=engine.dialect,
+                compile_kwargs={"literal_binds": True},
+            )
         )
 
         main_query = {
             "main_entity": self.main_entity,
-            "main_query": str(compiled_query_text),
+            "main_query": main_query_str,
             "top_value": top_value,
             "is_count": is_count,
-            "count_queries_redis": count_queries_redis,
+            "count_queries": count_queries,
             "as_of_value": as_of_value,
             "from_to_value": from_to_value,
             "single_result": self.single_result,
