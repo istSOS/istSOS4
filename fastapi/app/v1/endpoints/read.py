@@ -119,7 +119,7 @@ async def catch_all_get(
         main_query = data.get("main_query")
         top_value = data.get("top_value")
         is_count = data.get("is_count")
-        count_queries_redis = data.get("count_queries_redis")
+        count_queries = data.get("count_queries")
         as_of_value = data.get("as_of_value")
         from_to_value = data.get("from_to_value")
         single_result = data.get("single_result")
@@ -130,7 +130,7 @@ async def catch_all_get(
             pgpool,
             top_value,
             is_count,
-            count_queries_redis,
+            count_queries,
             as_of_value,
             from_to_value,
             single_result,
@@ -177,7 +177,7 @@ async def asyncpg_stream_results(
     pgpool,
     top,
     is_count,
-    count_queries_redis,
+    count_queries,
     as_of_value,
     from_to_value,
     single_result,
@@ -187,27 +187,21 @@ async def asyncpg_stream_results(
         async with conn.transaction():
             if is_count:
                 if COUNT_MODE == "LIMIT_ESTIMATE":
-                    query_count = await conn.fetchval(count_queries_redis[0])
+                    query_count = await conn.fetchval(count_queries[0])
                     if query_count == COUNT_ESTIMATE_THRESHOLD:
                         query_count = await conn.fetchval(
                             "SELECT sensorthings.count_estimate($1) AS estimated_count",
-                            count_queries_redis[1]["params"][
-                                "compiled_query_text"
-                            ],
+                            count_queries[1],
                         )
                 elif COUNT_MODE == "ESTIMATE_LIMIT":
                     query_count = await conn.fetchval(
                         "SELECT sensorthings.count_estimate($1) AS estimated_count",
-                        count_queries_redis[0]["params"][
-                            "compiled_query_text"
-                        ],
+                        count_queries[0],
                     )
                     if query_count < COUNT_ESTIMATE_THRESHOLD:
-                        query_count = await conn.fetchval(
-                            count_queries_redis[1]
-                        )
+                        query_count = await conn.fetchval(count_queries[1])
                 else:
-                    query_count = await conn.fetchval(count_queries_redis[0])
+                    query_count = await conn.fetchval(count_queries[0])
 
             iot_count = (
                 '"@iot.count": ' + str(query_count) + ","
