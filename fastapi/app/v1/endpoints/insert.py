@@ -94,8 +94,10 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
                                     observation_payload, conn
                                 )
 
-                            _, observation_selfLink = await insertObservation(
-                                observation_payload, conn
+                            _, observation_selfLink = (
+                                await insertBulkObservation(
+                                    observation_payload, conn
+                                )
                             )
                             response_urls.append(observation_selfLink)
                         except Exception as e:
@@ -112,6 +114,145 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"code": 400, "type": "error", "message": str(e)},
         )
+
+
+async def insertBulkObservation(payload, conn, datastream_id=None):
+    """
+    Inserts observation data into the database.
+
+    Args:
+        payload (dict or list): The payload containing the observation(s) to be inserted.
+        conn (connection): The database connection object.
+        datastream_id (int, optional): The ID of the datastream associated with the observation. Defaults to None.
+
+    Returns:
+        tuple: A tuple containing the ID and selfLink of the inserted observation.
+
+    Raises:
+        Exception: If an error occurs during the insertion process.
+    """
+
+    try:
+        async with conn.transaction():
+            if isinstance(payload, dict):
+                payload = [payload]
+
+            observations = []
+
+            all_keys = set()
+
+            for obs in payload:
+                if datastream_id:
+                    obs["datastream_id"] = datastream_id
+
+                await handle_associations(
+                    obs,
+                    "Datastream",
+                    datastream_id,
+                    insertDatastream,
+                    conn,
+                )
+
+                if "FeatureOfInterest" in obs:
+                    if "@iot.id" in obs["FeatureOfInterest"]:
+                        features_of_interest_id = obs["FeatureOfInterest"][
+                            "@iot.id"
+                        ]
+                        check_iot_id_in_payload(
+                            obs["FeatureOfInterest"], "FeatureOfInterest"
+                        )
+                        select_query = f"""
+                            SELECT last_foi_id
+                            FROM sensorthings."Datastream"
+                            WHERE id = $1::bigint;
+                        """
+                        last_foi_id = await conn.fetchval(
+                            select_query, obs["datastream_id"]
+                        )
+                        if last_foi_id != features_of_interest_id:
+                            await update_datastream_last_foi_id(
+                                conn,
+                                features_of_interest_id,
+                                obs["datastream_id"],
+                            )
+                    else:
+                        features_of_interest_id, _ = (
+                            await insertFeaturesOfInterest(
+                                obs["FeatureOfInterest"],
+                                conn,
+                                obs["datastream_id"],
+                            )
+                        )
+                    obs.pop("FeatureOfInterest", None)
+                    obs["featuresofinterest_id"] = features_of_interest_id
+                else:
+                    await generate_feature_of_interest(obs, conn)
+
+                check_missing_properties(
+                    obs, ["Datastream", "FeaturesOfInterest"]
+                )
+                handle_datetime_fields(obs)
+                handle_result_field(obs)
+
+                if obs.get("phenomenonTime") is None:
+                    obs["phenomenonTime"] = datetime.now()
+
+                for key, value in obs.items():
+                    if isinstance(value, dict):
+                        obs[key] = json.dumps(value)
+                    all_keys.add(key)
+
+            all_keys = list(all_keys)
+
+            for obs in payload:
+                obs_tuple = []
+                for key in all_keys:
+                    obs_tuple.append(obs.get(key))
+                observations.append(tuple(obs_tuple))
+
+            keys = ", ".join(f'"{key}"' for key in all_keys)
+            values_placeholders = ", ".join(
+                f"({', '.join(f'${i * len(all_keys) + j + 1}' for j in range(len(all_keys)))})"
+                for i in range(len(observations))
+            )
+
+            insert_query = f"""
+                INSERT INTO sensorthings."Observation" ({keys})
+                VALUES {values_placeholders}
+                RETURNING id, "phenomenonTime", datastream_id, featuresofinterest_id;
+            """
+
+            values = [
+                value for observation in observations for value in observation
+            ]
+            result = await conn.fetch(insert_query, *values)
+
+            phenomenon_times = [record["phenomenonTime"] for record in result]
+            update_query = """
+                UPDATE sensorthings."Datastream"
+                SET "phenomenonTime" = tstzrange(
+                    LEAST($1::timestamptz, lower("phenomenonTime")),
+                    GREATEST($2::timestamptz, upper("phenomenonTime")),
+                    '[]'
+                )
+                WHERE id = $3::bigint;
+            """
+            await conn.execute(
+                update_query,
+                min(phenomenon_times),
+                max(phenomenon_times),
+                result[0]["datastream_id"],
+            )
+
+            observation_id = result[0]["id"]
+            observation_selfLink = (
+                f"{HOSTNAME}{SUBPATH}{VERSION}/Observations({observation_id})"
+            )
+
+            return observation_id, observation_selfLink
+
+    except Exception as e:
+        format_exception(e)
 
 
 @v1.api_route("/{path_name:path}", methods=["POST"])
