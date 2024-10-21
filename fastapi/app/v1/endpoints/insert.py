@@ -167,14 +167,14 @@ async def catch_all_post(
         if len(result["entities"]) == 1:
             [name, id] = result["entities"][0]
             relationships = {
-                "Observation": ["Datastream"],
+                "Observation": ["Datastream", "FeaturesOfInterest"],
                 "Location": ["Thing"],
                 "Thing": ["Location"],
                 "Datastream": ["Thing", "Sensor", "ObservedProperty"],
                 "HistoricalLocation": ["Thing"],
-                "Observation": ["FeaturesOfInterest"],
             }
-            if name in relationships.get(main_table, []):
+            related_entities = relationships.get(main_table, [])
+            if name in related_entities:
                 body[f"{name.lower()}_id"] = int(id)
 
         if DEBUG:
