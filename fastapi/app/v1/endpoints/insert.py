@@ -1093,15 +1093,25 @@ async def manage_thing_location_with_historical_location(
                 location_id,
             )
         else:
-            await conn.execute(
+            updated = await conn.fetchval(
                 """
                     UPDATE sensorthings."Thing_Location"
                     SET "location_id" = $1
-                    WHERE "thing_id" = $2;
+                    WHERE "thing_id" = $2
+                    RETURNING "thing_id";
                 """,
                 location_id,
                 thing_id,
             )
+            if not updated:
+                await conn.execute(
+                    """
+                    INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id")
+                    VALUES ($1, $2);
+                """,
+                    thing_id,
+                    location_id,
+                )
 
         if historical_location_id is None:
             insert_query = f"""

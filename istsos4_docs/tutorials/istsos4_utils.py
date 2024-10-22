@@ -1,4 +1,3 @@
-# Define a function that queries the API
 import datetime as dt
 import logging
 from pprint import pprint
@@ -6,7 +5,7 @@ from typing import (
     List,
     Dict,
     Optional,
-)  # Typing is optional in Python but helps with documentation and code editors
+)
 from warnings import warn
 
 import matplotlib.pyplot as plt
@@ -27,17 +26,14 @@ class sta:
         """
         self.base = base_url
 
-        # test if endpoint is reachable
         response = requests.get(f"{self.base}")
 
-        # Print the response
         if response.status_code != 200:
             print("Error:", response.status_code, response.text)
 
     def query_api(
         self,
         entity: str,
-        # entity_id: Optional[int] = None,
         params: Optional[Dict] = None,
     ) -> List[Dict]:
         """
@@ -69,7 +65,7 @@ class sta:
         else:
             data = response_json["value"]
 
-        # Loop over pages. get() returns None, which is "falsey", if nextLink doesn't exist.
+        # Loop over pages. get() returns None, which is "false", if nextLink doesn't exist.
         while next_link := response_json.get("@iot.nextLink"):
             response = requests.get(next_link)
             logging.info(f"query_api request: {response.url}")
@@ -88,38 +84,52 @@ class sta:
         Returns:
             pd.DataFrame: The mapped things
         """
-        # return pd.DataFrame(things)
         import folium
 
-        # Step 1: Query the API for Thing data
-        things = self.query_api("Things", "$expand=Locations")
+        map_center = center if center else [50.244, 8.1]
+        mymap = folium.Map(location=map_center, zoom_start=7)
 
-        # Step 2: Create a base map using folium
-        # Define the initial location of the map (centered around some coordinates)
-        map_center = [
-            0,
-            0,
-        ]  # This can be set to a reasonable default or updated based on data
-        mymap = folium.Map(location=map_center, zoom_start=2)
-
-        # Step 3: Add markers to the map for each Thing with a valid location
         if things:
             for thing in things:
-                # Extract the location data for each Thing
                 if thing.get("Locations"):
                     for location in thing["Locations"]:
                         coords = location["location"]["coordinates"]
                         lat, lon = (
                             coords[1],
                             coords[0],
-                        )  # GeoJSON uses [longitude, latitude]
-
-                        # Add a marker for each location
+                        )
                         folium.Marker(
                             location=[lat, lon],
-                            popup=f"Thing: {thing['name']}<br>Description: {thing['description']}",
                             tooltip=thing["name"],
                         ).add_to(mymap)
 
-        # Step 4: Display the map in Jupyter
+        return mymap
+
+    def map_datastreams(self, datastreams: List[Dict], center=None) -> pd.DataFrame:
+        """
+        Map the datastreams to a pandas dataframe
+        Args:
+            datastreams (List[Dict]): The datastreams to map
+        Returns:
+            pd.DataFrame: The mapped datastreams
+        """
+        import folium
+
+        map_center = center if center else [50.244, 8.1]
+        mymap = folium.Map(location=map_center, zoom_start=7)
+
+        if datastreams:
+            for datastream in datastreams:
+                observed_area = datastream.get("observedArea", None)
+                if observed_area:
+                    coordinates = observed_area["coordinates"][0]
+                    switched_coordinates = [[lat, lon] for lon, lat in coordinates]
+                    folium.Polygon(
+                        locations=switched_coordinates,
+                        tooltip=datastream["name"],
+                        color="crimson",
+                        fill=True,
+                        fillColor="crimson",
+                        fill_opacity=0.1
+                    ).add_to(mymap)
         return mymap
