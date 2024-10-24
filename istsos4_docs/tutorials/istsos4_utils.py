@@ -86,8 +86,8 @@ class sta:
         """
         import folium
 
-        map_center = center if center else [50.244, 8.1]
-        mymap = folium.Map(location=map_center, zoom_start=7)
+        map_center = center if center else [46.172245, 8.956099]
+        mymap = folium.Map(location=map_center, zoom_start=16)
 
         if things:
             for thing in things:
@@ -115,8 +115,8 @@ class sta:
         """
         import folium
 
-        map_center = center if center else [50.244, 8.1]
-        mymap = folium.Map(location=map_center, zoom_start=7)
+        map_center = center if center else [46.172245, 8.956099]
+        mymap = folium.Map(location=map_center, zoom_start=16)
 
         if datastreams:
             for datastream in datastreams:
