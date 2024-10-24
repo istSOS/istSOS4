@@ -214,6 +214,13 @@ async def asyncpg_stream_results(
             is_first_partition = True
             has_rows = False
 
+            if VERSIONING:
+                as_of_value = (
+                    as_of_value
+                    if as_of_value is not None
+                    else datetime.now().isoformat()
+                )
+
             while True:
                 partition = await conn.fetch(
                     f"FETCH {PARTITION_CHUNK} FROM my_cursor"
@@ -234,17 +241,20 @@ async def asyncpg_stream_results(
                     and entity != "Commit"
                     and not from_to_value
                 ):
-                    partition[0]["@iot.as_of"] = as_of_value
-
-                processed_partition = [
-                    ujson.loads(record["json"]) for record in partition
-                ]
-
-                partition_json = ujson.dumps(
-                    processed_partition,
-                    default=datetime.isoformat,
-                    escape_forward_slashes=False,
-                )[1:-1]
+                    partition_data = ujson.loads(partition[0]["json"])
+                    partition_data["@iot.as_of"] = as_of_value
+                    partition_json = ujson.dumps(
+                        partition_data,
+                        escape_forward_slashes=False,
+                    )
+                else:
+                    processed_partition = [
+                        ujson.loads(record["json"]) for record in partition
+                    ]
+                    partition_json = ujson.dumps(
+                        processed_partition,
+                        escape_forward_slashes=False,
+                    )[1:-1]
 
                 if is_first_partition:
                     if partition_len > 0 and not single_result:

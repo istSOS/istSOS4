@@ -990,11 +990,7 @@ class NodeVisitor(Visitor):
             func.row_to_json(literal_column("main_query")).label("json")
         ).select_from(main_query)
 
-        as_of_value = (
-            node.as_of.value
-            if node.as_of
-            else datetime.now() if VERSIONING else ""
-        )
+        as_of_value = node.as_of.value if node.as_of else None
 
         from_to_value = True if node.from_to else False
 

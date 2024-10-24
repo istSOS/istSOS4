@@ -27,7 +27,7 @@ BEGIN
 
         -- If the table is 'Datastream' and the column 'phenomenonTime' or columns 'observedArea' exist  and are updated
         IF TG_TABLE_NAME = 'Datastream' THEN
-            IF (NEW."phenomenonTime" IS DISTINCT FROM OLD."phenomenonTime") OR IF (NEW."observedArea" IS DISTINCT FROM OLD."observedArea") THEN
+            IF (NEW."phenomenonTime" IS DISTINCT FROM OLD."phenomenonTime") OR (NEW."observedArea" IS DISTINCT FROM OLD."observedArea") THEN
                 -- Skip systemTimeValidity update
                 RETURN NEW;
             END IF;
