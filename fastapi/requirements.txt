@@ -7,3 +7,4 @@ sqlalchemy>=1.4.0
 geoalchemy2
 ujson
 redis==5.0.3
+gunicorn
