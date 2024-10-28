@@ -19,7 +19,7 @@ async def get_pool():
 
         pgpool = await asyncpg.create_pool(
             dsn=dsn,
-            min_size=1,
+            min_size=PG_POOL_SIZE,
             max_size=PG_POOL_SIZE,
             timeout=PG_POOL_TIMEOUT,
             max_queries=50000,
