@@ -39,10 +39,9 @@ services:
       COUNT_ESTIMATE_THRESHOLD: ${COUNT_ESTIMATE_THRESHOLD}
       TOP_VALUE: ${TOP_VALUE}
       PARTITION_CHUNK: ${PARTITION_CHUNK}
-      EXPAND_MODE: ${EXPAND_MODE}
       REDIS: ${REDIS}
       EPSG: ${EPSG}
-    command: uvicorn --reload --workers 1 --host 0.0.0.0 --timeout-keep-alive 60 --port 5000 app.main:app
+    command: uvicorn --workers 2 --host 0.0.0.0 --timeout-keep-alive 75 --port 5000 app.main:app
     ports:
       - 8018:5000
     working_dir: /code

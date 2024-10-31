@@ -204,6 +204,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
 CREATE INDEX IF NOT EXISTS "idx_observation_datastream_id" ON sensorthings."Observation" USING btree ("datastream_id" ASC NULLS LAST) TABLESPACE pg_default;
 CREATE INDEX IF NOT EXISTS "idx_observation_featuresofinterest_id" ON sensorthings."Observation" USING btree ("featuresofinterest_id" ASC NULLS LAST) TABLESPACE pg_default;
 CREATE INDEX IF NOT EXISTS "idx_observation_observation_id_datastream_id" ON sensorthings."Observation" USING btree ("datastream_id" ASC NULLS LAST, "id" ASC NULLS LAST) TABLESPACE pg_default;
+CREATE INDEX IF NOT EXISTS "idx_observation_datastream_id_phtime" ON sensorthings."Observation" USING btree ("datastream_id" ASC NULLS LAST, "phenomenonTime" ASC NULLS LAST, "id" ASC NULLS LAST) TABLESPACE pg_default WHERE "datastream_id" IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Observation") RETURNS text AS $$
     SELECT '/Observations(' || $1.id || ')';
@@ -308,19 +309,27 @@ CREATE OR REPLACE FUNCTION sensorthings.expand(
     query_ text,
     fk_field_ text,
     fk_id_ integer,
-    limit_ integer DEFAULT 100,
+    limit_ integer DEFAULT 101,
     offset_ integer DEFAULT 0,
     one_to_many_ boolean DEFAULT true,
-	show_id boolean DEFAULT false)
+	show_id boolean DEFAULT false,
+    table_ text DEFAULT ''::text,
+    base_url_ text DEFAULT ''::text,
+    is_count boolean DEFAULT false,
+    count_mode_ text DEFAULT 'FULL'::text,
+	count_estimate_threshold_ integer DEFAULT 10000)
     RETURNS json
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
 AS $BODY$
 DECLARE
-    result json;
+    result jsonb;
+    next_link text;
     where_clause text;
 	id_column text := CASE WHEN show_id THEN 'id' ELSE 'id as "@iot.id"' END;
+    preliminary_count integer;
+	total_count integer;
 BEGIN
 
     IF one_to_many_ THEN
@@ -339,6 +348,62 @@ BEGIN
 				)',
 			fk_field_, 'id', id_column, query_, fk_field_, fk_id_, limit_, offset_
 		) INTO result;
+
+        IF jsonb_array_length(result) > limit_ - 1 THEN
+            result := result - (limit_ - 1);
+            next_link := base_url_ || table_ || '?$top=' || limit_ - 1 || '&$skip=' || (offset_ + limit_ - 1);
+        ELSE
+            next_link := NULL;
+        END IF;
+
+        IF is_count THEN
+            -- Handle count based on count_mode_
+            IF count_mode_ = 'FULL' THEN
+                -- Full count mode: get the exact count
+                EXECUTE format(
+                    'SELECT COUNT(*) FROM (%s) d WHERE d.%s = %s',
+                    query_, fk_field_, fk_id_
+                ) INTO total_count;
+            
+            ELSIF count_mode_ = 'LIMIT_ESTIMATE' THEN
+                -- Limit estimate mode: get preliminary count with a limit
+                EXECUTE format(
+                    'SELECT COUNT(*) FROM (%s) d WHERE d.%s = %s LIMIT %s',
+                    query_, fk_field_, fk_id_, count_estimate_threshold_
+                ) INTO preliminary_count;
+
+                IF preliminary_count == count_estimate_threshold_ THEN
+                    -- Use count estimate if preliminary count exceeds threshold
+                    EXECUTE format(
+                        'SELECT sensorthings.count_estimate(
+                            ''SELECT 1 FROM (%s) d WHERE d.%s = %s'')',
+                        replace(query_, '''', ''''''), fk_field_, fk_id_
+                    ) INTO total_count;
+                ELSE
+                    -- Use preliminary count if below threshold
+                    total_count := preliminary_count;
+                END IF;
+
+            ELSIF count_mode_ = 'ESTIMATE_LIMIT' THEN
+                -- Estimate limit mode: perform count estimate first
+                EXECUTE format(
+                    'SELECT sensorthings.count_estimate(
+                        ''SELECT 1 FROM (%s) d WHERE d.%s = %s'')',
+                    replace(query_, '''', ''''''), fk_field_, fk_id_
+                ) INTO total_count;
+
+                -- Perform a precise count with limit if the estimate is below threshold
+                IF total_count < count_estimate_threshold_ THEN
+                    EXECUTE format(
+                        'SELECT COUNT(*) FROM (%s) d WHERE d.%s = %s LIMIT %s',
+                        query_, fk_field_, fk_id_, count_estimate_threshold_
+                    ) INTO total_count;
+                END IF;
+            END IF;
+            RETURN json_build_object(table_, result, table_ || '@iot.nextLink', next_link, table_ || '@iot.count', total_count);
+        END IF;
+        
+        RETURN json_build_object(table_, result, table_ || '@iot.nextLink', next_link);
 
     ELSE
 		-- Adjust where_clause based on whether fk_id_ is NULL
@@ -361,115 +426,11 @@ BEGIN
 						) t
 					), ''{}''::jsonb
 				)',
-			'id', id_column, query_, where_clause, limit_, offset_
+			'id', id_column, query_, where_clause, limit_ - 1, offset_
 		) INTO result;
 		
+        RETURN result;
 	END IF;
-
-    -- Return the result
-    RETURN result;
-END;
-$BODY$;
-
-CREATE OR REPLACE FUNCTION sensorthings.next_link_expand(
-    query_ text,
-    fk_field_ text,
-    fk_id_ integer,
-    limit_ integer DEFAULT 101,
-    offset_ integer DEFAULT 0,
-	table_ text DEFAULT ''::text)
-    RETURNS text
-    LANGUAGE 'plpgsql'
-    COST 100
-    VOLATILE PARALLEL UNSAFE
-AS $BODY$
-DECLARE
-    result json;
-BEGIN
-    EXECUTE format(
-		'SELECT COALESCE
-			(
-				(
-					SELECT jsonb_agg(row_to_json(t)::jsonb - %L - %L)
-					FROM (
-						SELECT *
-						FROM (%s) d
-						WHERE d.%s = %s
-						LIMIT %s OFFSET %s
-					) t
-				), ''[]''
-			)',
-		fk_field_, 'id', query_, fk_field_, fk_id_, limit_, offset_
-	) INTO result;
-
-	IF json_array_length(result) > limit_ - 1 THEN
-		RETURN table_ || '?$top=' || limit_ - 1 || '&$skip=' || (offset_ + limit_ - 1);
-	END IF;
-
-    RETURN NULL;
-END;
-$BODY$;
-
-CREATE OR REPLACE FUNCTION sensorthings.count_expand(
-    query_ text,
-    fk_field_ text,
-    fk_id_ integer,
-	count_mode_ text DEFAULT 'FULL'::text,
-	count_estimate_threshold_ integer DEFAULT 10000)
-    RETURNS integer
-    LANGUAGE 'plpgsql'
-    COST 100
-    VOLATILE PARALLEL UNSAFE
-AS $BODY$
-DECLARE
-	preliminary_count integer;
-	total_count integer;
-BEGIN
-	-- Handle count based on count_mode_
-    IF count_mode_ = 'FULL' THEN
-        -- Full count mode: get the exact count
-        EXECUTE format(
-            'SELECT COUNT(*) FROM (%s) d WHERE d.%s = %s',
-            query_, fk_field_, fk_id_
-        ) INTO total_count;
-    
-    ELSIF count_mode_ = 'LIMIT_ESTIMATE' THEN
-        -- Limit estimate mode: get preliminary count with a limit
-        EXECUTE format(
-            'SELECT COUNT(*) FROM (%s) d WHERE d.%s = %s LIMIT %s',
-            query_, fk_field_, fk_id_, count_estimate_threshold_
-        ) INTO preliminary_count;
-
-        IF preliminary_count == count_estimate_threshold_ THEN
-            -- Use count estimate if preliminary count exceeds threshold
-            EXECUTE format(
-                'SELECT sensorthings.count_estimate(
-                    ''SELECT 1 FROM (%s) d WHERE d.%s = %s'')',
-                replace(query_, '''', ''''''), fk_field_, fk_id_
-            ) INTO total_count;
-        ELSE
-            -- Use preliminary count if below threshold
-            total_count := preliminary_count;
-        END IF;
-
-    ELSIF count_mode_ = 'ESTIMATE_LIMIT' THEN
-        -- Estimate limit mode: perform count estimate first
-        EXECUTE format(
-            'SELECT sensorthings.count_estimate(
-                ''SELECT 1 FROM (%s) d WHERE d.%s = %s'')',
-            replace(query_, '''', ''''''), fk_field_, fk_id_
-        ) INTO total_count;
-
-        -- Perform a precise count with limit if the estimate is below threshold
-        IF total_count < count_estimate_threshold_ THEN
-            EXECUTE format(
-                'SELECT COUNT(*) FROM (%s) d WHERE d.%s = %s LIMIT %s',
-                query_, fk_field_, fk_id_, count_estimate_threshold_
-            ) INTO total_count;
-        END IF;
-    END IF;
-	
-    RETURN total_count;
 
 END;
 $BODY$;
@@ -480,17 +441,25 @@ CREATE OR REPLACE FUNCTION sensorthings.expand_many2many(
 	fk_id_ integer,
 	related_fk_field1_ text,
 	related_fk_field2_ text,
-	limit_ integer DEFAULT 100,
+	limit_ integer DEFAULT 101,
 	offset_ integer DEFAULT 0,
-    show_id boolean DEFAULT false)
+    show_id boolean DEFAULT false,
+    table_ text DEFAULT ''::text,
+    base_url_ text DEFAULT ''::text,
+    is_count boolean DEFAULT false,
+    count_mode_ text DEFAULT 'FULL'::text,
+	count_estimate_threshold_ integer DEFAULT 10000)
     RETURNS json
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
 AS $BODY$
 DECLARE
-    result json;
+    result jsonb;
+    next_link text;
     id_column text := CASE WHEN show_id THEN 'm.id' ELSE 'm.id as "@iot.id"' END;
+    preliminary_count integer;
+	total_count integer;
 BEGIN
     EXECUTE format(
         'SELECT COALESCE
@@ -509,145 +478,92 @@ BEGIN
 			'id', id_column, query_, join_table_, related_fk_field1_, related_fk_field2_, fk_id_, limit_, offset_
     ) INTO result;
 
-    RETURN result;
-END;
-$BODY$;
+    IF jsonb_array_length(result) > limit_ - 1 THEN
+        result := result - (limit_ - 1);
+        next_link := base_url_ || table_ || '?$top=' || limit_ - 1 || '&$skip=' || (offset_ + limit_ - 1);
+    ELSE
+        next_link := NULL;
+    END IF;
 
-CREATE OR REPLACE FUNCTION sensorthings.next_link_expand_many2many(
-	query_ text,
-	join_table_ text,
-	fk_id_ integer,
-	related_fk_field1_ text,
-	related_fk_field2_ text,
-	limit_ integer DEFAULT 101,
-	offset_ integer DEFAULT 0)
-    RETURNS text
-    LANGUAGE 'plpgsql'
-    COST 100
-    VOLATILE PARALLEL UNSAFE
-AS $BODY$
-DECLARE
-    result json;
-BEGIN
-    EXECUTE format(
-        'SELECT COALESCE
-			(
-				(
-					SELECT jsonb_agg(row_to_json(t)::jsonb - %L)
-			        FROM (
-						SELECT m.* 
-				      	FROM (%s) m
-				      	JOIN %s jt ON m.id = jt.%s
-				      	WHERE jt.%s = %s
-				      	LIMIT %s OFFSET %s
-					) t
-				), ''[]''
-			)',
-			'id', query_, join_table_, related_fk_field1_, related_fk_field2_, fk_id_, limit_, offset_
-    ) INTO result;
+    IF is_count THEN
+        -- Handle count based on count_mode_
+        IF count_mode_ = 'FULL' THEN
+            -- Full count mode: get the exact count
+            EXECUTE format(
+                'SELECT COUNT(*) FROM (%s) m 
+                JOIN %s jt ON m.id = jt.%s
+                WHERE jt.%s = %s',
+                query_,
+                join_table_,
+                related_fk_field1_,
+                related_fk_field2_,
+                fk_id_
+            ) INTO total_count;
 
-    IF json_array_length(result) > limit_ - 1 THEN
-		RETURN table_ || '?$top=' || limit_ - 1 || '&$skip=' || (offset_ + limit_ - 1);
-	END IF;
+        ELSIF count_mode_ = 'LIMIT_ESTIMATE' THEN
+            -- Limit estimate mode: get preliminary count with a limit
+            EXECUTE format(
+                'SELECT COUNT(*) FROM (%s) m 
+                JOIN %s jt ON m.id = jt.%s
+                WHERE jt.%s = %s
+                LIMIT %s',
+                query_,
+                join_table_,
+                related_fk_field1_,
+                related_fk_field2_,
+                fk_id_,
+                count_estimate_threshold_
+            ) INTO preliminary_count;
 
-    -- Return the result
-    RETURN NULL;
-END;
-$BODY$;
+            IF preliminary_count = count_estimate_threshold_ THEN
+                -- Use count estimate if preliminary count exceeds threshold
+                EXECUTE format(
+                    'SELECT sensorthings.count_estimate(''SELECT 1 FROM (%s) m 
+                    JOIN %s jt ON m.id = jt.%s
+                    WHERE jt.%s = %s'')',
+                    replace(query_, '''', ''''''),
+                    join_table_,
+                    related_fk_field1_,
+                    related_fk_field2_,
+                    fk_id_
+                ) INTO total_count;
+            ELSE
+                -- Use preliminary count if below threshold
+                total_count := preliminary_count;
+            END IF;
 
-CREATE OR REPLACE FUNCTION sensorthings.count_expand_many2many(
-	query_ text,
-	join_table_ text,
-	fk_id_ integer,
-	related_fk_field1_ text,
-	related_fk_field2_ text,
-	count_mode_ text DEFAULT 'FULL'::text,
-	count_estimate_threshold_ integer DEFAULT 10000)
-    RETURNS integer
-    LANGUAGE 'plpgsql'
-    COST 100
-    VOLATILE PARALLEL UNSAFE
-AS $BODY$
-DECLARE
-    preliminary_count integer;
-	total_count integer;
-BEGIN
-    -- Handle count based on count_mode_
-	IF count_mode_ = 'FULL' THEN
-		-- Full count mode: get the exact count
-		EXECUTE format(
-			'SELECT COUNT(*) FROM (%s) m 
-			JOIN %s jt ON m.id = jt.%s
-			WHERE jt.%s = %s',
-			query_,
-			join_table_,
-			related_fk_field1_,
-			related_fk_field2_,
-			fk_id_
-		) INTO total_count;
+        ELSIF count_mode_ = 'ESTIMATE_LIMIT' THEN
+            -- Estimate limit mode: perform count estimate first
+            EXECUTE format(
+                'SELECT sensorthings.count_estimate(''SELECT 1 FROM (%s) m 
+                JOIN %s jt ON m.id = jt.%s
+                WHERE jt.%s = %s'')',
+                replace(query_, '''', ''''''),
+                join_table_,
+                related_fk_field1_,
+                related_fk_field2_,
+                fk_id_
+            ) INTO total_count;
 
-	ELSIF count_mode_ = 'LIMIT_ESTIMATE' THEN
-		-- Limit estimate mode: get preliminary count with a limit
-		EXECUTE format(
-			'SELECT COUNT(*) FROM (%s) m 
-			JOIN %s jt ON m.id = jt.%s
-			WHERE jt.%s = %s
-			LIMIT %s',
-			query_,
-			join_table_,
-			related_fk_field1_,
-			related_fk_field2_,
-			fk_id_,
-			count_estimate_threshold_
-		) INTO preliminary_count;
-
-		IF preliminary_count = count_estimate_threshold_ THEN
-			-- Use count estimate if preliminary count exceeds threshold
-			EXECUTE format(
-				'SELECT sensorthings.count_estimate(''SELECT 1 FROM (%s) m 
-				JOIN %s jt ON m.id = jt.%s
-				WHERE jt.%s = %s'')',
-				replace(query_, '''', ''''''),
-				join_table_,
-				related_fk_field1_,
-				related_fk_field2_,
-				fk_id_
-			) INTO total_count;
-		ELSE
-			-- Use preliminary count if below threshold
-			total_count := preliminary_count;
-		END IF;
-
-	ELSIF count_mode_ = 'ESTIMATE_LIMIT' THEN
-		-- Estimate limit mode: perform count estimate first
-		EXECUTE format(
-			'SELECT sensorthings.count_estimate(''SELECT 1 FROM (%s) m 
-			JOIN %s jt ON m.id = jt.%s
-			WHERE jt.%s = %s'')',
-			replace(query_, '''', ''''''),
-			join_table_,
-			related_fk_field1_,
-			related_fk_field2_,
-			fk_id_
-		) INTO total_count;
-
-		-- Perform a precise count with limit if the estimate is below threshold
-		IF total_count < count_estimate_threshold_ THEN
-			EXECUTE format(
-				'SELECT COUNT(*) FROM (%s) m 
-				JOIN %s jt ON m.id = jt.%s
-				WHERE jt.%s = %s
-				LIMIT %s',
-				query_,
-				join_table_,
-				related_fk_field1_,
-				related_fk_field2_,
-				fk_id_,
-				count_estimate_threshold_
-			) INTO total_count;
-		END IF;
-	END IF;
-
-	RETURN total_count;
+            -- Perform a precise count with limit if the estimate is below threshold
+            IF total_count < count_estimate_threshold_ THEN
+                EXECUTE format(
+                    'SELECT COUNT(*) FROM (%s) m 
+                    JOIN %s jt ON m.id = jt.%s
+                    WHERE jt.%s = %s
+                    LIMIT %s',
+                    query_,
+                    join_table_,
+                    related_fk_field1_,
+                    related_fk_field2_,
+                    fk_id_,
+                    count_estimate_threshold_
+                ) INTO total_count;
+            END IF;
+        END IF;
+        RETURN json_build_object(table_, result, table_ || '@iot.nextLink', next_link, table_ || '@iot.count', total_count);
+    END IF;
+    
+    RETURN json_build_object(table_, result, table_ || '@iot.nextLink', next_link);
 END;
 $BODY$;
