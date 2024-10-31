@@ -281,7 +281,7 @@ class NodeVisitor(Visitor):
                     expand_identifier.subquery.orderby,
                     expand_identifier.identifier,
                 )
-                get_orderby_attr(attrs, orders)
+                ordering = get_orderby_attr(attrs, orders)
             else:
                 ordering = [asc(getattr(sub_entity, "id"))]
 
@@ -716,7 +716,7 @@ class NodeVisitor(Visitor):
             attrs, orders = self.visit_OrderByNode(
                 node.orderby, self.main_entity
             )
-            get_orderby_attr(attrs, orders)
+            ordering = get_orderby_attr(attrs, orders)
         else:
             ordering = [asc(getattr(main_entity, "id"))]
 
