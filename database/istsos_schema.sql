@@ -337,16 +337,16 @@ BEGIN
 			'SELECT COALESCE
 				(
 					(
-						SELECT jsonb_agg(row_to_json(t)::jsonb - %L - %L)
+						SELECT jsonb_agg(row_to_json(%I)::jsonb - %L - %L)
 						FROM (
 							SELECT %s, *
 							FROM (%s) d
 							WHERE d.%s = %s
 							LIMIT %s OFFSET %s
-						) t
+						) %I
 					), ''[]''
 				)',
-			fk_field_, 'id', id_column, query_, fk_field_, fk_id_, limit_, offset_
+			table_, fk_field_, 'id', id_column, query_, fk_field_, fk_id_, limit_, offset_, table_
 		) INTO result;
 
         IF jsonb_array_length(result) > limit_ - 1 THEN
@@ -417,16 +417,16 @@ BEGIN
 			'SELECT COALESCE
 				(
 					(
-						SELECT row_to_json(t)::jsonb - %L
+						SELECT row_to_json(%I)::jsonb - %L
 						FROM (
 							SELECT %s, * 
 							FROM (%s) d 
 							WHERE %s
 							LIMIT %s OFFSET %s
-						) t
+						) %I
 					), ''{}''::jsonb
 				)',
-			'id', id_column, query_, where_clause, limit_ - 1, offset_
+			table_, 'id', id_column, query_, where_clause, limit_ - 1, offset_, table_
 		) INTO result;
 		
         RETURN result;
@@ -465,17 +465,17 @@ BEGIN
         'SELECT COALESCE
 			(
 				(
-					SELECT jsonb_agg(row_to_json(t)::jsonb - %L)
+					SELECT jsonb_agg(row_to_json(%I)::jsonb - %L)
 			        FROM (
 						SELECT %s, m.* 
 				      	FROM (%s) m
 				      	JOIN %s jt ON m.id = jt.%s
 				      	WHERE jt.%s = %s
 				      	LIMIT %s OFFSET %s
-					) t
+					) %I
 				), ''[]''
 			)',
-			'id', id_column, query_, join_table_, related_fk_field1_, related_fk_field2_, fk_id_, limit_, offset_
+			table_, 'id', id_column, query_, join_table_, related_fk_field1_, related_fk_field2_, fk_id_, limit_, offset_, table_
     ) INTO result;
 
     IF jsonb_array_length(result) > limit_ - 1 THEN
