@@ -7,6 +7,7 @@ from app.db.asyncpg_db import get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
 from app.v1.endpoints.update_patch import updateDatastream, updateObservation
+from asyncpg.types import Range
 from fastapi.responses import JSONResponse, Response
 
 from fastapi import APIRouter, Depends, Request, status
@@ -195,7 +196,12 @@ async def insertBulkObservation(payload, conn, datastream_id=None):
                 handle_result_field(obs)
 
                 if obs.get("phenomenonTime") is None:
-                    obs["phenomenonTime"] = datetime.now()
+                    current_time = datetime.now()
+                    obs["phenomenonTime"] = Range(
+                        current_time,
+                        current_time,
+                        upper_inc=True,
+                    )
 
                 for key, value in obs.items():
                     if isinstance(value, dict):
@@ -219,7 +225,7 @@ async def insertBulkObservation(payload, conn, datastream_id=None):
             insert_query = f"""
                 INSERT INTO sensorthings."Observation" ({keys})
                 VALUES {values_placeholders}
-                RETURNING id, "phenomenonTime", datastream_id, featuresofinterest_id;
+                RETURNING id, lower("phenomenonTime"), upper("phenomenonTime"), datastream_id, featuresofinterest_id;
             """
 
             values = [
@@ -227,7 +233,8 @@ async def insertBulkObservation(payload, conn, datastream_id=None):
             ]
             result = await conn.fetch(insert_query, *values)
 
-            phenomenon_times = [record["phenomenonTime"] for record in result]
+            min_phenomenon_times = [record["lower"] for record in result]
+            max_phenomenon_times = [record["upper"] for record in result]
             update_query = """
                 UPDATE sensorthings."Datastream"
                 SET "phenomenonTime" = tstzrange(
@@ -239,8 +246,8 @@ async def insertBulkObservation(payload, conn, datastream_id=None):
             """
             await conn.execute(
                 update_query,
-                min(phenomenon_times),
-                max(phenomenon_times),
+                min(min_phenomenon_times),
+                max(max_phenomenon_times),
                 result[0]["datastream_id"],
             )
 
@@ -856,7 +863,12 @@ async def insertObservation(
             handle_result_field(payload)
 
             if payload.get("phenomenonTime") is None:
-                payload["phenomenonTime"] = datetime.now()
+                current_time = datetime.now()
+                payload["phenomenonTime"] = Range(
+                    current_time,
+                    current_time,
+                    upper_inc=True,
+                )
 
             observation_id, observation_self_link = await insert_record(
                 payload, conn, "Observation"
@@ -866,14 +878,15 @@ async def insertObservation(
                 UPDATE sensorthings."Datastream"
                 SET "phenomenonTime" = tstzrange(
                     LEAST($1::timestamptz, lower("phenomenonTime")),
-                    GREATEST($1::timestamptz, upper("phenomenonTime")),
+                    GREATEST($2::timestamptz, upper("phenomenonTime")),
                     '[]'
                 )
-                WHERE id = $2::bigint;
+                WHERE id = $3::bigint;
             """
             await conn.execute(
                 update_query,
-                payload["phenomenonTime"],
+                payload["phenomenonTime"].lower,
+                payload["phenomenonTime"].upper,
                 payload["datastream_id"],
             )
 

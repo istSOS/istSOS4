@@ -20,10 +20,19 @@ def handle_datetime_fields(payload):
             if "/" in payload[key]:
                 start_time, end_time = payload[key].split("/")
                 payload[key] = Range(
-                    parser.parse(start_time), parser.parse(end_time)
+                    parser.parse(start_time),
+                    parser.parse(end_time),
+                    upper_inc=True,
                 )
             else:
-                payload[key] = parser.parse(payload[key])
+                if key == "phenomenonTime":
+                    payload[key] = Range(
+                        parser.parse(payload[key]),
+                        parser.parse(payload[key]),
+                        upper_inc=True,
+                    )
+                else:
+                    payload[key] = parser.parse(payload[key])
 
 
 def handle_result_field(payload):
@@ -38,13 +47,16 @@ def handle_result_field(payload):
     """
     for key in list(payload.keys()):
         if key == "result":
-            result_type, column_name = get_result_type_and_column(payload[key])
-            payload[column_name] = payload[key]
+            result_type, values, columns = get_result_type_and_column(
+                payload[key]
+            )
+            for value, column in zip(values, columns):
+                payload[column] = value
             payload["resultType"] = result_type
             payload.pop("result")
 
 
-def get_result_type_and_column(input_string):
+def get_result_type_and_column(input):
     """
     Determines the result type and column name based on the input string.
 
@@ -57,33 +69,34 @@ def get_result_type_and_column(input_string):
     Raises:
         Exception: If the result cannot be cast to a valid type.
     """
-    try:
-        value = eval(str(input_string))
-    except (SyntaxError, NameError):
-        result_type = 0
-        column_name = "resultString"
-    else:
-        if isinstance(value, int):
-            result_type = 1
-            column_name = "resultInteger"
-        elif isinstance(value, float):
-            result_type = 2
-            column_name = "resultDouble"
-        elif isinstance(value, dict):
-            result_type = 4
-            column_name = "resultJSON"
-        else:
-            result_type = None
-            column_name = None
 
-    if input_string in ["true", "false"]:
+    result_type = None
+    values = []
+    columns = []
+    if isinstance(input, str):
         result_type = 3
-        column_name = "resultBoolean"
+        columns.append("resultString")
+        values.append(input)
+    elif isinstance(input, dict):
+        result_type = 2
+        columns.append("resultJSON")
+        values.append(input)
+    elif isinstance(input, bool):
+        result_type = 1
+        columns.append("resultBoolean")
+        values.append(input)
+        columns.append("resultString")
+        values.append(str(input).lower())
+    elif isinstance(input, int) or isinstance(input, float):
+        result_type = 0
+        columns.append("resultNumber")
+        values.append(input)
+        columns.append("resultString")
+        values.append(str(input))
 
     if result_type is not None:
-        return result_type, column_name
-    else:
-        raise Exception("Cannot cast result to a valid type")
+        return result_type, values, columns
+    raise Exception("Cannot cast result to a valid type")
 
 
 def response2jsonfile(request, response, filename, body="", status_code=200):

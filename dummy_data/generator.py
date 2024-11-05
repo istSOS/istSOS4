@@ -6,6 +6,7 @@ from datetime import datetime, time
 
 import asyncpg
 import isodate
+from asyncpg.types import Range
 
 create_dummy_data = int(os.getenv("DUMMY_DATA"))
 delete_dummy_data = int(os.getenv("CLEAR_DATA"))
@@ -296,7 +297,7 @@ async def insert_observations(conn, observations):
         schema_name="sensorthings",
         columns=[
             "phenomenonTime",
-            "resultInteger",
+            "resultNumber",
             "resultType",
             "datastream_id",
             "featuresofinterest_id",
@@ -305,7 +306,7 @@ async def insert_observations(conn, observations):
 
 
 async def update_datastream_phenomenon_time(conn, observations, datastream_id):
-    phenomenon_times = [record[0] for record in observations]
+    phenomenon_times = [record[0].lower for record in observations]
 
     update_sql = """
         UPDATE sensorthings."Datastream"
@@ -378,15 +379,20 @@ async def generate_observations(conn):
 
         while phenomenonTime < (date + interval):
             phenomenonTime += frequency
-            resultInteger = random.randint(1, 100)
+            phenomenonTimeRange = Range(
+                phenomenonTime,
+                phenomenonTime,
+                upper_inc=True,
+            )
+            resultNumber = random.randint(1, 100)
             resultType = 1
             datastream_id = j
             featuresofinterest_id = random.randint(1, n_things)
 
             observations.append(
                 (
-                    phenomenonTime,
-                    resultInteger,
+                    phenomenonTimeRange,
+                    resultNumber,
                     resultType,
                     datastream_id,
                     featuresofinterest_id,

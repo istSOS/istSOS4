@@ -270,19 +270,22 @@ async def update_record(payload, conn, table, record_id):
                 datastream_phenomenon_time = await conn.fetchval(
                     datastream_query, datastream_id
                 )
-                if datastream_phenomenon_time:
+                if datastream_phenomenon_time and obs_phenomenon_time:
+                    obs_lower = obs_phenomenon_time.lower
+                    obs_upper = obs_phenomenon_time.upper
+                    datastream_lower = datastream_phenomenon_time.lower
+                    datastream_upper = datastream_phenomenon_time.upper
                     if (
-                        obs_phenomenon_time < datastream_phenomenon_time.lower
-                        or obs_phenomenon_time
-                        > datastream_phenomenon_time.upper
+                        obs_lower < datastream_lower
+                        or obs_upper > datastream_upper
                     ):
                         new_lower_bound = min(
-                            obs_phenomenon_time,
-                            datastream_phenomenon_time.lower,
+                            obs_lower,
+                            datastream_lower,
                         )
                         new_upper_bound = max(
-                            obs_phenomenon_time,
-                            datastream_phenomenon_time.upper,
+                            obs_upper,
+                            datastream_upper,
                         )
                         update_datastream_query = """
                             UPDATE sensorthings."Datastream"
