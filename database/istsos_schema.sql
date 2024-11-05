@@ -186,12 +186,11 @@ $$ LANGUAGE SQL;
 
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
-    "phenomenonTime" TIMESTAMPTZ DEFAULT NOW(),
+    "phenomenonTime" tstzrange DEFAULT tstzrange(NOW(), NOW(), '[]'),
     "resultTime" TIMESTAMPTZ DEFAULT NULL,
     "resultType" INT NOT NULL,
     "resultString" TEXT,
-    "resultInteger" INT,
-    "resultDouble" DOUBLE PRECISION,
+    "resultNumber" DOUBLE PRECISION,
     "resultBoolean" BOOLEAN,
     "resultJSON" jsonb,
     "resultQuality" jsonb DEFAULT NULL,
@@ -221,11 +220,10 @@ $$ LANGUAGE SQL;
 CREATE OR REPLACE FUNCTION result(sensorthings."Observation") RETURNS jsonb AS $$
 BEGIN
     RETURN CASE 
-        WHEN $1."resultType" = 0 THEN to_jsonb($1."resultString")
-        WHEN $1."resultType" = 1 THEN to_jsonb($1."resultInteger")
-        WHEN $1."resultType" = 2 THEN to_jsonb($1."resultDouble")
-        WHEN $1."resultType" = 3 THEN to_jsonb($1."resultBoolean")
-        WHEN $1."resultType" = 4 THEN $1."resultJSON"
+        WHEN $1."resultType" = 0 THEN to_jsonb($1."resultNumber")
+        WHEN $1."resultType" = 1 THEN to_jsonb($1."resultBoolean")
+        WHEN $1."resultType" = 2 THEN $1."resultJSON"
+        WHEN $1."resultType" = 3 THEN to_jsonb($1."resultString")
         ELSE NULL::jsonb
     END;
 END;

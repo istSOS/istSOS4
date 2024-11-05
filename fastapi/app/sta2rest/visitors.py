@@ -891,10 +891,38 @@ def get_select_attr(attr, label, nested=False, as_of=None):
     if isinstance(attr.type, Geometry):
         return func.ST_AsGeoJSON(attr).cast(JSONB).label(label)
     elif isinstance(attr.type, TSTZRANGE):
+        if attr.name == "phenomenonTime" and attr.table.name == "Observation":
+            return case(
+                (
+                    func.lower(attr) == func.upper(attr),
+                    func.concat(
+                        func.to_char(
+                            func.lower(attr), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'
+                        )
+                    ),
+                ),
+                else_=func.concat(
+                    func.to_char(
+                        func.lower(attr), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'
+                    ),
+                    "/",
+                    func.to_char(
+                        func.upper(attr), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'
+                    ),
+                ),
+            ).label(label)
         return case(
             (
-                func.lower(attr).isnot(None) & func.upper(attr).isnot(None),
-                func.concat(func.lower(attr), "/", func.upper(attr)),
+                attr.isnot(None),
+                func.concat(
+                    func.to_char(
+                        func.lower(attr), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'
+                    ),
+                    "/",
+                    func.to_char(
+                        func.upper(attr), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'
+                    ),
+                ),
             ),
             else_=None,
         ).label(label)

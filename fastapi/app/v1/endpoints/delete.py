@@ -126,8 +126,8 @@ async def catch_all_delete(
                                     WHEN (SELECT "phenomenonTime" FROM first_asc) IS NOT NULL
                                     AND (SELECT "phenomenonTime" FROM first_desc) IS NOT NULL
                                     THEN tstzrange(
-                                        (SELECT "phenomenonTime" FROM first_asc),
-                                        (SELECT "phenomenonTime" FROM first_desc), 
+                                        (SELECT lower("phenomenonTime") FROM first_asc),
+                                        (SELECT upper("phenomenonTime") FROM first_desc), 
                                         '[]'
                                     )
                                     ELSE NULL
@@ -181,13 +181,13 @@ async def update_datastream_phenomenon_time(
                 SELECT
                     CASE
                         WHEN datastream."phenomenonTime" IS NOT NULL AND lower(datastream."phenomenonTime") = $2 THEN
-                            (SELECT "phenomenonTime" FROM sensorthings."Observation" WHERE "datastream_id" = $1 ORDER BY "phenomenonTime" ASC LIMIT 1)
+                            (SELECT lower("phenomenonTime") FROM sensorthings."Observation" WHERE "datastream_id" = $1 ORDER BY "phenomenonTime" ASC LIMIT 1)
                         ELSE
                             lower(datastream."phenomenonTime")
                     END AS new_lower_bound,
                     CASE
-                        WHEN datastream."phenomenonTime" IS NOT NULL AND upper(datastream."phenomenonTime") = $2 THEN
-                            (SELECT "phenomenonTime" FROM sensorthings."Observation" WHERE "datastream_id" = $1 ORDER BY "phenomenonTime" DESC LIMIT 1)
+                        WHEN datastream."phenomenonTime" IS NOT NULL AND upper(datastream."phenomenonTime") = $3 THEN
+                            (SELECT upper("phenomenonTime") FROM sensorthings."Observation" WHERE "datastream_id" = $1 ORDER BY "phenomenonTime" DESC LIMIT 1)
                         ELSE
                             upper(datastream."phenomenonTime")
                     END AS new_upper_bound
@@ -202,7 +202,12 @@ async def update_datastream_phenomenon_time(
             FROM new_boundaries
             WHERE id = $1;
         """
-        await conn.execute(query, datastream_id, obs_phenomenon_time)
+        await conn.execute(
+            query,
+            datastream_id,
+            obs_phenomenon_time.lower,
+            obs_phenomenon_time.upper,
+        )
 
 
 async def update_datastream_observedArea(conn, datastream_id, feature_id=None):
