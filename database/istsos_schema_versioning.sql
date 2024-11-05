@@ -292,11 +292,10 @@ BEGIN
     EXECUTE 'CREATE OR REPLACE FUNCTION result(sensorthings."Observation_traveltime") RETURNS jsonb AS $$ 
                 BEGIN 
                     RETURN CASE  
-                        WHEN $1."resultType" = 0 THEN to_jsonb($1."resultString") 
-                        WHEN $1."resultType" = 1 THEN to_jsonb($1."resultInteger") 
-                        WHEN $1."resultType" = 2 THEN to_jsonb($1."resultDouble") 
-                        WHEN $1."resultType" = 3 THEN to_jsonb($1."resultBoolean") 
-                        WHEN $1."resultType" = 4 THEN $1."resultJSON" 
+                        WHEN $1."resultType" = 0 THEN to_jsonb($1."resultNumber") 
+                        WHEN $1."resultType" = 1 THEN to_jsonb($1."resultBoolean") 
+                        WHEN $1."resultType" = 2 THEN $1."resultJSON"  
+                        WHEN $1."resultType" = 3 THEN to_jsonb($1."resultString")
                         ELSE NULL::jsonb 
                     END; 
                 END; 
