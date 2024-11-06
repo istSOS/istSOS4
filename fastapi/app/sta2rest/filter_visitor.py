@@ -275,8 +275,8 @@ class FilterVisitor(visitor.NodeVisitor):
 
         if (
             left.name == "phenomenonTime"
-            or left.name == "resultTime"
             or left.name == "validTime"
+            or (left.name == "resultTime" and left.table.name == "Datastream")
         ):
             return op(left, functions.func.tstzrange(right, right, "[]"))
 
