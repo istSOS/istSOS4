@@ -1,11 +1,10 @@
+from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Boolean, Float, Integer, Text
-
-from .database import SCHEMA_NAME, Base
 
 
 class Observation(Base):
@@ -19,12 +18,11 @@ class Observation(Base):
     )
     datastream_navigation_link = Column("Datastream@iot.navigationLink", Text)
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
-    phenomenon_time = Column("phenomenonTime", TIMESTAMP, nullable=False)
+    phenomenon_time = Column("phenomenonTime", TSTZRANGE)
     result_time = Column("resultTime", TIMESTAMP, nullable=False)
     result = Column(JSON)
     result_string = Column("resultString", Text)
-    result_integer = Column("resultInteger", Integer)
-    result_double = Column("resultDouble", Float)
+    result_number = Column("resultNumber", Float)
     result_boolean = Column("resultBoolean", Boolean)
     result_json = Column("resultJSON", JSON)
     result_quality = Column("resultQuality", JSON)

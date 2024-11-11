@@ -1,10 +1,10 @@
+from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from geoalchemy2 import Geometry
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
-from .database import SCHEMA_NAME, Base
 from .location_historicallocation import Location_HistoricalLocation
 from .thing_location import Thing_Location
 
@@ -23,9 +23,7 @@ class Location(Base):
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
-    location = Column(
-        Geometry(geometry_type="GEOMETRY", srid=4326), nullable=False
-    )
+    location = Column(Geometry, nullable=False)
     properties = Column(JSON)
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
     thing = relationship(

@@ -1,10 +1,9 @@
+from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from geoalchemy2 import Geometry
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
-from sqlalchemy.sql.schema import Column, ForeignKey, PrimaryKeyConstraint
+from sqlalchemy.sql.schema import Column, PrimaryKeyConstraint
 from sqlalchemy.sql.sqltypes import Integer, String, Text
-
-from .database import SCHEMA_NAME, Base
 
 
 class DatastreamTravelTime(Base):
@@ -25,25 +24,21 @@ class DatastreamTravelTime(Base):
     description = Column(Text, nullable=False)
     unit_of_measurement = Column("unitOfMeasurement", JSON, nullable=False)
     observation_type = Column("observationType", String(100), nullable=False)
-    observed_area = Column(
-        "observedArea", Geometry(geometry_type="POLYGON", srid=4326)
-    )
+    observed_area = Column("observedArea", Geometry)
     phenomenon_time = Column("phenomenonTime", TSTZRANGE)
     result_time = Column("resultTime", TSTZRANGE)
     properties = Column(JSON)
-    thing_id = Column(
-        Integer, ForeignKey(f"{SCHEMA_NAME}.Thing.id"), nullable=False
-    )
-    sensor_id = Column(
-        Integer, ForeignKey(f"{SCHEMA_NAME}.Sensor.id"), nullable=False
-    )
-    observedproperty_id = Column(
-        Integer,
-        ForeignKey(f"{SCHEMA_NAME}.ObservedProperty.id"),
-        nullable=False,
-    )
-    commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
-    system_time_validity = Column(TSTZRANGE)
+    thing_id = Column(Integer)
+    sensor_id = Column(Integer)
+    observedproperty_id = Column(Integer)
+    commit_id = Column(Integer)
+
+    thing = Column("Thing")
+    sensor = Column("Sensor")
+    observedproperty = Column("ObservedProperty")
+    observation = Column("Observation")
+    commit = Column("Commit")
+    system_time_validity = Column("systemTimeValidity", TSTZRANGE)
 
     __table_args__ = (
         PrimaryKeyConstraint(id, system_time_validity),

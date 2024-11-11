@@ -1,8 +1,9 @@
-fastapi>=0.68.0,<0.69.0
-pydantic>=1.8.0,<2.0.0
-uvicorn>=0.15.0,<0.16.0
-asyncpg
+fastapi==0.115.4
+pydantic==2.9.2
+uvicorn==0.32.0
+asyncpg==0.30.0
 odata-query==0.10.0b1
-sqlalchemy>=1.4.0
-geoalchemy2
-ujson
+sqlalchemy==2.0.36
+geoalchemy2==0.15.2
+ujson==5.10.0
+redis==5.2.0
