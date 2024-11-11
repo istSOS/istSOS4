@@ -2,7 +2,7 @@ version: "3.7"
 services:
 
   database:
-    image: gitlab-edu.supsi.ch:5050/dacd-ist/geomatica/iststa/istsos-miu-database:0.0.5
+    image: ghcr.io/istsos/istsos4/database:1.0
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -17,7 +17,7 @@ services:
       retries: 5
 
   api:
-    image: gitlab-edu.supsi.ch:5050/dacd-ist/geomatica/iststa/istsos-miu-fastapi:0.0.12
+    image: ghcr.io/istsos/istsos4/api:1.0
     environment:
       HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
@@ -44,3 +44,21 @@ services:
   redis:
     image: redis:7.4.0-alpine3.20
     restart: always
+
+# dummy_data:
+#   image: ghcr.io/istsos/istsos4/dummy_data:1.0
+#   command: python3 generator.py
+#   working_dir: /dummy_data
+#   environment:
+#     POSTGRES_DB: ${POSTGRES_DB}
+#     POSTGRES_USER: ${POSTGRES_USER}
+#     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+#     DUMMY_DATA: ${DUMMY_DATA}
+#     CLEAR_DATA: ${CLEAR_DATA}
+#     N_THINGS: ${N_THINGS}
+#     N_OBSERVED_PROPERTIES: ${N_OBSERVED_PROPERTIES}
+#     INTERVAL: ${INTERVAL}
+#     FREQUENCY: ${FREQUENCY}
+#     START_DATETIME: ${START_DATETIME}
+#     CHUNK_INTERVAL: ${CHUNK_INTERVAL}
+#     EPSG: ${EPSG}
