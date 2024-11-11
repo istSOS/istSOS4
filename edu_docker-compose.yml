@@ -24,7 +24,7 @@ services:
 
   api:
     build:
-      context: ./fastapi
+      context: ./api
       dockerfile: Dockerfile
     environment:
       HOSTNAME: http://api:5000
@@ -48,7 +48,7 @@ services:
     ports:
       - 8018:5000
     volumes:
-      - ./fastapi/app:/code/app
+      - ./api/app:/code/app
     working_dir: /code
 
   redis:
