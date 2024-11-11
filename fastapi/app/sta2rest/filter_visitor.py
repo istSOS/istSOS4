@@ -9,11 +9,21 @@ This module provides a visitor for the filter AST.
 import operator
 from typing import Any, Callable, List, Optional, Union
 
+from app import EPSG
 from geoalchemy2 import WKTElement
 from odata_query import ast
 from odata_query import exceptions as ex
 from odata_query import visitor
-from sqlalchemy import JSON, Float, Integer, String, Text, cast
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Float,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    cast,
+)
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm.properties import ColumnProperty
@@ -170,17 +180,6 @@ class FilterVisitor(visitor.NodeVisitor):
         self, node: ast.Identifier
     ) -> ColumnClause | BooleanClauseList:
         try:
-            if (
-                self.root_model == "Observation"
-                or self.root_model == "ObservationTravelTime"
-            ) and node.name == "result":
-                return or_(
-                    getattr(globals()[self.root_model], "result_integer"),
-                    getattr(globals()[self.root_model], "result_double"),
-                    getattr(globals()[self.root_model], "result_string"),
-                    getattr(globals()[self.root_model], "result_boolean"),
-                    getattr(globals()[self.root_model], "result_json"),
-                )
             name = node.name.lower() if node.name[0].isupper() else node.name
             for old_key, new_key in SELECT_MAPPING.items():
                 if old_key == node.name:
@@ -201,6 +200,7 @@ class FilterVisitor(visitor.NodeVisitor):
         attributes = attributes[::-1]
         rel_attr = self.visit(owner)
         prop_inspect = inspect(rel_attr).property
+        table_attr = None
 
         # Check if the property is a JSON column
         if isinstance(prop_inspect, ColumnProperty) and isinstance(
@@ -217,8 +217,16 @@ class FilterVisitor(visitor.NodeVisitor):
             raise ValueError(f"Not a relationship: {node.owner}")
         self.join_relationships.append(rel_attr)
         owner_cls = prop_inspect.entity.class_
+
+        if attributes:
+            table_attr = getattr(owner_cls, attributes[0])
+            path = "{" + ", ".join(attributes[1:] + [node.attr]) + "}"
+            table_attr = table_attr.op("#>")(path)
+        else:
+            table_attr = getattr(owner_cls, node.attr)
+
         try:
-            return getattr(owner_cls, node.attr)
+            return table_attr
         except AttributeError:
             raise ex.InvalidFieldException(node.attr)
 
@@ -226,6 +234,20 @@ class FilterVisitor(visitor.NodeVisitor):
         left = self.visit(node.left)
         right = self.visit(node.right)
         op = self.visit(node.op)
+        if (
+            isinstance(node.left, ast.Identifier)
+            and node.left.name == "result"
+        ):
+            left = FilterVisitor.handle_observation_result(
+                self.root_model, op, right
+            )
+        if (
+            isinstance(node.right, ast.Identifier)
+            and node.right.name == "result"
+        ):
+            right = FilterVisitor.handle_observation_result(
+                self.root_model, op, left
+            )
         return op(left, right)
 
     def visit_BoolOp(self, node: ast.BoolOp) -> BooleanClauseList:
@@ -239,24 +261,41 @@ class FilterVisitor(visitor.NodeVisitor):
         right = self.visit(node.right)
         op = self.visit(node.comparator)
 
-        if isinstance(left, InstrumentedAttribute):
-            if (
-                "system_time_validity" in left.key
-                and f"__{getattr(op, '__name__')}__" == "__eq__"
-            ):
-                if isinstance(right, list):
-                    right = functions.func.tstzrange(
-                        functions.func.timestamptz(right[0]),
-                        functions.func.timestamptz(right[1]),
-                    )
-                    return left.op("&&")(right)
-                return left.op("@>")(functions.func.timestamptz(right))
-        else:
-            if isinstance(left, BooleanClauseList):
-                left = FilterVisitor.handle_observation_result(
-                    self.root_model, left, op, right
+        if (
+            "system_time_validity" in left.name
+            and f"__{getattr(op, '__name__')}__" == "__eq__"
+        ):
+            if isinstance(right, list):
+                right = functions.func.tstzrange(
+                    functions.func.timestamptz(right[0]),
+                    functions.func.timestamptz(right[1]),
                 )
-                return or_(*left)
+                return left.op("&&")(right)
+            return left.op("@>")(functions.func.timestamptz(right))
+
+        if (
+            left.name == "phenomenonTime"
+            or left.name == "validTime"
+            or (left.name == "resultTime" and left.table.name == "Datastream")
+        ):
+            return op(left, functions.func.tstzrange(right, right, "[]"))
+
+        if (
+            isinstance(node.left, ast.Identifier)
+            and node.left.name == "result"
+        ):
+            left = FilterVisitor.handle_observation_result(
+                self.root_model, op, right, left=True
+            )
+            return or_(*left)
+
+        if (isinstance(node.right, ast.Identifier)) and (
+            node.right.name == "result"
+        ):
+            right = FilterVisitor.handle_observation_result(
+                self.root_model, op, left
+            )
+            return or_(*right)
         return op(left, right)
 
     def visit_Call(self, node: ast.Call) -> ClauseElement:
@@ -290,24 +329,65 @@ class FilterVisitor(visitor.NodeVisitor):
     def func_substringof(
         self, substr: ast._Node, field: ast._Node
     ) -> ClauseElement:
-        return self._substr_function(field, substr, "contains")
+        if isinstance(substr, ast.Identifier) and substr.name == "result":
+            identifier = getattr(globals()[self.root_model], "result_string")
+            return self.visit(field).contains(identifier)
+        if isinstance(field, ast.Identifier) and field.name == "result":
+            identifier = getattr(globals()[self.root_model], "result_string")
+            return identifier.contains(self.visit(substr))
+        if isinstance(substr, ast.Identifier):
+            return self._substr_function(field, substr, "contains")
+        if isinstance(field, ast.Identifier):
+            return self._substr_function(substr, field, "contains")
 
     def func_endswith(
         self, field: ast._Node, substr: ast._Node
     ) -> ClauseElement:
-        return self._substr_function(field, substr, "endswith")
+        if isinstance(field, ast.Identifier) and field.name == "result":
+            identifier = getattr(globals()[self.root_model], "result_string")
+            return identifier.endswith(self.visit(substr))
+        if isinstance(substr, ast.Identifier) and substr.name == "result":
+            identifier = getattr(globals()[self.root_model], "result_string")
+            return self.visit(field).endswith(identifier)
+        if isinstance(field, ast.Identifier):
+            return self._substr_function(field, substr, "endswith")
+        if isinstance(substr, ast.Identifier):
+            return self._substr_function(substr, field, "endswith")
 
     def func_startswith(
         self, field: ast._Node, substr: ast._Node
     ) -> ClauseElement:
-        return self._substr_function(field, substr, "startswith")
+        if isinstance(field, ast.Identifier) and field.name == "result":
+            identifier = getattr(globals()[self.root_model], "result_string")
+            return identifier.startswith(self.visit(substr))
+        if isinstance(substr, ast.Identifier) and substr.name == "result":
+            identifier = getattr(globals()[self.root_model], "result_string")
+            return self.visit(field).startswith(identifier)
+        if isinstance(field, ast.Identifier):
+            return self._substr_function(field, substr, "startswith")
+        if isinstance(substr, ast.Identifier):
+            return self._substr_function(substr, field, "startswith")
 
     def func_length(self, arg: ast._Node) -> functions.Function:
+        if isinstance(arg, ast.Identifier) and arg.name == "result":
+            return functions.char_length(
+                getattr(globals()[self.root_model], "result_string")
+            )
         return functions.char_length(self.visit(arg))
 
     def func_indexof(
         self, first: ast._Node, second: ast._Node
     ) -> functions.Function:
+        if isinstance(first, ast.Identifier) and first.name == "result":
+            return functions.func.strpos(
+                getattr(globals()[self.root_model], "result_string"),
+                self.visit(second),
+            )
+        if isinstance(second, ast.Identifier) and second.name == "result":
+            return functions.func.strpos(
+                self.visit(first),
+                getattr(globals()[self.root_model], "result_string"),
+            )
         return functions.func.strpos(self.visit(first), self.visit(second))
 
     def func_substring(
@@ -317,27 +397,65 @@ class FilterVisitor(visitor.NodeVisitor):
         nchars: Optional[ast._Node] = None,
     ) -> functions.Function:
         if nchars:
+            if (
+                isinstance(fullstr, ast.Identifier)
+                and fullstr.name == "result"
+            ):
+                return functions.func.substr(
+                    getattr(globals()[self.root_model], "result_string"),
+                    self.visit(index) + 1,
+                    self.visit(nchars),
+                )
             return functions.func.substr(
                 self.visit(fullstr),
-                int(self.visit(index)) + 1,
+                self.visit(index) + 1,
                 self.visit(nchars),
             )
         else:
+            if (
+                isinstance(fullstr, ast.Identifier)
+                and fullstr.name == "result"
+            ):
+                return functions.func.substr(
+                    getattr(globals()[self.root_model], "result_string"),
+                    self.visit(index) + 1,
+                )
             return functions.func.substr(
-                self.visit(fullstr), int(self.visit(index)) + 1
+                self.visit(fullstr), self.visit(index) + 1
             )
 
     def func_tolower(self, field: ast._Node) -> functions.Function:
+        if isinstance(field, ast.Identifier) and field.name == "result":
+            return functions.func.lower(
+                getattr(globals()[self.root_model], "result_string")
+            )
         return functions.func.lower(self.visit(field))
 
     def func_toupper(self, field: ast._Node) -> functions.Function:
+        if isinstance(field, ast.Identifier) and field.name == "result":
+            return functions.func.upper(
+                getattr(globals()[self.root_model], "result_string")
+            )
         return functions.func.upper(self.visit(field))
 
     def func_trim(self, field: ast._Node) -> functions.Function:
-        return functions.func.ltrim(functions.func.rtrim(self.visit(field)))
+        if isinstance(field, ast.Identifier) and field.name == "result":
+            return functions.func.btrim(
+                getattr(globals()[self.root_model], "result_string")
+            )
+        return functions.func.btrim(self.visit(field))
 
     def func_concat(self, *args: ast._Node) -> functions.Function:
-        return functions.concat(*[self.visit(arg) for arg in args])
+        return functions.concat(
+            *[
+                (
+                    getattr(globals()[self.root_model], "result_string")
+                    if isinstance(arg, ast.Identifier) and arg.name == "result"
+                    else self.visit(arg)
+                )
+                for arg in args
+            ]
+        )
 
     ####################################################################################
     # Date Functions
@@ -390,12 +508,24 @@ class FilterVisitor(visitor.NodeVisitor):
     ####################################################################################
 
     def func_ceiling(self, field: ast._Node) -> functions.Function:
+        if isinstance(field, ast.Identifier) and field.name == "result":
+            return functions.func.ceil(
+                getattr(globals()[self.root_model], "result_number")
+            )
         return functions.func.ceil(self.visit(field))
 
     def func_floor(self, field: ast._Node) -> functions.Function:
+        if isinstance(field, ast.Identifier) and field.name == "result":
+            return functions.func.floor(
+                getattr(globals()[self.root_model], "result_number")
+            )
         return functions.func.floor(self.visit(field))
 
     def func_round(self, field: ast._Node) -> functions.Function:
+        if isinstance(field, ast.Identifier) and field.name == "result":
+            return functions.func.round(
+                getattr(globals()[self.root_model], "result_number")
+            )
         return functions.func.round(self.visit(field))
 
     ####################################################################################
@@ -407,7 +537,7 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> functions.Function:
         return functions.func.ST_Distance(
             getattr(globals()[self.root_model], field.name),
-            WKTElement(geography.val, srid=4326),
+            WKTElement(geography.val, srid=EPSG),
         )
 
     def func_geolength(self, field: ast.Identifier) -> functions.Function:
@@ -420,7 +550,7 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> functions.Function:
         return functions.func.ST_Intersects(
             getattr(globals()[self.root_model], field.name),
-            WKTElement(geography.val, srid=4326),
+            WKTElement(geography.val, srid=EPSG),
         )
 
     def func_st_equals(
@@ -428,7 +558,7 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> functions.Function:
         return functions.func.ST_Equals(
             getattr(globals()[self.root_model], field.name),
-            WKTElement(geography.val, srid=4326),
+            WKTElement(geography.val, srid=EPSG),
         )
 
     def func_st_disjoint(
@@ -436,7 +566,7 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> functions.Function:
         return functions.func.ST_Disjoint(
             getattr(globals()[self.root_model], field.name),
-            WKTElement(geography.val, srid=4326),
+            WKTElement(geography.val, srid=EPSG),
         )
 
     def func_st_touches(
@@ -444,7 +574,7 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> functions.Function:
         return functions.func.ST_Touches(
             getattr(globals()[self.root_model], field.name),
-            WKTElement(geography.val, srid=4326),
+            WKTElement(geography.val, srid=EPSG),
         )
 
     def func_st_within(
@@ -452,7 +582,7 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> functions.Function:
         return functions.func.ST_Within(
             getattr(globals()[self.root_model], field.name),
-            WKTElement(geography.val, srid=4326),
+            WKTElement(geography.val, srid=EPSG),
         )
 
     def func_st_overlaps(
@@ -460,7 +590,7 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> functions.Function:
         return functions.func.ST_Overlaps(
             getattr(globals()[self.root_model], field.name),
-            WKTElement(geography.val, srid=4326),
+            WKTElement(geography.val, srid=EPSG),
         )
 
     def func_st_crosses(
@@ -468,7 +598,7 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> functions.Function:
         return functions.func.ST_Crosses(
             getattr(globals()[self.root_model], field.name),
-            WKTElement(geography.val, srid=4326),
+            WKTElement(geography.val, srid=EPSG),
         )
 
     def func_st_intersects(
@@ -476,7 +606,7 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> functions.Function:
         return functions.func.ST_Intersects(
             getattr(globals()[self.root_model], field.name),
-            WKTElement(geography.val, srid=4326),
+            WKTElement(geography.val, srid=EPSG),
         )
 
     def func_st_contains(
@@ -484,7 +614,7 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> functions.Function:
         return functions.func.ST_Contains(
             getattr(globals()[self.root_model], field.name),
-            WKTElement(geography.val, srid=4326),
+            WKTElement(geography.val, srid=EPSG),
         )
 
     def func_st_relate(
@@ -495,15 +625,15 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> functions.Function:
         return functions.func.ST_Relate(
             getattr(globals()[self.root_model], field.name),
-            WKTElement(geography.val, srid=4326),
+            WKTElement(geography.val, srid=EPSG),
             self.visit(intersectionMatrixPattern),
         )
 
     @staticmethod
-    def handle_observation_result(entity, list, operator, value):
+    def handle_observation_result(entity, operator, value, left=False):
         result_conditions = []
         operator_name = f"__{operator.__name__}__"
-        valid_operators = {
+        comparison_operators = {
             "__eq__",
             "__ne__",
             "__gt__",
@@ -511,39 +641,48 @@ class FilterVisitor(visitor.NodeVisitor):
             "__ge__",
             "__le__",
         }
+        arithmetic_operators = {
+            "__add__",
+            "__sub__",
+            "__mul__",
+            "__truediv__",
+            "__mod__",
+        }
 
-        if operator_name in valid_operators:
-            try:
-                value_type = value.type
-                entity_class = globals()[entity]
-                if isinstance(value_type, String):
-                    filter_query = getattr(entity_class, "result_string")
-                    result_conditions.append(
-                        getattr(filter_query, operator_name)(value)
-                    )
-                    for result_type in ["result_integer", "result_double"]:
-                        filter_query = cast(
-                            getattr(globals()[entity], result_type), Text
-                        )
-                        result_conditions.append(
-                            getattr(filter_query, operator_name)(value)
-                        )
-                elif isinstance(value_type, (Integer, Float)):
-                    filter_query = getattr(entity_class, "result_integer")
-                    result_conditions.append(
-                        getattr(filter_query, operator_name)(value)
-                    )
-                    filter_query = getattr(entity_class, "result_double")
-                    result_conditions.append(
-                        getattr(filter_query, operator_name)(value)
-                    )
-                elif value == "true" or value == "false":
-                    bool_value = value == "true"
-                    filter_query = getattr(entity_class, "result_boolean")
-                    result_conditions.append(
-                        getattr(filter_query, operator_name)(bool_value)
-                    )
-            except TypeError:
-                pass
+        entity_class = globals()[entity]
 
-        return result_conditions
+        def add_condition(attribute, value, left):
+            """Helper to append conditions based on left flag."""
+            condition = (
+                getattr(attribute, operator_name)(value)
+                if left
+                else getattr(value, operator_name)(attribute)
+            )
+            result_conditions.append(condition)
+
+        # Handle arithmetic operators
+        if operator_name in arithmetic_operators:
+            if operator_name == "__mod__":
+                return cast(getattr(entity_class, "result_number"), Numeric)
+            return getattr(entity_class, "result_number")
+
+        # Handle comparison operators
+        if operator_name in comparison_operators:
+            if isinstance(value.type, String):
+                attribute = getattr(entity_class, "result_string")
+                add_condition(attribute, value, left)
+                attribute = cast(getattr(entity_class, "result_number"), Text)
+                add_condition(attribute, value, left)
+            elif isinstance(value.type, (Integer, Float)):
+                attribute = getattr(entity_class, "result_number")
+                add_condition(attribute, value, left)
+            elif isinstance(value.type, Boolean):
+                attribute = getattr(entity_class, "result_boolean")
+                add_condition(attribute, value, left)
+            elif isinstance(value.type, JSON):
+                attribute = functions.func.to_jsonb(
+                    getattr(entity_class, "result_number")
+                )
+                add_condition(attribute, value, left)
+
+            return result_conditions

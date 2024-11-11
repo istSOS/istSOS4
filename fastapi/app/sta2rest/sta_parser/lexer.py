@@ -16,8 +16,8 @@ TOKEN_TYPES = {
     "FILTER": r"\$filter=",
     "EXPAND": r"\$expand=",
     "ORDERBY": r"\$orderby=",
-    "ASOF": r"\$asof=",
-    "FROMTO": r"\$fromto=",
+    "ASOF": r"\$as_of=",
+    "FROMTO": r"\$from_to=",
     "RESULT_FORMAT": r"\$resultFormat=",
     "RESULT_FORMAT_VALUE": r"\bdataArray\b",
     "SUBQUERY_SEPARATOR": r";",
@@ -74,7 +74,15 @@ class Lexer:
         Args:
             text (str): The input text to be tokenized.
         """
-        self.text = urllib.parse.unquote_plus(text)
+
+        if "'" in urllib.parse.unquote(text):
+            if "+" in text:
+                self.text = urllib.parse.unquote_plus(text)
+            else:
+                self.text = urllib.parse.unquote(text)
+        else:
+            self.text = urllib.parse.unquote(text)
+
         self.tokens = self.tokenize()
 
     def tokenize(self):

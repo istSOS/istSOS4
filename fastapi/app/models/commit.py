@@ -1,9 +1,8 @@
+from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column
 from sqlalchemy.sql.sqltypes import Integer, String, Text
-
-from .database import SCHEMA_NAME, Base
 
 
 class Commit(Base):
@@ -26,7 +25,7 @@ class Commit(Base):
         "FeatureOfInterest@iot.navigationLink", Text
     )
     observation_navigation_link = Column(
-        "Observation@iot.navigationLink", Text
+        "Observations@iot.navigationLink", Text
     )
     author = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100))

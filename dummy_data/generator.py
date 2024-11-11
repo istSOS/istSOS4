@@ -1,11 +1,12 @@
+import asyncio
 import json
 import os
 import random
 from datetime import datetime, time
-import asyncio
 
 import asyncpg
 import isodate
+from asyncpg.types import Range
 
 create_dummy_data = int(os.getenv("DUMMY_DATA"))
 delete_dummy_data = int(os.getenv("CLEAR_DATA"))
@@ -19,8 +20,10 @@ date = (
     else datetime.combine(datetime.now().today(), time.min)
 )
 chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL"))
+epsg = int(os.getenv("EPSG"))
 
 pgpool = None
+
 
 async def get_pool():
     """
@@ -32,10 +35,9 @@ async def get_pool():
     global pgpool
     if not pgpool:
         pgpool = await asyncpg.create_pool(
-            dsn=f"postgresql://{os.getenv("POSTGRES_USER")}:{os.getenv("POSTGRES_PASSWORD")}@database:5432/{os.getenv("POSTGRES_DB")}"
+            dsn=f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@database:5432/{os.getenv('POSTGRES_DB')}"
         )
     return pgpool
-
 
 
 async def generate_things(conn):
@@ -74,15 +76,19 @@ async def generate_locations(conn):
     """
     locations = []
     for i in range(1, n_things + 1):
+        lon = random.uniform(-180, 180)
+        lat = random.uniform(-90, 90)
+        # elevation = random.uniform(0, 1000)
+
         description = f"location {i}"
         name = f"location name {i}"
-        location = "0101000020E6100000BA490C022B7F52C0355EBA490C624440"
-        encodingType = "application/pdf"
+        location = f"SRID={epsg};POINT({lon} {lat})"
+        encodingType = "application/geo+json"
         locations.append((description, name, location, encodingType))
 
     insert_sql = """
     INSERT INTO sensorthings."Location" (description, name, location, "encodingType")
-    VALUES ($1, $2, $3, $4)
+    VALUES ($1, $2, $3::public.geometry, $4)
     """
     await conn.executemany(insert_sql, locations)
 
@@ -229,8 +235,8 @@ async def generate_datastreams(conn):
                     "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen",
                 }
             )
-            description = f"datastream {i}"
-            name = f"datastream name {i}"
+            description = f"datastream {cnt}"
+            name = f"datastream name {cnt}"
             observationType = "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"
             thing_id = i
             sensor_id = cnt
@@ -267,17 +273,93 @@ async def generate_featuresofinterest(conn):
     """
     featuresofinterest = []
     for i in range(1, n_things + 1):
+        lon = random.uniform(-180, 180)
+        lat = random.uniform(-90, 90)
+        # elevation = random.uniform(0, 1000)
+
         description = f"featuresofinterest {i}"
         name = f"featuresofinterest name {i}"
-        encodingType = "application/pdf"
-        feature = "0101000020E6100000BA490C022B7F52C0355EBA490C624440"
+        encodingType = "application/geo+json"
+        feature = f"SRID={epsg};POINT({lon} {lat})"
         featuresofinterest.append((description, name, encodingType, feature))
 
     insert_sql = """
     INSERT INTO sensorthings."FeaturesOfInterest" (description, name, "encodingType", feature)
-    VALUES ($1, $2, $3, $4)
+    VALUES ($1, $2, $3, $4::public.geometry)
     """
     await conn.executemany(insert_sql, featuresofinterest)
+
+
+async def insert_observations(conn, observations):
+    await conn.copy_records_to_table(
+        "Observation",
+        records=observations,
+        schema_name="sensorthings",
+        columns=[
+            "phenomenonTime",
+            "resultNumber",
+            "resultType",
+            "datastream_id",
+            "featuresofinterest_id",
+        ],
+    )
+
+
+async def update_datastream_phenomenon_time(conn, observations, datastream_id):
+    phenomenon_times = [record[0].lower for record in observations]
+
+    update_sql = """
+        UPDATE sensorthings."Datastream"
+        SET "phenomenonTime" = tstzrange(
+            LEAST($1::timestamptz, lower("phenomenonTime")),
+            GREATEST($2::timestamptz, upper("phenomenonTime")),
+            '[]'
+        )
+        WHERE id = $3::bigint
+    """
+    await conn.execute(
+        update_sql,
+        min(phenomenon_times),
+        max(phenomenon_times),
+        datastream_id,
+    )
+
+
+async def update_datastream_observed_area(conn):
+    query = 'SELECT DISTINCT id FROM sensorthings."Datastream";'
+    datastream_ids = await conn.fetch(query)
+    for ds in datastream_ids:
+        ds = ds["id"]
+        # Fetch distinct featuresofinterest IDs associated with the datastream
+        query = 'SELECT DISTINCT featuresofinterest_id FROM sensorthings."Observation" WHERE "datastream_id" = $1;'
+        featuresofinterest_ids = await conn.fetch(query, ds)
+
+        # Collect the geometries for each feature of interest
+        geometries = []
+        for foi in featuresofinterest_ids:
+            foi_id = foi["featuresofinterest_id"]
+
+            # Fetch the actual geometry associated with the feature of interest
+            query = 'SELECT feature FROM sensorthings."FeaturesOfInterest" WHERE id = $1;'
+            geometry = await conn.fetchval(query, foi_id)
+
+            if geometry:
+                geometries.append(geometry)
+
+        if geometries:
+            query = f"""
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = ST_ConvexHull(
+                    ST_Collect(
+                        ARRAY[{', '.join(f"'{g}'::geometry" for g in geometries)}]
+                    )
+                )
+                WHERE id = $1;
+            """
+
+            # Execute the update query, passing the datastream_id
+            await conn.execute(query, ds)
+
 
 async def generate_observations(conn):
     """
@@ -297,31 +379,41 @@ async def generate_observations(conn):
 
         while phenomenonTime < (date + interval):
             phenomenonTime += frequency
-            resultInteger = random.randint(1, 100)
+            phenomenonTimeRange = Range(
+                phenomenonTime,
+                phenomenonTime,
+                upper_inc=True,
+            )
+            resultNumber = random.randint(1, 100)
             resultType = 1
             datastream_id = j
             featuresofinterest_id = random.randint(1, n_things)
 
             observations.append(
                 (
-                    phenomenonTime,
-                    resultInteger,
+                    phenomenonTimeRange,
+                    resultNumber,
                     resultType,
                     datastream_id,
                     featuresofinterest_id,
                 )
             )
             if phenomenonTime >= (check_date + chunk):
-                await conn.copy_records_to_table('Observation', records=observations, schema_name='sensorthings', columns=[
-                    'phenomenonTime', 'resultInteger', 'resultType', 'datastream_id', 'featuresofinterest_id'
-                ])
+                await insert_observations(conn, observations)
+                await update_datastream_phenomenon_time(
+                    conn, observations, datastream_id
+                )
                 check_date = phenomenonTime
                 observations = []
 
     if observations:
-        await conn.copy_records_to_table('Observation', records=observations, schema_name='sensorthings', columns=[
-            'phenomenonTime', 'resultInteger', 'resultType', 'datastream_id', 'featuresofinterest_id'
-        ])
+        await insert_observations(conn, observations)
+        await update_datastream_phenomenon_time(
+            conn, observations, datastream_id
+        )
+
+    await update_datastream_observed_area(conn)
+
 
 async def create_data():
     """
@@ -375,18 +467,26 @@ async def delete_data():
     After the deletion is complete, the database connection is closed.
     """
     pool = await get_pool()
-    async with  pool.acquire() as conn:
+    async with pool.acquire() as conn:
         async with conn.transaction():
             try:
                 await conn.execute('DELETE FROM sensorthings."Thing"')
                 await conn.execute('DELETE FROM sensorthings."Location"')
                 await conn.execute('DELETE FROM sensorthings."Thing_Location"')
-                await conn.execute('DELETE FROM sensorthings."HistoricalLocation"')
-                await conn.execute('DELETE FROM sensorthings."Location_HistoricalLocation"')
-                await conn.execute('DELETE FROM sensorthings."ObservedProperty"')
+                await conn.execute(
+                    'DELETE FROM sensorthings."HistoricalLocation"'
+                )
+                await conn.execute(
+                    'DELETE FROM sensorthings."Location_HistoricalLocation"'
+                )
+                await conn.execute(
+                    'DELETE FROM sensorthings."ObservedProperty"'
+                )
                 await conn.execute('DELETE FROM sensorthings."Sensor"')
                 await conn.execute('DELETE FROM sensorthings."Datastream"')
-                await conn.execute('DELETE FROM sensorthings."FeaturesOfInterest"')
+                await conn.execute(
+                    'DELETE FROM sensorthings."FeaturesOfInterest"'
+                )
                 await conn.execute('DELETE FROM sensorthings."Observation"')
             except Exception as e:
                 print(f"An error occurred: {e}")

@@ -1,6 +1,8 @@
 services:
   database:
-    image: gitlab-edu.supsi.ch:5050/dacd-ist/geomatica/iststa/istsos-miu-database:0.0.1
+    build:
+      context: ./database
+      dockerfile: Dockerfile
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -21,9 +23,11 @@ services:
       retries: 5
 
   api:
-    image: gitlab-edu.supsi.ch:5050/dacd-ist/geomatica/iststa/istsos-miu-fastapi:0.0.1
+    build:
+      context: ./fastapi
+      dockerfile: Dockerfile
     environment:
-      HOSTNAME: ${HOSTNAME}
+      HOSTNAME: http://api:5000
       SUBPATH: ${SUBPATH}
       VERSION: ${VERSION}
       DEBUG: ${DEBUG}
@@ -40,9 +44,11 @@ services:
       PARTITION_CHUNK: ${PARTITION_CHUNK}
       REDIS: ${REDIS}
       EPSG: ${EPSG}
-    command: uvicorn --workers 2 --host 0.0.0.0 --timeout-keep-alive 75 --port 5000 app.main:app
+    command: uvicorn --reload --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - 8018:5000
+    volumes:
+      - ./fastapi/app:/code/app
     working_dir: /code
 
   redis:
@@ -52,7 +58,9 @@ services:
       - v-istsos4-redis-data:/data
 
   dummy_data:
-    image: gitlab-edu.supsi.ch:5050/dacd-ist/geomatica/iststa/istsos-miu-dummy-data:0.0.1
+    build:
+      context: ./dummy_data
+      dockerfile: Dockerfile
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -67,20 +75,33 @@ services:
       CHUNK_INTERVAL: ${CHUNK_INTERVAL}
       EPSG: ${EPSG}
     command: python3 generator.py
+    volumes:
+      - ./dummy_data:/dummy_data
     working_dir: /dummy_data
     depends_on:
       database:
         condition: service_healthy
 
-  # docs:
-  #   build:
-  #     context: istsos4_docs/mkdocs
-  #     dockerfile: dockerfile
-  #   #restart: always
-  #   ports:
-  #     - 8100:8000
-  #   volumes:
-  #     - ./mkdocs:/docs
+  docs:
+    build:
+      context: ./istsos4_docs/mkdocs
+      dockerfile: dockerfile
+    #restart: always
+    ports:
+      - 8019:8000
+    volumes:
+      - ./istsos4_docs/mkdocs:/docs
+
+  tutorials:
+    # image: quay.io/jupyter/scipy-notebook
+    build:
+      context: ./istsos4_docs/tutorials
+      dockerfile: dockerfile
+    ports:
+      - "10000:8888"
+    command: start-notebook.py --IdentityProvider.token=''
+    volumes:
+      - ./istsos4_docs/tutorials:/home/jovyan/work
 
 volumes:
   v-istsos4-database-data:

@@ -1,5 +1,6 @@
 import json
 
+from app import HOSTNAME, TOP_VALUE
 from asyncpg.types import Range
 from dateutil import parser
 
@@ -19,10 +20,19 @@ def handle_datetime_fields(payload):
             if "/" in payload[key]:
                 start_time, end_time = payload[key].split("/")
                 payload[key] = Range(
-                    parser.parse(start_time), parser.parse(end_time)
+                    parser.parse(start_time),
+                    parser.parse(end_time),
+                    upper_inc=True,
                 )
             else:
-                payload[key] = parser.parse(payload[key])
+                if key == "phenomenonTime":
+                    payload[key] = Range(
+                        parser.parse(payload[key]),
+                        parser.parse(payload[key]),
+                        upper_inc=True,
+                    )
+                else:
+                    payload[key] = parser.parse(payload[key])
 
 
 def handle_result_field(payload):
@@ -37,13 +47,16 @@ def handle_result_field(payload):
     """
     for key in list(payload.keys()):
         if key == "result":
-            result_type, column_name = get_result_type_and_column(payload[key])
-            payload[column_name] = payload[key]
+            result_type, values, columns = get_result_type_and_column(
+                payload[key]
+            )
+            for value, column in zip(values, columns):
+                payload[column] = value
             payload["resultType"] = result_type
             payload.pop("result")
 
 
-def get_result_type_and_column(input_string):
+def get_result_type_and_column(input):
     """
     Determines the result type and column name based on the input string.
 
@@ -56,33 +69,34 @@ def get_result_type_and_column(input_string):
     Raises:
         Exception: If the result cannot be cast to a valid type.
     """
-    try:
-        value = eval(str(input_string))
-    except (SyntaxError, NameError):
-        result_type = 0
-        column_name = "resultString"
-    else:
-        if isinstance(value, int):
-            result_type = 1
-            column_name = "resultInteger"
-        elif isinstance(value, float):
-            result_type = 2
-            column_name = "resultDouble"
-        elif isinstance(value, dict):
-            result_type = 4
-            column_name = "resultJSON"
-        else:
-            result_type = None
-            column_name = None
 
-    if input_string in ["true", "false"]:
+    result_type = None
+    values = []
+    columns = []
+    if isinstance(input, str):
         result_type = 3
-        column_name = "resultBoolean"
+        columns.append("resultString")
+        values.append(input)
+    elif isinstance(input, dict):
+        result_type = 2
+        columns.append("resultJSON")
+        values.append(input)
+    elif isinstance(input, bool):
+        result_type = 1
+        columns.append("resultBoolean")
+        values.append(input)
+        columns.append("resultString")
+        values.append(str(input).lower())
+    elif isinstance(input, int) or isinstance(input, float):
+        result_type = 0
+        columns.append("resultNumber")
+        values.append(input)
+        columns.append("resultString")
+        values.append(str(input))
 
     if result_type is not None:
-        return result_type, column_name
-    else:
-        raise Exception("Cannot cast result to a valid type")
+        return result_type, values, columns
+    raise Exception("Cannot cast result to a valid type")
 
 
 def response2jsonfile(request, response, filename, body="", status_code=200):
@@ -118,3 +132,50 @@ def response2jsonfile(request, response, filename, body="", status_code=200):
             }
         )
         f.write(json.dumps(r, indent=4))
+
+
+def build_nextLink(full_path, count_links):
+    nextLink = f"{HOSTNAME}{full_path}"
+    new_top_value = TOP_VALUE
+
+    # Handle $top
+    if "$top" in nextLink:
+        start_index = nextLink.find("$top=") + 5
+        end_index = len(nextLink)
+        for char in ("&", ";", ")"):
+            char_index = nextLink.find(char, start_index)
+            if char_index != -1 and char_index < end_index:
+                end_index = char_index
+        top_value = int(nextLink[start_index:end_index])
+        new_top_value = top_value
+        nextLink = (
+            nextLink[:start_index] + str(new_top_value) + nextLink[end_index:]
+        )
+    else:
+        if "?" in nextLink:
+            nextLink = nextLink + f"&$top={new_top_value}"
+        else:
+            nextLink = nextLink + f"?$top={new_top_value}"
+
+    # Handle $skip
+    if "$skip" in nextLink:
+        start_index = nextLink.find("$skip=") + 6
+        end_index = len(nextLink)
+        for char in ("&", ";", ")"):
+            char_index = nextLink.find(char, start_index)
+            if char_index != -1 and char_index < end_index:
+                end_index = char_index
+        skip_value = int(nextLink[start_index:end_index])
+        new_skip_value = skip_value + new_top_value
+        nextLink = (
+            nextLink[:start_index] + str(new_skip_value) + nextLink[end_index:]
+        )
+    else:
+        new_skip_value = new_top_value
+        nextLink = nextLink + f"&$skip={new_skip_value}"
+
+    # Only return the nextLink if there's more data to fetch
+    if new_top_value < count_links:
+        return nextLink
+
+    return None

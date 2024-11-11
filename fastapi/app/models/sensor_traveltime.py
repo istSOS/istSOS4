@@ -1,9 +1,8 @@
+from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
-from sqlalchemy.sql.schema import Column, ForeignKey, PrimaryKeyConstraint
+from sqlalchemy.sql.schema import Column, PrimaryKeyConstraint
 from sqlalchemy.sql.sqltypes import Integer, String, Text
-
-from .database import SCHEMA_NAME, Base
 
 
 class SensorTravelTime(Base):
@@ -18,8 +17,11 @@ class SensorTravelTime(Base):
     encoding_type = Column("encodingType", String(100), nullable=False)
     sensor_metadata = Column("metadata", JSON, nullable=False)
     properties = Column(JSON)
-    system_time_validity = Column(TSTZRANGE)
-    commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
+    commit_id = Column(Integer)
+
+    datastream = Column("Datastream")
+    commit = Column("Commit")
+    system_time_validity = Column("systemTimeValidity", TSTZRANGE)
 
     __table_args__ = (
         PrimaryKeyConstraint(id, system_time_validity),

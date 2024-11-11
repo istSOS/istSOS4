@@ -8,8 +8,9 @@ representations in a REST API.
 """
 
 import re
+from datetime import datetime
 
-from app import DEBUG, VERSION
+from app import DEBUG, VERSION, VERSIONING
 from odata_query import grammar
 
 from .sta_parser.ast import *
@@ -121,7 +122,6 @@ class STA2REST:
             "self_link",
             "thing_navigation_link",
             "historicallocation_navigation_link",
-            "commit_navigation_link",
             "name",
             "description",
             "encoding_type",
@@ -133,7 +133,6 @@ class STA2REST:
             "self_link",
             "thing_navigation_link",
             "historicallocation_navigation_link",
-            "commit_navigation_link",
             "name",
             "description",
             "encoding_type",
@@ -147,7 +146,6 @@ class STA2REST:
             "location_navigation_link",
             "historicallocation_navigation_link",
             "datastream_navigation_link",
-            "commit_navigation_link",
             "name",
             "description",
             "properties",
@@ -158,7 +156,6 @@ class STA2REST:
             "location_navigation_link",
             "historicallocation_navigation_link",
             "datastream_navigation_link",
-            "commit_navigation_link",
             "name",
             "description",
             "properties",
@@ -169,7 +166,6 @@ class STA2REST:
             "self_link",
             "location_navigation_link",
             "thing_navigation_link",
-            "commit_navigation_link",
             "time",
         ],
         "HistoricalLocationTravelTime": [
@@ -177,7 +173,6 @@ class STA2REST:
             "self_link",
             "location_navigation_link",
             "thing_navigation_link",
-            "commit_navigation_link",
             "time",
             "system_time_validity",
         ],
@@ -185,7 +180,6 @@ class STA2REST:
             "id",
             "self_link",
             "datastream_navigation_link",
-            "commit_navigation_link",
             "name",
             "description",
             "definition",
@@ -195,7 +189,6 @@ class STA2REST:
             "id",
             "self_link",
             "datastream_navigation_link",
-            "commit_navigation_link",
             "name",
             "description",
             "definition",
@@ -206,7 +199,6 @@ class STA2REST:
             "id",
             "self_link",
             "datastream_navigation_link",
-            "commit_navigation_link",
             "name",
             "description",
             "encoding_type",
@@ -217,7 +209,6 @@ class STA2REST:
             "id",
             "self_link",
             "datastream_navigation_link",
-            "commit_navigation_link",
             "name",
             "description",
             "encoding_type",
@@ -232,7 +223,6 @@ class STA2REST:
             "sensor_navigation_link",
             "observedproperty_navigation_link",
             "observation_navigation_link",
-            "commit_navigation_link",
             "name",
             "description",
             "unit_of_measurement",
@@ -249,7 +239,6 @@ class STA2REST:
             "sensor_navigation_link",
             "observedproperty_navigation_link",
             "observation_navigation_link",
-            "commit_navigation_link",
             "name",
             "description",
             "unit_of_measurement",
@@ -264,7 +253,6 @@ class STA2REST:
             "id",
             "self_link",
             "observation_navigation_link",
-            "commit_navigation_link",
             "name",
             "description",
             "encoding_type",
@@ -275,7 +263,6 @@ class STA2REST:
             "id",
             "self_link",
             "observation_navigation_link",
-            "commit_navigation_link",
             "name",
             "description",
             "encoding_type",
@@ -288,7 +275,6 @@ class STA2REST:
             "self_link",
             "featuresofinterest_navigation_link",
             "datastream_navigation_link",
-            "commit_navigation_link",
             "phenomenon_time",
             "result_time",
             "result",
@@ -310,7 +296,6 @@ class STA2REST:
             "self_link",
             "featuresofinterest_navigation_link",
             "datastream_navigation_link",
-            "commit_navigation_link",
             "phenomenon_time",
             "result_time",
             "result",
@@ -331,9 +316,15 @@ class STA2REST:
         "resultTime": "result_time",
         "resultQuality": "result_quality",
         "validTime": "valid_time",
+        "systemTimeValidity": "system_time_validity",
     }
 
     REVERSE_SELECT_MAPPING = {v: k for k, v in SELECT_MAPPING.items()}
+
+    if VERSIONING:
+        for key in DEFAULT_SELECT:
+            if key != "Commit":
+                DEFAULT_SELECT[key].append("commit_navigation_link")
 
     @staticmethod
     def get_default_column_names(entity: str) -> list:
@@ -351,6 +342,7 @@ class STA2REST:
             if old_key in select:
                 select.remove(old_key)
                 select.append(new_key)
+
         return select
 
     @staticmethod
@@ -373,7 +365,7 @@ class STA2REST:
         return entity + "_id"
 
     @staticmethod
-    async def convert_query(full_path: str, db) -> str:
+    def convert_query(full_path: str) -> str:
         """
         Converts a STA query to a PostgREST query.
 
@@ -412,28 +404,55 @@ class STA2REST:
         entities = uri["entities"]
 
         if query_ast.as_of:
-            if len(entities) == 0 and not query_ast.expand:
-                main_entity += "TravelTime"
-                as_of_filter = (
-                    f"system_time_validity eq {query_ast.as_of.value}"
-                )
-                query_ast.filter = FilterNode(
-                    query_ast.filter.filter + f" and {as_of_filter}"
-                    if query_ast.filter
-                    else as_of_filter
-                )
-            else:
-                raise Exception(
-                    "AS_OF function available only for single entity"
-                )
-            # if query_ast.expand:
-            #     for identifier in query_ast.expand.identifiers:
-            #         identifier.identifier = identifier.identifier + "TravelTime"
-            #         identifier.subquery = QueryNode(None, None, None, None, None, None, None, None, None, True) if identifier.subquery is None else identifier.subquery
-            #         identifier.subquery.filter = FilterNode(identifier.subquery.filter + f" and {as_of_filter}" if identifier.subquery.filter else as_of_filter)
+            if datetime.fromisoformat(query_ast.as_of.value) > datetime.now():
+                raise Exception("AS_OF value cannot be in the future")
+
+            main_entity += "TravelTime"
+            entities = [
+                (entity + "TravelTime", value) for entity, value in entities
+            ]
+            as_of_filter = f"system_time_validity eq {query_ast.as_of.value}"
+            query_ast.filter = FilterNode(
+                query_ast.filter.filter + f" and {as_of_filter}"
+                if query_ast.filter
+                else as_of_filter
+            )
+            if query_ast.expand:
+                for identifier in query_ast.expand.identifiers:
+                    identifier.identifier = STA2REST.ENTITY_MAPPING.get(
+                        identifier.identifier, identifier.identifier
+                    )
+                    identifier.subquery = (
+                        QueryNode(
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            True,
+                        )
+                        if identifier.subquery is None
+                        else identifier.subquery
+                    )
+                    if identifier.identifier != "Commit":
+                        identifier.identifier += "TravelTime"
+                        identifier.subquery.filter = FilterNode(
+                            identifier.subquery.filter.filter
+                            + f" and {as_of_filter}"
+                            if identifier.subquery.filter
+                            else as_of_filter
+                        )
 
         if query_ast.from_to:
-            if len(entities) == 0 and not query_ast.expand:
+            if (
+                len(entities) == 0
+                and not main_entity_id
+                and not query_ast.expand
+            ):
                 main_entity += "TravelTime"
                 from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
                 query_ast.filter = FilterNode(
@@ -524,14 +543,13 @@ class STA2REST:
         # Visit the query ast to convert it
         visitor = NodeVisitor(
             main_entity,
-            db,
             full_path,
             uri["ref"],
             uri["value"],
             single_result,
             entities,
         )
-        query_converted = await visitor.visit(query_ast)
+        query_converted = visitor.visit(query_ast)
 
         # Result format is allowed only for Observations
         if query_ast.result_format and main_entity != "Observation":
