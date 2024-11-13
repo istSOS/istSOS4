@@ -8,9 +8,9 @@ from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
 from app.v1.endpoints.update_patch import updateDatastream, updateObservation
 from asyncpg.types import Range
-from fastapi.responses import JSONResponse, Response
-
+from dateutil import parser
 from fastapi import APIRouter, Depends, Request, status
+from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
 
@@ -96,7 +96,7 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
                                 )
 
                             _, observation_selfLink = (
-                                await insertBulkObservation(
+                                await insertDataArrayObservation(
                                     observation_payload, conn
                                 )
                             )
@@ -117,7 +117,235 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
         )
 
 
-async def insertBulkObservation(payload, conn, datastream_id=None):
+@v1.api_route("/BulkObservations", methods=["POST"])
+async def create_observations(request: Request, pgpool=Depends(get_pool)):
+    try:
+        body = await request.json()
+        if not isinstance(body, list):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "code": 400,
+                    "type": "error",
+                    "message": "Invalid payload format. Expected a list of observations.",
+                },
+            )
+
+        response_urls = []
+
+        async with pgpool.acquire() as conn:
+            async with conn.transaction():
+                for observation_set in body:
+                    datastream_id = observation_set.get("Datastream", {}).get(
+                        "@iot.id"
+                    )
+                    components = observation_set.get("components", [])
+                    data_array = observation_set.get("dataArray", [])
+
+                    if not datastream_id:
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "code": 400,
+                                "type": "error",
+                                "message": "Missing 'datastream_id' in Datastream.",
+                            },
+                        )
+
+                    # Check that at least phenomenonTime and result are present
+                    if (
+                        "phenomenonTime" not in components
+                        or "result" not in components
+                    ):
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "code": 400,
+                                "type": "error",
+                                "message": "Missing required properties 'phenomenonTime' or 'result' in components.",
+                            },
+                        )
+                    if "featureOfInterest" in components:
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "code": 400,
+                                "type": "error",
+                                "message": "This method does not support 'featureOfInterest' in components. It will support in future.",
+                            },
+                        )
+                    try:
+                        foi_id = await get_foi_id(datastream_id, conn)
+                        await insertBulkObservation(
+                            data_array,
+                            conn,
+                            foi_id,
+                            datastream_id=datastream_id,
+                            components=components,
+                        )
+                        # await update_datastream_phenomenon_time(
+                        #     conn, datastream_id
+                        # )
+
+                        response_urls.append("success")
+                    except Exception as e:
+                        response_urls.append("error")
+                        if DEBUG:
+                            print(f"Error inserting observation: {str(e)}")
+                            traceback.print_exc()
+        return JSONResponse(status_code=status.HTTP_201_CREATED, content="")
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"code": 400, "type": "error", "message": str(e)},
+        )
+
+
+async def insertBulkObservation(
+    payload, conn, foi_id, datastream_id, components=None
+):
+    """
+    Inserts observation data into the database.
+
+    Args:
+        payload (dict or list): The payload containing the observation(s) to be inserted.
+        conn (connection): The database connection object.
+        datastream_id (int, optional): The ID of the datastream associated with the observation. Defaults to None.
+
+    Returns:
+        tuple: A tuple containing the ID and selfLink of the inserted observation.
+
+    Raises:
+        Exception: If an error occurs during the insertion process.
+    """
+
+    try:
+        async with conn.transaction():
+            result_time_idx = -1
+            if components:
+                result_idx = components.index("result")
+                ph_idx = components.index("phenomenonTime")
+                if components.index("resultTime") > -1:
+                    result_time_idx = components.index("resultTime")
+                if isinstance(payload[0][result_idx], str):
+                    result_type = 3
+                    observation_type = "resultString"
+                elif isinstance(payload[0][result_idx], bool):
+                    result_type = 1
+                    observation_type = "resultBoolean"
+                elif isinstance(payload[0][result_idx], dict):
+                    result_type = 2
+                    observation_type = "resultJSON"
+                else:
+                    result_type = 0
+                    observation_type = "resultNumber"
+            else:
+                result_type = 0
+                observation_type = "resultNumber"
+                ph_idx = 0
+            data = []
+            ph_interval = None
+            for obs in payload:
+                if result_time_idx > -1:
+                    obs[result_time_idx] = parser.parse(obs[result_time_idx])
+                if "/" in obs[ph_idx]:
+                    ph_time = obs[ph_idx].split("/")
+                    obs[ph_idx] = Range(
+                        ph_time[0],
+                        ph_time[1],
+                        upper_inc=True,
+                    )
+                else:
+                    obs[ph_idx] = Range(
+                        obs[ph_idx],
+                        obs[ph_idx],
+                        upper_inc=True,
+                    )
+                if ph_interval is None:
+                    ph_interval = Range(
+                        obs[ph_idx].lower,
+                        obs[ph_idx].upper,
+                        upper_inc=True,
+                    )
+                else:
+                    if parser.parse(ph_interval.lower) > parser.parse(
+                        obs[ph_idx].lower
+                    ):
+                        ph_interval = Range(
+                            obs[ph_idx].lower,
+                            ph_interval.upper,
+                            upper_inc=True,
+                        )
+                    if parser.parse(ph_interval.upper) < parser.parse(
+                        obs[ph_idx].upper
+                    ):
+                        ph_interval = Range(
+                            ph_interval.lower,
+                            obs[ph_idx].upper,
+                            upper_inc=True,
+                        )
+                obs[ph_idx] = Range(
+                    parser.parse(obs[ph_idx].lower),
+                    parser.parse(obs[ph_idx].upper),
+                    upper_inc=True,
+                )
+                data.append(obs + [result_type, datastream_id, foi_id])
+            ph_interval = Range(
+                parser.parse(ph_interval.lower),
+                parser.parse(ph_interval.upper),
+                upper_inc=True,
+            )
+            cols = [
+                "phenomenonTime",
+                observation_type,
+                "resultType",
+                "datastream_id",
+                "featuresofinterest_id",
+            ]
+
+            if components:
+                idx = 0
+                for c in components:
+                    if c == "result":
+                        components[idx] = observation_type
+                    idx += 1
+
+                cols = components + [
+                    "resultType",
+                    "datastream_id",
+                    "featuresofinterest_id",
+                ]
+
+            await conn.copy_records_to_table(
+                "Observation",
+                records=data,
+                schema_name="sensorthings",
+                columns=cols,
+            )
+            update_query = """
+                UPDATE sensorthings."Datastream"
+                SET "phenomenonTime" = tstzrange(
+                    LEAST($1::timestamptz, lower("phenomenonTime")),
+                    GREATEST($2::timestamptz, upper("phenomenonTime")),
+                    '[]'
+                )
+                WHERE id = $3::bigint;
+            """
+            await conn.execute(
+                update_query,
+                ph_interval.lower,
+                ph_interval.upper,
+                datastream_id,
+            )
+            await update_datastream_last_foi_id(conn, foi_id, datastream_id)
+            return True
+
+    except Exception as e:
+        format_exception(e)
+
+
+async def insertDataArrayObservation(payload, conn, datastream_id=None):
     """
     Inserts observation data into the database.
 
@@ -997,6 +1225,115 @@ async def generate_feature_of_interest(payload, conn):
                     )
 
                 payload["featuresofinterest_id"] = gen_foi_id
+        else:
+            raise ValueError(
+                "Can not generate foi for Thing with no locations."
+            )
+
+
+async def get_foi_id(datastream_id, conn):
+    """
+    Retrieve or generate a Feature of Interest (FOI) ID for a given datastream.
+
+    This function checks if a FOI ID is already associated with the location of the
+    thing related to the provided datastream. If not, it generates a new FOI,
+    inserts it into the database, and updates the location and datastream records
+    accordingly.
+
+    Args:
+        datastream_id (int): The ID of the datastream for which to retrieve or
+                             generate the FOI ID.
+        conn (asyncpg.Connection): The database connection object.
+
+    Returns:
+        int: The FOI ID associated with the datastream.
+
+    Raises:
+        ValueError: If the thing associated with the datastream has no locations.
+    """
+
+    async with conn.transaction():
+        query_location_from_thing_datastream = f"""
+            SELECT
+                l.id,
+                l.name,
+                l.description,
+                l."encodingType",
+                l.location,
+                l.properties,
+                l.gen_foi_id
+            FROM
+                sensorthings."Datastream" d
+            JOIN
+                sensorthings."Thing" t ON d.thing_id = t.id
+            JOIN
+                sensorthings."Thing_Location" tl ON tl.thing_id = t.id
+            JOIN
+                sensorthings."Location" l ON l.ID = tl.location_id
+            WHERE
+                d.id = {datastream_id}
+        """
+
+        result = await conn.fetch(query_location_from_thing_datastream)
+
+        if result:
+            (
+                location_id,
+                name,
+                description,
+                encoding_type,
+                location,
+                properties,
+                gen_foi_id,
+            ) = result[0]
+
+            if gen_foi_id is None:
+                foi_payload = {
+                    "name": name,
+                    "description": description,
+                    "encodingType": encoding_type,
+                    "feature": location,
+                    "properties": properties,
+                }
+
+                foi_id, _ = await insert_record(
+                    foi_payload, conn, "FeaturesOfInterest"
+                )
+
+                update_query = f"""
+                    UPDATE sensorthings."Location" 
+                    SET "gen_foi_id" = $1::bigint
+                    WHERE id = $2::bigint;
+                """
+                await conn.execute(update_query, foi_id, location_id)
+
+                await update_datastream_last_foi_id(
+                    conn, foi_id, datastream_id
+                )
+
+                return foi_id
+            else:
+                select_query = """
+                    SELECT last_foi_id
+                    FROM sensorthings."Datastream"
+                    WHERE id = $1::bigint;
+                """
+                last_foi_id = await conn.fetchval(select_query, datastream_id)
+
+                select_query = """
+                    SELECT id
+                    FROM sensorthings."Observation"
+                    WHERE "datastream_id" = $1::bigint
+                    LIMIT 1;
+                """
+                observation_ids = await conn.fetch(select_query, datastream_id)
+
+                if last_foi_id is None or not observation_ids:
+                    await update_datastream_last_foi_id(
+                        conn, gen_foi_id, datastream_id
+                    )
+
+                return gen_foi_id
         else:
             raise ValueError(
                 "Can not generate foi for Thing with no locations."
