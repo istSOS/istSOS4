@@ -1,9 +1,10 @@
 import json
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 
 import ujson
 from app import (
+    AUTHORIZATION,
     COUNT_ESTIMATE_THRESHOLD,
     COUNT_MODE,
     DEBUG,
@@ -16,15 +17,13 @@ from app import (
 )
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
+from app.oauth import get_current_user
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
 from app.utils.utils import build_nextLink
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.exc import TimeoutError
-from sqlalchemy.orm import Session
-from sqlalchemy.sql import text
-
-from fastapi import APIRouter, Depends, Request, status
 
 v1 = APIRouter()
 
@@ -75,6 +74,7 @@ async def wrapped_result_generator(first_item, result):
 async def catch_all_get(
     request: Request,
     path_name: str,
+    current_user=Depends(get_current_user) if AUTHORIZATION else None,
     pgpool=Depends(get_pool),
 ):
     """
@@ -135,6 +135,7 @@ async def catch_all_get(
             from_to_value,
             single_result,
             full_path,
+            current_user,
         )
 
         try:
@@ -182,9 +183,16 @@ async def asyncpg_stream_results(
     from_to_value,
     single_result,
     full_path,
+    current_user,
 ):
     async with pgpool.acquire() as conn:
         async with conn.transaction():
+            if current_user is not None:
+                query_role = 'SET ROLE "{username}";'
+                await conn.execute(
+                    query_role.format(username=current_user["username"])
+                )
+
             if is_count:
                 if COUNT_MODE == "LIMIT_ESTIMATE":
                     query_count = await conn.fetchval(count_queries[0])
@@ -218,7 +226,9 @@ async def asyncpg_stream_results(
                 as_of_value = (
                     as_of_value
                     if as_of_value is not None
-                    else datetime.now().isoformat()
+                    else datetime.now(timezone.utc)
+                    .isoformat(timespec="seconds")
+                    .replace("+00:00", "Z")
                 )
 
             while True:
@@ -292,3 +302,6 @@ async def asyncpg_stream_results(
                 yield "]}"
 
             await conn.execute("CLOSE my_cursor")
+
+            if current_user is not None:
+                await conn.execute("RESET ROLE")

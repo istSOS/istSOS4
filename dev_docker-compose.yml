@@ -9,13 +9,18 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DATADIR: /var/lib/postgresql/data
     command: >
-      postgres -c custom.versioning="${VERSIONING}" -c custom.duplicates="${DUPLICATES}" -c custom.epsg="${EPSG}" -c log_statement="all" -c log_destination="stderr"
+      postgres
+        -c custom.versioning=${VERSIONING:-0}
+        -c custom.authorization=${AUTHORIZATION:-0}
+        -c custom.duplicates=${DUPLICATES:-0}
+        -c custom.epsg=${EPSG:-4326}
+        -c log_statement="all"
+        -c log_destination="stderr"
+        -c log_duration="on"
     ports:
       - "45432:5432"
     volumes:
       - v-istsos4-database-data:/var/lib/postgresql/data
-    env_file:
-      - .env
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
       interval: 10s
@@ -44,6 +49,7 @@ services:
       PARTITION_CHUNK: ${PARTITION_CHUNK}
       REDIS: ${REDIS}
       EPSG: ${EPSG}
+      AUTHORIZATION: ${AUTHORIZATION}
     command: uvicorn --reload --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - 8018:5000
@@ -86,7 +92,6 @@ services:
     build:
       context: ./docs/mkdocs
       dockerfile: dockerfile
-    #restart: always
     ports:
       - 8019:8000
     volumes:

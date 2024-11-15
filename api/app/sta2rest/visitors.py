@@ -8,6 +8,7 @@ from app import (
     SUBPATH,
     TOP_VALUE,
     VERSION,
+    VERSIONING,
 )
 from app.db.redis_db import redis
 from app.db.sqlalchemy_db import engine
@@ -26,6 +27,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.orm.attributes import InstrumentedAttribute
@@ -719,6 +721,10 @@ class NodeVisitor(Visitor):
             ordering = get_orderby_attr(attrs, orders)
         else:
             ordering = [asc(getattr(main_entity, "id"))]
+            if VERSIONING and node.from_to:
+                ordering.append(
+                    asc(getattr(main_entity, "system_time_validity"))
+                )
 
         main_query = main_query.order_by(*ordering)
 
@@ -903,15 +909,36 @@ def get_select_attr(attr, label, nested=False, as_of=None):
                 + "/"
                 + func.to_char(upper_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
             ).label(label)
-        return case(
-            (
-                attr.isnot(None),
-                func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+        if VERSIONING and attr.name == "systemTimeValidity":
+            return case(
+                (
+                    lower_bound == upper_bound,
+                    func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+                ),
+                else_=func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
                 + "/"
-                + func.to_char(upper_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-            ),
-            else_=None,
-        ).label(label)
+                + case(
+                    (
+                        (upper_bound == "infinity"),
+                        "infinity",
+                    ),
+                    else_=func.to_char(
+                        upper_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'
+                    ),
+                ),
+            ).label(label)
+        else:
+            return case(
+                (
+                    attr.isnot(None),
+                    func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+                    + "/"
+                    + func.to_char(upper_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+                ),
+                else_=None,
+            ).label(label)
+    elif isinstance(attr.type, TIMESTAMP):
+        return func.to_char(attr, 'YYYY-MM-DD"T"HH24:MI:SS"Z"').label(label)
     elif "Link" in label:
         link_url = (
             HOSTNAME

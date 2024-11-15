@@ -36,7 +36,7 @@ TOKEN_TYPES = {
     "LEFT_PAREN": r"\(",
     "RIGHT_PAREN": r"\)",
     "WHITESPACE": r"\s+",
-    "EXPAND_SEPARATOR": r"\/",
+    "SEGMENT_SEPARATOR": r"\/",
 }
 
 

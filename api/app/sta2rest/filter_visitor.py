@@ -262,7 +262,7 @@ class FilterVisitor(visitor.NodeVisitor):
         op = self.visit(node.comparator)
 
         if (
-            "system_time_validity" in left.name
+            "systemTimeValidity" in left.name
             and f"__{getattr(op, '__name__')}__" == "__eq__"
         ):
             if isinstance(right, list):
