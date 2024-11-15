@@ -1,5 +1,6 @@
 CREATE EXTENSION IF NOT exists postgis;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE SCHEMA sensorthings;
 
@@ -231,28 +232,28 @@ $$ LANGUAGE plpgsql;
 
 DO $$
 BEGIN
-    IF NOT current_setting('custom.duplicates', false)::boolean THEN
+    IF NOT current_setting('custom.duplicates')::boolean THEN
         -- Add the UNIQUE constraint on the 'name' column
-        EXECUTE 'ALTER TABLE sensorthings."Location"
-                 ADD CONSTRAINT unique_location_name UNIQUE ("name");';
+        ALTER TABLE sensorthings."Location"
+        ADD CONSTRAINT unique_location_name UNIQUE ("name");
 
-        EXECUTE 'ALTER TABLE sensorthings."Thing"
-                 ADD CONSTRAINT unique_thing_name UNIQUE ("name");';
+        ALTER TABLE sensorthings."Thing"
+        ADD CONSTRAINT unique_thing_name UNIQUE ("name");
 
-        EXECUTE 'ALTER TABLE sensorthings."ObservedProperty"
-                 ADD CONSTRAINT unique_observedProperty_name UNIQUE ("name");';
+        ALTER TABLE sensorthings."ObservedProperty"
+        ADD CONSTRAINT unique_observedProperty_name UNIQUE ("name");
 
-        EXECUTE 'ALTER TABLE sensorthings."Sensor"
-                 ADD CONSTRAINT unique_sensor_name UNIQUE ("name");';
+        ALTER TABLE sensorthings."Sensor"
+        ADD CONSTRAINT unique_sensor_name UNIQUE ("name");
 
-        EXECUTE 'ALTER TABLE sensorthings."Datastream"
-                 ADD CONSTRAINT unique_datastream_name UNIQUE ("name");';
+        ALTER TABLE sensorthings."Datastream"
+        ADD CONSTRAINT unique_datastream_name UNIQUE ("name");
 
-        EXECUTE 'ALTER TABLE sensorthings."FeaturesOfInterest"
-                 ADD CONSTRAINT unique_featuresOfInterest_name UNIQUE ("name");';
+        ALTER TABLE sensorthings."FeaturesOfInterest"
+        ADD CONSTRAINT unique_featuresOfInterest_name UNIQUE ("name");
 
-        EXECUTE 'ALTER TABLE sensorthings."Observation"
-                 ADD CONSTRAINT unique_observation_phenomenonTime_datastreamId UNIQUE ("phenomenonTime", "datastream_id");';
+        ALTER TABLE sensorthings."Observation"
+        ADD CONSTRAINT unique_observation_phenomenonTime_datastreamId UNIQUE ("phenomenonTime", "datastream_id");
     END IF;
 END $$;
 
@@ -565,3 +566,68 @@ BEGIN
     RETURN json_build_object(table_, result, table_ || '@iot.nextLink', next_link);
 END;
 $BODY$;
+
+CREATE TABLE IF NOT EXISTS sensorthings."User"( 
+    "id" BIGSERIAL NOT NULL PRIMARY KEY,
+    "firstName" VARCHAR(255) NOT NULL,
+    "lastName" VARCHAR(255) NOT NULL,
+    "username" VARCHAR(255) UNIQUE,
+    "role" VARCHAR(255) NOT NULL,
+    "email" VARCHAR(255) UNIQUE NOT NULL,
+    "uri" VARCHAR(255)
+);
+
+CREATE OR REPLACE FUNCTION generate_username()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.username := LOWER(NEW."firstName" || '_' || NEW."lastName" || '_' ||  NEW.id);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER username_trigger
+BEFORE INSERT ON sensorthings."User"
+FOR EACH ROW
+EXECUTE FUNCTION generate_username();
+
+DO $$
+BEGIN
+    IF current_setting('custom.authorization')::boolean THEN
+
+        -- Create the admin role
+        CREATE ROLE sensorthings_admin;
+        GRANT CREATE, USAGE ON SCHEMA sensorthings TO sensorthings_admin;
+        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_admin;
+        GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_admin;
+
+        -- Create the viewer role
+        CREATE ROLE sensorthings_viewer;
+        GRANT USAGE ON SCHEMA sensorthings TO sensorthings_viewer;
+        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_viewer;
+        GRANT SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_viewer;
+
+        -- Create the editor role
+        CREATE ROLE sensorthings_editor;
+        GRANT USAGE ON SCHEMA sensorthings TO sensorthings_editor;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_editor;
+        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_editor;
+
+        -- Create the sensor role
+        CREATE ROLE sensorthings_sensor;
+        GRANT USAGE ON SCHEMA sensorthings TO sensorthings_sensor;
+        GRANT INSERT ON TABLE sensorthings."Observation" TO sensorthings_sensor;
+        GRANT UPDATE ("phenomenonTime", "last_foi_id", "observedArea") ON sensorthings."Datastream" TO sensorthings_sensor;
+        GRANT INSERT ON TABLE sensorthings."FeaturesOfInterest" TO sensorthings_sensor;
+        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_sensor;
+        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_sensor;
+
+        -- Create the observation manager role
+        CREATE ROLE sensorthings_obs_manager;
+        GRANT USAGE ON SCHEMA sensorthings TO sensorthings_obs_manager;
+        GRANT INSERT, UPDATE, DELETE, SELECT ON TABLE sensorthings."Observation" TO sensorthings_obs_manager;
+        GRANT UPDATE ("phenomenonTime", "last_foi_id", "observedArea") ON sensorthings."Datastream" TO sensorthings_obs_manager;
+        GRANT INSERT ON TABLE sensorthings."FeaturesOfInterest" TO sensorthings_obs_manager;
+        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_obs_manager;
+        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_obs_manager;
+    END IF;
+END $$;

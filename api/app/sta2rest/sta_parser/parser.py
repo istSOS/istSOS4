@@ -123,8 +123,8 @@ class Parser:
         if self.check_token("EXPAND"):
             self.match("EXPAND")
             dollar_expand = True
-        if self.check_token("EXPAND_SEPARATOR"):
-            self.match("EXPAND_SEPARATOR")
+        if self.check_token("SEGMENT_SEPARATOR"):
+            self.match("SEGMENT_SEPARATOR")
         identifiers = []
         while self.current_token.type != "OPTIONS_SEPARATOR":
             tmp = self.current_token.value
@@ -133,7 +133,7 @@ class Parser:
             # Check if there is a subquery
             if self.check_token("LEFT_PAREN"):
                 identifier.subquery = self.parse_subquery()
-            elif self.check_token("EXPAND_SEPARATOR"):
+            elif self.check_token("SEGMENT_SEPARATOR"):
                 self.expand_identifiers.append(tmp)
                 identifier.subquery = self.parse_subquery()
 
@@ -148,7 +148,7 @@ class Parser:
                     if self.tokens[0].value in self.expand_identifiers:
                         self.match("VALUE_SEPARATOR")
                         self.match("EXPAND_IDENTIFIER")
-                        self.match("EXPAND_SEPARATOR")
+                        self.match("SEGMENT_SEPARATOR")
                     else:
                         self.expand_identifiers = []
                         break
@@ -265,8 +265,7 @@ class Parser:
         self.match("FROMTO")
         value1 = self.current_token.value
         self.match("TIMESTAMP")
-        self.match("VALUE_SEPARATOR")
-        self.match("WHITESPACE")
+        self.match("SEGMENT_SEPARATOR")
         value2 = self.current_token.value
         self.match("TIMESTAMP")
         return ast.FromToNode(value1, value2)
@@ -311,7 +310,7 @@ class Parser:
                 filter = self.parse_filter(True)
             elif self.current_token.type == "EXPAND":
                 expand = self.parse_expand()
-            elif self.current_token.type == "EXPAND_SEPARATOR":
+            elif self.current_token.type == "SEGMENT_SEPARATOR":
                 expand = self.parse_expand()
             elif self.current_token.type == "ORDERBY":
                 orderby = self.parse_orderby()

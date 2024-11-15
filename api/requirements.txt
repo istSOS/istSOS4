@@ -7,3 +7,6 @@ sqlalchemy==2.0.36
 geoalchemy2==0.15.2
 ujson==5.10.0
 redis==5.2.0
+pyjwt==2.9.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.17

@@ -8,7 +8,7 @@ representations in a REST API.
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app import DEBUG, VERSION, VERSIONING
 from odata_query import grammar
@@ -116,6 +116,7 @@ class STA2REST:
             "encoding_type",
             "message",
             "date",
+            "action_type",
         ],
         "Location": [
             "id",
@@ -404,7 +405,12 @@ class STA2REST:
         entities = uri["entities"]
 
         if query_ast.as_of:
-            if datetime.fromisoformat(query_ast.as_of.value) > datetime.now():
+            value = datetime.fromisoformat(query_ast.as_of.value)
+
+            if value.tzinfo is None:
+                query_ast.as_of.value += "Z"
+
+            if value > datetime.now(timezone.utc):
                 raise Exception("AS_OF value cannot be in the future")
 
             main_entity += "TravelTime"
@@ -453,6 +459,20 @@ class STA2REST:
                 and not main_entity_id
                 and not query_ast.expand
             ):
+                value1 = datetime.fromisoformat(query_ast.from_to.value1)
+                value2 = datetime.fromisoformat(query_ast.from_to.value2)
+
+                if value1.tzinfo is None:
+                    query_ast.from_to.value1 += "Z"
+
+                if value2.tzinfo is None:
+                    query_ast.from_to.value2 += "Z"
+
+                if value1 > value2:
+                    raise Exception(
+                        "FROM_TO value1 cannot be greater than value2"
+                    )
+
                 main_entity += "TravelTime"
                 from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
                 query_ast.filter = FilterNode(

@@ -2,15 +2,30 @@ import json
 import traceback
 from datetime import datetime
 
-from app import DEBUG, EPSG, HOSTNAME, SUBPATH, VERSION
+from app import (
+    AUTHORIZATION,
+    DEBUG,
+    EPSG,
+    HOSTNAME,
+    SUBPATH,
+    VERSION,
+    VERSIONING,
+)
 from app.db.asyncpg_db import get_pool
+from app.oauth import authenticate_user, create_access_token, get_current_user
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
-from app.v1.endpoints.update_patch import updateDatastream, updateObservation
+from app.v1.endpoints.update_patch import (
+    insertCommit,
+    updateDatastream,
+    updateObservation,
+)
+from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
 from dateutil import parser
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
+from fastapi.security import OAuth2PasswordRequestForm
 
 v1 = APIRouter()
 
@@ -22,10 +37,126 @@ except:
     DEBUG = 0
 
 
-@v1.api_route("/CreateObservations", methods=["POST"])
-async def create_observations(request: Request, pgpool=Depends(get_pool)):
+@v1.api_route("/users", methods=["POST"])
+async def create_user(request: Request, pgpool=Depends(get_pool)):
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "code": 400,
+                    "type": "error",
+                    "message": "Invalid payload format. Expected a dictionary.",
+                },
+            )
+
+        async with pgpool.acquire() as conn:
+            async with conn.transaction():
+                if (
+                    "firstname" not in body
+                    or "lastname" not in body
+                    or "password" not in body
+                    or "email" not in body
+                    or "role" not in body
+                ):
+                    return JSONResponse(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        content={
+                            "code": 400,
+                            "type": "error",
+                            "message": "Missing required properties 'firstname' or 'lastname' or 'password' or 'email' or 'role'.",
+                        },
+                    )
+
+                if body.get("uri"):
+                    query = """
+                        INSERT INTO sensorthings."User" ("firstName", "lastName", role, email, uri)
+                        VALUES ($1, $2, $3, $4, $5)
+                        RETURNING id, username;
+                    """
+                    user = await conn.fetchrow(
+                        query,
+                        body["firstname"],
+                        body["lastname"],
+                        body["role"],
+                        body["email"],
+                        body["uri"],
+                    )
+                else:
+                    query = """
+                        INSERT INTO sensorthings."User" ("firstName", "lastName", role, email)
+                        VALUES ($1, $2, $3, $4)
+                        RETURNING id, username;
+                    """
+
+                    user = await conn.fetchrow(
+                        query,
+                        body["firstname"],
+                        body["lastname"],
+                        body["role"],
+                        body["email"],
+                    )
+                    query = """
+                        UPDATE sensorthings."User"
+                        SET uri = $1 || '/Users(' || sensorthings."User".id || ')'
+                        WHERE sensorthings."User".id = $2;
+                    """
+                    await conn.execute(
+                        query, f"{HOSTNAME}{SUBPATH}{VERSION}", user["id"]
+                    )
+
+                query = "CREATE USER {username} WITH ENCRYPTED PASSWORD '{password}';"
+                await conn.execute(
+                    query.format(
+                        username=user["username"], password=body["password"]
+                    )
+                )
+
+                query = "GRANT sensorthings_{role} to {username};"
+                await conn.execute(
+                    query.format(role=body["role"], username=user["username"])
+                )
+
+                return JSONResponse(
+                    status_code=status.HTTP_201_CREATED,
+                    content={"id": user["id"], "username": user["username"]},
+                )
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"code": 400, "type": "error", "message": str(e)},
+        )
+
+
+@v1.api_route("/login", methods=["POST"])
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+):
+    user = await authenticate_user(form_data.username)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = create_access_token(data={"sub": user["username"]})
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"access_token": access_token, "token_type": "bearer"},
+    )
+
+
+@v1.api_route("/CreateObservations", methods=["POST"])
+async def create_observations(
+    request: Request,
+    current_user=Depends(get_current_user) if AUTHORIZATION else None,
+    pgpool=Depends(get_pool),
+):
+    try:
+        body = await request.json()
+        headers = request.headers
         if not isinstance(body, list):
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -40,6 +171,24 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
 
         async with pgpool.acquire() as conn:
             async with conn.transaction():
+                if current_user is not None:
+                    query = 'SET ROLE "{username}";'
+                    await conn.execute(
+                        query.format(username=current_user["username"])
+                    )
+
+                try:
+                    commit_id = await get_commit(headers, conn, current_user)
+                except InsufficientPrivilegeError:
+                    return JSONResponse(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        content={
+                            "code": 401,
+                            "type": "error",
+                            "message": "Insufficient privileges.",
+                        },
+                    )
+
                 for observation_set in body:
                     datastream_id = observation_set.get("Datastream", {}).get(
                         "@iot.id"
@@ -92,20 +241,36 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
                                 }
                             else:
                                 await generate_feature_of_interest(
-                                    observation_payload, conn
+                                    observation_payload,
+                                    conn,
+                                    commit_id=commit_id,
                                 )
 
                             _, observation_selfLink = (
-                                await insertDataArrayObservation(
-                                    observation_payload, conn
+                                await insertBulkObservation(
+                                    observation_payload,
+                                    conn,
+                                    commit_id=commit_id,
                                 )
                             )
                             response_urls.append(observation_selfLink)
+                        except InsufficientPrivilegeError:
+                            return JSONResponse(
+                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                content={
+                                    "code": 401,
+                                    "type": "error",
+                                    "message": "Insufficient privileges.",
+                                },
+                            )
                         except Exception as e:
                             response_urls.append("error")
                             if DEBUG:
                                 print(f"Error inserting observation: {str(e)}")
                                 traceback.print_exc()
+
+                if current_user is not None:
+                    await conn.execute("RESET ROLE;")
         return JSONResponse(
             status_code=status.HTTP_201_CREATED, content=response_urls
         )
@@ -118,9 +283,14 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
 
 
 @v1.api_route("/BulkObservations", methods=["POST"])
-async def create_observations(request: Request, pgpool=Depends(get_pool)):
+async def create_observations(
+    request: Request,
+    current_user=Depends(get_current_user) if AUTHORIZATION else None,
+    pgpool=Depends(get_pool),
+):
     try:
         body = await request.json()
+        headers = request.headers
         if not isinstance(body, list):
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -135,6 +305,24 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
 
         async with pgpool.acquire() as conn:
             async with conn.transaction():
+                if current_user is not None:
+                    query = 'SET ROLE "{username}";'
+                    await conn.execute(
+                        query.format(username=current_user["username"])
+                    )
+
+                try:
+                    commit_id = await get_commit(headers, conn, current_user)
+                except InsufficientPrivilegeError:
+                    return JSONResponse(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        content={
+                            "code": 401,
+                            "type": "error",
+                            "message": "Insufficient privileges.",
+                        },
+                    )
+
                 for observation_set in body:
                     datastream_id = observation_set.get("Datastream", {}).get(
                         "@iot.id"
@@ -175,25 +363,36 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
                             },
                         )
                     try:
-                        foi_id = await get_foi_id(datastream_id, conn)
+                        foi_id = await get_foi_id(
+                            datastream_id, conn, commit_id=commit_id
+                        )
                         await insertBulkObservation(
                             data_array,
                             conn,
                             foi_id,
                             datastream_id=datastream_id,
                             components=components,
+                            commit_id=commit_id,
                         )
-                        # await update_datastream_phenomenon_time(
-                        #     conn, datastream_id
-                        # )
-
                         response_urls.append("success")
+                    except InsufficientPrivilegeError:
+                        return JSONResponse(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            content={
+                                "code": 401,
+                                "type": "error",
+                                "message": "Insufficient privileges.",
+                            },
+                        )
                     except Exception as e:
                         response_urls.append("error")
                         if DEBUG:
                             print(f"Error inserting observation: {str(e)}")
                             traceback.print_exc()
-        return JSONResponse(status_code=status.HTTP_201_CREATED, content="")
+
+                if current_user is not None:
+                    await conn.execute("RESET ROLE;")
+        return Response(status_code=status.HTTP_201_CREATED)
 
     except Exception as e:
         return JSONResponse(
@@ -203,7 +402,7 @@ async def create_observations(request: Request, pgpool=Depends(get_pool)):
 
 
 async def insertBulkObservation(
-    payload, conn, foi_id, datastream_id, components=None
+    payload, conn, foi_id, datastream_id, components=None, commit_id=None
 ):
     """
     Inserts observation data into the database.
@@ -244,6 +443,7 @@ async def insertBulkObservation(
                 result_type = 0
                 observation_type = "resultNumber"
                 ph_idx = 0
+
             data = []
             ph_interval = None
             for obs in payload:
@@ -290,7 +490,13 @@ async def insertBulkObservation(
                     parser.parse(obs[ph_idx].upper),
                     upper_inc=True,
                 )
-                data.append(obs + [result_type, datastream_id, foi_id])
+
+                default_obs = [result_type, datastream_id, foi_id]
+
+                if VERSIONING and commit_id is not None:
+                    default_obs.append(commit_id)
+
+                data.append(obs + default_obs)
             ph_interval = Range(
                 parser.parse(ph_interval.lower),
                 parser.parse(ph_interval.upper),
@@ -317,6 +523,9 @@ async def insertBulkObservation(
                     "featuresofinterest_id",
                 ]
 
+            if VERSIONING and commit_id is not None:
+                cols.append("commit_id")
+
             await conn.copy_records_to_table(
                 "Observation",
                 records=data,
@@ -338,14 +547,18 @@ async def insertBulkObservation(
                 ph_interval.upper,
                 datastream_id,
             )
-            await update_datastream_last_foi_id(conn, foi_id, datastream_id)
-            return True
 
+            await update_datastream_last_foi_id(conn, foi_id, datastream_id)
+
+    except InsufficientPrivilegeError:
+        raise InsufficientPrivilegeError
     except Exception as e:
         format_exception(e)
 
 
-async def insertDataArrayObservation(payload, conn, datastream_id=None):
+async def insertDataArrayObservation(
+    payload, conn, datastream_id=None, commit_id=None
+):
     """
     Inserts observation data into the database.
 
@@ -380,6 +593,7 @@ async def insertDataArrayObservation(payload, conn, datastream_id=None):
                     datastream_id,
                     insertDatastream,
                     conn,
+                    commit_id=commit_id,
                 )
 
                 if "FeatureOfInterest" in obs:
@@ -410,12 +624,15 @@ async def insertDataArrayObservation(payload, conn, datastream_id=None):
                                 obs["FeatureOfInterest"],
                                 conn,
                                 obs["datastream_id"],
+                                commit_id=commit_id,
                             )
                         )
                     obs.pop("FeatureOfInterest", None)
                     obs["featuresofinterest_id"] = features_of_interest_id
                 else:
-                    await generate_feature_of_interest(obs, conn)
+                    await generate_feature_of_interest(
+                        obs, conn, commit_id=commit_id
+                    )
 
                 check_missing_properties(
                     obs, ["Datastream", "FeaturesOfInterest"]
@@ -486,13 +703,18 @@ async def insertDataArrayObservation(payload, conn, datastream_id=None):
 
             return observation_id, observation_selfLink
 
+    except InsufficientPrivilegeError:
+        raise InsufficientPrivilegeError
     except Exception as e:
         format_exception(e)
 
 
 @v1.api_route("/{path_name:path}", methods=["POST"])
 async def catch_all_post(
-    request: Request, path_name: str, pgpool=Depends(get_pool)
+    request: Request,
+    path_name: str,
+    current_user=Depends(get_current_user) if AUTHORIZATION else None,
+    pgpool=Depends(get_pool),
 ):
     """
     Handle POST requests for all paths.
@@ -529,6 +751,8 @@ async def catch_all_post(
         # get json body
         body = await request.json()
 
+        headers = request.headers
+
         main_table = result["entity"][0]
 
         if DEBUG:
@@ -554,11 +778,11 @@ async def catch_all_post(
                 body[f"{name.lower()}_id"] = int(id)
 
         if DEBUG:
-            res = await insert(main_table, body, pgpool)
+            res = await insert(main_table, headers, body, pgpool, current_user)
             response2jsonfile(request, "", "requests.json", b, res.status_code)
             return res
         else:
-            r = await insert(main_table, body, pgpool)
+            r = await insert(main_table, headers, body, pgpool, current_user)
             return r
     except Exception as e:
         traceback.print_exc()
@@ -568,7 +792,7 @@ async def catch_all_post(
         )
 
 
-async def insert(main_table, payload, pgpool):
+async def insert(main_table, headers, payload, pgpool, current_user):
     """
     Insert data into the specified main_table using the provided payload.
 
@@ -584,10 +808,29 @@ async def insert(main_table, payload, pgpool):
     async with pgpool.acquire() as conn:
         async with conn.transaction():
             try:
-                _, header = await insert_funcs[main_table](payload, conn)
+                if current_user is not None:
+                    query = 'SET ROLE "{username}";'
+                    await conn.execute(
+                        query.format(username=current_user["username"])
+                    )
+
+                commit_id = await get_commit(headers, conn, current_user)
+
+                _, header = await insert_funcs[main_table](
+                    payload, conn, commit_id=commit_id
+                )
                 return Response(
                     status_code=status.HTTP_201_CREATED,
                     headers={"location": header},
+                )
+            except InsufficientPrivilegeError:
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={
+                        "code": 401,
+                        "type": "error",
+                        "message": "Insufficient privileges.",
+                    },
                 )
             except ValueError as e:
                 return JSONResponse(
@@ -599,6 +842,9 @@ async def insert(main_table, payload, pgpool):
                     status_code=status.HTTP_400_BAD_REQUEST,
                     content={"code": 400, "type": "error", "message": str(e)},
                 )
+            finally:
+                if current_user is not None:
+                    await conn.execute("RESET ROLE;")
 
 
 async def insert_record(payload, conn, table):
@@ -647,7 +893,7 @@ async def insert_record(payload, conn, table):
         return inserted_id, inserted_self_link
 
 
-async def insertLocation(payload, conn):
+async def insertLocation(payload, conn, commit_id=None):
     """
     Inserts location data into the database.
 
@@ -679,12 +925,15 @@ async def insertLocation(payload, conn):
                     new_thing = False
                     check_iot_id_in_payload(thing, "Thing")
                 else:
-                    thing_id, _ = await insertThing(thing, conn)
+                    thing_id, _ = await insertThing(thing, conn, commit_id)
                     new_thing = True
 
                 things.append((thing_id, new_thing))
 
             payload.pop("Things", None)
+
+            if VERSIONING and commit_id is not None:
+                payload["commit_id"] = commit_id
 
             location_id, location_self_link = await insert_record(
                 payload, conn, "Location"
@@ -692,16 +941,18 @@ async def insertLocation(payload, conn):
 
             for thing_id, new_thing in things:
                 await manage_thing_location_with_historical_location(
-                    conn, thing_id, location_id, new_thing
+                    conn, thing_id, location_id, new_thing, commit_id=commit_id
                 )
 
             return location_id, location_self_link
 
+    except InsufficientPrivilegeError:
+        raise InsufficientPrivilegeError
     except Exception as e:
         format_exception(e)
 
 
-async def insertThing(payload, conn):
+async def insertThing(payload, conn, commit_id=None):
     """
     Inserts a Thing record into the database.
 
@@ -725,7 +976,9 @@ async def insertThing(payload, conn):
             for location in payload.get("Locations", []):
                 location_id = location.get("@iot.id")
                 if location_id is None:
-                    location_id, _ = await insertLocation(location, conn)
+                    location_id, _ = await insertLocation(
+                        location, conn, commit_id
+                    )
                 else:
                     check_iot_id_in_payload(location, "Location")
 
@@ -735,25 +988,32 @@ async def insertThing(payload, conn):
 
             datastreams = payload.pop("Datastreams", [])
 
+            if VERSIONING and commit_id is not None:
+                payload["commit_id"] = commit_id
+
             thing_id, thing_selfLink = await insert_record(
                 payload, conn, "Thing"
             )
 
             for location_id in locations_ids:
                 await manage_thing_location_with_historical_location(
-                    conn, thing_id, location_id, True
+                    conn, thing_id, location_id, True, commit_id=commit_id
                 )
 
             for datastream in datastreams:
-                await insertDatastream(datastream, conn, thing_id=thing_id)
+                await insertDatastream(
+                    datastream, conn, thing_id=thing_id, commit_id=commit_id
+                )
 
             return thing_id, thing_selfLink
 
+    except InsufficientPrivilegeError:
+        raise InsufficientPrivilegeError
     except Exception as e:
         format_exception(e)
 
 
-async def insertHistoricalLocation(payload, conn):
+async def insertHistoricalLocation(payload, conn, commit_id=None):
     """
     Inserts a historical location record into the database.
 
@@ -779,7 +1039,9 @@ async def insertHistoricalLocation(payload, conn):
             for location in payload.get("Locations", []):
                 location_id = location.get("@iot.id")
                 if location_id is None:
-                    location_id, _ = await insertLocation(location, conn)
+                    location_id, _ = await insertLocation(
+                        location, conn, commit_id
+                    )
                 else:
                     check_iot_id_in_payload(location, "Location")
 
@@ -790,12 +1052,17 @@ async def insertHistoricalLocation(payload, conn):
             if "Thing" in payload:
                 thing_id = payload["Thing"].get("@iot.id")
                 if thing_id is None:
-                    thing_id, _ = await insertThing(payload["Thing"], conn)
+                    thing_id, _ = await insertThing(
+                        payload["Thing"], conn, commit_id
+                    )
                     new_thing = True
                 payload["thing_id"] = thing_id
                 payload.pop("Thing", None)
 
             handle_datetime_fields(payload)
+
+            if VERSIONING and commit_id is not None:
+                payload["commit_id"] = commit_id
 
             historical_location_id, historical_location_selfLink = (
                 await insert_record(payload, conn, "HistoricalLocation")
@@ -808,15 +1075,18 @@ async def insertHistoricalLocation(payload, conn):
                     location_id,
                     new_thing,
                     historical_location_id,
+                    commit_id=commit_id,
                 )
 
             return historical_location_id, historical_location_selfLink
 
+    except InsufficientPrivilegeError:
+        raise InsufficientPrivilegeError
     except Exception as e:
         format_exception(e)
 
 
-async def insertSensor(payload, conn):
+async def insertSensor(payload, conn, commit_id=None):
     """
     Inserts a sensor record into the database.
 
@@ -833,6 +1103,10 @@ async def insertSensor(payload, conn):
 
     try:
         async with conn.transaction():
+
+            if VERSIONING and commit_id is not None:
+                payload["commit_id"] = commit_id
+
             sensor_id, sensor_selfLink = await insert_record(
                 payload, conn, "Sensor"
             )
@@ -841,15 +1115,21 @@ async def insertSensor(payload, conn):
             if datastreams:
                 for datastream in datastreams:
                     await insertDatastream(
-                        datastream, conn, sensor_id=sensor_id
+                        datastream,
+                        conn,
+                        sensor_id=sensor_id,
+                        commit_id=commit_id,
                     )
 
             return sensor_id, sensor_selfLink
+
+    except InsufficientPrivilegeError:
+        raise InsufficientPrivilegeError
     except Exception as e:
         format_exception(e)
 
 
-async def insertObservedProperty(payload, conn):
+async def insertObservedProperty(payload, conn, commit_id=None):
     """
     Inserts a new observed property record into the database.
 
@@ -865,6 +1145,10 @@ async def insertObservedProperty(payload, conn):
     """
     try:
         async with conn.transaction():
+
+            if VERSIONING and commit_id is not None:
+                payload["commit_id"] = commit_id
+
             observed_property_id, observed_property_selfLink = (
                 await insert_record(payload, conn, "ObservedProperty")
             )
@@ -876,14 +1160,20 @@ async def insertObservedProperty(payload, conn):
                         datastream,
                         conn,
                         observed_property_id=observed_property_id,
+                        commit_id=commit_id,
                     )
 
             return observed_property_id, observed_property_selfLink
+
+    except InsufficientPrivilegeError:
+        raise InsufficientPrivilegeError
     except Exception as e:
         format_exception(e)
 
 
-async def insertFeaturesOfInterest(payload, conn, datastream_id=None):
+async def insertFeaturesOfInterest(
+    payload, conn, datastream_id=None, commit_id=None
+):
     """
     Inserts features of interest into the database.
 
@@ -904,6 +1194,9 @@ async def insertFeaturesOfInterest(payload, conn, datastream_id=None):
             if feature:
                 validate_epsg(feature.get("crs"))
 
+            if VERSIONING and commit_id is not None:
+                payload["commit_id"] = commit_id
+
             features_of_interest_id, feature_of_interest_self_link = (
                 await insert_record(payload, conn, "FeaturesOfInterest")
             )
@@ -920,16 +1213,24 @@ async def insertFeaturesOfInterest(payload, conn, datastream_id=None):
                         observation,
                         conn,
                         features_of_interest_id=features_of_interest_id,
+                        commit_id=commit_id,
                     )
 
             return features_of_interest_id, feature_of_interest_self_link
 
+    except InsufficientPrivilegeError:
+        raise InsufficientPrivilegeError
     except Exception as e:
         format_exception(e)
 
 
 async def insertDatastream(
-    payload, conn, thing_id=None, sensor_id=None, observed_property_id=None
+    payload,
+    conn,
+    thing_id=None,
+    sensor_id=None,
+    observed_property_id=None,
+    commit_id=None,
 ):
     """
     Inserts datastream(s) into the database.
@@ -969,10 +1270,10 @@ async def insertDatastream(
                 )
 
             await handle_associations(
-                payload, "Thing", thing_id, insertThing, conn
+                payload, "Thing", thing_id, insertThing, conn, commit_id
             )
             await handle_associations(
-                payload, "Sensor", sensor_id, insertSensor, conn
+                payload, "Sensor", sensor_id, insertSensor, conn, commit_id
             )
             await handle_associations(
                 payload,
@@ -980,6 +1281,7 @@ async def insertDatastream(
                 observed_property_id,
                 insertObservedProperty,
                 conn,
+                commit_id,
             )
 
             check_missing_properties(
@@ -992,22 +1294,33 @@ async def insertDatastream(
 
             handle_datetime_fields(payload)
 
+            if VERSIONING and commit_id is not None:
+                payload["commit_id"] = commit_id
+
             datastream_id, datastream_selfLink = await insert_record(
                 payload, conn, "Datastream"
             )
 
             if observations:
                 for observation in observations:
-                    await insertObservation(observation, conn, datastream_id)
+                    await insertObservation(
+                        observation, conn, datastream_id, commit_id=commit_id
+                    )
 
         return datastream_id, datastream_selfLink
 
+    except InsufficientPrivilegeError:
+        raise InsufficientPrivilegeError
     except Exception as e:
         format_exception(e)
 
 
 async def insertObservation(
-    payload, conn, datastream_id=None, features_of_interest_id=None
+    payload,
+    conn,
+    datastream_id=None,
+    features_of_interest_id=None,
+    commit_id=None,
 ):
     """
     Inserts observation data into the database.
@@ -1046,7 +1359,12 @@ async def insertObservation(
                 )
 
             await handle_associations(
-                payload, "Datastream", datastream_id, insertDatastream, conn
+                payload,
+                "Datastream",
+                datastream_id,
+                insertDatastream,
+                conn,
+                commit_id,
             )
 
             if "FeatureOfInterest" in payload:
@@ -1077,12 +1395,13 @@ async def insertObservation(
                             payload["FeatureOfInterest"],
                             conn,
                             payload["datastream_id"],
+                            commit_id,
                         )
                     )
                 payload.pop("FeatureOfInterest", None)
                 payload["featuresofinterest_id"] = features_of_interest_id
             else:
-                await generate_feature_of_interest(payload, conn)
+                await generate_feature_of_interest(payload, conn, commit_id)
 
             check_missing_properties(
                 payload, ["Datastream", "FeaturesOfInterest"]
@@ -1097,6 +1416,9 @@ async def insertObservation(
                     current_time,
                     upper_inc=True,
                 )
+
+            if VERSIONING and commit_id is not None:
+                payload["commit_id"] = commit_id
 
             observation_id, observation_self_link = await insert_record(
                 payload, conn, "Observation"
@@ -1120,11 +1442,13 @@ async def insertObservation(
 
             return observation_id, observation_self_link
 
+    except InsufficientPrivilegeError:
+        raise InsufficientPrivilegeError
     except Exception as e:
         format_exception(e)
 
 
-async def generate_feature_of_interest(payload, conn):
+async def generate_feature_of_interest(payload, conn, commit_id=None):
     """
     Generates a FeatureOfInterest based on the given payload and connection.
 
@@ -1183,6 +1507,9 @@ async def generate_feature_of_interest(payload, conn):
                     "properties": properties,
                 }
 
+                if VERSIONING and commit_id is not None:
+                    foi_payload["commit_id"] = commit_id
+
                 foi_id, _ = await insert_record(
                     foi_payload, conn, "FeaturesOfInterest"
                 )
@@ -1231,7 +1558,7 @@ async def generate_feature_of_interest(payload, conn):
             )
 
 
-async def get_foi_id(datastream_id, conn):
+async def get_foi_id(datastream_id, conn, commit_id=None):
     """
     Retrieve or generate a Feature of Interest (FOI) ID for a given datastream.
 
@@ -1295,6 +1622,9 @@ async def get_foi_id(datastream_id, conn):
                     "feature": location,
                     "properties": properties,
                 }
+
+                if VERSIONING and commit_id is not None:
+                    foi_payload["commit_id"] = commit_id
 
                 foi_id, _ = await insert_record(
                     foi_payload, conn, "FeaturesOfInterest"
@@ -1363,7 +1693,9 @@ def check_iot_id_in_payload(payload, entity):
         )
 
 
-async def handle_associations(payload, key, entity_id, insert_func, conn):
+async def handle_associations(
+    payload, key, entity_id, insert_func, conn, commit_id
+):
     if entity_id is not None:
         payload[f"{key.lower()}_id"] = entity_id
     elif key in payload:
@@ -1372,7 +1704,7 @@ async def handle_associations(payload, key, entity_id, insert_func, conn):
             payload[f"{key.lower()}_id"] = payload[key]["@iot.id"]
         else:
             async with conn.transaction():
-                entity_id, _ = await insert_func(payload[key], conn)
+                entity_id, _ = await insert_func(payload[key], conn, commit_id)
             payload[f"{key.lower()}_id"] = entity_id
         payload.pop(key, None)
 
@@ -1430,7 +1762,12 @@ def validate_epsg(crs):
 
 
 async def manage_thing_location_with_historical_location(
-    conn, thing_id, location_id, new_record, historical_location_id=None
+    conn,
+    thing_id,
+    location_id,
+    new_record,
+    historical_location_id=None,
+    commit_id=None,
 ):
     async with conn.transaction():
         if new_record:
@@ -1464,14 +1801,24 @@ async def manage_thing_location_with_historical_location(
                 )
 
         if historical_location_id is None:
-            insert_query = f"""
-                INSERT INTO sensorthings."HistoricalLocation" ("thing_id")
-                VALUES ($1)
-                RETURNING id;
-            """
-            historical_location_id = await conn.fetchval(
-                insert_query, thing_id
-            )
+            if VERSIONING:
+                insert_query = f"""
+                    INSERT INTO sensorthings."HistoricalLocation" ("thing_id", "commit_id")
+                    VALUES ($1, $2)
+                    RETURNING id;
+                """
+                historical_location_id = await conn.fetchval(
+                    insert_query, thing_id, commit_id
+                )
+            else:
+                insert_query = f"""
+                    INSERT INTO sensorthings."HistoricalLocation" ("thing_id")
+                    VALUES ($1)
+                    RETURNING id;
+                """
+                historical_location_id = await conn.fetchval(
+                    insert_query, thing_id
+                )
 
         if historical_location_id is not None:
             await conn.execute(
@@ -1512,3 +1859,29 @@ async def update_datastream_observedArea(conn, datastream_id, foi_id):
             WHERE id = $2;
         """
         await conn.execute(update_query, foi_id, datastream_id)
+
+
+async def get_commit(headers, conn, current_user):
+    if VERSIONING:
+        if headers.get("commit-message"):
+            if current_user and current_user["role"] == "sensor":
+                raise Exception("Sensor cannot provide commit message")
+
+            commit_message = headers.get("commit-message")
+            commit_author = (
+                current_user["uri"]
+                if current_user and current_user["role"] != "sensor"
+                else "anonymous"
+            )
+            commit_encoding_type = "text/plain"
+            commit = {
+                "message": commit_message,
+                "author": commit_author,
+                "encodingType": commit_encoding_type,
+            }
+            return await insertCommit(commit, conn, "INSERT")
+        else:
+            if current_user and current_user["role"] == "sensor":
+                return None
+            raise Exception("No commit message provided")
+    return None

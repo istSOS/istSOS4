@@ -1,13 +1,14 @@
 import json
 import traceback
 
-from app import DEBUG, EPSG, VERSIONING
+from app import AUTHORIZATION, DEBUG, EPSG, VERSIONING
 from app.db.asyncpg_db import get_pool
+from app.oauth import get_current_user
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
-from fastapi.responses import JSONResponse, Response
-
+from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Depends, Request, status
+from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
 
@@ -92,7 +93,10 @@ ALLOWED_KEYS = {
 
 @v1.api_route("/{path_name:path}", methods=["PATCH"])
 async def catch_all_update(
-    request: Request, path_name: str, pgpool=Depends(get_pool)
+    request: Request,
+    path_name: str,
+    current_user=Depends(get_current_user) if AUTHORIZATION else None,
+    pgpool=Depends(get_pool),
 ):
     """
     Handle PATCH requests for updating entities.
@@ -114,6 +118,8 @@ async def catch_all_update(
         full_path = request.url.path
         result = sta2rest.STA2REST.parse_uri(full_path)
 
+        headers = request.headers
+
         # Validate entity name and id
         name, id = result["entity"]
         if not name or not id:
@@ -132,10 +138,6 @@ async def catch_all_update(
             except:
                 b = ""
 
-        if VERSIONING:
-            ALLOWED_KEYS["Commit"] = {"message", "author", "encodingType"}
-            ALLOWED_KEYS[name].add("Commit")
-
         if name in ALLOWED_KEYS:
             allowed_keys = ALLOWED_KEYS[name]
             invalid_keys = [
@@ -151,11 +153,15 @@ async def catch_all_update(
                 response2jsonfile(request, "", "requests.json", "")
             return Response(status_code=status.HTTP_200_OK)
         if DEBUG:
-            r = await update(name, int(id), body, pgpool)
+            r = await update(
+                name, int(id), headers, body, pgpool, current_user
+            )
             response2jsonfile(request, "", "requests.json", b, r.status_code)
             return r
         else:
-            r = await update(name, int(id), body, pgpool)
+            r = await update(
+                name, int(id), headers, body, pgpool, current_user
+            )
             return r
     except Exception as e:
         traceback.print_exc()
@@ -165,7 +171,9 @@ async def catch_all_update(
         )
 
 
-async def update(main_table, record_id, payload, pgpool):
+async def update(
+    main_table, record_id, headers, payload, pgpool, current_user
+):
     """
     Update function for the specified main_table.
 
@@ -196,13 +204,59 @@ async def update(main_table, record_id, payload, pgpool):
     async with pgpool.acquire() as conn:
         async with conn.transaction():
             try:
+                if current_user is not None:
+                    query = 'SET ROLE "{username}";'
+                    await conn.execute(
+                        query.format(username=current_user["username"])
+                    )
+
+                if VERSIONING:
+                    if headers.get("commit-message"):
+                        commit_message = headers.get("commit-message")
+                        commit_author = (
+                            current_user["uri"]
+                            if current_user
+                            and current_user["role"] != "sensor"
+                            else "anonymous"
+                        )
+                        commit_encoding_type = "text/plain"
+                        commit = {
+                            "message": commit_message,
+                            "author": commit_author,
+                            "encodingType": commit_encoding_type,
+                        }
+                        query = f"""
+                            SELECT id
+                            FROM sensorthings."{main_table}"
+                            WHERE id = {record_id};
+                        """
+                        selected_id = await conn.fetchval(query)
+                        if selected_id:
+                            payload["commit_id"] = await insertCommit(
+                                commit, conn, "UPDATE"
+                            )
+                    else:
+                        raise Exception("No commit message provided")
+
                 await update_funcs[main_table](payload, conn, record_id)
                 return Response(status_code=status.HTTP_200_OK)
+            except InsufficientPrivilegeError:
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={
+                        "code": 401,
+                        "type": "error",
+                        "message": "Insufficient privileges.",
+                    },
+                )
             except Exception as e:
                 return JSONResponse(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     content={"code": 400, "type": "error", "message": str(e)},
                 )
+            finally:
+                if current_user is not None:
+                    await conn.execute("RESET ROLE;")
 
 
 async def update_record(payload, conn, table, record_id):
@@ -222,18 +276,6 @@ async def update_record(payload, conn, table, record_id):
         JSONResponse: If no entity is found for the given ID or if an internal server error occurs.
     """
     async with conn.transaction():
-        if VERSIONING:
-            query = f"""
-                SELECT id
-                FROM sensorthings."{table}"
-                WHERE id = {record_id};
-            """
-            selected_id = await conn.fetchval(query)
-            if selected_id:
-                payload["commit_id"] = await insertCommit(
-                    payload["Commit"], conn
-                )
-                payload.pop("Commit")
 
         payload = {
             key: json.dumps(value) if isinstance(value, dict) else value
@@ -399,9 +441,6 @@ async def updateLocation(payload, conn, location_id):
                         f"Invalid EPSG code. Expected {EPSG}, got {epsg_code}"
                     )
 
-        if VERSIONING:
-            check_commit_versioning(payload)
-
         if payload:
             await update_record(payload, conn, "Location", location_id)
 
@@ -476,9 +515,6 @@ async def updateThing(payload, conn, thing_id):
             payload, conn, thing_id, "Datastreams", "thing_id", "Datastream"
         )
 
-        if VERSIONING:
-            check_commit_versioning(payload)
-
         if payload:
             await update_record(payload, conn, "Thing", thing_id)
 
@@ -535,9 +571,6 @@ async def updateHistoricalLocation(payload, conn, historicallocation_id):
         handle_datetime_fields(payload)
         handle_associations(payload, ["Thing"])
 
-        if VERSIONING:
-            check_commit_versioning(payload)
-
         if payload:
             await update_record(
                 payload, conn, "HistoricalLocation", historicallocation_id
@@ -564,9 +597,6 @@ async def updateSensor(payload, conn, sensor_id):
         await handle_nested_entities(
             payload, conn, sensor_id, "Datastreams", "sensor_id", "Datastream"
         )
-
-        if VERSIONING:
-            check_commit_versioning(payload)
 
         if payload:
             await update_record(payload, conn, "Sensor", sensor_id)
@@ -598,9 +628,6 @@ async def updateObservedProperty(payload, conn, observedproperty_id):
             "Datastream",
         )
 
-        if VERSIONING:
-            check_commit_versioning(payload)
-
         if payload:
             await update_record(
                 payload, conn, "ObservedProperty", observedproperty_id
@@ -629,9 +656,6 @@ async def updateFeaturesOfInterest(payload, conn, featuresofinterest_id):
             "featuresofinterest_id",
             "Observation",
         )
-
-        if VERSIONING:
-            check_commit_versioning(payload)
 
         if payload["feature"]:
             crs = payload["feature"].get("crs")
@@ -673,9 +697,6 @@ async def updateDatastream(payload, conn, datastream_id):
             "Observation",
         )
 
-        if VERSIONING:
-            check_commit_versioning(payload)
-
         if payload:
             await update_record(payload, conn, "Datastream", datastream_id)
 
@@ -698,9 +719,6 @@ async def updateObservation(payload, conn, observation_id):
         handle_datetime_fields(payload)
         handle_result_field(payload)
         handle_associations(payload, ["Datastream", "FeatureOfInterest"])
-
-        if VERSIONING:
-            check_commit_versioning(payload)
 
         if payload:
             await update_record(payload, conn, "Observation", observation_id)
@@ -773,45 +791,11 @@ def handle_associations(payload, keys):
             payload.pop(key)
 
 
-def check_commit_versioning(payload):
-    """
-    Check the versioning of the payload.
-
-    Args:
-        payload (dict): The payload to be checked.
-
-    Raises:
-        Exception: If the "Commit" field is missing in the payload.
-        Exception: If there are invalid keys in the payload for "Commit".
-        Exception: If the "message" field is missing in the "Commit" field.
-
-    """
-
-    if "Commit" not in payload:
-        raise Exception("Commit field is required for versioning update.")
-
-    if "Commit" in ALLOWED_KEYS:
-        allowed_keys = ALLOWED_KEYS["Commit"]
-        invalid_keys = [
-            key for key in payload["Commit"].keys() if key not in allowed_keys
-        ]
-        if invalid_keys:
-            raise Exception(
-                f'Invalid keys in payload for {payload["Commit"]}: {", ".join(invalid_keys)}'
-            )
-
-    if "message" not in payload["Commit"]:
-        raise Exception("Commit message is required for versioning update.")
-
-    if "author" not in payload["Commit"]:
-        payload["Commit"]["author"] = "anonymous"
-
-    if "encodingType" not in payload["Commit"]:
-        payload["Commit"]["encodingType"] = "text/plain"
-
-
-async def insertCommit(payload, conn):
+async def insertCommit(payload, conn, action):
     async with conn.transaction():
+
+        payload["actionType"] = action
+
         for key in list(payload.keys()):
             if isinstance(payload[key], dict):
                 payload[key] = json.dumps(payload[key])

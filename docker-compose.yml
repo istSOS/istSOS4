@@ -1,6 +1,4 @@
-version: "3.7"
 services:
-
   database:
     image: ghcr.io/istsos/istsos4/database:1.0
     environment:
@@ -9,7 +7,14 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DATADIR: /var/lib/postgresql/data
     command: >
-      postgres -c custom.versioning="${VERSIONING}" -c custom.duplicates="${DUPLICATES}" -c custom.epsg="${EPSG}" -c log_statement="all" -c log_destination="stderr" -c log_duration="on"
+      postgres
+        -c custom.versioning=${VERSIONING:-0}
+        -c custom.authorization=${AUTHORIZATION:-0}
+        -c custom.duplicates=${DUPLICATES:-0}
+        -c custom.epsg=${EPSG:-4326}
+        -c log_statement="all"
+        -c log_destination="stderr"
+        -c log_duration="on"
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
       interval: 10s
@@ -36,6 +41,7 @@ services:
       PARTITION_CHUNK: ${PARTITION_CHUNK}
       REDIS: ${REDIS}
       EPSG: ${EPSG}
+      AUTHORIZATION: ${AUTHORIZATION}
     command: uvicorn --timeout-keep-alive 75 --workers 2 --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - 8018:5000
@@ -45,20 +51,20 @@ services:
     image: redis:7.4.0-alpine3.20
     restart: always
 
-# dummy_data:
-#   image: ghcr.io/istsos/istsos4/dummy_data:1.0
-#   command: python3 generator.py
-#   working_dir: /dummy_data
-#   environment:
-#     POSTGRES_DB: ${POSTGRES_DB}
-#     POSTGRES_USER: ${POSTGRES_USER}
-#     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-#     DUMMY_DATA: ${DUMMY_DATA}
-#     CLEAR_DATA: ${CLEAR_DATA}
-#     N_THINGS: ${N_THINGS}
-#     N_OBSERVED_PROPERTIES: ${N_OBSERVED_PROPERTIES}
-#     INTERVAL: ${INTERVAL}
-#     FREQUENCY: ${FREQUENCY}
-#     START_DATETIME: ${START_DATETIME}
-#     CHUNK_INTERVAL: ${CHUNK_INTERVAL}
-#     EPSG: ${EPSG}
+  # dummy_data:
+  #   image: ghcr.io/istsos/istsos4/dummy_data:1.0
+  #   command: python3 generator.py
+  #   working_dir: /dummy_data
+  #   environment:
+  #     POSTGRES_DB: ${POSTGRES_DB}
+  #     POSTGRES_USER: ${POSTGRES_USER}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     DUMMY_DATA: ${DUMMY_DATA}
+  #     CLEAR_DATA: ${CLEAR_DATA}
+  #     N_THINGS: ${N_THINGS}
+  #     N_OBSERVED_PROPERTIES: ${N_OBSERVED_PROPERTIES}
+  #     INTERVAL: ${INTERVAL}
+  #     FREQUENCY: ${FREQUENCY}
+  #     START_DATETIME: ${START_DATETIME}
+  #     CHUNK_INTERVAL: ${CHUNK_INTERVAL}
+  #     EPSG: ${EPSG}

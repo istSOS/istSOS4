@@ -75,24 +75,28 @@ def get_result_type_and_column(input):
     columns = []
     if isinstance(input, str):
         result_type = 3
-        columns.append("resultString")
-        values.append(input)
+        columns.extend(
+            ["resultString", "resultBoolean", "resultNumber", "resultJSON"]
+        )
+        values.extend([input, None, None, None])
     elif isinstance(input, dict):
         result_type = 2
-        columns.append("resultJSON")
-        values.append(input)
+        columns.extend(
+            ["resultJSON", "resultBoolean", "resultNumber", "resultString"]
+        )
+        values.extend([input, None, None, None])
     elif isinstance(input, bool):
         result_type = 1
-        columns.append("resultBoolean")
-        values.append(input)
-        columns.append("resultString")
-        values.append(str(input).lower())
+        columns.extend(
+            ["resultBoolean", "resultString", "resultNumber", "resultJSON"]
+        )
+        values.extend([input, str(input).lower(), None, None])
     elif isinstance(input, int) or isinstance(input, float):
         result_type = 0
-        columns.append("resultNumber")
-        values.append(input)
-        columns.append("resultString")
-        values.append(str(input))
+        columns.extend(
+            ["resultNumber", "resultString", "resultBoolean", "resultJSON"]
+        )
+        values.extend([input, str(input), None, None])
 
     if result_type is not None:
         return result_type, values, columns

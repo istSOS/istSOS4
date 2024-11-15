@@ -1,11 +1,13 @@
 import traceback
 
-from app import DEBUG
+from app import AUTHORIZATION, DEBUG, VERSIONING
 from app.db.asyncpg_db import get_pool
+from app.oauth import get_current_user
 from app.sta2rest import sta2rest
-from fastapi.responses import JSONResponse, Response
-
+from app.v1.endpoints.update_patch import insertCommit
+from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Depends, Request, status
+from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
 
@@ -21,7 +23,10 @@ except:
 
 @v1.api_route("/{path_name:path}", methods=["DELETE"])
 async def catch_all_delete(
-    request: Request, path_name: str, pgpool=Depends(get_pool)
+    request: Request,
+    path_name: str,
+    current_user=Depends(get_current_user) if AUTHORIZATION else None,
+    pgpool=Depends(get_pool),
 ):
     """
     Delete endpoint for catching all DELETE requests.
@@ -40,8 +45,9 @@ async def catch_all_delete(
     """
     try:
         full_path = request.url.path
-        # parse uri
         result = sta2rest.STA2REST.parse_uri(full_path)
+
+        headers = request.headers
 
         # Get main entity
         [name, id] = result["entity"]
@@ -55,6 +61,41 @@ async def catch_all_delete(
 
         async with pgpool.acquire() as conn:
             async with conn.transaction():
+
+                if current_user is not None:
+                    query = 'SET ROLE "{username}";'
+                    await conn.execute(
+                        query.format(username=current_user["username"])
+                    )
+
+                commit_id = None
+                if VERSIONING:
+                    if headers.get("commit-message"):
+                        commit_message = headers.get("commit-message")
+                        commit_author = (
+                            current_user["uri"]
+                            if current_user
+                            and current_user["role"] != "sensor"
+                            else "anonymous"
+                        )
+                        commit_encoding_type = "text/plain"
+                        commit = {
+                            "message": commit_message,
+                            "author": commit_author,
+                            "encodingType": commit_encoding_type,
+                        }
+                        commit_id = await insertCommit(commit, conn, "DELETE")
+                        query = """
+                            UPDATE sensorthings."{name}"
+                            SET "commit_id" = $1
+                            WHERE id = $2
+                        """
+                        await conn.execute(
+                            query.format(name=name), commit_id, int(id)
+                        )
+                    else:
+                        raise Exception("No commit message provided")
+
                 id_deleted = None
                 if name == "Observation":
                     delete_query = """
@@ -156,7 +197,19 @@ async def catch_all_delete(
             if DEBUG:
                 response2jsonfile(request, "", "requests.json")
 
+            if current_user is not None:
+                await conn.execute("RESET ROLE;")
+
             return Response(status_code=status.HTTP_200_OK)
+    except InsufficientPrivilegeError:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={
+                "code": 401,
+                "type": "error",
+                "message": "Insufficient privileges.",
+            },
+        )
 
     except Exception as e:
         # print stack trace
