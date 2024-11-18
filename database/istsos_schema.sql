@@ -567,33 +567,37 @@ BEGIN
 END;
 $BODY$;
 
-CREATE TABLE IF NOT EXISTS sensorthings."User"( 
-    "id" BIGSERIAL NOT NULL PRIMARY KEY,
-    "firstName" VARCHAR(255) NOT NULL,
-    "lastName" VARCHAR(255) NOT NULL,
-    "username" VARCHAR(255) UNIQUE,
-    "role" VARCHAR(255) NOT NULL,
-    "email" VARCHAR(255) UNIQUE NOT NULL,
-    "uri" VARCHAR(255)
-);
-
-CREATE OR REPLACE FUNCTION generate_username()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.username := LOWER(NEW."firstName" || '_' || NEW."lastName" || '_' ||  NEW.id);
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER username_trigger
-BEFORE INSERT ON sensorthings."User"
-FOR EACH ROW
-EXECUTE FUNCTION generate_username();
-
 DO $$
 BEGIN
-    IF current_setting('custom.authorization')::boolean THEN
+    IF current_setting('custom.authorization', true)::boolean THEN
 
+        -- Create the "User" table if it doesn't exist
+        CREATE TABLE IF NOT EXISTS sensorthings."User"( 
+            "id" BIGSERIAL NOT NULL PRIMARY KEY,
+            "firstName" VARCHAR(255) NOT NULL,
+            "lastName" VARCHAR(255) NOT NULL,
+            "username" VARCHAR(255) UNIQUE,
+            "role" VARCHAR(255) NOT NULL,
+            "email" VARCHAR(255) UNIQUE NOT NULL,
+            "uri" VARCHAR(255)
+        );
+
+    -- Create or replace the generate_username function
+        CREATE OR REPLACE FUNCTION sensorthings.generate_username()
+        RETURNS TRIGGER AS $query$
+        BEGIN
+            NEW.username := LOWER(NEW."firstName" || '_' || NEW."lastName" || '_' || NEW.id);
+            RETURN NEW;
+        END;
+        $query$ LANGUAGE plpgsql;
+
+        -- Create a trigger for the "User" table
+        CREATE TRIGGER username_trigger
+        BEFORE INSERT ON sensorthings."User"
+        FOR EACH ROW
+        EXECUTE FUNCTION sensorthings.generate_username();
+
+        -- Create roles and grant privileges
         -- Create the admin role
         CREATE ROLE sensorthings_admin;
         GRANT CREATE, USAGE ON SCHEMA sensorthings TO sensorthings_admin;
@@ -629,5 +633,6 @@ BEGIN
         GRANT INSERT ON TABLE sensorthings."FeaturesOfInterest" TO sensorthings_obs_manager;
         GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_obs_manager;
         GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_obs_manager;
+
     END IF;
 END $$;

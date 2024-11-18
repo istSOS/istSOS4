@@ -1,7 +1,7 @@
 import traceback
 
-from app import AUTHORIZATION, DEBUG, VERSIONING
-from app.db.asyncpg_db import get_pool
+from app import AUTHORIZATION, DEBUG, POSTGRES_PORT_WRITE, VERSIONING
+from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.sta2rest import sta2rest
 from app.v1.endpoints.update_patch import insertCommit
@@ -26,7 +26,7 @@ async def catch_all_delete(
     request: Request,
     path_name: str,
     current_user=Depends(get_current_user) if AUTHORIZATION else None,
-    pgpool=Depends(get_pool),
+    pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     """
     Delete endpoint for catching all DELETE requests.

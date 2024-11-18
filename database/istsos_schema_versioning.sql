@@ -82,8 +82,6 @@ BEGIN
     -- Create a new table with the same structure as the original table, but no data
     EXECUTE format('CREATE TABLE %I.%I AS SELECT * FROM %I.%I WITH NO DATA;', schemaname || '_history', tablename, schemaname, tablename);
 
-    -- EXECUTE format('ALTER TABLE %I.%I ADD COLUMN "deleted_commit_id" BIGINT DEFAULT NULL;', schemaname || '_history', tablename);
-
     -- Add constraint to enforce a single observation does not have two values at the same time
     EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I EXCLUDE USING gist (id WITH =, "systemTimeValidity" WITH &&);', schemaname || '_history', tablename, tablename || '_history_unique_obs');
 
@@ -282,8 +280,7 @@ BEGIN
             "encodingType" VARCHAR(100),
             "message" VARCHAR(255) NOT NULL,
             "date" TIMESTAMPTZ DEFAULT NOW(),
-            "actionType" VARCHAR(100) NOT NULL CHECK ("actionType" IN ('INSERT', 'UPDATE', 'DELETE')),
-            "user_id" BIGINT REFERENCES sensorthings."User"(id) ON DELETE CASCADE
+            "actionType" VARCHAR(100) NOT NULL CHECK ("actionType" IN ('INSERT', 'UPDATE', 'DELETE'))
         );
 
         -- Create or replace function for selfLink
@@ -540,21 +537,30 @@ BEGIN
         EXECUTE 'SELECT sensorthings.add_schema_to_versioning(''sensorthings'');';
 
         IF current_setting('custom.authorization')::boolean THEN
-            -- Grant permissions to the roles on Commit table
+
+            ALTER TABLE sensorthings."Commit"
+            ADD COLUMN "user_id" BIGINT REFERENCES sensorthings."User"(id) ON DELETE CASCADE;
+
+            -- Grant privileges to the roles
             GRANT ALL PRIVILEGES ON TABLE sensorthings."Commit" TO sensorthings_admin;
             GRANT ALL PRIVILEGES ON SEQUENCE sensorthings."Commit_id_seq" TO sensorthings_admin;
+            GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_admin;
 
             GRANT SELECT ON TABLE sensorthings."Commit" TO sensorthings_viewer;
             GRANT SELECT ON SEQUENCE sensorthings."Commit_id_seq" TO sensorthings_viewer;
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_viewer;
 
             GRANT SELECT, INSERT ON TABLE sensorthings."Commit" TO sensorthings_editor;
             GRANT USAGE, SELECT ON SEQUENCE sensorthings."Commit_id_seq" TO sensorthings_editor;
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_editor;
 
             GRANT SELECT ON TABLE sensorthings."Commit" TO sensorthings_sensor;
             GRANT USAGE, SELECT ON SEQUENCE sensorthings."Commit_id_seq" TO sensorthings_sensor;
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_sensor;
 
             GRANT SELECT, INSERT ON TABLE sensorthings."Commit" TO sensorthings_obs_manager;
             GRANT USAGE, SELECT ON SEQUENCE sensorthings."Commit_id_seq" TO sensorthings_obs_manager;
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_obs_manager;
 
             -- Grant permissions to the roles on the versioned tables
             GRANT CREATE, USAGE ON SCHEMA sensorthings_history TO sensorthings_admin;

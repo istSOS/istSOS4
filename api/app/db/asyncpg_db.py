@@ -6,10 +6,14 @@ from app import (
     POSTGRES_HOST,
     POSTGRES_PASSWORD,
     POSTGRES_PORT,
+    POSTGRES_PORT_WRITE,
     POSTGRES_USER,
 )
 
 pgpool: asyncpg.Pool | None = None
+
+if POSTGRES_PORT_WRITE:
+    pgpoolw: asyncpg.Pool | None = None
 
 
 async def get_pool():
@@ -26,3 +30,19 @@ async def get_pool():
             max_inactive_connection_lifetime=3600,
         )
     return pgpool
+
+
+async def get_pool_w():
+    global pgpoolw
+    if not pgpoolw:
+        dsn = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT_WRITE}/{POSTGRES_DB}"
+
+        pgpoolw = await asyncpg.create_pool(
+            dsn=dsn,
+            min_size=PG_POOL_SIZE,
+            max_size=PG_POOL_SIZE,
+            timeout=PG_POOL_TIMEOUT,
+            max_queries=50000,
+            max_inactive_connection_lifetime=3600,
+        )
+    return pgpoolw

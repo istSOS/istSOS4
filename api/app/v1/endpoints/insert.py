@@ -7,11 +7,12 @@ from app import (
     DEBUG,
     EPSG,
     HOSTNAME,
+    POSTGRES_PORT_WRITE,
     SUBPATH,
     VERSION,
     VERSIONING,
 )
-from app.db.asyncpg_db import get_pool
+from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import authenticate_user, create_access_token, get_current_user
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
@@ -38,7 +39,10 @@ except:
 
 
 @v1.api_route("/users", methods=["POST"])
-async def create_user(request: Request, pgpool=Depends(get_pool)):
+async def create_user(
+    request: Request,
+    pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
+):
     try:
         body = await request.json()
         if not isinstance(body, dict):
@@ -152,7 +156,7 @@ async def login_for_access_token(
 async def create_observations(
     request: Request,
     current_user=Depends(get_current_user) if AUTHORIZATION else None,
-    pgpool=Depends(get_pool),
+    pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
         body = await request.json()
@@ -286,7 +290,7 @@ async def create_observations(
 async def create_observations(
     request: Request,
     current_user=Depends(get_current_user) if AUTHORIZATION else None,
-    pgpool=Depends(get_pool),
+    pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
         body = await request.json()
@@ -714,7 +718,7 @@ async def catch_all_post(
     request: Request,
     path_name: str,
     current_user=Depends(get_current_user) if AUTHORIZATION else None,
-    pgpool=Depends(get_pool),
+    pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     """
     Handle POST requests for all paths.
@@ -1878,6 +1882,7 @@ async def get_commit(headers, conn, current_user):
                 "message": commit_message,
                 "author": commit_author,
                 "encodingType": commit_encoding_type,
+                "user_id": current_user["id"] if current_user else None,
             }
             return await insertCommit(commit, conn, "INSERT")
         else:

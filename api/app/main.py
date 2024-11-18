@@ -1,10 +1,9 @@
 import asyncio
 
-from app import HOSTNAME, SUBPATH, VERSION
-from app.db.asyncpg_db import get_pool
+from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
+from app.db.asyncpg_db import get_pool, get_pool_w
 from app.settings import serverSettings, tables
 from app.v1 import api
-
 from fastapi import FastAPI
 
 
@@ -12,6 +11,8 @@ async def initialize_pool():
     while True:
         try:
             await get_pool()  # Ensure get_pool() is awaited
+            if POSTGRES_PORT_WRITE:
+                await get_pool_w()
             break
         except Exception as e:
             await asyncio.sleep(1)  # Use asyncio.sleep for asynchronous sleep
