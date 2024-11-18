@@ -58,7 +58,8 @@ async def create_user(
         async with pgpool.acquire() as conn:
             async with conn.transaction():
                 if (
-                    "firstname" not in body
+                    "username" not in body
+                    or "firstname" not in body
                     or "lastname" not in body
                     or "password" not in body
                     or "email" not in body
@@ -69,18 +70,19 @@ async def create_user(
                         content={
                             "code": 400,
                             "type": "error",
-                            "message": "Missing required properties 'firstname' or 'lastname' or 'password' or 'email' or 'role'.",
+                            "message": "Missing required properties 'username' or 'firstname' or 'lastname' or 'password' or 'email' or 'role'.",
                         },
                     )
 
                 if body.get("uri"):
                     query = """
-                        INSERT INTO sensorthings."User" ("firstName", "lastName", role, email, uri)
-                        VALUES ($1, $2, $3, $4, $5)
+                        INSERT INTO sensorthings."User" (username, "firstName", "lastName", role, email, uri)
+                        VALUES ($1, $2, $3, $4, $5, $6)
                         RETURNING id, username;
                     """
                     user = await conn.fetchrow(
                         query,
+                        body["username"],
                         body["firstname"],
                         body["lastname"],
                         body["role"],
@@ -89,13 +91,14 @@ async def create_user(
                     )
                 else:
                     query = """
-                        INSERT INTO sensorthings."User" ("firstName", "lastName", role, email)
-                        VALUES ($1, $2, $3, $4)
+                        INSERT INTO sensorthings."User" (username, "firstName", "lastName", role, email)
+                        VALUES ($1, $2, $3, $4, $5)
                         RETURNING id, username;
                     """
 
                     user = await conn.fetchrow(
                         query,
+                        body["username"],
                         body["firstname"],
                         body["lastname"],
                         body["role"],
@@ -145,10 +148,14 @@ async def login_for_access_token(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token = create_access_token(data={"sub": user["username"]})
+    access_token, expire = create_access_token(data={"sub": user["username"]})
     return JSONResponse(
         status_code=status.HTTP_200_OK,
-        content={"access_token": access_token, "token_type": "bearer"},
+        content={
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": expire,
+        },
     )
 
 
