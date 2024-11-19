@@ -312,8 +312,6 @@ async def create_observations(
                 },
             )
 
-        response_urls = []
-
         async with pgpool.acquire() as conn:
             async with conn.transaction():
                 if current_user is not None:
@@ -385,7 +383,6 @@ async def create_observations(
                             components=components,
                             commit_id=commit_id,
                         )
-                        response_urls.append("success")
                     except InsufficientPrivilegeError:
                         return JSONResponse(
                             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -396,10 +393,17 @@ async def create_observations(
                             },
                         )
                     except Exception as e:
-                        response_urls.append("error")
                         if DEBUG:
                             print(f"Error inserting observation: {str(e)}")
                             traceback.print_exc()
+                        return JSONResponse(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            content={
+                                "code": 400,
+                                "type": "error",
+                                "message": str(e),
+                            },
+                        )
 
                 if current_user is not None:
                     await conn.execute("RESET ROLE;")
