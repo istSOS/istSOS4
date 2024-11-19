@@ -59,10 +59,7 @@ async def create_user(
             async with conn.transaction():
                 if (
                     "username" not in body
-                    or "firstname" not in body
-                    or "lastname" not in body
                     or "password" not in body
-                    or "email" not in body
                     or "role" not in body
                 ):
                     return JSONResponse(
@@ -70,40 +67,28 @@ async def create_user(
                         content={
                             "code": 400,
                             "type": "error",
-                            "message": "Missing required properties 'username' or 'firstname' or 'lastname' or 'password' or 'email' or 'role'.",
+                            "message": "Missing required properties 'username' or 'password' or 'role'.",
                         },
                     )
 
-                if body.get("uri"):
-                    query = """
-                        INSERT INTO sensorthings."User" (username, "firstName", "lastName", role, email, uri)
-                        VALUES ($1, $2, $3, $4, $5, $6)
-                        RETURNING id, username;
-                    """
-                    user = await conn.fetchrow(
-                        query,
-                        body["username"],
-                        body["firstname"],
-                        body["lastname"],
-                        body["role"],
-                        body["email"],
-                        body["uri"],
-                    )
-                else:
-                    query = """
-                        INSERT INTO sensorthings."User" (username, "firstName", "lastName", role, email)
-                        VALUES ($1, $2, $3, $4, $5)
-                        RETURNING id, username;
-                    """
+                password = body.pop("password", None)
 
-                    user = await conn.fetchrow(
-                        query,
-                        body["username"],
-                        body["firstname"],
-                        body["lastname"],
-                        body["role"],
-                        body["email"],
-                    )
+                for key in list(body.keys()):
+                    if isinstance(body[key], dict):
+                        body[key] = json.dumps(body[key])
+
+                keys = ", ".join(f'"{key}"' for key in body.keys())
+                values_placeholders = ", ".join(
+                    (f"${i+1}") for i in range(len(body))
+                )
+                query = f"""
+                    INSERT INTO sensorthings."User" ({keys})
+                    VALUES ({values_placeholders})
+                    RETURNING id, username;
+                """
+                user = await conn.fetchrow(query, *body.values())
+
+                if not body.get("uri"):
                     query = """
                         UPDATE sensorthings."User"
                         SET uri = $1 || '/Users(' || sensorthings."User".id || ')'
@@ -115,9 +100,7 @@ async def create_user(
 
                 query = "CREATE USER {username} WITH ENCRYPTED PASSWORD '{password}';"
                 await conn.execute(
-                    query.format(
-                        username=user["username"], password=body["password"]
-                    )
+                    query.format(username=user["username"], password=password)
                 )
 
                 query = "GRANT sensorthings_{role} to {username};"

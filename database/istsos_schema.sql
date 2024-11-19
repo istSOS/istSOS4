@@ -574,11 +574,9 @@ BEGIN
         -- Create the "User" table if it doesn't exist
         CREATE TABLE IF NOT EXISTS sensorthings."User"( 
             "id" BIGSERIAL NOT NULL PRIMARY KEY,
-            "firstName" VARCHAR(255) NOT NULL,
-            "lastName" VARCHAR(255) NOT NULL,
             "username" VARCHAR(255) UNIQUE NOT NULL,
+            "contact" jsonb DEFAULT NULL,
             "role" VARCHAR(255) NOT NULL,
-            "email" VARCHAR(255) UNIQUE NOT NULL,
             "uri" VARCHAR(255)
         );
 
