@@ -73,10 +73,13 @@ class sta:
         if commit_message:
             tmp_headers["commit-message"] = commit_message
         response = requests.post(
-            f"{self.base}/Things", json=body, headers=tmp_headers
+            f"{self.base}Things", json=body, headers=tmp_headers
         )
+        if "unique" in response.text:
+            response.status_code = 409
+            logging.warning("Thing already exists")
+            return response
         response.raise_for_status()
-
         return response
 
     def update_thing(self, thing_id, body, commit_message=None):
