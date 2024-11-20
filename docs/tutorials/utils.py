@@ -373,12 +373,13 @@ class sta:
         """
         import folium
 
-        map_center = center if center else [46.172245, 8.956099]
+        map_center = center if center else [46.505978, 8.511378]
         mymap = folium.Map(location=map_center, zoom_start=16)
 
         if things:
             for thing in things:
                 if thing.get("Locations"):
+                    print(thing["Locations"])
                     for location in thing["Locations"]:
                         coords = location["location"]["coordinates"]
                         lat, lon = (
