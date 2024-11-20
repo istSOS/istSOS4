@@ -2,6 +2,7 @@ import csv
 import datetime as dt
 import json
 import logging
+import os
 import re
 from pprint import pprint
 from typing import Dict, List, Optional
@@ -29,6 +30,29 @@ class sta:
         self.verbose = verbose
         self.user = None
         self.token_obj = None
+
+    def from_csv(self, files, prefix=None):
+        """
+        Read a CSV file and return a pandas DataFrame
+        Args:
+            files (List[str]): The path to the CSV file
+            prefix (Optional[str]): The prefix to add to the name of the DataFrame
+        Returns:
+            pd.DataFrame: The data from the CSV file
+        """
+        dfs = {}
+        qcs = {}
+        for f in files:
+            if "sta_" in f:
+                name = f.split(".")[0].strip("sta_")
+                name = prefix + name
+                df = pd.read_csv("data" + os.sep + f)
+                df.index = pd.to_datetime(df["phenomenonTime"])
+                df["result"] = pd.to_numeric(df["result"])
+                dfs[name] = df
+                # Create a QC object
+                qcs[name] = SaQC(data=df, scheme="float")
+        return dfs, qcs
 
     def create_user(
         self, username: str, password: str, role: str, uri=None, contact=None
