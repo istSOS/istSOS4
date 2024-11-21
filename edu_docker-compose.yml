@@ -84,18 +84,18 @@ services:
 
   docs:
     build:
-      context: ./istsos4_docs/mkdocs
+      context: ./docs/mkdocs
       dockerfile: dockerfile
     #restart: always
     ports:
       - 8019:8000
     volumes:
-      - ./istsos4_docs/mkdocs:/docs
+      - ./docs/mkdocs:/docs
 
   tutorials:
     # image: quay.io/jupyter/scipy-notebook
     build:
-      context: ./istsos4_docs/tutorials
+      context: ./docs/tutorials
       dockerfile: dockerfile
     ports:
       - "10000:8888"
