@@ -318,6 +318,7 @@ class STA2REST:
         "resultQuality": "result_quality",
         "validTime": "valid_time",
         "systemTimeValidity": "system_time_validity",
+        "actionType": "action_type",
     }
 
     REVERSE_SELECT_MAPPING = {v: k for k, v in SELECT_MAPPING.items()}
@@ -454,36 +455,57 @@ class STA2REST:
                         )
 
         if query_ast.from_to:
-            if (
-                len(entities) == 0
-                and not main_entity_id
-                and not query_ast.expand
-            ):
-                value1 = datetime.fromisoformat(query_ast.from_to.value1)
-                value2 = datetime.fromisoformat(query_ast.from_to.value2)
+            value1 = datetime.fromisoformat(query_ast.from_to.value1)
+            value2 = datetime.fromisoformat(query_ast.from_to.value2)
 
-                if value1.tzinfo is None:
-                    query_ast.from_to.value1 += "Z"
+            if value1.tzinfo is None:
+                query_ast.from_to.value1 += "Z"
 
-                if value2.tzinfo is None:
-                    query_ast.from_to.value2 += "Z"
+            if value2.tzinfo is None:
+                query_ast.from_to.value2 += "Z"
 
-                if value1 > value2:
+            if value1 > value2:
+                raise Exception("FROM_TO value1 cannot be greater than value2")
+
+            main_entity += "TravelTime"
+            entities = [
+                (entity + "TravelTime", value) for entity, value in entities
+            ]
+            from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
+            query_ast.filter = FilterNode(
+                query_ast.filter.filter + f" and {from_to_filter}"
+                if query_ast.filter
+                else from_to_filter
+            )
+            if query_ast.expand:
+                if (
+                    len(query_ast.expand.identifiers) == 1
+                    and query_ast.expand.identifiers[0].identifier == "Commit"
+                ):
+                    for identifier in query_ast.expand.identifiers:
+                        identifier.identifier = STA2REST.ENTITY_MAPPING.get(
+                            identifier.identifier, identifier.identifier
+                        )
+                        identifier.subquery = (
+                            QueryNode(
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                True,
+                            )
+                            if identifier.subquery is None
+                            else identifier.subquery
+                        )
+                else:
                     raise Exception(
-                        "FROM_TO value1 cannot be greater than value2"
+                        "Illegal operation: FROM_TO with expand is only valid for Commit"
                     )
-
-                main_entity += "TravelTime"
-                from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
-                query_ast.filter = FilterNode(
-                    query_ast.filter.filter + f" and {from_to_filter}"
-                    if query_ast.filter
-                    else from_to_filter
-                )
-            else:
-                raise Exception(
-                    "FROM_TO function available only for single entity"
-                )
 
         if DEBUG:
             print(f"Main entity: {main_entity}")
@@ -512,6 +534,23 @@ class STA2REST:
                 )
                 if entity[1]:
                     sub_query.filter = FilterNode(f"id eq {entity[1]}")
+
+                if query_ast.as_of:
+                    as_of_filter = (
+                        f"system_time_validity eq {query_ast.as_of.value}"
+                    )
+                    if sub_query.filter:
+                        sub_query.filter = FilterNode(
+                            sub_query.filter.filter + f" and {as_of_filter}"
+                        )
+
+                if query_ast.from_to:
+                    from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
+                    if sub_query.filter:
+                        sub_query.filter = FilterNode(
+                            sub_query.filter.filter + f" and {from_to_filter}"
+                        )
+
                 # Check if we are the last entity
                 if index == len(entities) - 1:
                     # Check if we have a property name
@@ -548,6 +587,9 @@ class STA2REST:
 
         if uri["single"]:
             single_result = True
+
+        if query_ast.from_to:
+            single_result = False
 
         # Check if query has an expand but not a select and does not have sub entities
         if query_ast.expand and not query_ast.select and not entities:

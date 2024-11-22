@@ -18,7 +18,7 @@ async def initialize_pool():
             await asyncio.sleep(1)  # Use asyncio.sleep for asynchronous sleep
 
 
-app = FastAPI(debug=True)
+app = FastAPI()
 
 
 def __handle_root():

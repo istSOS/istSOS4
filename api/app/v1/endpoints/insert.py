@@ -13,20 +13,16 @@ from app import (
     VERSIONING,
 )
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.oauth import authenticate_user, create_access_token, get_current_user
+from app.oauth import get_current_user
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
-from app.v1.endpoints.update_patch import (
-    insertCommit,
-    updateDatastream,
-    updateObservation,
-)
+from app.v1.endpoints.crud import insert_commit
+from app.v1.endpoints.update.datastream import update_datastream_entity
+from app.v1.endpoints.update.observation import update_observation_entity
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
-from dateutil import parser
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
-from fastapi.security import OAuth2PasswordRequestForm
 
 v1 = APIRouter()
 
@@ -37,681 +33,24 @@ try:
 except:
     DEBUG = 0
 
+user = Header(default=None, include_in_schema=False)
+message = Header(default=None, alias="commit-message", include_in_schema=False)
 
-@v1.api_route("/users", methods=["POST"])
-async def create_user(
-    request: Request,
-    pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
-):
-    try:
-        body = await request.json()
-        if not isinstance(body, dict):
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "code": 400,
-                    "type": "error",
-                    "message": "Invalid payload format. Expected a dictionary.",
-                },
-            )
+if AUTHORIZATION:
+    from app.oauth import get_current_user
 
-        async with pgpool.acquire() as conn:
-            async with conn.transaction():
-                if (
-                    "username" not in body
-                    or "password" not in body
-                    or "role" not in body
-                ):
-                    return JSONResponse(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        content={
-                            "code": 400,
-                            "type": "error",
-                            "message": "Missing required properties 'username' or 'password' or 'role'.",
-                        },
-                    )
+    user = Depends(get_current_user)
 
-                password = body.pop("password", None)
-
-                for key in list(body.keys()):
-                    if isinstance(body[key], dict):
-                        body[key] = json.dumps(body[key])
-
-                keys = ", ".join(f'"{key}"' for key in body.keys())
-                values_placeholders = ", ".join(
-                    (f"${i+1}") for i in range(len(body))
-                )
-                query = f"""
-                    INSERT INTO sensorthings."User" ({keys})
-                    VALUES ({values_placeholders})
-                    RETURNING id, username;
-                """
-                user = await conn.fetchrow(query, *body.values())
-
-                if not body.get("uri"):
-                    query = """
-                        UPDATE sensorthings."User"
-                        SET uri = $1 || '/Users(' || sensorthings."User".id || ')'
-                        WHERE sensorthings."User".id = $2;
-                    """
-                    await conn.execute(
-                        query, f"{HOSTNAME}{SUBPATH}{VERSION}", user["id"]
-                    )
-
-                query = "CREATE USER {username} WITH ENCRYPTED PASSWORD '{password}';"
-                await conn.execute(
-                    query.format(username=user["username"], password=password)
-                )
-
-                query = "GRANT sensorthings_{role} to {username};"
-                await conn.execute(
-                    query.format(role=body["role"], username=user["username"])
-                )
-
-                return JSONResponse(
-                    status_code=status.HTTP_201_CREATED,
-                    content={"id": user["id"], "username": user["username"]},
-                )
-
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
-
-
-@v1.api_route("/login", methods=["POST"])
-async def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-):
-    user = await authenticate_user(form_data.username)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token, expire = create_access_token(data={"sub": user["username"]})
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content={
-            "access_token": access_token,
-            "token_type": "bearer",
-            "expires_in": expire,
-        },
-    )
-
-
-@v1.api_route("/CreateObservations", methods=["POST"])
-async def create_observations(
-    request: Request,
-    current_user=Depends(get_current_user) if AUTHORIZATION else None,
-    pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
-):
-    try:
-        body = await request.json()
-        headers = request.headers
-        if not isinstance(body, list):
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "code": 400,
-                    "type": "error",
-                    "message": "Invalid payload format. Expected a list of observations.",
-                },
-            )
-
-        response_urls = []
-
-        async with pgpool.acquire() as conn:
-            async with conn.transaction():
-                if current_user is not None:
-                    query = 'SET ROLE "{username}";'
-                    await conn.execute(
-                        query.format(username=current_user["username"])
-                    )
-
-                try:
-                    commit_id = await get_commit(headers, conn, current_user)
-                except InsufficientPrivilegeError:
-                    return JSONResponse(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        content={
-                            "code": 401,
-                            "type": "error",
-                            "message": "Insufficient privileges.",
-                        },
-                    )
-
-                for observation_set in body:
-                    datastream_id = observation_set.get("Datastream", {}).get(
-                        "@iot.id"
-                    )
-                    components = observation_set.get("components", [])
-                    data_array = observation_set.get("dataArray", [])
-
-                    if not datastream_id:
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Missing 'datastream_id' in Datastream.",
-                            },
-                        )
-
-                    # Check that at least phenomenonTime and result are present
-                    if (
-                        "phenomenonTime" not in components
-                        or "result" not in components
-                    ):
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Missing required properties 'phenomenonTime' or 'result' in components.",
-                            },
-                        )
-
-                    for data in data_array:
-                        try:
-                            observation_payload = {
-                                components[i]: (
-                                    data[i] if i < len(data) else None
-                                )
-                                for i in range(len(components))
-                            }
-
-                            observation_payload["datastream_id"] = (
-                                datastream_id
-                            )
-
-                            if "FeatureOfInterest/id" in observation_payload:
-                                observation_payload["FeatureOfInterest"] = {
-                                    "@iot.id": observation_payload.pop(
-                                        "FeatureOfInterest/id"
-                                    )
-                                }
-                            else:
-                                await generate_feature_of_interest(
-                                    observation_payload,
-                                    conn,
-                                    commit_id=commit_id,
-                                )
-
-                            _, observation_selfLink = (
-                                await insertBulkObservation(
-                                    observation_payload,
-                                    conn,
-                                    commit_id=commit_id,
-                                )
-                            )
-                            response_urls.append(observation_selfLink)
-                        except InsufficientPrivilegeError:
-                            return JSONResponse(
-                                status_code=status.HTTP_401_UNAUTHORIZED,
-                                content={
-                                    "code": 401,
-                                    "type": "error",
-                                    "message": "Insufficient privileges.",
-                                },
-                            )
-                        except Exception as e:
-                            response_urls.append("error")
-                            if DEBUG:
-                                print(f"Error inserting observation: {str(e)}")
-                                traceback.print_exc()
-
-                if current_user is not None:
-                    await conn.execute("RESET ROLE;")
-        return JSONResponse(
-            status_code=status.HTTP_201_CREATED, content=response_urls
-        )
-
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
-
-
-@v1.api_route("/BulkObservations", methods=["POST"])
-async def create_observations(
-    request: Request,
-    current_user=Depends(get_current_user) if AUTHORIZATION else None,
-    pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
-):
-    try:
-        body = await request.json()
-        headers = request.headers
-        if not isinstance(body, list):
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "code": 400,
-                    "type": "error",
-                    "message": "Invalid payload format. Expected a list of observations.",
-                },
-            )
-
-        async with pgpool.acquire() as conn:
-            async with conn.transaction():
-                if current_user is not None:
-                    query = 'SET ROLE "{username}";'
-                    await conn.execute(
-                        query.format(username=current_user["username"])
-                    )
-
-                try:
-                    commit_id = await get_commit(headers, conn, current_user)
-                except InsufficientPrivilegeError:
-                    return JSONResponse(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        content={
-                            "code": 401,
-                            "type": "error",
-                            "message": "Insufficient privileges.",
-                        },
-                    )
-
-                for observation_set in body:
-                    datastream_id = observation_set.get("Datastream", {}).get(
-                        "@iot.id"
-                    )
-                    components = observation_set.get("components", [])
-                    data_array = observation_set.get("dataArray", [])
-
-                    if not datastream_id:
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Missing 'datastream_id' in Datastream.",
-                            },
-                        )
-
-                    # Check that at least phenomenonTime and result are present
-                    if (
-                        "phenomenonTime" not in components
-                        or "result" not in components
-                    ):
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Missing required properties 'phenomenonTime' or 'result' in components.",
-                            },
-                        )
-                    if "featureOfInterest" in components:
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "This method does not support 'featureOfInterest' in components. It will support in future.",
-                            },
-                        )
-                    try:
-                        foi_id = await get_foi_id(
-                            datastream_id, conn, commit_id=commit_id
-                        )
-                        await insertBulkObservation(
-                            data_array,
-                            conn,
-                            foi_id,
-                            datastream_id=datastream_id,
-                            components=components,
-                            commit_id=commit_id,
-                        )
-                    except InsufficientPrivilegeError:
-                        return JSONResponse(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
-                            content={
-                                "code": 401,
-                                "type": "error",
-                                "message": "Insufficient privileges.",
-                            },
-                        )
-                    except Exception as e:
-                        if DEBUG:
-                            print(f"Error inserting observation: {str(e)}")
-                            traceback.print_exc()
-                        return JSONResponse(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": str(e),
-                            },
-                        )
-
-                if current_user is not None:
-                    await conn.execute("RESET ROLE;")
-        return Response(status_code=status.HTTP_201_CREATED)
-
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
-
-
-async def insertBulkObservation(
-    payload, conn, foi_id, datastream_id, components=None, commit_id=None
-):
-    """
-    Inserts observation data into the database.
-
-    Args:
-        payload (dict or list): The payload containing the observation(s) to be inserted.
-        conn (connection): The database connection object.
-        datastream_id (int, optional): The ID of the datastream associated with the observation. Defaults to None.
-
-    Returns:
-        tuple: A tuple containing the ID and selfLink of the inserted observation.
-
-    Raises:
-        Exception: If an error occurs during the insertion process.
-    """
-
-    try:
-        async with conn.transaction():
-            result_time_idx = -1
-            if components:
-                result_idx = components.index("result")
-                ph_idx = components.index("phenomenonTime")
-                if components.index("resultTime") > -1:
-                    result_time_idx = components.index("resultTime")
-                if isinstance(payload[0][result_idx], str):
-                    result_type = 3
-                    observation_type = "resultString"
-                elif isinstance(payload[0][result_idx], bool):
-                    result_type = 1
-                    observation_type = "resultBoolean"
-                elif isinstance(payload[0][result_idx], dict):
-                    result_type = 2
-                    observation_type = "resultJSON"
-                else:
-                    result_type = 0
-                    observation_type = "resultNumber"
-            else:
-                result_type = 0
-                observation_type = "resultNumber"
-                ph_idx = 0
-
-            data = []
-            ph_interval = None
-            for obs in payload:
-                if result_time_idx > -1:
-                    obs[result_time_idx] = parser.parse(obs[result_time_idx])
-                if "/" in obs[ph_idx]:
-                    ph_time = obs[ph_idx].split("/")
-                    obs[ph_idx] = Range(
-                        ph_time[0],
-                        ph_time[1],
-                        upper_inc=True,
-                    )
-                else:
-                    obs[ph_idx] = Range(
-                        obs[ph_idx],
-                        obs[ph_idx],
-                        upper_inc=True,
-                    )
-                if ph_interval is None:
-                    ph_interval = Range(
-                        obs[ph_idx].lower,
-                        obs[ph_idx].upper,
-                        upper_inc=True,
-                    )
-                else:
-                    if parser.parse(ph_interval.lower) > parser.parse(
-                        obs[ph_idx].lower
-                    ):
-                        ph_interval = Range(
-                            obs[ph_idx].lower,
-                            ph_interval.upper,
-                            upper_inc=True,
-                        )
-                    if parser.parse(ph_interval.upper) < parser.parse(
-                        obs[ph_idx].upper
-                    ):
-                        ph_interval = Range(
-                            ph_interval.lower,
-                            obs[ph_idx].upper,
-                            upper_inc=True,
-                        )
-                obs[ph_idx] = Range(
-                    parser.parse(obs[ph_idx].lower),
-                    parser.parse(obs[ph_idx].upper),
-                    upper_inc=True,
-                )
-
-                default_obs = [result_type, datastream_id, foi_id]
-
-                if VERSIONING and commit_id is not None:
-                    default_obs.append(commit_id)
-
-                data.append(obs + default_obs)
-            ph_interval = Range(
-                parser.parse(ph_interval.lower),
-                parser.parse(ph_interval.upper),
-                upper_inc=True,
-            )
-            cols = [
-                "phenomenonTime",
-                observation_type,
-                "resultType",
-                "datastream_id",
-                "featuresofinterest_id",
-            ]
-
-            if components:
-                idx = 0
-                for c in components:
-                    if c == "result":
-                        components[idx] = observation_type
-                    idx += 1
-
-                cols = components + [
-                    "resultType",
-                    "datastream_id",
-                    "featuresofinterest_id",
-                ]
-
-            if VERSIONING and commit_id is not None:
-                cols.append("commit_id")
-
-            await conn.copy_records_to_table(
-                "Observation",
-                records=data,
-                schema_name="sensorthings",
-                columns=cols,
-            )
-            update_query = """
-                UPDATE sensorthings."Datastream"
-                SET "phenomenonTime" = tstzrange(
-                    LEAST($1::timestamptz, lower("phenomenonTime")),
-                    GREATEST($2::timestamptz, upper("phenomenonTime")),
-                    '[]'
-                )
-                WHERE id = $3::bigint;
-            """
-            await conn.execute(
-                update_query,
-                ph_interval.lower,
-                ph_interval.upper,
-                datastream_id,
-            )
-
-            await update_datastream_last_foi_id(conn, foi_id, datastream_id)
-
-    except InsufficientPrivilegeError:
-        raise InsufficientPrivilegeError
-    except Exception as e:
-        format_exception(e)
-
-
-async def insertDataArrayObservation(
-    payload, conn, datastream_id=None, commit_id=None
-):
-    """
-    Inserts observation data into the database.
-
-    Args:
-        payload (dict or list): The payload containing the observation(s) to be inserted.
-        conn (connection): The database connection object.
-        datastream_id (int, optional): The ID of the datastream associated with the observation. Defaults to None.
-
-    Returns:
-        tuple: A tuple containing the ID and selfLink of the inserted observation.
-
-    Raises:
-        Exception: If an error occurs during the insertion process.
-    """
-
-    try:
-        async with conn.transaction():
-            if isinstance(payload, dict):
-                payload = [payload]
-
-            observations = []
-
-            all_keys = set()
-
-            for obs in payload:
-                if datastream_id:
-                    obs["datastream_id"] = datastream_id
-
-                await handle_associations(
-                    obs,
-                    "Datastream",
-                    datastream_id,
-                    insertDatastream,
-                    conn,
-                    commit_id=commit_id,
-                )
-
-                if "FeatureOfInterest" in obs:
-                    if "@iot.id" in obs["FeatureOfInterest"]:
-                        features_of_interest_id = obs["FeatureOfInterest"][
-                            "@iot.id"
-                        ]
-                        check_iot_id_in_payload(
-                            obs["FeatureOfInterest"], "FeatureOfInterest"
-                        )
-                        select_query = f"""
-                            SELECT last_foi_id
-                            FROM sensorthings."Datastream"
-                            WHERE id = $1::bigint;
-                        """
-                        last_foi_id = await conn.fetchval(
-                            select_query, obs["datastream_id"]
-                        )
-                        if last_foi_id != features_of_interest_id:
-                            await update_datastream_last_foi_id(
-                                conn,
-                                features_of_interest_id,
-                                obs["datastream_id"],
-                            )
-                    else:
-                        features_of_interest_id, _ = (
-                            await insertFeaturesOfInterest(
-                                obs["FeatureOfInterest"],
-                                conn,
-                                obs["datastream_id"],
-                                commit_id=commit_id,
-                            )
-                        )
-                    obs.pop("FeatureOfInterest", None)
-                    obs["featuresofinterest_id"] = features_of_interest_id
-                else:
-                    await generate_feature_of_interest(
-                        obs, conn, commit_id=commit_id
-                    )
-
-                check_missing_properties(
-                    obs, ["Datastream", "FeaturesOfInterest"]
-                )
-                handle_datetime_fields(obs)
-                handle_result_field(obs)
-
-                if obs.get("phenomenonTime") is None:
-                    current_time = datetime.now()
-                    obs["phenomenonTime"] = Range(
-                        current_time,
-                        current_time,
-                        upper_inc=True,
-                    )
-
-                for key, value in obs.items():
-                    if isinstance(value, dict):
-                        obs[key] = json.dumps(value)
-                    all_keys.add(key)
-
-            all_keys = list(all_keys)
-
-            for obs in payload:
-                obs_tuple = []
-                for key in all_keys:
-                    obs_tuple.append(obs.get(key))
-                observations.append(tuple(obs_tuple))
-
-            keys = ", ".join(f'"{key}"' for key in all_keys)
-            values_placeholders = ", ".join(
-                f"({', '.join(f'${i * len(all_keys) + j + 1}' for j in range(len(all_keys)))})"
-                for i in range(len(observations))
-            )
-
-            insert_query = f"""
-                INSERT INTO sensorthings."Observation" ({keys})
-                VALUES {values_placeholders}
-                RETURNING id, lower("phenomenonTime"), upper("phenomenonTime"), datastream_id, featuresofinterest_id;
-            """
-
-            values = [
-                value for observation in observations for value in observation
-            ]
-            result = await conn.fetch(insert_query, *values)
-
-            min_phenomenon_times = [record["lower"] for record in result]
-            max_phenomenon_times = [record["upper"] for record in result]
-            update_query = """
-                UPDATE sensorthings."Datastream"
-                SET "phenomenonTime" = tstzrange(
-                    LEAST($1::timestamptz, lower("phenomenonTime")),
-                    GREATEST($2::timestamptz, upper("phenomenonTime")),
-                    '[]'
-                )
-                WHERE id = $3::bigint;
-            """
-            await conn.execute(
-                update_query,
-                min(min_phenomenon_times),
-                max(max_phenomenon_times),
-                result[0]["datastream_id"],
-            )
-
-            observation_id = result[0]["id"]
-            observation_selfLink = (
-                f"{HOSTNAME}{SUBPATH}{VERSION}/Observations({observation_id})"
-            )
-
-            return observation_id, observation_selfLink
-
-    except InsufficientPrivilegeError:
-        raise InsufficientPrivilegeError
-    except Exception as e:
-        format_exception(e)
+if VERSIONING:
+    message = Header(default=None, alias="commit-message")
 
 
 @v1.api_route("/{path_name:path}", methods=["POST"])
 async def catch_all_post(
     request: Request,
     path_name: str,
-    current_user=Depends(get_current_user) if AUTHORIZATION else None,
+    commit_message=message,
+    current_user=user,
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     """
@@ -749,8 +88,6 @@ async def catch_all_post(
         # get json body
         body = await request.json()
 
-        headers = request.headers
-
         main_table = result["entity"][0]
 
         if DEBUG:
@@ -776,11 +113,15 @@ async def catch_all_post(
                 body[f"{name.lower()}_id"] = int(id)
 
         if DEBUG:
-            res = await insert(main_table, headers, body, pgpool, current_user)
+            res = await insert(
+                main_table, commit_message, body, pgpool, current_user
+            )
             response2jsonfile(request, "", "requests.json", b, res.status_code)
             return res
         else:
-            r = await insert(main_table, headers, body, pgpool, current_user)
+            r = await insert(
+                main_table, commit_message, body, pgpool, current_user
+            )
             return r
     except Exception as e:
         traceback.print_exc()
@@ -790,7 +131,7 @@ async def catch_all_post(
         )
 
 
-async def insert(main_table, headers, payload, pgpool, current_user):
+async def insert(main_table, commit_message, payload, pgpool, current_user):
     """
     Insert data into the specified main_table using the provided payload.
 
@@ -812,7 +153,9 @@ async def insert(main_table, headers, payload, pgpool, current_user):
                         query.format(username=current_user["username"])
                     )
 
-                commit_id = await get_commit(headers, conn, current_user)
+                commit_id = await get_commit(
+                    commit_message, conn, current_user
+                )
 
                 _, header = await insert_funcs[main_table](
                     payload, conn, commit_id=commit_id
@@ -1260,7 +603,7 @@ async def insertDatastream(
                     }
 
                 iot_id = payload.pop("@iot.id")
-                await updateDatastream(payload, conn, iot_id)
+                await update_datastream_entity(conn, iot_id, payload)
 
                 return (
                     payload["@iot.id"],
@@ -1349,7 +692,7 @@ async def insertObservation(
                     }
 
                 iot_id = payload.pop("@iot.id")
-                await updateObservation(payload, conn, iot_id)
+                await update_observation_entity(conn, iot_id, payload)
 
                 return (
                     iot_id,
@@ -1556,118 +899,6 @@ async def generate_feature_of_interest(payload, conn, commit_id=None):
             )
 
 
-async def get_foi_id(datastream_id, conn, commit_id=None):
-    """
-    Retrieve or generate a Feature of Interest (FOI) ID for a given datastream.
-
-    This function checks if a FOI ID is already associated with the location of the
-    thing related to the provided datastream. If not, it generates a new FOI,
-    inserts it into the database, and updates the location and datastream records
-    accordingly.
-
-    Args:
-        datastream_id (int): The ID of the datastream for which to retrieve or
-                             generate the FOI ID.
-        conn (asyncpg.Connection): The database connection object.
-
-    Returns:
-        int: The FOI ID associated with the datastream.
-
-    Raises:
-        ValueError: If the thing associated with the datastream has no locations.
-    """
-
-    async with conn.transaction():
-        query_location_from_thing_datastream = f"""
-            SELECT
-                l.id,
-                l.name,
-                l.description,
-                l."encodingType",
-                l.location,
-                l.properties,
-                l.gen_foi_id
-            FROM
-                sensorthings."Datastream" d
-            JOIN
-                sensorthings."Thing" t ON d.thing_id = t.id
-            JOIN
-                sensorthings."Thing_Location" tl ON tl.thing_id = t.id
-            JOIN
-                sensorthings."Location" l ON l.ID = tl.location_id
-            WHERE
-                d.id = {datastream_id}
-        """
-
-        result = await conn.fetch(query_location_from_thing_datastream)
-
-        if result:
-            (
-                location_id,
-                name,
-                description,
-                encoding_type,
-                location,
-                properties,
-                gen_foi_id,
-            ) = result[0]
-
-            if gen_foi_id is None:
-                foi_payload = {
-                    "name": name,
-                    "description": description,
-                    "encodingType": encoding_type,
-                    "feature": location,
-                    "properties": properties,
-                }
-
-                if VERSIONING and commit_id is not None:
-                    foi_payload["commit_id"] = commit_id
-
-                foi_id, _ = await insert_record(
-                    foi_payload, conn, "FeaturesOfInterest"
-                )
-
-                update_query = f"""
-                    UPDATE sensorthings."Location" 
-                    SET "gen_foi_id" = $1::bigint
-                    WHERE id = $2::bigint;
-                """
-                await conn.execute(update_query, foi_id, location_id)
-
-                await update_datastream_last_foi_id(
-                    conn, foi_id, datastream_id
-                )
-
-                return foi_id
-            else:
-                select_query = """
-                    SELECT last_foi_id
-                    FROM sensorthings."Datastream"
-                    WHERE id = $1::bigint;
-                """
-                last_foi_id = await conn.fetchval(select_query, datastream_id)
-
-                select_query = """
-                    SELECT id
-                    FROM sensorthings."Observation"
-                    WHERE "datastream_id" = $1::bigint
-                    LIMIT 1;
-                """
-                observation_ids = await conn.fetch(select_query, datastream_id)
-
-                if last_foi_id is None or not observation_ids:
-                    await update_datastream_last_foi_id(
-                        conn, gen_foi_id, datastream_id
-                    )
-
-                return gen_foi_id
-        else:
-            raise ValueError(
-                "Can not generate foi for Thing with no locations."
-            )
-
-
 insert_funcs = {
     "Location": insertLocation,
     "Thing": insertThing,
@@ -1859,13 +1090,13 @@ async def update_datastream_observedArea(conn, datastream_id, foi_id):
         await conn.execute(update_query, foi_id, datastream_id)
 
 
-async def get_commit(headers, conn, current_user):
+async def get_commit(commit_message, conn, current_user):
+    commit_id = None
     if VERSIONING:
-        if headers.get("commit-message"):
+        if commit_message:
             if current_user and current_user["role"] == "sensor":
                 raise Exception("Sensor cannot provide commit message")
 
-            commit_message = headers.get("commit-message")
             commit_author = (
                 current_user["uri"]
                 if current_user and current_user["role"] != "sensor"
@@ -1876,11 +1107,12 @@ async def get_commit(headers, conn, current_user):
                 "message": commit_message,
                 "author": commit_author,
                 "encodingType": commit_encoding_type,
-                "user_id": current_user["id"] if current_user else None,
             }
-            return await insertCommit(commit, conn, "INSERT")
+            if current_user is not None:
+                commit["user_id"] = current_user["id"]
+            commit_id = await insert_commit(conn, commit, "CREATE")
         else:
             if current_user and current_user["role"] == "sensor":
-                return None
+                return commit_id
             raise Exception("No commit message provided")
-    return None
+    return commit_id

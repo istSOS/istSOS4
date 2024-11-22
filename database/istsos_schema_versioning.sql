@@ -280,7 +280,7 @@ BEGIN
             "encodingType" VARCHAR(100),
             "message" VARCHAR(255) NOT NULL,
             "date" TIMESTAMPTZ DEFAULT NOW(),
-            "actionType" VARCHAR(100) NOT NULL CHECK ("actionType" IN ('INSERT', 'UPDATE', 'DELETE'))
+            "actionType" VARCHAR(100) NOT NULL CHECK ("actionType" IN ('CREATE', 'UPDATE', 'DELETE'))
         );
 
         -- Create or replace function for selfLink
@@ -539,7 +539,7 @@ BEGIN
         IF current_setting('custom.authorization')::boolean THEN
 
             ALTER TABLE sensorthings."Commit"
-            ADD COLUMN "user_id" BIGINT REFERENCES sensorthings."User"(id) ON DELETE CASCADE;
+            ADD COLUMN "user_id" BIGINT NOT NULL REFERENCES sensorthings."User"(id) ON DELETE CASCADE;
 
             -- Grant privileges to the roles
             GRANT ALL PRIVILEGES ON TABLE sensorthings."Commit" TO sensorthings_admin;

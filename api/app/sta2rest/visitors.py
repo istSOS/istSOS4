@@ -586,15 +586,14 @@ class NodeVisitor(Visitor):
                     filter_condition = None
                     if relationship.direction.name == "MANYTOONE":
                         filter_condition = getattr(
-                            entity_class,
+                            globals()[identifier],
                             f"{nested_identifier.replace('TravelTime', '').lower()}_id",
                         ) == getattr(nested_entity_class, "id")
-
                     elif relationship.direction.name == "ONETOMANY":
                         filter_condition = getattr(
                             nested_entity_class,
                             f"{identifier.replace('TravelTime', '').lower()}_id",
-                        ) == getattr(entity_class, "id")
+                        ) == getattr(globals()[identifier], "id")
                     else:
                         filter_condition = getattr(
                             entity_class, "id"
@@ -618,20 +617,6 @@ class NodeVisitor(Visitor):
                     query_estimate_count = query_estimate_count.filter(
                         filter_condition
                     )
-
-                    if node.as_of:
-                        filter_node = FilterNode(
-                            f"system_time_validity eq {node.as_of.value}"
-                        )
-                        filter, _ = self.visit_FilterNode(
-                            filter_node, nested_identifier
-                        )
-                        filters.append(filter)
-                        main_query = main_query.filter(filter)
-                        query_count = query_count.filter(filter)
-                        query_estimate_count = query_estimate_count.filter(
-                            filter
-                        )
 
             # here we create the sub queries for the expand identifiers
             if node.expand.identifiers:
@@ -946,7 +931,7 @@ def get_select_attr(attr, label, nested=False, as_of=None):
             + VERSION
             + attr
             + (
-                f"?$as_of={as_of}"
+                f"?$as_of={as_of.value}"
                 if as_of and label != "Commit@iot.navigationLink"
                 else ""
             )
