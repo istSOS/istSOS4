@@ -39,7 +39,9 @@ PAYLOAD_EXAMPLE = {
 }
 
 
-@v1.patch("/Datastreams({datastream_id})", tags=["Datastreams"])
+@v1.api_route(
+    "/Datastreams({datastream_id})", methods=["PATCH"], tags=["Datastreams"]
+)
 async def update_datastream(
     datastream_id: int,
     payload: dict = Body(example=PAYLOAD_EXAMPLE),

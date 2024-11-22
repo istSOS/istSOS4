@@ -33,7 +33,9 @@ PAYLOAD_EXAMPLE = {
 }
 
 
-@v1.patch("/Locations({location_id})", tags=["Locations"])
+@v1.api_route(
+    "/Locations({location_id})", methods=["PATCH"], tags=["Locations"]
+)
 async def update_location(
     location_id: int,
     payload: dict = Body(example=PAYLOAD_EXAMPLE),

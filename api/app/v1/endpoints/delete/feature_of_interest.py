@@ -30,8 +30,9 @@ if VERSIONING:
     message = Header(alias="commit-message")
 
 
-@v1.delete(
+@v1.api_route(
     "/FeaturesOfInterest({feature_of_interest_id})",
+    methods=["DELETE"],
     tags=["FeaturesOfInterest"],
     summary="Delete FeatureOfInterest",
 )

@@ -21,8 +21,9 @@ if VERSIONING:
     message = Header(alias="commit-message")
 
 
-@v1.delete(
+@v1.api_route(
     "/HistoricalLocations({historical_location_id})",
+    methods=["DELETE"],
     tags=["HistoricalLocations"],
     summary="Delete HistoricalLocation",
 )

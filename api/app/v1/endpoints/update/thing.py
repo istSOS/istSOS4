@@ -32,7 +32,7 @@ PAYLOAD_EXAMPLE = {
 }
 
 
-@v1.patch("/Things({thing_id})", tags=["Things"])
+@v1.api_route("/Things({thing_id})", methods=["PATCH"], tags=["Things"])
 async def update_thing(
     thing_id: int,
     payload: dict = Body(example=PAYLOAD_EXAMPLE),
