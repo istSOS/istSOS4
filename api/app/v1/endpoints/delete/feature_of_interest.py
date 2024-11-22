@@ -73,9 +73,19 @@ async def delete_feature_of_interest(
                     connection, feature_of_interest_id
                 )
 
-                await delete_entity(
+                id_deleted = await delete_entity(
                     connection, "FeaturesOfInterest", feature_of_interest_id
                 )
+
+                if id_deleted is None:
+                    return JSONResponse(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        content={
+                            "code": 404,
+                            "type": "error",
+                            "message": f"FeatureOfInterest with id {feature_of_interest_id} not found",
+                        },
+                    )
 
                 for record in datastream_records:
                     ds_id = record["datastream_id"]

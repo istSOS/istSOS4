@@ -43,7 +43,7 @@ async def delete_entity(connection, entity_name, entity_id, obs=False):
             """,
                 entity_id,
             )
-        await connection.fetchval(
+        return await connection.fetchval(
             f"""
                 DELETE FROM sensorthings."{entity_name}"
                 WHERE id = $1
