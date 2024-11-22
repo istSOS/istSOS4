@@ -35,7 +35,7 @@ async def set_commit(
 async def delete_entity(connection, entity_name, entity_id, obs=False):
     async with connection.transaction():
         if obs:
-            await connection.fetchrow(
+            return await connection.fetchrow(
                 f"""
                 DELETE FROM sensorthings."{entity_name}"
                 WHERE id = $1
@@ -43,7 +43,7 @@ async def delete_entity(connection, entity_name, entity_id, obs=False):
             """,
                 entity_id,
             )
-        return await connection.fetchval(
+        await connection.fetchval(
             f"""
                 DELETE FROM sensorthings."{entity_name}"
                 WHERE id = $1
