@@ -21,8 +21,9 @@ if VERSIONING:
     message = Header(alias="commit-message")
 
 
-@v1.delete(
+@v1.api_route(
     "/ObservedProperties({observed_property_id})",
+    methods=["DELETE"],
     tags=["ObservedProperties"],
     summary="Delete ObservedProperty",
 )

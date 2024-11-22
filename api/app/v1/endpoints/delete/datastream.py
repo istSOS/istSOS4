@@ -21,7 +21,9 @@ if VERSIONING:
     message = Header(alias="commit-message")
 
 
-@v1.delete("/Datastreams({datastream_id})", tags=["Datastreams"])
+@v1.api_route(
+    "/Datastreams({datastream_id})", methods=["DELETE"], tags=["Datastreams"]
+)
 async def delete_datastream(
     datastream_id: int,
     commit_message=message,

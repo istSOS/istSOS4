@@ -72,8 +72,9 @@ PAYLOAD_EXAMPLE = [
 ]
 
 
-@v1.post(
+@v1.api_route(
     "/CreateObservations",
+    methods=["POST"],
     tags=["Observations"],
     summary="Data Array Extension",
 )

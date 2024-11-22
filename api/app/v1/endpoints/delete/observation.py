@@ -25,8 +25,9 @@ if VERSIONING:
     message = Header(alias="commit-message")
 
 
-@v1.delete(
+@v1.api_route(
     "/Observations({observation_id})",
+    methods=["DELETE"],
     tags=["Observations"],
 )
 async def delete_observation(

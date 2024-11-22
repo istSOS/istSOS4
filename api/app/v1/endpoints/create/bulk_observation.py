@@ -58,8 +58,9 @@ PAYLOAD_EXAMPLE = [
 ]
 
 
-@v1.post(
+@v1.api_route(
     "/BulkObservations",
+    methods=["POST"],
     tags=["Observations"],
     summary="Create multiple Observations",
 )

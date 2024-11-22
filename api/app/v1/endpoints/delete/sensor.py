@@ -21,7 +21,7 @@ if VERSIONING:
     message = Header(alias="commit-message")
 
 
-@v1.delete("/Sensors({sensor_id})", tags=["Sensors"])
+@v1.api_route("/Sensors({sensor_id})", methods=["DELETE"], tags=["Sensors"])
 async def delete_sensor(
     sensor_id: int,
     commit_message=message,

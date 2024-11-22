@@ -29,8 +29,9 @@ if VERSIONING:
 PAYLOAD_EXAMPLE = {"time": "2015-07-01T00:00:00.000Z"}
 
 
-@v1.patch(
+@v1.api_route(
     "/HistoricalLocations({historical_location_id})",
+    methods=["PATCH"],
     tags=["HistoricalLocations"],
     summary="Delete HistoricalLocation",
 )

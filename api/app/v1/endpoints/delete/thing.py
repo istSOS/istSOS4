@@ -21,7 +21,7 @@ if VERSIONING:
     message = Header(alias="commit-message")
 
 
-@v1.delete("/Things({thing_id})", tags=["Things"])
+@v1.api_route("/Things({thing_id})", methods=["DELETE"], tags=["Things"])
 async def delete_thing(
     thing_id: int,
     commit_message=message,

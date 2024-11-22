@@ -32,8 +32,9 @@ PAYLOAD_EXAMPLE = {
 }
 
 
-@v1.patch(
+@v1.api_route(
     "/ObservedProperties({observed_property_id})",
+    methods=["PATCH"],
     tags=["ObservedProperties"],
     summary="Delete ObservedProperty",
 )

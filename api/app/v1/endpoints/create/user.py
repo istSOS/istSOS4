@@ -15,7 +15,7 @@ PAYLOAD_EXAMPLE = {
 }
 
 
-@v1.post("/Users", tags=["Users"])
+@v1.api_route("/Users", methods=["POST"], tags=["Users"])
 async def create_user(
     payload: dict = Body(example=PAYLOAD_EXAMPLE),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),

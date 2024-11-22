@@ -38,8 +38,9 @@ PAYLOAD_EXAMPLE = {
 }
 
 
-@v1.patch(
+@v1.api_route(
     "/FeaturesOfInterest({feature_of_interest_id})",
+    methods=["PATCH"],
     tags=["FeaturesOfInterest"],
     summary="Delete FeatureOfInterest",
 )
