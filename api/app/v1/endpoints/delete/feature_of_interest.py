@@ -59,7 +59,7 @@ async def delete_feature_of_interest(
                     feature_of_interest_id,
                 )
 
-                datastream_records = get_datastreams_from_foi(
+                datastream_records = await get_datastreams_from_foi(
                     connection, feature_of_interest_id
                 )
 
