@@ -18,7 +18,15 @@ async def initialize_pool():
             await asyncio.sleep(1)  # Use asyncio.sleep for asynchronous sleep
 
 
-app = FastAPI()
+app = FastAPI(
+    title="OGC SensorThings API",
+    description="A SensorThings API implementation in Python using FastAPI.",
+    openapi_tags=[
+        {
+            "name": "Read root",
+        }
+    ],
+)
 
 
 def __handle_root():
@@ -45,7 +53,7 @@ async def startup_event():
     await initialize_pool()  # Call the initialize_pool function at startup
 
 
-@app.get(f"{SUBPATH}{VERSION}")
+@app.get(f"{SUBPATH}{VERSION}", tags=["Read root"])
 async def read_root():
     return __handle_root()
 

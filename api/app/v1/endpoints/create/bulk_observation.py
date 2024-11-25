@@ -1,16 +1,13 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.v1.endpoints.insert import (
-    get_commit,
-    insert_record,
-    update_datastream_last_foi_id,
-)
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
 from dateutil import parser
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
+
+from .create import create_entity, set_commit, update_datastream_last_foi_id
 
 v1 = APIRouter()
 
@@ -63,8 +60,10 @@ PAYLOAD_EXAMPLE = [
     methods=["POST"],
     tags=["Observations"],
     summary="Create multiple Observations",
+    description="Create multiple Observations in a single request.",
+    status_code=status.HTTP_201_CREATED,
 )
-async def create_observations(
+async def bulk_observations(
     payload: list = Body(example=PAYLOAD_EXAMPLE),
     commit_message=message,
     current_user=user,
@@ -80,8 +79,8 @@ async def create_observations(
                     )
 
                 try:
-                    commit_id = await get_commit(
-                        commit_message, conn, current_user
+                    commit_id = await set_commit(
+                        conn, commit_message, current_user
                     )
                 except InsufficientPrivilegeError:
                     return JSONResponse(
@@ -391,8 +390,8 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
                 if VERSIONING and commit_id is not None:
                     foi_payload["commit_id"] = commit_id
 
-                foi_id, _ = await insert_record(
-                    foi_payload, conn, "FeaturesOfInterest"
+                foi_id, _ = await create_entity(
+                    conn, "FeaturesOfInterest", foi_payload
                 )
 
                 update_query = f"""

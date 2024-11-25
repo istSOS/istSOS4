@@ -1,5 +1,6 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.crud import (
     get_datastreams_from_foi,
     set_role,
@@ -9,13 +10,7 @@ from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
-from .update import (
-    handle_nested_entities,
-    set_commit,
-    update_entity,
-    validate_epsg,
-    validate_payload_keys,
-)
+from .update import set_commit, update_feature_of_interest_entity
 
 v1 = APIRouter()
 
@@ -37,12 +32,23 @@ PAYLOAD_EXAMPLE = {
     "feature": {"type": "Point", "coordinates": [-114.05, 51.05]},
 }
 
+ALLOWED_KEYS = [
+    "name",
+    "description",
+    "encodingType",
+    "feature",
+    "properties",
+    "Observations",
+]
+
 
 @v1.api_route(
     "/FeaturesOfInterest({feature_of_interest_id})",
     methods=["PATCH"],
     tags=["FeaturesOfInterest"],
-    summary="Delete FeatureOfInterest",
+    summary="Update a Feature of Interest",
+    description="Update a Feature of Interest",
+    status_code=status.HTTP_200_OK,
 )
 async def update_feature_of_interest(
     feature_of_interest_id: int,
@@ -58,15 +64,7 @@ async def update_feature_of_interest(
         if not payload:
             return Response(status_code=status.HTTP_200_OK)
 
-        allowed_keys = [
-            "name",
-            "description",
-            "encodingType",
-            "feature",
-            "properties",
-            "Observations",
-        ]
-        validate_payload_keys(payload, allowed_keys)
+        validate_payload_keys(payload, ALLOWED_KEYS)
 
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -115,25 +113,4 @@ async def update_feature_of_interest(
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"code": 400, "type": "error", "message": str(e)},
-        )
-
-
-async def update_feature_of_interest_entity(
-    connection, feature_of_interest_id, payload
-):
-    if payload["feature"]:
-        validate_epsg(payload["feature"])
-
-    await handle_nested_entities(
-        connection,
-        payload,
-        feature_of_interest_id,
-        "Observations",
-        "featuresofinterest_id",
-        "Observation",
-    )
-
-    if payload:
-        await update_entity(
-            connection, "FeaturesOfInterest", feature_of_interest_id, payload
         )

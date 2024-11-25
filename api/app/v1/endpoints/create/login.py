@@ -6,7 +6,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 v1 = APIRouter()
 
 
-@v1.api_route("/Login", methods=["POST"], tags=["Login"])
+@v1.api_route(
+    "/Login", methods=["POST"], tags=["Login"], include_in_schema=False
+)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
 ):

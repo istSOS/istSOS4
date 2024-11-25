@@ -1,11 +1,21 @@
 from app import AUTHORIZATION
-from app.v1.endpoints import insert, read
+from app.v1.endpoints.create import bulk_observation, data_array_observation
+from app.v1.endpoints.create import datastream as create_datastream
 from app.v1.endpoints.create import (
-    bulk_observation,
-    create_observation,
-    login,
-    user,
+    feature_of_interest as create_feature_of_interest,
 )
+from app.v1.endpoints.create import (
+    historical_location as create_historical_location,
+)
+from app.v1.endpoints.create import location as create_location
+from app.v1.endpoints.create import login
+from app.v1.endpoints.create import observation as create_observation
+from app.v1.endpoints.create import (
+    observed_property as create_observed_property,
+)
+from app.v1.endpoints.create import sensor as create_sensor
+from app.v1.endpoints.create import thing as create_thing
+from app.v1.endpoints.create import user
 from app.v1.endpoints.delete import datastream as delete_datastream
 from app.v1.endpoints.delete import (
     feature_of_interest as delete_feature_of_interest,
@@ -20,6 +30,19 @@ from app.v1.endpoints.delete import (
 )
 from app.v1.endpoints.delete import sensor as delete_sensor
 from app.v1.endpoints.delete import thing as delete_thing
+from app.v1.endpoints.read import datastream as read_datastream
+from app.v1.endpoints.read import (
+    feature_of_interest as read_feature_of_interest,
+)
+from app.v1.endpoints.read import (
+    historical_location as read_historical_location,
+)
+from app.v1.endpoints.read import location as read_location
+from app.v1.endpoints.read import observation as read_observation
+from app.v1.endpoints.read import observed_property as read_observed_property
+from app.v1.endpoints.read import read
+from app.v1.endpoints.read import sensor as read_sensor
+from app.v1.endpoints.read import thing as read_thing
 from app.v1.endpoints.update import datastream as update_datastream
 from app.v1.endpoints.update import (
     feature_of_interest as update_feature_of_interest,
@@ -42,15 +65,15 @@ if AUTHORIZATION:
             "name": "Users",
             "description": "Users of the SensorThings API.",
         },
-        {
-            "name": "Login",
-            "description": "Login for access token.",
-        },
     ]
 else:
     tags_metadata = []
 
 tags_metadata += [
+    {
+        "name": "Catch All",
+        "description": "Read operations for SensorThings API.",
+    },
     {
         "name": "Locations",
         "description": "Current (and previous) location details for each thing, generally lat/long and elevation.",
@@ -86,7 +109,9 @@ tags_metadata += [
 ]
 
 v1 = FastAPI(
-    title="SensorThings API",
+    title="OGC SensorThings API",
+    description="A SensorThings API implementation in Python using FastAPI.",
+    version="1.1",
     openapi_tags=tags_metadata,
     swagger_ui_parameters={"defaultModelsExpandDepth": -1},
 )
@@ -96,13 +121,28 @@ if AUTHORIZATION:
     v1.include_router(user.v1)
     v1.include_router(login.v1)
 
+# Register the read endpoints
+v1.include_router(read_location.v1)
+v1.include_router(read_thing.v1)
+v1.include_router(read_historical_location.v1)
+v1.include_router(read_sensor.v1)
+v1.include_router(read_observed_property.v1)
+v1.include_router(read_datastream.v1)
+v1.include_router(read_feature_of_interest.v1)
+v1.include_router(read_observation.v1)
+v1.include_router(read.v1)
+
 # Register the create endpoints
 v1.include_router(bulk_observation.v1)
+v1.include_router(data_array_observation.v1)
+v1.include_router(create_location.v1)
+v1.include_router(create_thing.v1)
+v1.include_router(create_historical_location.v1)
+v1.include_router(create_sensor.v1)
+v1.include_router(create_observed_property.v1)
+v1.include_router(create_datastream.v1)
+v1.include_router(create_feature_of_interest.v1)
 v1.include_router(create_observation.v1)
-
-# Register the endpoints
-v1.include_router(read.v1)
-v1.include_router(insert.v1)
 
 # Register the update endpoints
 v1.include_router(update_location.v1)

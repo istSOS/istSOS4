@@ -10,21 +10,25 @@ from app import (
     VERSIONING,
 )
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import handle_datetime_fields, handle_result_field
-from app.v1.endpoints.insert import (
+from app.utils.utils import (
     check_iot_id_in_payload,
     check_missing_properties,
-    generate_feature_of_interest,
-    get_commit,
-    handle_associations,
-    insertDatastream,
-    insertFeaturesOfInterest,
-    update_datastream_last_foi_id,
+    handle_datetime_fields,
+    handle_result_field,
 )
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse
+
+from .create import (
+    generate_feature_of_interest,
+    handle_associations,
+    insert_datastream_entity,
+    insert_feature_of_interest_entity,
+    set_commit,
+    update_datastream_last_foi_id,
+)
 
 v1 = APIRouter()
 
@@ -77,8 +81,10 @@ PAYLOAD_EXAMPLE = [
     methods=["POST"],
     tags=["Observations"],
     summary="Data Array Extension",
+    description="Create multiple Observations in a single request.",
+    status_code=status.HTTP_201_CREATED,
 )
-async def create_observations(
+async def data_array_observation(
     payload: list = Body(example=PAYLOAD_EXAMPLE),
     commit_message=message,
     current_user=user,
@@ -96,8 +102,8 @@ async def create_observations(
                     )
 
                 try:
-                    commit_id = await get_commit(
-                        commit_message, conn, current_user
+                    commit_id = await set_commit(
+                        conn, commit_message, current_user
                     )
                 except InsufficientPrivilegeError:
                     return JSONResponse(
@@ -242,7 +248,7 @@ async def insertDataArrayObservation(
                 obs,
                 "Datastream",
                 datastream_id,
-                insertDatastream,
+                insert_datastream_entity,
                 conn,
                 commit_id=commit_id,
             )
@@ -271,9 +277,9 @@ async def insertDataArrayObservation(
                         )
                 else:
                     features_of_interest_id, _ = (
-                        await insertFeaturesOfInterest(
-                            obs["FeatureOfInterest"],
+                        await insert_feature_of_interest_entity(
                             conn,
+                            obs["FeatureOfInterest"],
                             obs["datastream_id"],
                             commit_id=commit_id,
                         )

@@ -1,12 +1,14 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
+from app.v1.endpoints.create.create import (
+    insert_feature_of_interest_entity,
+    set_commit,
+)
 from app.v1.endpoints.crud import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
-from fastapi import APIRouter, Body, Depends, Header, status
+from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
-
-from .update import set_commit, update_datastream_entity
 
 v1 = APIRouter()
 
@@ -22,53 +24,43 @@ if VERSIONING:
     message = Header(alias="commit-message")
 
 PAYLOAD_EXAMPLE = {
-    "unitOfMeasurement": {
-        "name": "Lumen",
-        "symbol": "lm",
-        "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen",
-    },
-    "description": "datastream 1",
-    "name": "datastream name 1",
-    "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement",
+    "name": "A weather station.",
+    "description": "A weather station.",
+    "encodingType": "application/vnd.geo+json",
+    "feature": {"type": "Point", "coordinates": [-114.05, 51.05]},
 }
 
 ALLOWED_KEYS = [
     "name",
     "description",
-    "unitOfMeasurement",
-    "observationType",
-    "observedArea",
-    "phenomenonTime",
-    "resultTime",
+    "encodingType",
+    "feature",
     "properties",
-    "Thing",
-    "Sensor",
-    "ObservedProperty",
     "Observations",
 ]
 
 
 @v1.api_route(
-    "/Datastreams({datastream_id})",
-    methods=["PATCH"],
-    tags=["Datastreams"],
-    summary="Update a Datastream",
-    description="Update a Datastream",
-    status_code=status.HTTP_200_OK,
+    "/FeaturesOfInterest",
+    methods=["POST"],
+    tags=["FeaturesOfInterest"],
+    summary="Create a new FeatureOfInterest",
+    description="Create a new FeatureOfInterest entity.",
+    status_code=status.HTTP_201_CREATED,
 )
-async def update_datastream(
-    datastream_id: int,
+async def create_feature_of_interest(
+    request: Request,
     payload: dict = Body(example=PAYLOAD_EXAMPLE),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
-        if not datastream_id:
-            raise Exception("Datastream ID not provided")
-
-        if not payload:
-            return Response(status_code=status.HTTP_200_OK)
+        if (
+            not "content-type" in request.headers
+            or request.headers["content-type"] != "application/json"
+        ):
+            raise Exception("Only content-type application/json is supported.")
 
         validate_payload_keys(payload, ALLOWED_KEYS)
 
@@ -78,25 +70,21 @@ async def update_datastream(
                     await set_role(connection, current_user)
 
                 commit_id = await set_commit(
-                    connection,
-                    commit_message,
-                    current_user,
-                    "Datastream",
-                    datastream_id,
+                    connection, commit_message, current_user
                 )
                 if commit_id is not None:
                     payload["commit_id"] = commit_id
 
-                await update_datastream_entity(
-                    connection,
-                    datastream_id,
-                    payload,
+                _, header = await insert_feature_of_interest_entity(
+                    connection, payload, commit_id
                 )
 
                 if current_user is not None:
-                    await set_role(connection, current_user)
-
-        return Response(status_code=status.HTTP_200_OK)
+                    await connection.execute("RESET ROLE;")
+        return Response(
+            status_code=status.HTTP_201_CREATED,
+            headers={"location": header},
+        )
     except InsufficientPrivilegeError:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -109,5 +97,9 @@ async def update_datastream(
     except Exception as e:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
+            content={
+                "code": 400,
+                "type": "error",
+                "message": str(e),
+            },
         )
