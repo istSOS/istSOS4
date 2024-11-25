@@ -1,17 +1,12 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import handle_datetime_fields
+from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.crud import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
-from .update import (
-    handle_associations,
-    set_commit,
-    update_entity,
-    validate_payload_keys,
-)
+from .update import set_commit, update_historical_location_entity
 
 v1 = APIRouter()
 
@@ -28,12 +23,16 @@ if VERSIONING:
 
 PAYLOAD_EXAMPLE = {"time": "2015-07-01T00:00:00.000Z"}
 
+ALLOWED_KEYS = ["time", "Thing", "Locations"]
+
 
 @v1.api_route(
     "/HistoricalLocations({historical_location_id})",
     methods=["PATCH"],
     tags=["HistoricalLocations"],
-    summary="Delete HistoricalLocation",
+    summary="Update a Historical Location",
+    description="Update a Historical Location",
+    status_code=status.HTTP_200_OK,
 )
 async def update_historical_location(
     historical_location_id: int,
@@ -49,12 +48,7 @@ async def update_historical_location(
         if not payload:
             return Response(status_code=status.HTTP_200_OK)
 
-        allowed_keys = [
-            "time",
-            "Thing",
-            "Locations",
-        ]
-        validate_payload_keys(payload, allowed_keys)
+        validate_payload_keys(payload, ALLOWED_KEYS)
 
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -94,52 +88,4 @@ async def update_historical_location(
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"code": 400, "type": "error", "message": str(e)},
-        )
-
-
-async def update_historical_location_entity(
-    connection, historical_location_id, payload
-):
-    if "Locations" in payload:
-        if isinstance(payload["Locations"], dict):
-            payload["Locations"] = [payload["Locations"]]
-        for location in payload["Locations"]:
-            if not isinstance(location, dict) or list(location.keys()) != [
-                "@iot.id"
-            ]:
-                raise Exception(
-                    "Invalid format: Each location should be a dictionary with a single key '@iot.id'."
-                )
-            location_id = location["@iot.id"]
-            check = await connection.fetchval(
-                """
-                    UPDATE sensorthings."Location_HistoricalLocation"
-                    SET location_id = $1
-                    WHERE historicallocation_id = $2;
-                """,
-                location_id,
-                historical_location_id,
-            )
-            if check is None:
-                await connection.execute(
-                    """
-                        INSERT INTO sensorthings."Location_HistoricalLocation" ("historicallocation_id", "location_id")
-                        VALUES ($1, $2)
-                        ON CONFLICT ("historicallocation_id", "location_id") DO NOTHING;
-                    """,
-                    historical_location_id,
-                    location_id,
-                )
-        payload.pop("Locations")
-
-    handle_datetime_fields(payload)
-
-    handle_associations(payload, ["Thing"])
-
-    if payload:
-        await update_entity(
-            connection,
-            "HistoricalLocation",
-            historical_location_id,
-            payload,
         )

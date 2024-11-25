@@ -25,7 +25,9 @@ if VERSIONING:
     "/ObservedProperties({observed_property_id})",
     methods=["DELETE"],
     tags=["ObservedProperties"],
-    summary="Delete ObservedProperty",
+    summary="Delete an Observed Property",
+    description="Delete an Observed Property by ID",
+    status_code=status.HTTP_200_OK,
 )
 async def delete_observed_property(
     observed_property_id: int,

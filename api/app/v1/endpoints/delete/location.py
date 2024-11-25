@@ -24,7 +24,12 @@ if VERSIONING:
 
 
 @v1.api_route(
-    "/Locations({location_id})", methods=["DELETE"], tags=["Locations"]
+    "/Locations({location_id})",
+    methods=["DELETE"],
+    tags=["Locations"],
+    summary="Delete a Location",
+    description="Delete a Location by ID",
+    status_code=status.HTTP_200_OK,
 )
 async def delete_location(
     location_id: int,

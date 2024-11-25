@@ -21,7 +21,14 @@ if VERSIONING:
     message = Header(alias="commit-message")
 
 
-@v1.api_route("/Sensors({sensor_id})", methods=["DELETE"], tags=["Sensors"])
+@v1.api_route(
+    "/Sensors({sensor_id})",
+    methods=["DELETE"],
+    tags=["Sensors"],
+    summary="Delete a Sensor",
+    description="Delete a Sensor by ID",
+    status_code=status.HTTP_200_OK,
+)
 async def delete_sensor(
     sensor_id: int,
     commit_message=message,

@@ -1,16 +1,12 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.crud import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
-from .update import (
-    handle_nested_entities,
-    set_commit,
-    update_entity,
-    validate_payload_keys,
-)
+from .update import set_commit, update_sensor_entity
 
 v1 = APIRouter()
 
@@ -32,8 +28,24 @@ PAYLOAD_EXAMPLE = {
     "metadata": "Light flux sensor",
 }
 
+ALLOWED_KEYS = [
+    "name",
+    "description",
+    "encodingType",
+    "metadata",
+    "properties",
+    "Datastreams",
+]
 
-@v1.api_route("/Sensors({sensor_id})", methods=["PATCH"], tags=["Sensors"])
+
+@v1.api_route(
+    "/Sensors({sensor_id})",
+    methods=["PATCH"],
+    tags=["Sensors"],
+    summary="Update a Sensor",
+    description="Update a Sensor",
+    status_code=status.HTTP_200_OK,
+)
 async def update_sensor(
     sensor_id: int,
     payload: dict = Body(example=PAYLOAD_EXAMPLE),
@@ -48,15 +60,7 @@ async def update_sensor(
         if not payload:
             return Response(status_code=status.HTTP_200_OK)
 
-        allowed_keys = [
-            "name",
-            "description",
-            "encodingType",
-            "metadata",
-            "properties",
-            "Datastreams",
-        ]
-        validate_payload_keys(payload, allowed_keys)
+        validate_payload_keys(payload, ALLOWED_KEYS)
 
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -93,17 +97,3 @@ async def update_sensor(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"code": 400, "type": "error", "message": str(e)},
         )
-
-
-async def update_sensor_entity(connection, sensor_id, payload):
-    await handle_nested_entities(
-        connection,
-        payload,
-        sensor_id,
-        "Datastreams",
-        "sensor_id",
-        "Datastream",
-    )
-
-    if payload:
-        await update_entity(connection, "Sensor", sensor_id, payload)

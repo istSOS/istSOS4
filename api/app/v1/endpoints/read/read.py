@@ -7,7 +7,6 @@ from app import (
     AUTHORIZATION,
     COUNT_ESTIMATE_THRESHOLD,
     COUNT_MODE,
-    DEBUG,
     HOSTNAME,
     PARTITION_CHUNK,
     REDIS,
@@ -21,21 +20,24 @@ from app.oauth import get_current_user
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
 from app.utils.utils import build_nextLink
-from fastapi import APIRouter, Depends, Request, status
+from app.v1.endpoints.crud import set_role
+from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy.exc import TimeoutError
+
+from .query_parameters import CommonQueryParams, get_common_query_params
 
 v1 = APIRouter()
 
-try:
-    DEBUG = DEBUG
-    if DEBUG:
-        from app.utils.utils import response2jsonfile
-except:
-    DEBUG = 0
+
+user = Header(default=None, include_in_schema=False)
+
+if AUTHORIZATION:
+    from app.oauth import get_current_user
+
+    user = Depends(get_current_user)
 
 
-def __handle_root(request: Request):
+def __handle_root():
     """
     Handle the root path.
 
@@ -59,8 +61,6 @@ def __handle_root(request: Request):
         "value": value,
         "serverSettings": serverSettings,
     }
-    if DEBUG:
-        response2jsonfile(request, response, "requests.json")
     return response
 
 
@@ -70,34 +70,25 @@ async def wrapped_result_generator(first_item, result):
         yield item
 
 
-@v1.api_route("/{path_name:path}", methods=["GET"])
+@v1.api_route(
+    "/{path_name:path}",
+    methods=["GET"],
+    tags=["Catch All"],
+    summary="Catch all GET requests",
+    description="Handles all GET requests to the API",
+)
 async def catch_all_get(
     request: Request,
     path_name: str,
-    current_user=Depends(get_current_user) if AUTHORIZATION else None,
-    pgpool=Depends(get_pool),
+    current_user=user,
+    pool=Depends(get_pool),
+    params: CommonQueryParams = Depends(get_common_query_params),
 ):
-    """
-    Handle GET requests for all paths.
 
-    Args:
-        request (Request): The incoming request object.
-        path_name (str): The path name extracted from the URL.
-        pgpool (Session): The database session.
-
-    Returns:
-        dict: The response data.
-
-    Raises:
-        JSONResponse: If the requested resource is not found.
-        JSONResponse: If there is a bad request.
-    """
     if not path_name:
-        # Handle the root path
-        return __handle_root(request)
+        return __handle_root()
 
     try:
-        # get full path from request
         full_path = request.url.path
         if request.url.query:
             full_path += "?" + request.url.query
@@ -127,7 +118,7 @@ async def catch_all_get(
         result = asyncpg_stream_results(
             main_entity,
             main_query,
-            pgpool,
+            pool,
             top_value,
             is_count,
             count_queries,
@@ -144,15 +135,6 @@ async def catch_all_get(
                 wrapped_result_generator(first_item, result),
                 media_type="application/json",
                 status_code=status.HTTP_200_OK,
-            )
-        except TimeoutError:
-            return JSONResponse(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                content={
-                    "code": 503,
-                    "type": "error",
-                    "message": "Service Unavailable",
-                },
             )
         except Exception as e:
             return JSONResponse(
@@ -185,38 +167,37 @@ async def asyncpg_stream_results(
     full_path,
     current_user,
 ):
-    async with pgpool.acquire() as conn:
-        async with conn.transaction():
+    async with pgpool.acquire() as connection:
+        async with connection.transaction():
             if current_user is not None:
-                query_role = 'SET ROLE "{username}";'
-                await conn.execute(
-                    query_role.format(username=current_user["username"])
-                )
+                await set_role(connection, current_user)
 
             if is_count:
                 if COUNT_MODE == "LIMIT_ESTIMATE":
-                    query_count = await conn.fetchval(count_queries[0])
+                    query_count = await connection.fetchval(count_queries[0])
                     if query_count == COUNT_ESTIMATE_THRESHOLD:
-                        query_count = await conn.fetchval(
+                        query_count = await connection.fetchval(
                             "SELECT sensorthings.count_estimate($1) AS estimated_count",
                             count_queries[1],
                         )
                 elif COUNT_MODE == "ESTIMATE_LIMIT":
-                    query_count = await conn.fetchval(
+                    query_count = await connection.fetchval(
                         "SELECT sensorthings.count_estimate($1) AS estimated_count",
                         count_queries[0],
                     )
                     if query_count < COUNT_ESTIMATE_THRESHOLD:
-                        query_count = await conn.fetchval(count_queries[1])
+                        query_count = await connection.fetchval(
+                            count_queries[1]
+                        )
                 else:
-                    query_count = await conn.fetchval(count_queries[0])
+                    query_count = await connection.fetchval(count_queries[0])
 
             iot_count = (
                 '"@iot.count": ' + str(query_count) + ","
                 if is_count and not single_result
                 else ""
             )
-            await conn.execute(f"DECLARE my_cursor CURSOR FOR {query}")
+            await connection.execute(f"DECLARE my_cursor CURSOR FOR {query}")
 
             start_json = ""
             is_first_partition = True
@@ -232,7 +213,7 @@ async def asyncpg_stream_results(
                 )
 
             while True:
-                partition = await conn.fetch(
+                partition = await connection.fetch(
                     f"FETCH {PARTITION_CHUNK} FROM my_cursor"
                 )
                 if not partition:
@@ -301,7 +282,7 @@ async def asyncpg_stream_results(
             if has_rows and not single_result:
                 yield "]}"
 
-            await conn.execute("CLOSE my_cursor")
+            await connection.execute("CLOSE my_cursor")
 
             if current_user is not None:
-                await conn.execute("RESET ROLE")
+                await connection.execute("RESET ROLE")

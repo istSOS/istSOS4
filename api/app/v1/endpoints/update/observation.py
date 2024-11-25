@@ -1,17 +1,12 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import handle_datetime_fields, handle_result_field
+from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.crud import set_role, update_datastream_observedArea
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
-from .update import (
-    handle_associations,
-    set_commit,
-    update_entity,
-    validate_payload_keys,
-)
+from .update import set_commit, update_observation_entity
 
 v1 = APIRouter()
 
@@ -33,9 +28,25 @@ PAYLOAD_EXAMPLE = {
     "resultQuality": "100",
 }
 
+ALLOWED_KEYS = [
+    "phenomenonTime",
+    "result",
+    "resultTime",
+    "resultQuality",
+    "validTime",
+    "parameters",
+    "Datastream",
+    "FeatureOfInterest",
+]
+
 
 @v1.api_route(
-    "/Observations({observation_id})", methods=["PATCH"], tags=["Observations"]
+    "/Observations({observation_id})",
+    methods=["PATCH"],
+    tags=["Observations"],
+    summary="Update an Observation",
+    description="Update an Observation",
+    status_code=status.HTTP_200_OK,
 )
 async def update_observation(
     observation_id: int,
@@ -51,17 +62,7 @@ async def update_observation(
         if not payload:
             return Response(status_code=status.HTTP_200_OK)
 
-        allowed_keys = [
-            "phenomenonTime",
-            "result",
-            "resultTime",
-            "resultQuality",
-            "validTime",
-            "parameters",
-            "Datastream",
-            "FeatureOfInterest",
-        ]
-        validate_payload_keys(payload, allowed_keys)
+        validate_payload_keys(payload, ALLOWED_KEYS)
 
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -146,14 +147,3 @@ async def update_observation(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"code": 400, "type": "error", "message": str(e)},
         )
-
-
-async def update_observation_entity(connection, observation_id, payload):
-    handle_datetime_fields(payload)
-
-    handle_result_field(payload)
-
-    handle_associations(payload, ["Datastream", "FeatureOfInterest"])
-
-    if payload:
-        await update_entity(connection, "Observation", observation_id, payload)

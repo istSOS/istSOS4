@@ -25,7 +25,9 @@ if VERSIONING:
     "/HistoricalLocations({historical_location_id})",
     methods=["DELETE"],
     tags=["HistoricalLocations"],
-    summary="Delete HistoricalLocation",
+    summary="Delete a Historical Location",
+    description="Delete a Historical Location by ID",
+    status_code=status.HTTP_200_OK,
 )
 async def delete_historical_location(
     historical_location_id: int,

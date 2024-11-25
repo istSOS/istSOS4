@@ -29,6 +29,9 @@ if VERSIONING:
     "/Observations({observation_id})",
     methods=["DELETE"],
     tags=["Observations"],
+    summary="Delete an Observation",
+    description="Delete an Observation by ID",
+    status_code=status.HTTP_200_OK,
 )
 async def delete_observation(
     observation_id: int,

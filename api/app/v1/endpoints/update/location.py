@@ -1,16 +1,12 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.crud import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
-from .update import (
-    set_commit,
-    update_entity,
-    validate_epsg,
-    validate_payload_keys,
-)
+from .update import set_commit, update_location_entity
 
 v1 = APIRouter()
 
@@ -32,9 +28,23 @@ PAYLOAD_EXAMPLE = {
     "encodingType": "application/vnd.geo+json",
 }
 
+ALLOWED_KEYS = [
+    "name",
+    "description",
+    "encodingType",
+    "location",
+    "properties",
+    "Things",
+]
+
 
 @v1.api_route(
-    "/Locations({location_id})", methods=["PATCH"], tags=["Locations"]
+    "/Locations({location_id})",
+    methods=["PATCH"],
+    tags=["Locations"],
+    summary="Update a Location",
+    description="Update a Location",
+    status_code=status.HTTP_200_OK,
 )
 async def update_location(
     location_id: int,
@@ -50,15 +60,7 @@ async def update_location(
         if not payload:
             return Response(status_code=status.HTTP_200_OK)
 
-        allowed_keys = [
-            "name",
-            "description",
-            "encodingType",
-            "location",
-            "properties",
-            "Things",
-        ]
-        validate_payload_keys(payload, allowed_keys)
+        validate_payload_keys(payload, ALLOWED_KEYS)
 
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -99,66 +101,3 @@ async def update_location(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"code": 400, "type": "error", "message": str(e)},
         )
-
-
-async def update_location_entity(
-    connection,
-    location_id,
-    payload,
-):
-    if payload["location"]:
-        validate_epsg(payload["location"])
-
-    if "Things" in payload:
-        if isinstance(payload["Things"], dict):
-            payload["Things"] = [payload["Things"]]
-        for thing in payload["Things"]:
-            if not isinstance(thing, dict) or list(thing.keys()) != [
-                "@iot.id"
-            ]:
-                raise Exception(
-                    "Invalid format: Each thing should be a dictionary with a single key '@iot.id'."
-                )
-            thing_id = thing["@iot.id"]
-            check = await connection.fetchval(
-                """
-                    UPDATE sensorthings."Thing_Location"
-                    SET thing_id = $1
-                    WHERE location_id = $2;
-                """,
-                location_id,
-                thing_id,
-            )
-            if check is None:
-                await connection.execute(
-                    """
-                        INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id")
-                        VALUES ($1, $2)
-                        ON CONFLICT ("thing_id", "location_id") DO NOTHING;
-                    """,
-                    thing_id,
-                    location_id,
-                )
-            historical_location_id = await connection.fetchval(
-                """
-                    INSERT INTO sensorthings."HistoricalLocation" ("thing_id")
-                    VALUES ($1)
-                    RETURNING id;
-                """,
-                thing_id,
-            )
-            await connection.execute(
-                """
-                    INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id")
-                    VALUES ($1, $2)
-                    ON CONFLICT ("location_id", "historicallocation_id") DO NOTHING;
-                """,
-                location_id,
-                historical_location_id,
-            )
-        payload.pop("Things")
-
-    payload["gen_foi_id"] = None
-
-    if payload:
-        await update_entity(connection, "Location", location_id, payload)

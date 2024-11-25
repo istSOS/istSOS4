@@ -34,7 +34,9 @@ if VERSIONING:
     "/FeaturesOfInterest({feature_of_interest_id})",
     methods=["DELETE"],
     tags=["FeaturesOfInterest"],
-    summary="Delete FeatureOfInterest",
+    summary="Delete a Feature of Interest",
+    description="Delete a Feature of Interest by ID",
+    status_code=status.HTTP_200_OK,
 )
 async def delete_feature_of_interest(
     feature_of_interest_id: int,

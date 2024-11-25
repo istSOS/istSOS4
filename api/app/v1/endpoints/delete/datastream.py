@@ -22,7 +22,12 @@ if VERSIONING:
 
 
 @v1.api_route(
-    "/Datastreams({datastream_id})", methods=["DELETE"], tags=["Datastreams"]
+    "/Datastreams({datastream_id})",
+    methods=["DELETE"],
+    tags=["Datastreams"],
+    summary="Delete a Datastream",
+    description="Delete a Datastream by ID",
+    status_code=status.HTTP_200_OK,
 )
 async def delete_datastream(
     datastream_id: int,

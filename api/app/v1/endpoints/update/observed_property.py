@@ -1,16 +1,12 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.crud import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
-from .update import (
-    handle_nested_entities,
-    set_commit,
-    update_entity,
-    validate_payload_keys,
-)
+from .update import set_commit, update_observed_property_entity
 
 v1 = APIRouter()
 
@@ -31,12 +27,22 @@ PAYLOAD_EXAMPLE = {
     "description": "observedProperty 1",
 }
 
+ALLOWED_KEYS = [
+    "name",
+    "definition",
+    "description",
+    "properties",
+    "Datastreams",
+]
+
 
 @v1.api_route(
     "/ObservedProperties({observed_property_id})",
     methods=["PATCH"],
     tags=["ObservedProperties"],
-    summary="Delete ObservedProperty",
+    summary="Update an Observed Property",
+    description="Update an Observed Property",
+    status_code=status.HTTP_200_OK,
 )
 async def update_observed_property(
     observed_property_id: int,
@@ -52,14 +58,7 @@ async def update_observed_property(
         if not payload:
             return Response(status_code=status.HTTP_200_OK)
 
-        allowed_keys = [
-            "name",
-            "definition",
-            "description",
-            "properties",
-            "Datastreams",
-        ]
-        validate_payload_keys(payload, allowed_keys)
+        validate_payload_keys(payload, ALLOWED_KEYS)
 
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -99,22 +98,4 @@ async def update_observed_property(
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"code": 400, "type": "error", "message": str(e)},
-        )
-
-
-async def update_observed_property_entity(
-    connection, observed_property_id, payload
-):
-    await handle_nested_entities(
-        connection,
-        payload,
-        observed_property_id,
-        "Datastreams",
-        "observedproperty_id",
-        "Datastream",
-    )
-
-    if payload:
-        await update_entity(
-            connection, "ObservedProperty", observed_property_id, payload
         )
