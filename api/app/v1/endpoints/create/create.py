@@ -329,7 +329,7 @@ async def insert_datastream_entity(
 
         handle_datetime_fields(payload)
 
-        if VERSIONING and commit_id is not None:
+        if commit_id is not None:
             payload["commit_id"] = commit_id
 
         datastream_id, datastream_selfLink = await create_entity(
@@ -352,11 +352,10 @@ async def insert_feature_of_interest_entity(
     connection, payload, datastream_id=None, commit_id=None
 ):
     async with connection.transaction():
-        feature = payload.get("feature")
-        if feature:
-            validate_epsg(feature.get("crs"))
+        if payload["feature"]:
+            validate_epsg(payload["feature"])
 
-        if VERSIONING and commit_id is not None:
+        if commit_id is not None:
             payload["commit_id"] = commit_id
 
         features_of_interest_id, feature_of_interest_self_link = (
@@ -465,7 +464,7 @@ async def insert_observation_entity(
                 upper_inc=True,
             )
 
-        if VERSIONING and commit_id is not None:
+        if commit_id is not None:
             payload["commit_id"] = commit_id
 
         observation_id, observation_self_link = await create_entity(
@@ -561,8 +560,8 @@ async def generate_feature_of_interest(payload, connection, commit_id=None):
                     "properties": properties,
                 }
 
-                if VERSIONING and commit_id is not None:
-                    foi_payload["commit_id"] = commit_id
+                if commit_id is not None:
+                    payload["commit_id"] = commit_id
 
                 foi_id, _ = await create_entity(
                     connection, "FeaturesOfInterest", foi_payload
