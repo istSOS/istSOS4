@@ -1,11 +1,11 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.v1.endpoints.crud import set_role, update_datastream_observedArea
+from app.v1.endpoints.functions import set_role, update_datastream_observedArea
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
-from .delete import (
+from .functions import (
     delete_entity,
     set_commit,
     update_datastream_phenomenon_time,

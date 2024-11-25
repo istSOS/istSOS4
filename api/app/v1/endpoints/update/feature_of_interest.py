@@ -1,7 +1,7 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
-from app.v1.endpoints.crud import (
+from app.v1.endpoints.functions import (
     get_datastreams_from_foi,
     set_role,
     update_datastream_observedArea,
@@ -10,7 +10,7 @@ from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
-from .update import set_commit, update_feature_of_interest_entity
+from .functions import set_commit, update_feature_of_interest_entity
 
 v1 = APIRouter()
 
