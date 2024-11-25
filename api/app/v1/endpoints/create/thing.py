@@ -1,11 +1,12 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
-from app.v1.endpoints.create.create import insert_thing_entity, set_commit
-from app.v1.endpoints.crud import set_role
+from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
+
+from .functions import insert_thing_entity, set_commit
 
 v1 = APIRouter()
 
@@ -102,7 +103,7 @@ async def create_thing(
 
 
 @v1.api_route(
-    "/Locations{location_id}/Things",
+    "/Locations({location_id})/Things",
     methods=["POST"],
     tags=["Things"],
     summary="Create a new Thing for a Location",

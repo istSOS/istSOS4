@@ -20,7 +20,7 @@ from app.oauth import get_current_user
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
 from app.utils.utils import build_nextLink
-from app.v1.endpoints.crud import set_role
+from app.v1.endpoints.functions import set_role
 from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 

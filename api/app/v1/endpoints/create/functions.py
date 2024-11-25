@@ -9,7 +9,7 @@ from app.utils.utils import (
     handle_result_field,
     validate_epsg,
 )
-from app.v1.endpoints.crud import insert_commit
+from app.v1.endpoints.functions import insert_commit
 from app.v1.endpoints.update.datastream import update_datastream_entity
 from app.v1.endpoints.update.observation import update_observation_entity
 from asyncpg.types import Range
@@ -561,7 +561,7 @@ async def generate_feature_of_interest(payload, connection, commit_id=None):
                 }
 
                 if commit_id is not None:
-                    payload["commit_id"] = commit_id
+                    foi_payload["commit_id"] = commit_id
 
                 foi_id, _ = await create_entity(
                     connection, "FeaturesOfInterest", foi_payload

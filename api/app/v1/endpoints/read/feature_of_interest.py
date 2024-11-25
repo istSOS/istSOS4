@@ -4,14 +4,11 @@ from app import AUTHORIZATION, REDIS
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
 from app.sta2rest import sta2rest
-from app.v1.endpoints.read.read import (
-    asyncpg_stream_results,
-    wrapped_result_generator,
-)
 from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .query_parameters import CommonQueryParams, get_common_query_params
+from .read import asyncpg_stream_results, wrapped_result_generator
 
 v1 = APIRouter()
 
@@ -38,10 +35,14 @@ async def get_features_of_interest(
     params: CommonQueryParams = Depends(get_common_query_params),
 ):
     try:
+        full_path = request.url.path
+        if request.url.query:
+            full_path += "?" + request.url.query
+
         data = None
 
         if REDIS:
-            result = redis.get(request.url.path)
+            result = redis.get(full_path)
             if result:
                 data = json.loads(result)
                 print("Cache hit")
@@ -49,7 +50,7 @@ async def get_features_of_interest(
                 print("Cache miss")
 
         if not data:
-            data = sta2rest.STA2REST.convert_query(request.url.path)
+            data = sta2rest.STA2REST.convert_query(full_path)
 
         main_entity = data.get("main_entity")
         main_query = data.get("main_query")
@@ -70,7 +71,7 @@ async def get_features_of_interest(
             as_of_value,
             from_to_value,
             single_result,
-            request.url.path,
+            full_path,
             current_user,
         )
 

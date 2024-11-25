@@ -7,7 +7,7 @@ from app.utils.utils import (
     handle_result_field,
     validate_epsg,
 )
-from app.v1.endpoints.crud import insert_commit
+from app.v1.endpoints.functions import insert_commit
 
 
 async def set_commit(
