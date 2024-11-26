@@ -576,7 +576,7 @@ BEGIN
             "id" BIGSERIAL NOT NULL PRIMARY KEY,
             "username" VARCHAR(255) UNIQUE NOT NULL,
             "contact" jsonb DEFAULT NULL,
-            "role" VARCHAR(255) NOT NULL,
+            "role" VARCHAR(255) NOT NULL CHECK (role IN ('super_admin' ,'admin', 'viewer', 'editor', 'sensor', 'obs_manager')),
             "uri" VARCHAR(255)
         );
 
