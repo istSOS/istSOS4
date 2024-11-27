@@ -1,8 +1,11 @@
 import json
 
-from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
+from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
-from fastapi import APIRouter, Body, Depends, Request, status
+from app.oauth import get_current_user
+from app.v1.endpoints.functions import set_role
+from asyncpg.exceptions import InsufficientPrivilegeError
+from fastapi import APIRouter, Body, Depends, status
 from fastapi.responses import JSONResponse
 
 v1 = APIRouter()
@@ -25,6 +28,7 @@ PAYLOAD_EXAMPLE = {
 )
 async def create_user(
     payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
@@ -54,6 +58,9 @@ async def create_user(
                         },
                     )
 
+                if current_user is not None:
+                    await set_role(conn, current_user)
+
                 password = payload.pop("password", None)
 
                 for key in list(payload.keys()):
@@ -74,22 +81,24 @@ async def create_user(
                 if not payload.get("uri"):
                     query = """
                         UPDATE sensorthings."User"
-                        SET uri = $1 || '/Users(' || sensorthings."User".id || ')'
-                        WHERE sensorthings."User".id = $2;
+                        SET uri = '/Users(' || sensorthings."User".id || ')'
+                        WHERE sensorthings."User".id = $1;
                     """
-                    await conn.execute(
-                        query, f"{HOSTNAME}{SUBPATH}{VERSION}", user["id"]
-                    )
+                    await conn.execute(query, user["id"])
 
-                query = "CREATE USER {username} WITH ENCRYPTED PASSWORD '{password}';"
-                await conn.execute(
-                    query.format(username=user["username"], password=password)
-                )
+                if current_user is not None:
+                    await conn.execute("RESET ROLE;")
 
-                query = "GRANT sensorthings_{role} to {username};"
+                query = """
+                    CREATE USER "{username}"
+                    WITH ENCRYPTED PASSWORD '{password}'
+                    IN ROLE sensorthings_{role};
+                """
                 await conn.execute(
                     query.format(
-                        role=payload["role"], username=user["username"]
+                        username=user["username"],
+                        password=password,
+                        role=payload["role"],
                     )
                 )
 
@@ -97,9 +106,21 @@ async def create_user(
                     status_code=status.HTTP_201_CREATED,
                     content={"id": user["id"], "username": user["username"]},
                 )
-
+    except InsufficientPrivilegeError:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={
+                "code": 401,
+                "type": "error",
+                "message": "Insufficient privileges.",
+            },
+        )
     except Exception as e:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
+            content={
+                "code": 400,
+                "type": "error",
+                "message": str(e),
+            },
         )

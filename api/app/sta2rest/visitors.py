@@ -924,7 +924,7 @@ def get_select_attr(attr, label, nested=False, as_of=None):
             ).label(label)
     elif isinstance(attr.type, TIMESTAMP):
         return func.to_char(attr, 'YYYY-MM-DD"T"HH24:MI:SS"Z"').label(label)
-    elif "Link" in label:
+    elif "Link" in label or label == "author":
         link_url = (
             HOSTNAME
             + SUBPATH

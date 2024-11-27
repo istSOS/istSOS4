@@ -576,9 +576,16 @@ BEGIN
             "id" BIGSERIAL NOT NULL PRIMARY KEY,
             "username" VARCHAR(255) UNIQUE NOT NULL,
             "contact" jsonb DEFAULT NULL,
-            "role" VARCHAR(255) NOT NULL CHECK (role IN ('super_admin' ,'admin', 'viewer', 'editor', 'sensor', 'obs_manager')),
+            "role" VARCHAR(255) NOT NULL CHECK (role IN ('admin', 'viewer', 'editor', 'sensor', 'obs_manager')),
             "uri" VARCHAR(255)
         );
+
+        INSERT INTO sensorthings."User" ("username", "role")
+        VALUES (current_setting('custom.user'), 'admin');
+
+        UPDATE sensorthings."User"
+        SET "uri" = '/Users(' || id || ')'
+        WHERE "username" = current_setting('custom.user');
 
         -- Create roles and grant privileges
         -- Create the admin role
@@ -586,6 +593,13 @@ BEGIN
         GRANT CREATE, USAGE ON SCHEMA sensorthings TO sensorthings_admin;
         GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_admin;
         GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_admin;
+
+        EXECUTE format(
+            'CREATE USER %I WITH ENCRYPTED PASSWORD %L IN ROLE sensorthings_admin',
+            current_setting('custom.user'),
+            current_setting('custom.password')
+        );
+
 
         -- Create the viewer role
         CREATE ROLE sensorthings_viewer;
@@ -598,6 +612,7 @@ BEGIN
         GRANT USAGE ON SCHEMA sensorthings TO sensorthings_editor;
         GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_editor;
         GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_editor;
+        REVOKE INSERT, UPDATE, DELETE ON sensorthings."User" FROM sensorthings_editor;
 
         -- Create the sensor role
         CREATE ROLE sensorthings_sensor;

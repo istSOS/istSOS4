@@ -406,6 +406,9 @@ class STA2REST:
         entities = uri["entities"]
 
         if query_ast.as_of:
+            if query_ast.from_to:
+                raise Exception("AS_OF and FROM_TO cannot be used together")
+
             value = datetime.fromisoformat(query_ast.as_of.value)
 
             if value.tzinfo is None:
@@ -455,6 +458,9 @@ class STA2REST:
                         )
 
         if query_ast.from_to:
+            if query_ast.as_of:
+                raise Exception("AS_OF and FROM_TO cannot be used together")
+
             value1 = datetime.fromisoformat(query_ast.from_to.value1)
             value2 = datetime.fromisoformat(query_ast.from_to.value2)
 
