@@ -52,26 +52,16 @@ async def get_pool():
     )
 
 
-async def generate_user(conn):
+async def get_user(conn):
     query = """
-        INSERT INTO sensorthings."User"
-        (username, role)
-        VALUES ($1, $2)    
-        RETURNING id;
+        SELECT id, uri
+        FROM sensorthings."User"
+        WHERE username = $1;
     """
-    user_id = await conn.fetchval(query, pg_user, "super_admin")
-
-    query = """
-        UPDATE sensorthings."User"
-        SET uri = $1 || '/Users(' || sensorthings."User".id || ')'
-        WHERE sensorthings."User".id = $2;
-    """
-    await conn.execute(query, f"{hostname}{subpath}{version}", user_id)
-
-    return user_id
+    return await conn.fetchrow(query, pg_user)
 
 
-async def generate_commit(conn, user_id):
+async def generate_commit(conn, user_id, user_uri):
     if authorization:
         query = """
             INSERT INTO sensorthings."Commit" (author, "encodingType", message, "actionType", user_id)
@@ -79,7 +69,7 @@ async def generate_commit(conn, user_id):
             RETURNING id;
         """
         return await conn.fetchval(
-            query, pg_user, "text/plain", "dummy data", "CREATE", user_id
+            query, user_uri, "text/plain", "dummy data", "CREATE", user_id
         )
     else:
         query = """
@@ -88,7 +78,7 @@ async def generate_commit(conn, user_id):
             RETURNING id;
         """
         return await conn.fetchval(
-            query, pg_user, "text/plain", "dummy data", "CREATE"
+            query, user_uri, "text/plain", "dummy data", "CREATE"
         )
 
 
@@ -608,11 +598,15 @@ async def create_data():
                     if authorization:
                         query = 'SET ROLE "{username}";'
                         await conn.execute(query.format(username=pg_user))
-                        user_id = await generate_user(conn)
+                        user = await get_user(conn)
+                        user_id = user["id"]
+                        user_uri = user["uri"]
 
                     commit_id = None
                     if versioning:
-                        commit_id = await generate_commit(conn, user_id)
+                        commit_id = await generate_commit(
+                            conn, user_id, user_uri
+                        )
 
                     await generate_things(conn, commit_id)
                     await generate_locations(conn, commit_id)
