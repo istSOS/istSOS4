@@ -73,7 +73,7 @@ async def update_observation(
                     connection,
                     commit_message,
                     current_user,
-                    "Observations",
+                    "Observation",
                     observation_id,
                 )
                 if commit_id is not None:
