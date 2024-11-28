@@ -87,7 +87,7 @@ async def create_datastream(
                     payload["commit_id"] = commit_id
 
                 _, header = await insert_datastream_entity(
-                    connection, payload, commit_id
+                    connection, payload, commit_id=commit_id
                 )
 
                 if current_user is not None:

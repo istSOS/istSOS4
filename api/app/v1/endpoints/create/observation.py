@@ -77,7 +77,7 @@ async def create_observation(
                     payload["commit_id"] = commit_id
 
                 _, header = await insert_observation_entity(
-                    connection, payload, commit_id
+                    connection, payload, commit_id=commit_id
                 )
 
                 if current_user is not None:

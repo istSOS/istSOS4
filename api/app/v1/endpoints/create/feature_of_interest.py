@@ -74,7 +74,7 @@ async def create_feature_of_interest(
                     payload["commit_id"] = commit_id
 
                 _, header = await insert_feature_of_interest_entity(
-                    connection, payload, commit_id
+                    connection, payload, commit_id=commit_id
                 )
 
                 if current_user is not None:
