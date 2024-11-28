@@ -12,8 +12,8 @@ services:
         -c custom.authorization=${AUTHORIZATION:-0}
         -c custom.duplicates=${DUPLICATES:-0}
         -c custom.epsg=${EPSG:-4326}
-        -c custom.user=${ISTSOS_ADMIN}
-        -c custom.password=${ISTSOS_ADMIN_PASSWORD}
+        -c custom.user=${ISTSOS_ADMIN:-admin}
+        -c custom.password=${ISTSOS_ADMIN_PASSWORD:-admin}
         -c log_statement="all"
         -c log_destination="stderr"
         -c log_duration="on"
@@ -32,8 +32,8 @@ services:
       DEBUG: ${DEBUG}
       VERSIONING: ${VERSIONING}
       POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      ISTSOS_ADMIN: ${ISTSOS_ADMIN}
+      ISTSOS_ADMIN_PASSWORD: ${ISTSOS_ADMIN_PASSWORD}
       POSTGRES_HOST: ${POSTGRES_HOST}
       PG_MAX_OVERFLOW: ${PG_MAX_OVERFLOW}
       PG_POOL_SIZE: ${PG_POOL_SIZE}
@@ -67,8 +67,8 @@ services:
   #     VERSION: ${VERSION}
   #     VERSIONING: ${VERSIONING}
   #     POSTGRES_DB: ${POSTGRES_DB}
-  #     POSTGRES_USER: ${POSTGRES_USER}
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     ISTSOS_ADMIN: ${ISTSOS_ADMIN}
+  #     ISTSOS_ADMIN_PASSWORD: ${ISTSOS_ADMIN_PASSWORD}
   #     POSTGRES_HOST: ${POSTGRES_HOST}
   #     DUMMY_DATA: ${DUMMY_DATA}
   #     CLEAR_DATA: ${CLEAR_DATA}

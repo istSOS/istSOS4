@@ -1,13 +1,13 @@
 import asyncpg
 from app import (
+    ISTSOS_ADMIN,
+    ISTSOS_ADMIN_PASSWORD,
     PG_POOL_SIZE,
     PG_POOL_TIMEOUT,
     POSTGRES_DB,
     POSTGRES_HOST,
-    POSTGRES_PASSWORD,
     POSTGRES_PORT,
     POSTGRES_PORT_WRITE,
-    POSTGRES_USER,
 )
 
 pgpool: asyncpg.Pool | None = None
@@ -19,7 +19,7 @@ if POSTGRES_PORT_WRITE:
 async def get_pool():
     global pgpool
     if not pgpool:
-        dsn = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+        dsn = f"postgresql://{ISTSOS_ADMIN}:{ISTSOS_ADMIN_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
         pgpool = await asyncpg.create_pool(
             dsn=dsn,
@@ -35,7 +35,7 @@ async def get_pool():
 async def get_pool_w():
     global pgpoolw
     if not pgpoolw:
-        dsn = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT_WRITE}/{POSTGRES_DB}"
+        dsn = f"postgresql://{ISTSOS_ADMIN}:{ISTSOS_ADMIN_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT_WRITE}/{POSTGRES_DB}"
 
         pgpoolw = await asyncpg.create_pool(
             dsn=dsn,

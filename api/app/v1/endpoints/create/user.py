@@ -102,6 +102,16 @@ async def create_user(
                     )
                 )
 
+                query = """
+                    GRANT {user} TO "{role}";
+                """
+                await conn.execute(
+                    query.format(
+                        user=payload["username"],
+                        role=current_user["username"],
+                    )
+                )
+
                 return JSONResponse(
                     status_code=status.HTTP_201_CREATED,
                     content={"id": user["id"], "username": user["username"]},
