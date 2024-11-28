@@ -15,7 +15,7 @@ services:
         -c custom.duplicates=${DUPLICATES:-0}
         -c custom.epsg=${EPSG:-4326}
         -c custom.user=${ISTSOS_ADMIN:-admin}
-        -c custom.password=${ISTSOS_ADMIN_PASSWORD_:-admin}
+        -c custom.password=${ISTSOS_ADMIN_PASSWORD:-admin}
         -c log_statement="all"
         -c log_destination="stderr"
         -c log_duration="on"

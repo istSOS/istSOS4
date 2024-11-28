@@ -443,8 +443,8 @@ async def insert_observation_entity(
                     await insert_feature_of_interest_entity(
                         connection,
                         payload["FeatureOfInterest"],
-                        payload["datastream_id"],
-                        commit_id,
+                        datastream_id=payload["datastream_id"],
+                        commit_id=commit_id,
                     )
                 )
             payload.pop("FeatureOfInterest", None)
@@ -711,6 +711,8 @@ async def handle_associations(
             payload[f"{key.lower()}_id"] = payload[key]["@iot.id"]
         else:
             async with conn.transaction():
-                entity_id, _ = await insert_func(conn, payload[key], commit_id)
+                entity_id, _ = await insert_func(
+                    conn, payload[key], commit_id=commit_id
+                )
             payload[f"{key.lower()}_id"] = entity_id
         payload.pop(key, None)
