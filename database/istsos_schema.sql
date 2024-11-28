@@ -569,6 +569,19 @@ $BODY$;
 
 DO $$
 BEGIN
+
+    -- Create the admin role
+    CREATE ROLE sensorthings_admin WITH CREATEROLE;
+    GRANT CREATE, USAGE ON SCHEMA sensorthings TO sensorthings_admin;
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_admin;
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_admin;
+    
+    EXECUTE format(
+        'CREATE USER %I WITH ENCRYPTED PASSWORD %L CREATEROLE IN ROLE sensorthings_admin',
+        current_setting('custom.user'),
+        current_setting('custom.password')
+    );
+    
     IF current_setting('custom.authorization', true)::boolean THEN
 
         -- Create the "User" table if it doesn't exist
@@ -588,24 +601,19 @@ BEGIN
         WHERE "username" = current_setting('custom.user');
 
         -- Create roles and grant privileges
-        -- Create the admin role
-        CREATE ROLE sensorthings_admin;
-        GRANT CREATE, USAGE ON SCHEMA sensorthings TO sensorthings_admin;
-        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_admin;
-        GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_admin;
-
+        GRANT ALL PRIVILEGES ON TABLE sensorthings."User" TO sensorthings_admin;
+        GRANT ALL PRIVILEGES ON SEQUENCE sensorthings."User_id_seq" TO sensorthings_admin;
         EXECUTE format(
-            'CREATE USER %I WITH ENCRYPTED PASSWORD %L IN ROLE sensorthings_admin',
-            current_setting('custom.user'),
-            current_setting('custom.password')
-        );
-
+            'GRANT sensorthings_admin TO %I WITH ADMIN OPTION',
+            current_setting('custom.user')
+        );      
 
         -- Create the viewer role
         CREATE ROLE sensorthings_viewer;
         GRANT USAGE ON SCHEMA sensorthings TO sensorthings_viewer;
         GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_viewer;
         GRANT SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_viewer;
+        GRANT sensorthings_viewer TO sensorthings_admin WITH ADMIN OPTION;
 
         -- Create the editor role
         CREATE ROLE sensorthings_editor;
@@ -613,6 +621,7 @@ BEGIN
         GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_editor;
         GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_editor;
         REVOKE INSERT, UPDATE, DELETE ON sensorthings."User" FROM sensorthings_editor;
+        GRANT sensorthings_editor TO sensorthings_admin WITH ADMIN OPTION;
 
         -- Create the sensor role
         CREATE ROLE sensorthings_sensor;
@@ -622,6 +631,7 @@ BEGIN
         GRANT INSERT ON TABLE sensorthings."FeaturesOfInterest" TO sensorthings_sensor;
         GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_sensor;
         GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_sensor;
+        GRANT sensorthings_sensor TO sensorthings_admin WITH ADMIN OPTION;
 
         -- Create the observation manager role
         CREATE ROLE sensorthings_obs_manager;
@@ -631,6 +641,7 @@ BEGIN
         GRANT INSERT ON TABLE sensorthings."FeaturesOfInterest" TO sensorthings_obs_manager;
         GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_obs_manager;
         GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_obs_manager;
+        GRANT sensorthings_obs_manager TO sensorthings_admin WITH ADMIN OPTION;
 
     END IF;
 END $$;

@@ -13,8 +13,8 @@ subpath = os.getenv("SUBPATH", "/istsos4")
 version = os.getenv("VERSION", "/v1.1")
 versioning = int(os.getenv("VERSIONING"), 0)
 pg_db = os.getenv("POSTGRES_DB", "istsos")
-pg_user = os.getenv("POSTGRES_USER", "postgres")
-pg_password = os.getenv("POSTGRES_PASSWORD", "postgres")
+pg_user = os.getenv("ISTSOS_ADMIN", "admin")
+pg_password = os.getenv("ISTSOS_ADMIN_PASSWORD", "admin")
 pg_host = os.getenv("POSTGRES_HOST", "database")
 pg_port = os.getenv("POSTGRES_PORT", "5432")
 pg_write_port = os.getenv("POSTGRES_PORT_WRITE")
@@ -596,8 +596,6 @@ async def create_data():
                 try:
                     user_id = None
                     if authorization:
-                        query = 'SET ROLE "{username}";'
-                        await conn.execute(query.format(username=pg_user))
                         user = await get_user(conn)
                         user_id = user["id"]
                         user_uri = user["uri"]
@@ -620,9 +618,6 @@ async def create_data():
                     await generate_observations(conn, commit_id)
                 except Exception as e:
                     print(f"An error occured: {e}")
-                finally:
-                    if authorization:
-                        await conn.execute("RESET ROLE;")
     finally:
         await pool.close()
 
@@ -655,8 +650,6 @@ async def delete_data():
             async with conn.transaction():
                 try:
                     if authorization:
-                        query = 'SET ROLE "{username}";'
-                        await conn.execute(query.format(username=pg_user))
                         await conn.execute('DELETE FROM sensorthings."User"')
                     if versioning:
                         await conn.execute('DELETE FROM sensorthings."Commit"')
@@ -685,9 +678,6 @@ async def delete_data():
                     )
                 except Exception as e:
                     print(f"An error occurred: {e}")
-                finally:
-                    if authorization:
-                        await conn.execute("RESET ROLE;")
     finally:
         await pool.close()
 

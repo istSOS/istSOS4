@@ -1,17 +1,17 @@
 from app import (
+    ISTSOS_ADMIN,
+    ISTSOS_ADMIN_PASSWORD,
     PG_MAX_OVERFLOW,
     PG_POOL_SIZE,
     PG_POOL_TIMEOUT,
     POSTGRES_DB,
     POSTGRES_HOST,
-    POSTGRES_PASSWORD,
     POSTGRES_PORT,
-    POSTGRES_USER,
 )
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 
-dsn = f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+dsn = f"postgresql+asyncpg://{ISTSOS_ADMIN}:{ISTSOS_ADMIN_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
 engine = create_async_engine(
     dsn,
