@@ -75,7 +75,7 @@ async def update_feature_of_interest(
                     connection,
                     commit_message,
                     current_user,
-                    "FeatureOfInterest",
+                    "FeaturesOfInterest",
                     feature_of_interest_id,
                 )
                 if commit_id is not None:
