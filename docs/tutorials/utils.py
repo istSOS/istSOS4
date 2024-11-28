@@ -55,7 +55,14 @@ class sta:
         return dfs, qcs
 
     def create_user(
-        self, username: str, password: str, role: str, uri=None, contact=None
+        self,
+        username: str,
+        password: str,
+        role: str,
+        istsos_admin_user,
+        istsos_admin_password,
+        uri=None,
+        contact=None,
     ):
         """
         Create a new user
@@ -75,14 +82,22 @@ class sta:
         }
         self.user = data
 
-        response = requests.post(f"{self.base}/users", json=data)
+        token_object = self.get_token(istsos_admin_user, istsos_admin_password)
+
+        response = requests.post(
+            f"{self.base}Users",
+            headers={
+                "Authorization": f"Bearer {token_object['access_token']}",
+                "Content-Type": "application/json",
+            },
+            json=data,
+        )
         if "already exists" in response.text:
             response.status_code = 409
             logging.warning("User already exists")
             return True
-        logging.info("User created successfully")
         response.raise_for_status()
-
+        logging.info("User created successfully")
         return True
 
     def create_thing(self, body, commit_message=None):
@@ -163,13 +178,14 @@ class sta:
         }
 
         response = requests.post(
-            f"{self.base}" + "login",
+            f"{self.base}" + "Login",
             data={
                 "username": username,
                 "password": password,
                 "grant_type": "password",
             },
         )
+
         response.raise_for_status()
         res = response.json()
         self.token_obj = res
