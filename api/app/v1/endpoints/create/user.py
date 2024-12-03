@@ -103,7 +103,7 @@ async def create_user(
                 )
 
                 query = """
-                    GRANT {user} TO "{role}";
+                    GRANT "{user}" TO "{role}";
                 """
                 await conn.execute(
                     query.format(
