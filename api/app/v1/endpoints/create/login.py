@@ -22,7 +22,7 @@ v1 = APIRouter()
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
 ):
-    user = await authenticate_user(form_data.username)
+    user = await authenticate_user(form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

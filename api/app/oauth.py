@@ -1,7 +1,15 @@
 from datetime import datetime, timedelta, timezone
 
+import asyncpg
 import jwt
-from app import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
+from app import (
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    ALGORITHM,
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PORT,
+    SECRET_KEY,
+)
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
 from fastapi import Depends, HTTPException, status
@@ -30,16 +38,22 @@ async def get_user_from_db(username: str):
     return None
 
 
-async def authenticate_user(username: str):
-    pool = await get_pool()
-    async with pool.acquire() as connection:
-        query = """
-            SELECT username
-            FROM sensorthings."User"
-            WHERE username = $1
-        """
-        user_record = await connection.fetchval(query, username)
-        return user_record
+async def authenticate_user(username: str, password: str):
+    connection = None
+    try:
+        connection = await asyncpg.connect(
+            user=username,
+            password=password,
+            database=POSTGRES_DB,
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+        )
+    except asyncpg.InvalidPasswordError:
+        return None
+    finally:
+        if connection is not None:
+            await connection.close()
+    return username
 
 
 def create_access_token(data: dict):
