@@ -188,9 +188,7 @@ def build_nextLink(full_path, count_links):
 def validate_payload_keys(payload, keys):
     invalid_keys = [key for key in payload.keys() if key not in keys]
     if invalid_keys:
-        raise Exception(
-            f"Invalid keys in payload for Location: {', '.join(invalid_keys)}"
-        )
+        raise Exception(f"Invalid keys in payload: {', '.join(invalid_keys)}")
 
 
 def validate_epsg(key):
