@@ -1,6 +1,6 @@
 import json
 
-from app import POSTGRES_PORT_WRITE
+from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.v1.endpoints.functions import set_role
@@ -81,10 +81,12 @@ async def create_user(
                 if not payload.get("uri"):
                     query = """
                         UPDATE sensorthings."User"
-                        SET uri = '/Users(' || sensorthings."User".id || ')'
-                        WHERE sensorthings."User".id = $1;
+                        SET uri = $1 || $2 || $3 ||  '/Users(' || sensorthings."User".id || ')'
+                        WHERE sensorthings."User".id = $4;
                     """
-                    await conn.execute(query, user["id"])
+                    await conn.execute(
+                        query, HOSTNAME, SUBPATH, VERSION, user["id"]
+                    )
 
                 if current_user is not None:
                     await conn.execute("RESET ROLE;")
