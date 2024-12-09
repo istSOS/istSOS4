@@ -19,6 +19,11 @@ class CommonQueryParams:
             alias="$count",
             description="Flag indicating if the total number of items in the collection should be returned.",
         ),
+        order: str = Query(
+            None,
+            alias="$orderby",
+            description="The order in which the elements should be returned",
+        ),
         select: str = Query(
             None,
             alias="$select",
@@ -48,6 +53,7 @@ class CommonQueryParams:
         self.skip = skip
         self.top = top
         self.count = count
+        self.order = order
         self.select = select
         self.expand = expand
         self.filter = filter
