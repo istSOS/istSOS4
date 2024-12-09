@@ -1,2 +1,3 @@
 FROM squidfunk/mkdocs-material:latest
-RUN pip install mkdocs-video mkdocs-bibtex mkdocs-badges neoteroi-mkdocs markdown-include
+RUN pip install mkdocs-video mkdocs-bibtex mkdocs-badges neoteroi-mkdocs markdown-include mknotebooks
+

@@ -1,5 +1,7 @@
 services:
   database:
+    env_file:
+      - .env.dev
     build:
       context: ./database
       dockerfile: Dockerfile
@@ -30,6 +32,8 @@ services:
       retries: 5
 
   api:
+    env_file:
+      - .env.dev
     build:
       context: ./api
       dockerfile: Dockerfile
@@ -71,6 +75,8 @@ services:
       - v-istsos4-redis-data:/data
 
   dummy_data:
+    env_file:
+      - .env.dev
     build:
       context: ./dummy_data
       dockerfile: Dockerfile
