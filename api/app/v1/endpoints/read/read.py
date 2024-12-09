@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import ujson
 from app import (
+    ANONYMOUS_VIEWER,
     AUTHORIZATION,
     COUNT_ESTIMATE_THRESHOLD,
     COUNT_MODE,
@@ -31,7 +32,7 @@ v1 = APIRouter()
 
 user = Header(default=None, include_in_schema=False)
 
-if AUTHORIZATION:
+if AUTHORIZATION and not ANONYMOUS_VIEWER:
     from app.oauth import get_current_user
 
     user = Depends(get_current_user)

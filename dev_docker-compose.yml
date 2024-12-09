@@ -56,6 +56,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
       ALGORITHM: ${ALGORITHM}
+      ANONYMOUS_VIEWER: ${ANONYMOUS_VIEWER}
     command: uvicorn --reload --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - 8018:5000
