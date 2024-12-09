@@ -32,6 +32,13 @@ To switch off the services:
 docker compose -f edu_docker-compose.yml down
 ```
 
+To remove all images and volumes:
+
+```sh
+docker compose -f edu_docker-compose.yml down -v --rmi local
+```
+
+
 ## Use Sensor Things APIs
 
 Access the SensorThings API at: http://127.0.0.1:8018/istsos4/v1.1

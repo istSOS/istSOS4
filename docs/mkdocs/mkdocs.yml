@@ -9,7 +9,7 @@ theme:
   name: "material"
   language: en
   favicon: assets/images/favicon.ico
-  logo: assets/images/android-chrome-192x192.png
+  logo: assets/images/istsos_bars_white.png
   font:
     text: Ubuntu
   palette:
@@ -36,6 +36,7 @@ nav:
   # SET HERE THE CONTENT PAGES IN THE APPROPRIATE CHAPTER
   # =====================================================
   - The Project:
+      - Introduction: populate_basic.ipynb
       - Introduction: project/introduction.md
       - History: project/history.md
       - Resources: project/resources.md
@@ -49,6 +50,10 @@ nav:
       - Configuration: devdocs/configuration.md
       - API: devdocs/api.md
       - Extensions: devdocs/extensions.md
+  - Tutorial: 
+      - tutorial/tutorial_index.md
+      - Introduction: tutorial/introduction.md
+      - Tutorial: tutorial/tutorial.md
   - Team: team.md
 
 extra_css:
@@ -79,6 +84,7 @@ markdown_extensions:
 plugins:
   - search
   - mkdocs-video
+  - mknotebooks
   - bibtex:
       bib_file: "./docs/refs.bib"
   # - git-revision-date-localized

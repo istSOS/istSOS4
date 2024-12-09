@@ -4,7 +4,7 @@
 /* font-family: "supsibook"; */
 [data-md-color-scheme="istsos"] {
   /* --md-primary-fg-color: #008558; */
-  --md-primary-fg-color: hsl(140, 90%, 36%);
+  --md-primary-fg-color: hsl(140, 77%, 21%);
   --md-default-bg-color: #f0f4f8;
   /* --md-secondary-fg-color: #56647e; */
   --md-secondary-fg-color: #f0ec07;
@@ -25,26 +25,27 @@
 }
 
 .md-typeset h1 {
-  color: hsl(140, 90%, 36%);
+  color: hsl(140, 77%, 21%);
+  font-weight: bold;
 }
 
 h2 {
   color: #313237;
   font-size: x-large;
+  font-weight: bold;
   /* font-family: ""; */
 }
 
-
 p {
-  font-size: 18px;
+  font-size: 22px;
   text-align: justify;
 }
 
 tbody {
-  font-size: 16px;
+  font-size: 22px;
 }
 thead {
-  font-size: 16px;
+  font-size: 22px;
 }
 
 r { color: Red }
