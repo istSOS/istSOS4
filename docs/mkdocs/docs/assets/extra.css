@@ -37,17 +37,26 @@ h2 {
 }
 
 p {
-  font-size: 22px;
+  /* font-size: 16px; */
   text-align: justify;
 }
 
-tbody {
-  font-size: 22px;
-}
-thead {
+/* tbody {
   font-size: 22px;
 }
 
-r { color: Red }
-o { color: Orange }
-g { color: Green }
+thead {
+  font-size: 22px;
+} */
+
+r {
+  color: Red
+}
+
+o {
+  color: Orange
+}
+
+g {
+  color: Green
+}
