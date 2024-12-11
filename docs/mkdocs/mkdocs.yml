@@ -52,6 +52,7 @@ nav:
       - Extensions: devdocs/extensions.md
   - Tutorial:
       - tutorial/tutorial_index.md
+      - Installation: tutorial/install.md
       - Manage Authentication & Authorization:
           - Concepts and Theory: tutorial/authorization.md
           - Hands-On Example (Python): tutorial/authorization_notebook.ipynb
