@@ -47,22 +47,22 @@ So, let's review it from that simplified point of view:
 This table outlines the different roles and their corresponding permissions for accessing and managing the various tables within the Sensorthings schema. Each role has a set of privileges that define the level of access granted to specific tables in the system.
 
 
-| Role          | Table Permissions                                                                                                                                                  |
-| ------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`       | All `PRIVILEGES` on all tables of sensorthings schema                                                                                                              |
-| `viewer`      | `SELECT` privilege on all tables (except User table)                                                                                                               |
-| `editor`      | `SELECT`, `INSERT`, `UPDATE`, `DELETE` privileges on all tables (except User table)                                                                                |
-| `obs_manager` | `SELECT`, `INSERT`, `UPDATE`, `DELETE` privileges on Observation table<br>`INSERT` privilege on FeaturesOfInterest table<br>`UPDATE` privilege on Datastream table |
-| `sensor`      | `SELECT` privilege on all tables (except User table)<br>`INSERT` privilege on Observation and FeaturesOfInterest tables<br>`UPDATE` privilege on Datastream table  |
+| Role          | Table Permissions                                                                                                                                                                            |
+| ------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `admin`       | All `PRIVILEGES` on all tables of sensorthings schema                                                                                                                                        |
+| `viewer`      | `SELECT` privilege on all tables                                                                                                                                                             |
+| `editor`      | `SELECT` privilege on all tables<br>`INSERT`, `UPDATE`, `DELETE` privileges on all tables (except User table)                                                                                |
+| `obs_manager` | `SELECT` privilege on all tables<br>`INSERT`, `UPDATE`, `DELETE` privileges on Observation table<br>`INSERT` privilege on FeaturesOfInterest table<br>`UPDATE` privilege on Datastream table |
+| `sensor`      | `SELECT` privilege on all tables<br>`INSERT` privilege on Observation and FeaturesOfInterest tables<br>`UPDATE` privilege on Datastream table                                                |
 
 
-## Authenticate
+## Authentication
 After authenticating in the system, you will see it like:
 
 ![Login successfull](../assets/images/tutorial/authorization3.png)
 
 
-### Retrieving Data
+### Retrieve data (Authorization)
 
 To access the data, navigate to the interactive documentation at: <code>/Things</code>.
 
