@@ -50,10 +50,13 @@ nav:
       - Configuration: devdocs/configuration.md
       - API: devdocs/api.md
       - Extensions: devdocs/extensions.md
-  - Tutorial: 
+  - Tutorial:
       - tutorial/tutorial_index.md
-      - Introduction: tutorial/introduction.md
-      - Tutorial: tutorial/tutorial.md
+      - Manage Authentication & Authorization:
+          - Concepts and Theory: tutorial/authorization.md
+          - Hands-On Example (Python): authorization.ipynb
+      # - Introduction: tutorial/introduction.md
+      # - Tutorial: tutorial/tutorial.md
   - Team: team.md
 
 extra_css:
