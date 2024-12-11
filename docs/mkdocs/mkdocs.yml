@@ -54,7 +54,7 @@ nav:
       - tutorial/tutorial_index.md
       - Manage Authentication & Authorization:
           - Concepts and Theory: tutorial/authorization.md
-          - Hands-On Example (Python): authorization.ipynb
+          - Hands-On Example (Python): tutorial/authorization_notebook.ipynb
       # - Introduction: tutorial/introduction.md
       # - Tutorial: tutorial/tutorial.md
   - Team: team.md
