@@ -31,6 +31,7 @@ theme:
     - navigation.footer
     - navigation.indexes
     - navigation.top
+    - content.code.copy
 
 nav:
   # SET HERE THE CONTENT PAGES IN THE APPROPRIATE CHAPTER
