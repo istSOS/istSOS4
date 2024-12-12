@@ -4,7 +4,7 @@ OAuth 2.0 (Open Authorization) is an authorization framework that allows third-p
 
 ## Check it
 
-Go to the interactive docs at: http://localhost:8018/istsos4/v1.1/docs
+Navigate to the interactive documentation at: `/docs`
 
 You will see something like this:
 
