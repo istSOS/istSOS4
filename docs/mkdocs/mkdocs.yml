@@ -58,7 +58,9 @@ nav:
       - Managing Authentication & Authorization:
           - Concepts and Theory: tutorial/authorization.md
           - Hands-On Example (Python): tutorial/authorization_notebook.ipynb
-      - Utilizing the SensorThings API: tutorial/sta.ipynb
+      - Utilizing the SensorThings API:
+          - Register Sensors: tutorial/sta_sensor.ipynb
+          - Register Observations: tutorial/sta_observation.ipynb
       - Applying Advanced Filtering Techniques for Data Retrieval: tutorial/filtering.ipynb
       - Leveraging the TravelTime Extension for Reproducibility and Data Lineage: tutorial/traveltime.ipynb
       - Utilizing Python for Data Curation and Quality: tutorial/quality.ipynb
