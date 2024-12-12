@@ -52,13 +52,17 @@ nav:
       - API: devdocs/api.md
       - Extensions: devdocs/extensions.md
   - Tutorial:
-      - tutorial/tutorial_index.md
-      - Installation: tutorial/install.md
-      - Manage Authentication & Authorization:
+      - Welcome to the istSOS4-Things tutorial: tutorial/tutorial_index.md
+      - Understanding the Principles and Functionality of istSOS4: tutorial/intro.md
+      - Installing and Configuring istSOS4: tutorial/install.md
+      - Managing Authentication & Authorization:
           - Concepts and Theory: tutorial/authorization.md
           - Hands-On Example (Python): tutorial/authorization_notebook.ipynb
-      # - Introduction: tutorial/introduction.md
-      # - Tutorial: tutorial/tutorial.md
+      - Utilizing the SensorThings API: tutorial/sta.ipynb
+      - Applying Advanced Filtering Techniques for Data Retrieval: tutorial/filtering.ipynb
+      - Leveraging the TravelTime Extension for Reproducibility and Data Lineage: tutorial/traveltime.ipynb
+      - Utilizing Python for Data Curation and Quality: tutorial/quality.ipynb
+      - Applying Machine Learning and AI for Time Series Data Processing: tutorial/ai.ipynb
   - Team: team.md
 
 extra_css:

@@ -1,4 +1,4 @@
-# Introduction to istSOS4
+# Understanding the Principles and Functionality of istSOS4
 
 Welcome to the istSOS4 tutorial! istSOS4 is an open-source Sensor Observation Service (SOS) implementation that allows users to manage and publish observations from various sensors. It is designed to be compliant with the OGC SOS standard, making it easy to integrate with other geospatial services and applications.
 

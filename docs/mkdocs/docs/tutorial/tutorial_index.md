@@ -16,16 +16,14 @@ Welcome to the istSOS4 tutorial! istSOS4 is an open-source Sensor Things API (ST
 
 In this tutorial, you will learn how to:
 
-
-- [istSOS4 works and its principles](intro.md)
-- [Install and configure istSOS4](link_to_installation)
-- [Use the Sensor Things API to create and manage Datastreams](link_to_sensor_things_api)
-- [Use the Sensor Things API to insert and retrieve Observations](link_to_sensor_things_api_things)
-- [Manage Authentication & Authorization](authorization.md)
-- [Exploit the Traveltime extension to support reproducibility and data lineage](link_to_traveltime_extension)
-- [Apply advanced filtering to retrieve data](link_to_sensor_things_api_advanced)
-- [Leverage Python for Data curation and quality assurance](link_to_data_cleaning)
-- [Apply ML & AI data processing to time series](link_to_data_manipulation)
+- Understanding the Principles and Functionality of istSOS4
+- Installing and Configuring istSOS4
+- Managing Authentication & Authorization
+- Utilizing the SensorThings API
+- Applying Advanced Filtering Techniques for Data Retrieval
+- Leveraging the TravelTime Extension for Reproducibility and Data Lineage
+- Utilizing Python for Data Curation and Quality Assurance
+- Applying Machine Learning and AI for Time Series Data Processing
 
 By the end of this tutorial, you will have a solid understanding of how to use istSOS4 to manage and exploit your sensor data effectively.
 

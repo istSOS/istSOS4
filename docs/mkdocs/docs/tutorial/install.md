@@ -1,4 +1,4 @@
-# istSOS4 Installation
+# Installing and Configuring istSOS4
 Installing istSOS4 is straightforward with Docker. Follow these steps to get started.
 
 ## Prerequisites

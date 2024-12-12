@@ -1,4 +1,4 @@
-# OAuth 2.0 Overview
+# Managing Authentication & Authorization<br>Concepts and Theory
 
 OAuth 2.0 (Open Authorization) is an authorization framework that allows third-party applications to grant access to a user's resources without sharing their credentials. It is widely used for secure delegated access to resources across web applications and APIs.
 
