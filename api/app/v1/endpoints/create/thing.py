@@ -88,7 +88,7 @@ async def create_thing(
             content={
                 "code": 401,
                 "type": "error",
-                "message": str(e),
+                "message": "Insufficient privileges.",
             },
         )
     except Exception as e:
