@@ -40,27 +40,47 @@ So, let's review it from that simplified point of view:
 - The user clicks in the frontend to go to another section of the frontend web app.
 - The frontend needs to fetch some more data from the API.
     - But it needs authentication for that specific endpoint.
-    - So, to authenticate with our API, it sends a header <code>Authorization</code> with a value of <code>Bearer</code> plus the token.
-    - If the token contains foobar, the content of the <code>Authorization</code> header would be: <code>Bearer foobar</code>.
+    - So, to authenticate with our API, it sends a header <code>Authorization</code> with a value of <code>Bearer</code> plus the token.  
+    Foe example: if the token contains foobar, the content of the <code>Authorization</code> header would be: <code>Bearer foobar</code>.
 
 ## SensorThings Roles and Permissions
-This table outlines the different roles and their corresponding permissions for accessing and managing the various tables within the Sensorthings schema. Each role has a set of privileges that define the level of access granted to specific tables in the system.
+In istSOS4 users have specific roles which define their access permissions.  
+Permissions are managed trough database privileges to access specific tables of the Sensorthings schema.  
+Therefore each role has a set of privileges that define the level of access granted to specific tables in the system.  
+The following table outlines the different defined roles and their corresponding permissions.  
 
 
-| Role          | Table Permissions                                                                                                                                                                            |
-| ------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`       | All `PRIVILEGES` on all tables of sensorthings schema                                                                                                                                        |
-| `viewer`      | `SELECT` privilege on all tables                                                                                                                                                             |
-| `editor`      | `SELECT` privilege on all tables<br>`INSERT`, `UPDATE`, `DELETE` privileges on all tables (except User table)                                                                                |
-| `obs_manager` | `SELECT` privilege on all tables<br>`INSERT`, `UPDATE`, `DELETE` privileges on Observation table<br>`INSERT` privilege on FeaturesOfInterest table<br>`UPDATE` privilege on Datastream table |
-| `sensor`      | `SELECT` privilege on all tables<br>`INSERT` privilege on Observation and FeaturesOfInterest tables<br>`UPDATE` privilege on Datastream table                                                |
+
+| Role          | Description                                          | Table Permissions                                                                                                                                                                            |
+| ------------- | ---------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `admin`       | Have all the privileges                              | All `PRIVILEGES` on all tables of sensorthings schema                                                                                                                                        |
+| `viewer`      | Only view capabilities                               | `SELECT` privilege on all tables                                                                                                                                                             |
+| `editor`      | Can do everything except defining users            | `SELECT` privilege on all tables<br>`INSERT`, `UPDATE`, `DELETE` privileges on all tables (except User table)                                                                                |
+| `obs_manager` | Can view everything and manage observations          | `SELECT` privilege on all tables<br>`INSERT`, `UPDATE`, `DELETE` privileges on Observation table<br>`INSERT` privilege on FeaturesOfInterest table<br>`UPDATE` privilege on Datastream table |
+| `sensor`      | Can view everything and only insert new observations | `SELECT` privilege on all tables<br>`INSERT` privilege on Observation and FeaturesOfInterest tables<br>`UPDATE` privilege on Datastream table                                                |
 
 
 ## Authentication
 After authenticating in the system, you will see it like:
 
-![Login successfull](../assets/images/tutorial/authorization3.png)
+![Create Things](../assets/images/tutorial/authorization3.png)
 
+### Create a Thing
+
+Login as a Viewer!
+
+![Login successfull](../assets/images/tutorial/authorization3b.png)
+
+If you do not have the necessary privileges, you will see the following error message:
+```json
+{
+  "code": 401,
+  "type": "error",
+  "message": "Insufficient privileges."
+}
+```
+
+Now logout, login as editor and try again to create a Thing!
 
 ### Retrieve data (Authorization)
 
@@ -87,15 +107,6 @@ If you have sufficient privileges to access this table, you will receive the dat
       "Commit@iot.navigationLink": "http://localhost:8018/istsos4/v1.1/Things(1)/Commit(1)"
     },
   ]
-}
-```
-
-If you do not have the necessary privileges, you will see the following error message:
-```json
-{
-  "code": 401,
-  "type": "error",
-  "message": "Insufficient privileges."
 }
 ```
 

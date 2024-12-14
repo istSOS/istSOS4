@@ -1,18 +1,20 @@
 # Welcome to the istSOS4-Things tutorial
 
+Welcome to the istSOS4 tutorial!   
 This tutorial is designed to help you dive into the use of istSOS4 and fully take advantage of its features.
 
-!!!requirements
+!!!Pre-requirements
 
     To successfully run this tutorial the following requirements are preferred:  
     - basic understanding of HTTP requests  
     - basic understanding of Python  
-    - jupyter notebook installed on your machine
+    - jupyter notebook installed on your machine  
+    - Docker installed on your machine (only if you plan to install istSOS4)
 
 You can either run the tutorial on a local instance of istSOS4 or use the demo instance available at [https://istsos.org/v4/v1.1/](https://istsos.org/v4/v1.1/).
 
 
-Welcome to the istSOS4 tutorial! istSOS4 is an open-source Sensor Things API (STA) implementation that allows users to manage and publish observations from various sensors. It is designed to be compliant with the OGC STA standard, making it easy to integrate with other geospatial services and applications.
+istSOS4 is an open-source Sensor Things API (STA) implementation that allows users to manage and publish observations from various sensors. It is designed to be compliant with the OGC STA standard, making it easy to integrate with other geospatial services and applications.
 
 In this tutorial, you will learn how to:
 
