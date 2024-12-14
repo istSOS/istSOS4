@@ -1,25 +1,9 @@
 # Easily manage your sensor network and distribute your data in a standard way
 
 
+## Open Services for Interoperable and Reproducible research based on Spatiotemporal data
 
-
-
-
-  the not so widely adopted 
-
-
-
-to manage flood events, particularly 
-
-following OGC standards.
-
-
-
-## Open Services for Inte
-
-roperable and Reproducible research based on Spatiotemporal data
-
-![istSOS4](./assets/images/logo.png){ loading=lazy }
+![istSOS4](./assets/images/istsos_bars.png){ loading=lazy, align="center" }
 
 In the era of cloud computing, big data and Internet of things, research is very often data-driven: based on the analysis of data, increasingly available in large quantities and collected by experiments, observations or simulations.
 

@@ -36,21 +36,21 @@ theme:
 nav:
   # SET HERE THE CONTENT PAGES IN THE APPROPRIATE CHAPTER
   # =====================================================
-  - The Project:
-      - Introduction: populate_basic.ipynb
-      - Introduction: project/introduction.md
-      - History: project/history.md
-      - Resources: project/resources.md
-  - User Documentation:
-      - Installation: userdocs/installation.md
-      - Configuration: userdocs/configuration.md
-      - User Guide: userdocs/userguide.md
-      - FAQ: userdocs/faq.md
-  - Developer Documentation:
-      - Installation: devdocs/installation.md
-      - Configuration: devdocs/configuration.md
-      - API: devdocs/api.md
-      - Extensions: devdocs/extensions.md
+  # - The Project:
+  #     - Introduction: populate_basic.ipynb
+  #     - Introduction: project/introduction.md
+  #     - History: project/history.md
+  #     - Resources: project/resources.md
+  # - User Documentation:
+  #     - Installation: userdocs/installation.md
+  #     - Configuration: userdocs/configuration.md
+  #     - User Guide: userdocs/userguide.md
+  #     - FAQ: userdocs/faq.md
+  # - Developer Documentation:
+  #     - Installation: devdocs/installation.md
+  #     - Configuration: devdocs/configuration.md
+  #     - API: devdocs/api.md
+  #     - Extensions: devdocs/extensions.md
   - Tutorial:
       - Welcome to the istSOS4-Things tutorial: tutorial/tutorial_index.md
       - Understanding the Principles and Functionality of istSOS4: tutorial/intro.md
@@ -61,9 +61,9 @@ nav:
       - Utilizing the SensorThings API:
           - Register Entities: tutorial/sta_entity.ipynb
           - Register Observations: tutorial/sta_observation.ipynb
-      - Applying Advanced Filtering Techniques for Data Retrieval: tutorial/filtering.ipynb
       - Leveraging the TravelTime Extension for Reproducibility and Data Lineage: tutorial/traveltime.ipynb
       - Utilizing Python for Data Curation and Quality: tutorial/quality.ipynb
+      - Applying Advanced Filtering Techniques for Data Retrieval: tutorial/filtering.ipynb
       - Applying Machine Learning and AI for Time Series Data Processing: tutorial/ai.ipynb
   - Team: team.md
 

@@ -11,7 +11,7 @@ git clone https://github.com/istSOS/istSOS4.git
 To start the Docker services, run:
 
 ```sh
-docker compose -f dev_docker-compose.yml up -d
+docker compose --env-file .env.dev -f dev_docker-compose.yml up -d
 ```
 
 To switch off the services:

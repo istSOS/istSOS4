@@ -2,22 +2,20 @@
 Installing istSOS4 is straightforward with Docker. Follow these steps to get started.
 
 ## Prerequisites
-Before proceeding, ensure you have Docker installed on your machine. If not, download and install Docker from the [official Dokcer website](https://docs.docker.com/get-docker/).
 
-For detailed installation instructions, refer to the [Docker documentation](https://docs.docker.com/get-docker/).
+### Docker
+Before proceeding, ensure you have Docker installed on your machine. If not, download and install Docker from the [official Dokcer website](https://docs.docker.com/get-docker/).  
+For detailed installation instructions, please refer to the [Docker documentation](https://docs.docker.com/get-docker/).
 
-## Jupiter Notebook
-To participate in the hands-on tutorial, make sure Jupyter Notebook is available on your system.
-
-### Installing Jupyter Notebook
-If Jupyter Notebook is not already installed, follow these platform-specific instructions:
+### JupiterLab
+To participate in the hands-on tutorial, make sure JupyterLab is available on your system.  
+If JupyterLab is not already installed, follow these platform-specific instructions:
 
 - Linux User: Install Jupyter Notebook by following the guide on the [official Jupyter website](https://jupyter.org/install).
-- Windows User: Use [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/windows.html) to install Jupyter Notebook.
+- Windows User: Use [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/windows.html) to install Jupyter Notebook and this [package](https://anaconda.org/conda-forge/jupyterlab) to install JupyterLab.
 
-### Using Docker
-Alternatively, you can use a Docker image that comes with Jupyter Notebook pre-installed.
-
+### Using JupyterLab from a Docker
+Alternatively, you can use a Docker image that comes with Jupyter Notebook pre-installed.  
 Run the following command to start the Docker container with Jupyter Notebook:
 
 ```sh
