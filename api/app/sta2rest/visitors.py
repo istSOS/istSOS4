@@ -15,7 +15,6 @@ from app.db.sqlalchemy_db import engine
 from app.models import *
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
-from odata_query.grammar import ODataLexer, ODataParser
 from sqlalchemy import (
     asc,
     case,
@@ -35,6 +34,7 @@ from sqlalchemy.sql.expression import cast
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
 from .filter_visitor import FilterVisitor
+from .odata_query.grammar import ODataLexer, ODataParser
 from .sta_parser.ast import *
 from .sta_parser.visitor import Visitor
 
@@ -85,6 +85,8 @@ class NodeVisitor(Visitor):
         """
 
         prefix, *suffix = node.name.split("/", maxsplit=1)
+        if "@iot" in prefix:
+            prefix = prefix.split(".")[1]
         converted_prefix = sta2rest.STA2REST.SELECT_MAPPING.get(prefix, prefix)
         node.name = (
             f"{converted_prefix}/{suffix[0]}" if suffix else converted_prefix

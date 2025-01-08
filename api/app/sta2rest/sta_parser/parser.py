@@ -251,7 +251,7 @@ class Parser:
         """
         self.match("ASOF")
         value = self.current_token.value
-        self.match("TIMESTAMP")
+        self.match("DATETIME")
 
         return ast.AsOfNode(value)
 
@@ -264,10 +264,10 @@ class Parser:
         """
         self.match("FROMTO")
         value1 = self.current_token.value
-        self.match("TIMESTAMP")
+        self.match("DATETIME")
         self.match("SEGMENT_SEPARATOR")
         value2 = self.current_token.value
-        self.match("TIMESTAMP")
+        self.match("DATETIME")
         return ast.FromToNode(value1, value2)
 
     def parse_result_format(self):
