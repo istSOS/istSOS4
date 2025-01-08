@@ -595,6 +595,7 @@ async def create_data():
             async with conn.transaction():
                 try:
                     user_id = None
+                    user_uri = "anonymous"
                     if authorization:
                         user = await get_user(conn)
                         user_id = user["id"]

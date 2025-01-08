@@ -536,6 +536,13 @@ BEGIN
         -- Finally, set up schema versioning
         EXECUTE 'SELECT sensorthings.add_schema_to_versioning(''sensorthings'');';
 
+        -- Grant privileges to the roles
+        GRANT ALL PRIVILEGES ON TABLE sensorthings."Commit" TO sensorthings_admin;
+        GRANT ALL PRIVILEGES ON SEQUENCE sensorthings."Commit_id_seq" TO sensorthings_admin;
+        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_admin;
+        GRANT CREATE, USAGE ON SCHEMA sensorthings_history TO sensorthings_admin;
+        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings_history TO sensorthings_admin;
+        
         IF current_setting('custom.authorization')::boolean THEN
 
             ALTER TABLE sensorthings."Commit"
