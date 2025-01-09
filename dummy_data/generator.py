@@ -592,33 +592,30 @@ async def create_data():
     pool = await get_pool()
     try:
         async with pool.acquire() as conn:
-            async with conn.transaction():
-                try:
-                    user_id = None
-                    user_uri = "anonymous"
-                    if authorization:
-                        user = await get_user(conn)
-                        user_id = user["id"]
-                        user_uri = user["uri"]
+            try:
+                user_id = None
+                user_uri = "anonymous"
+                if authorization:
+                    user = await get_user(conn)
+                    user_id = user["id"]
+                    user_uri = user["uri"]
 
-                    commit_id = None
-                    if versioning:
-                        commit_id = await generate_commit(
-                            conn, user_id, user_uri
-                        )
+                commit_id = None
+                if versioning:
+                    commit_id = await generate_commit(conn, user_id, user_uri)
 
-                    await generate_things(conn, commit_id)
-                    await generate_locations(conn, commit_id)
-                    await generate_things_locations(conn)
-                    await generate_historicallocations(conn, commit_id)
-                    await generate_locations_historicallocations(conn)
-                    await generate_observedProperties(conn, commit_id)
-                    await generate_sensors(conn, commit_id)
-                    await generate_datastreams(conn, commit_id)
-                    await generate_featuresofinterest(conn, commit_id)
-                    await generate_observations(conn, commit_id)
-                except Exception as e:
-                    print(f"An error occured: {e}")
+                await generate_things(conn, commit_id)
+                await generate_locations(conn, commit_id)
+                await generate_things_locations(conn)
+                await generate_historicallocations(conn, commit_id)
+                await generate_locations_historicallocations(conn)
+                await generate_observedProperties(conn, commit_id)
+                await generate_sensors(conn, commit_id)
+                await generate_datastreams(conn, commit_id)
+                await generate_featuresofinterest(conn, commit_id)
+                await generate_observations(conn, commit_id)
+            except Exception as e:
+                print(f"An error occured: {e}")
     finally:
         await pool.close()
 
@@ -648,37 +645,32 @@ async def delete_data():
     pool = await get_pool()
     try:
         async with pool.acquire() as conn:
-            async with conn.transaction():
-                try:
-                    if authorization:
-                        await conn.execute('DELETE FROM sensorthings."User"')
-                    if versioning:
-                        await conn.execute('DELETE FROM sensorthings."Commit"')
+            try:
+                if authorization:
+                    await conn.execute('DELETE FROM sensorthings."User"')
+                if versioning:
+                    await conn.execute('DELETE FROM sensorthings."Commit"')
 
-                    await conn.execute('DELETE FROM sensorthings."Thing"')
-                    await conn.execute('DELETE FROM sensorthings."Location"')
-                    await conn.execute(
-                        'DELETE FROM sensorthings."Thing_Location"'
-                    )
-                    await conn.execute(
-                        'DELETE FROM sensorthings."HistoricalLocation"'
-                    )
-                    await conn.execute(
-                        'DELETE FROM sensorthings."Location_HistoricalLocation"'
-                    )
-                    await conn.execute(
-                        'DELETE FROM sensorthings."ObservedProperty"'
-                    )
-                    await conn.execute('DELETE FROM sensorthings."Sensor"')
-                    await conn.execute('DELETE FROM sensorthings."Datastream"')
-                    await conn.execute(
-                        'DELETE FROM sensorthings."FeaturesOfInterest"'
-                    )
-                    await conn.execute(
-                        'DELETE FROM sensorthings."Observation"'
-                    )
-                except Exception as e:
-                    print(f"An error occurred: {e}")
+                await conn.execute('DELETE FROM sensorthings."Thing"')
+                await conn.execute('DELETE FROM sensorthings."Location"')
+                await conn.execute('DELETE FROM sensorthings."Thing_Location"')
+                await conn.execute(
+                    'DELETE FROM sensorthings."HistoricalLocation"'
+                )
+                await conn.execute(
+                    'DELETE FROM sensorthings."Location_HistoricalLocation"'
+                )
+                await conn.execute(
+                    'DELETE FROM sensorthings."ObservedProperty"'
+                )
+                await conn.execute('DELETE FROM sensorthings."Sensor"')
+                await conn.execute('DELETE FROM sensorthings."Datastream"')
+                await conn.execute(
+                    'DELETE FROM sensorthings."FeaturesOfInterest"'
+                )
+                await conn.execute('DELETE FROM sensorthings."Observation"')
+            except Exception as e:
+                print(f"An error occurred: {e}")
     finally:
         await pool.close()
 
