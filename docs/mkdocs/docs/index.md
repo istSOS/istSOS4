@@ -3,7 +3,9 @@
 
 ## Open Services for Interoperable and Reproducible research based on Spatiotemporal data
 
+<figure markdown="span">
 ![istSOS4](./assets/images/istsos_bars.png){ loading=lazy, align="center" }
+</figure>
 
 In the era of cloud computing, big data and Internet of things, research is very often data-driven: based on the analysis of data, increasingly available in large quantities and collected by experiments, observations or simulations.
 

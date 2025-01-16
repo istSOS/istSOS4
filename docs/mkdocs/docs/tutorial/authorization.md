@@ -51,13 +51,13 @@ The following table outlines the different defined roles and their corresponding
 
 
 
-| Role          | Description                                          | Table Permissions                                                                                                                                                                            |
-| ------------- | ---------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`       | Have all the privileges                              | All `PRIVILEGES` on all tables of sensorthings schema                                                                                                                                        |
-| `viewer`      | Only view capabilities                               | `SELECT` privilege on all tables                                                                                                                                                             |
-| `editor`      | Can do everything except defining users            | `SELECT` privilege on all tables<br>`INSERT`, `UPDATE`, `DELETE` privileges on all tables (except User table)                                                                                |
-| `obs_manager` | Can view everything and manage observations          | `SELECT` privilege on all tables<br>`INSERT`, `UPDATE`, `DELETE` privileges on Observation table<br>`INSERT` privilege on FeaturesOfInterest table<br>`UPDATE` privilege on Datastream table |
-| `sensor`      | Can view everything and only insert new observations | `SELECT` privilege on all tables<br>`INSERT` privilege on Observation and FeaturesOfInterest tables<br>`UPDATE` privilege on Datastream table                                                |
+| <div style="width:10em">Role</div> | <div style="width:15em">Description</div>            | <div style="width:15em">Table Permissions</div>                                                                                                                                              |
+| :--------------------------------- | :--------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `admin`                            | Have all the privileges                              | All `PRIVILEGES` on all tables                                                                                                                                                               |
+| `viewer`                           | Only view capabilities                               | `SELECT` privilege on all tables                                                                                                                                                             |
+| `editor`                           | Can do everything except defining users              | `SELECT` privilege on all tables<br>`INSERT`, `UPDATE`, `DELETE` privileges on all tables (except User table)                                                                                |
+| `obs_manager`                      | Can view everything and manage observations          | `SELECT` privilege on all tables<br>`INSERT`, `UPDATE`, `DELETE` privileges on Observation table<br>`INSERT` privilege on FeaturesOfInterest table<br>`UPDATE` privilege on Datastream table |
+| `sensor`                           | Can view everything and only insert new observations | `SELECT` privilege on all tables<br>`INSERT` privilege on Observation and FeaturesOfInterest tables<br>`UPDATE` privilege on Datastream table                                                |
 
 
 ## Authentication
@@ -65,9 +65,7 @@ After authenticating in the system, you will see it like:
 
 ![Create Things](../assets/images/tutorial/authorization3.png)
 
-### Create a Thing
-
-Login as a Viewer!
+### Create a Thing (Login as a viewer)
 
 ![Login successfull](../assets/images/tutorial/authorization3b.png)
 
@@ -80,7 +78,7 @@ If you do not have the necessary privileges, you will see the following error me
 }
 ```
 
-Now logout, login as editor and try again to create a Thing!
+Now logout, login as editor and try again to create a Thing.
 
 ### Retrieve data (Authorization)
 

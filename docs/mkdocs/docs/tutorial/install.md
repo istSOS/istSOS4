@@ -108,6 +108,4 @@ docker compose down -v --rmi all
 
 ## Use Sensor Things APIs
 
-Access the SensorThings API with the interactive docs at:
-
-http://localhost:8018/istsos4/v1.1/docs
+Access the SensorThings API with the interactive docs at: <http://localhost:8018/istsos4/v1.1/docs>
