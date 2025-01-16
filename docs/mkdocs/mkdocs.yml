@@ -14,16 +14,6 @@ theme:
     text: Ubuntu
   palette:
     scheme: istsos
-    # - media: "(prefers-color-scheme: light)"
-    #   scheme: default
-    #   toggle:
-    #     icon: material/toggle-switch-off-outline
-    #     name: Switch to dark mode
-    # - media: "(prefers-color-scheme: dark)"
-    #   scheme: slate
-    #   toggle:
-    #     icon: material/toggle-switch
-    #     name: Switch to light mode
   extra_css:
     - extra.css
   features:
@@ -34,23 +24,6 @@ theme:
     - content.code.copy
 
 nav:
-  # SET HERE THE CONTENT PAGES IN THE APPROPRIATE CHAPTER
-  # =====================================================
-  # - The Project:
-  #     - Introduction: populate_basic.ipynb
-  #     - Introduction: project/introduction.md
-  #     - History: project/history.md
-  #     - Resources: project/resources.md
-  # - User Documentation:
-  #     - Installation: userdocs/installation.md
-  #     - Configuration: userdocs/configuration.md
-  #     - User Guide: userdocs/userguide.md
-  #     - FAQ: userdocs/faq.md
-  # - Developer Documentation:
-  #     - Installation: devdocs/installation.md
-  #     - Configuration: devdocs/configuration.md
-  #     - API: devdocs/api.md
-  #     - Extensions: devdocs/extensions.md
   - Tutorial:
       - Welcome to the istSOS4-Things tutorial: tutorial/tutorial_index.md
       - Understanding the Principles and Functionality of istSOS4: tutorial/intro.md
@@ -70,32 +43,12 @@ nav:
 extra_css:
   - assets/extra.css
 
-markdown_extensions:
+markdown_extensions: 
   - attr_list
-  - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - md_in_html
   - admonition
-  - pymdownx.details
   - pymdownx.superfences
-  - pymdownx.critic
-  - pymdownx.caret
-  - pymdownx.keys
-  - pymdownx.mark
-  - pymdownx.tilde
-  - pymdownx.magiclink
-  - pymdownx.highlight
-  - pymdownx.tabbed
-  - pymdownx.arithmatex:
-      generic: true
-  - footnotes
-  - toc:
-      permalink: true
 
 plugins:
   - search
-  - mkdocs-video
-  - mknotebooks
-  - bibtex:
-      bib_file: "./docs/refs.bib"
-  # - git-revision-date-localized
+  - mkdocs-jupyter

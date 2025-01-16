@@ -1,6 +1,5 @@
 # Welcome to the istSOS4-Things tutorial
 
-Welcome to the istSOS4 tutorial!   
 This tutorial is designed to help you dive into the use of istSOS4 and fully take advantage of its features.
 
 !!!Pre-requirements
