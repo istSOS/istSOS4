@@ -21,7 +21,7 @@ Run the following command to start the Docker container with Jupyter Notebook:
 ```sh
 docker run -it --rm -p 10000:8888 \
 -v "${PWD}":/home/jovyan/work quay.io/jupyter/datascience-notebook:latest \
--c start-notebook.py --IdentityProvider.token=''
+start-notebook.sh --IdentityProvider.token=''
 ```
 
 ## Using Preconfigured Setup
