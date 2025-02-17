@@ -19,7 +19,7 @@ if AUTHORIZATION:
 
     user = Depends(get_current_user)
 
-if VERSIONING:
+if VERSIONING or AUTHORIZATION:
     message = Header(alias="commit-message")
 
 PAYLOAD_EXAMPLE = [
@@ -264,7 +264,7 @@ async def insertBulkObservation(
 
             default_obs = [result_type, datastream_id, foi_id]
 
-            if VERSIONING and commit_id is not None:
+            if (VERSIONING or AUTHORIZATION) and commit_id is not None:
                 default_obs.append(commit_id)
 
             data.append(obs + default_obs)
@@ -294,15 +294,26 @@ async def insertBulkObservation(
                 "featuresofinterest_id",
             ]
 
-        if VERSIONING and commit_id is not None:
+        if (VERSIONING or AUTHORIZATION) and commit_id is not None:
             cols.append("commit_id")
 
-        await conn.copy_records_to_table(
-            "Observation",
-            records=data,
-            schema_name="sensorthings",
-            columns=cols,
+        column_names = ", ".join(f'"{col}"' for col in cols)
+
+        values_placeholders = ", ".join(
+            f"({', '.join(['$' + str(i + 1 + j * len(data[0])) for i in range(len(data[0]))])})"
+            for j in range(len(data))
         )
+
+        query = f"""
+            INSERT INTO sensorthings."Observation"
+            ({column_names})
+            VALUES {values_placeholders};
+        """
+
+        flattened_values = [item for row in data for item in row]
+
+        await conn.execute(query, *flattened_values)
+
         update_query = """
             UPDATE sensorthings."Datastream"
             SET "phenomenonTime" = tstzrange(
@@ -387,7 +398,7 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
                     "properties": properties,
                 }
 
-                if VERSIONING and commit_id is not None:
+                if (VERSIONING or AUTHORIZATION) and commit_id is not None:
                     foi_payload["commit_id"] = commit_id
 
                 foi_id, _ = await create_entity(

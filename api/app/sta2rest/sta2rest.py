@@ -10,7 +10,7 @@ representations in a REST API.
 import re
 from datetime import datetime, timezone
 
-from app import DEBUG, VERSION, VERSIONING
+from app import AUTHORIZATION, DEBUG, VERSION, VERSIONING
 from dateutil.parser import isoparse
 
 from .sta_parser.ast import *
@@ -277,7 +277,7 @@ class STA2REST:
 
     REVERSE_SELECT_MAPPING = {v: k for k, v in SELECT_MAPPING.items()}
 
-    if VERSIONING:
+    if VERSIONING or AUTHORIZATION:
         for key in DEFAULT_SELECT:
             if key != "Commit":
                 DEFAULT_SELECT[key].append("commit_navigation_link")

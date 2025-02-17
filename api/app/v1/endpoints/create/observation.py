@@ -18,8 +18,8 @@ if AUTHORIZATION:
 
     user = Depends(get_current_user)
 
-if VERSIONING:
-    message = Header(alias="commit-message")
+if VERSIONING or AUTHORIZATION:
+    message = Header(None, alias="commit-message")
 
 PAYLOAD_EXAMPLE = {
     "phenomenonTime": "2015-03-03T00:00:00Z",
