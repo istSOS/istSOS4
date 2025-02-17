@@ -426,33 +426,35 @@ async def generate_featuresofinterest(conn, commit_id):
 
 
 async def insert_observations(conn, observations, commit_id):
+    cols = [
+        "phenomenonTime",
+        "resultNumber",
+        "resultType",
+        "datastream_id",
+        "featuresofinterest_id",
+    ]
+
     if commit_id is not None:
-        await conn.copy_records_to_table(
-            "Observation",
-            records=observations,
-            schema_name="sensorthings",
-            columns=[
-                "phenomenonTime",
-                "resultNumber",
-                "resultType",
-                "datastream_id",
-                "featuresofinterest_id",
-                "commit_id",
-            ],
-        )
-    else:
-        await conn.copy_records_to_table(
-            "Observation",
-            records=observations,
-            schema_name="sensorthings",
-            columns=[
-                "phenomenonTime",
-                "resultNumber",
-                "resultType",
-                "datastream_id",
-                "featuresofinterest_id",
-            ],
-        )
+        cols.append("commit_id")
+
+    column_names = ", ".join(f'"{col}"' for col in cols)
+
+    values_placeholders = ", ".join(
+        f"({', '.join(['$' + str(i + 1 + j * len(observations[0])) for i in range(len(observations[0]))])})"
+        for j in range(len(observations))
+    )
+
+    query = f"""
+        INSERT INTO sensorthings."Observation"
+        ({column_names})
+        VALUES {values_placeholders};
+    """
+
+    flattened_values = [
+        item for observation in observations for item in observation
+    ]
+
+    await conn.execute(query, *flattened_values)
 
 
 async def update_datastream_phenomenon_time(conn, observations, datastream_id):
@@ -601,7 +603,7 @@ async def create_data():
                     user_uri = user["uri"]
 
                 commit_id = None
-                if versioning:
+                if versioning or authorization:
                     commit_id = await generate_commit(conn, user_id, user_uri)
 
                 await generate_things(conn, commit_id)
@@ -648,7 +650,7 @@ async def delete_data():
             try:
                 if authorization:
                     await conn.execute('DELETE FROM sensorthings."User"')
-                if versioning:
+                if versioning or authorization:
                     await conn.execute('DELETE FROM sensorthings."Commit"')
 
                 await conn.execute('DELETE FROM sensorthings."Thing"')
