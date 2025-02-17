@@ -21,7 +21,7 @@ if AUTHORIZATION:
 
     user = Depends(get_current_user)
 
-if VERSIONING:
+if VERSIONING or AUTHORIZATION:
     message = Header(alias="commit-message")
 
 

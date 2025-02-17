@@ -18,7 +18,7 @@ if AUTHORIZATION:
 
     user = Depends(get_current_user)
 
-if VERSIONING:
+if VERSIONING or AUTHORIZATION:
     message = Header(alias="commit-message")
 
 PAYLOAD_EXAMPLE = {"time": "2015-07-01T00:00:00.000Z", "Thing": {"@iot.id": 1}}
