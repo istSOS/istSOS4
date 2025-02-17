@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 
-from app import HOSTNAME, SUBPATH, VERSION, VERSIONING
+from app import AUTHORIZATION, HOSTNAME, SUBPATH, VERSION, VERSIONING
 from app.utils.utils import (
     check_iot_id_in_payload,
     check_missing_properties,
@@ -16,31 +16,29 @@ from asyncpg.types import Range
 
 
 async def set_commit(connection, commit_message, current_user):
-    commit_id = None
-    if VERSIONING:
-        if commit_message:
-            if current_user and current_user["role"] == "sensor":
-                raise Exception("Sensor cannot provide commit message")
-
-            commit_author = (
-                current_user["uri"]
-                if current_user and current_user["role"] != "sensor"
-                else "anonymous"
-            )
-            commit_encoding_type = "text/plain"
-            commit = {
-                "message": commit_message,
-                "author": commit_author,
-                "encodingType": commit_encoding_type,
-            }
-            if current_user is not None:
-                commit["user_id"] = current_user["id"]
-            commit_id = await insert_commit(connection, commit, "CREATE")
-        else:
-            if current_user and current_user["role"] == "sensor":
-                return commit_id
+    if VERSIONING or AUTHORIZATION:
+        if not commit_message:
+            if current_user and current_user["role"] == "istsos_sensor":
+                return await connection.fetchval(
+                    """
+                        SELECT id FROM sensorthings."Commit"
+                        WHERE user_id = $1::bigint
+                    """,
+                    current_user["id"],
+                )
             raise Exception("No commit message provided")
-    return commit_id
+
+        commit = {
+            "message": commit_message,
+            "author": current_user["uri"] if current_user else "anonymous",
+            "encodingType": "text/plain",
+        }
+
+        if current_user:
+            commit["user_id"] = current_user["id"]
+            if current_user["role"] != "istsos_sensor":
+                return await insert_commit(connection, commit, "CREATE")
+    return None
 
 
 async def create_entity(connection, entity_name, payload):

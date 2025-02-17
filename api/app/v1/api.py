@@ -13,9 +13,10 @@ from app.v1.endpoints.create import observation as create_observation
 from app.v1.endpoints.create import (
     observed_property as create_observed_property,
 )
+from app.v1.endpoints.create import policy as create_policy
 from app.v1.endpoints.create import sensor as create_sensor
 from app.v1.endpoints.create import thing as create_thing
-from app.v1.endpoints.create import user
+from app.v1.endpoints.create import user as create_user
 from app.v1.endpoints.delete import datastream as delete_datastream
 from app.v1.endpoints.delete import (
     feature_of_interest as delete_feature_of_interest,
@@ -28,8 +29,10 @@ from app.v1.endpoints.delete import observation as delete_observation
 from app.v1.endpoints.delete import (
     observed_property as delete_observed_property,
 )
+from app.v1.endpoints.delete import policy as delete_policy
 from app.v1.endpoints.delete import sensor as delete_sensor
 from app.v1.endpoints.delete import thing as delete_thing
+from app.v1.endpoints.delete import user as delete_user
 from app.v1.endpoints.read import datastream as read_datastream
 from app.v1.endpoints.read import (
     feature_of_interest as read_feature_of_interest,
@@ -40,9 +43,11 @@ from app.v1.endpoints.read import (
 from app.v1.endpoints.read import location as read_location
 from app.v1.endpoints.read import observation as read_observation
 from app.v1.endpoints.read import observed_property as read_observed_property
+from app.v1.endpoints.read import policy as read_policy
 from app.v1.endpoints.read import read
 from app.v1.endpoints.read import sensor as read_sensor
 from app.v1.endpoints.read import thing as read_thing
+from app.v1.endpoints.read import user as read_user
 from app.v1.endpoints.update import datastream as update_datastream
 from app.v1.endpoints.update import (
     feature_of_interest as update_feature_of_interest,
@@ -55,6 +60,7 @@ from app.v1.endpoints.update import observation as update_observation
 from app.v1.endpoints.update import (
     observed_property as update_observed_property,
 )
+from app.v1.endpoints.update import policy as update_policy
 from app.v1.endpoints.update import sensor as update_sensor
 from app.v1.endpoints.update import thing as update_thing
 from fastapi import FastAPI
@@ -64,6 +70,10 @@ if AUTHORIZATION:
         {
             "name": "Users",
             "description": "Users of the SensorThings API.",
+        },
+        {
+            "name": "Policies",
+            "description": "Policies for the SensorThings API.",
         },
     ]
 else:
@@ -118,8 +128,14 @@ v1 = FastAPI(
 
 # Register the user endpoint
 if AUTHORIZATION:
-    v1.include_router(user.v1)
     v1.include_router(login.v1)
+    v1.include_router(read_user.v1)
+    v1.include_router(create_user.v1)
+    v1.include_router(delete_user.v1)
+    v1.include_router(read_policy.v1)
+    v1.include_router(create_policy.v1)
+    v1.include_router(update_policy.v1)
+    v1.include_router(delete_policy.v1)
 
 # Register the read endpoints
 v1.include_router(read_location.v1)

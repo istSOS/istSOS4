@@ -3,8 +3,8 @@
 -- =======================
 
 -- triggers to handle table versioning with system_time
-CREATE OR REPLACE FUNCTION istsos_mutate_history()
-RETURNS trigger 
+CREATE OR REPLACE FUNCTION sensorthings.istsos_mutate_history()
+RETURNS trigger
 LANGUAGE plpgsql
 AS $body$
 DECLARE
@@ -60,7 +60,7 @@ END;
 $body$;
 
 
-CREATE OR REPLACE FUNCTION istsos_prevent_table_update()
+CREATE OR REPLACE FUNCTION sensorthings.istsos_prevent_table_update()
 RETURNS trigger 
 LANGUAGE plpgsql
 AS $body$
@@ -86,10 +86,10 @@ BEGIN
     EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I EXCLUDE USING gist (id WITH =, "systemTimeValidity" WITH &&);', schemaname || '_history', tablename, tablename || '_history_unique_obs');
 
     -- Add triggers for versioning
-    EXECUTE format('CREATE TRIGGER %I BEFORE INSERT OR UPDATE OR DELETE ON %I.%I FOR EACH ROW EXECUTE PROCEDURE istsos_mutate_history();', tablename || '_history_trigger', schemaname, tablename);
+    EXECUTE format('CREATE TRIGGER %I BEFORE INSERT OR UPDATE OR DELETE ON %I.%I FOR EACH ROW EXECUTE PROCEDURE sensorthings.istsos_mutate_history();', tablename || '_history_trigger', schemaname, tablename);
 
     -- Add triggers to raise an error if the history table is updated or deleted
-    EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE OR DELETE ON %I.%I FOR EACH ROW EXECUTE FUNCTION istsos_prevent_table_update();', tablename || '_history_no_mutate', schemaname || '_history', tablename);
+    EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE OR DELETE ON %I.%I FOR EACH ROW EXECUTE FUNCTION sensorthings.istsos_prevent_table_update();', tablename || '_history_no_mutate', schemaname || '_history', tablename);
 
     -- Create the travelitime view to query data modification history
     EXECUTE format('CREATE VIEW %I.%I AS SELECT * FROM %I.%I UNION SELECT * FROM %I.%I;',
@@ -108,8 +108,16 @@ AS $body$
 DECLARE
     tablename text;
 BEGIN
+
+    RESET ROLE;
     -- Create the history schema if it doesn't exist
     EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I_history;', original_schema);
+
+    -- Grant privileges to the administrator for sensorthings_history
+    GRANT CREATE, USAGE ON SCHEMA sensorthings_history TO administrator;
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings_history TO administrator;
+
+    SET ROLE administrator;
 
     -- Loop through each table in the original schema in the correct order
     FOR tablename IN
@@ -273,319 +281,313 @@ DO $body$
 BEGIN
     -- Check if custom versioning is enabled
     IF current_setting('custom.versioning')::boolean THEN
-        -- First, create the Commit table if it doesn't exist
-        CREATE TABLE IF NOT EXISTS sensorthings."Commit"(
-            "id" BIGSERIAL NOT NULL PRIMARY KEY,
-            "author" VARCHAR(255) NOT NULL,
-            "encodingType" VARCHAR(100),
-            "message" VARCHAR(255) NOT NULL,
-            "date" TIMESTAMPTZ DEFAULT NOW(),
-            "actionType" VARCHAR(100) NOT NULL CHECK ("actionType" IN ('CREATE', 'UPDATE', 'DELETE'))
-        );
 
-        -- Create or replace function for selfLink
-        CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Commit") RETURNS text AS $$
-            SELECT '/Commits(' || $1.id || ')';
-        $$ LANGUAGE SQL;
+        SET ROLE administrator;
 
-        -- Alter the Location table to add the commit_id column
-        ALTER TABLE sensorthings."Location" 
-        ADD COLUMN IF NOT EXISTS "commit_id" BIGINT NOT NULL
-        REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
+        IF NOT current_setting('custom.authorization')::boolean THEN
 
-        -- Create an index on the commit_id column for Location table
-        CREATE INDEX IF NOT EXISTS "idx_location_commit_id" 
-        ON sensorthings."Location" 
-        USING btree ("commit_id" ASC NULLS LAST) 
-        TABLESPACE pg_default;
+            -- First, create the Commit table if it doesn't exist
+            CREATE TABLE IF NOT EXISTS sensorthings."Commit"(
+                "id" BIGSERIAL NOT NULL PRIMARY KEY,
+                "author" VARCHAR(255) NOT NULL,
+                "encodingType" VARCHAR(100),
+                "message" VARCHAR(255) NOT NULL,
+                "date" TIMESTAMPTZ DEFAULT NOW(),
+                "actionType" VARCHAR(100) NOT NULL CHECK ("actionType" IN ('CREATE', 'UPDATE', 'DELETE'))
+            );
 
-        -- Create or replace function for Commit@iot.navigationLink for Location table
-        CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Location") RETURNS text AS $$
-            SELECT '/Locations(' || $1.id || ')/Commit(' || $1.commit_id || ')';
-        $$ LANGUAGE SQL;
+            -- Create or replace function for selfLink
+            CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Commit") RETURNS text AS $$
+                SELECT '/Commits(' || $1.id || ')';
+            $$ LANGUAGE SQL;
 
-        -- Alter the Thing table to add the commit_id column
-        ALTER TABLE sensorthings."Thing" 
-        ADD COLUMN IF NOT EXISTS "commit_id" BIGINT NOT NULL
-        REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
+            -- Alter the Location table to add the commit_id column
+            ALTER TABLE sensorthings."Location" 
+            ADD COLUMN IF NOT EXISTS "commit_id" BIGINT NOT NULL
+            REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
 
-        -- Create an index on the commit_id column for Thing table
-        CREATE INDEX IF NOT EXISTS "idx_thing_commit_id" 
-        ON sensorthings."Thing" 
-        USING btree ("commit_id" ASC NULLS LAST) 
-        TABLESPACE pg_default;
+            -- Create an index on the commit_id column for Location table
+            CREATE INDEX IF NOT EXISTS "idx_location_commit_id" 
+            ON sensorthings."Location" 
+            USING btree ("commit_id" ASC NULLS LAST) 
+            TABLESPACE pg_default;
 
-        -- Create or replace function for Commit@iot.navigationLink for Thing table
-        CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Thing") RETURNS text AS $$
-            SELECT '/Things(' || $1.id || ')/Commit(' || $1.commit_id || ')';
-        $$ LANGUAGE SQL;
+            -- Create or replace function for Commit@iot.navigationLink for Location table
+            CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Location") RETURNS text AS $$
+                SELECT '/Locations(' || $1.id || ')/Commit(' || $1.commit_id || ')';
+            $$ LANGUAGE SQL;
 
-        -- Alter the HistoricalLocation table to add the commit_id column
-        ALTER TABLE sensorthings."HistoricalLocation" 
-        ADD COLUMN IF NOT EXISTS "commit_id" BIGINT NOT NULL
-        REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
+            -- Alter the Thing table to add the commit_id column
+            ALTER TABLE sensorthings."Thing" 
+            ADD COLUMN IF NOT EXISTS "commit_id" BIGINT NOT NULL
+            REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
 
-        -- Create an index on the commit_id column for HistoricalLocation table
-        CREATE INDEX IF NOT EXISTS "idx_historicallocation_commit_id" 
-        ON sensorthings."HistoricalLocation" 
-        USING btree ("commit_id" ASC NULLS LAST) 
-        TABLESPACE pg_default;
+            -- Create an index on the commit_id column for Thing table
+            CREATE INDEX IF NOT EXISTS "idx_thing_commit_id" 
+            ON sensorthings."Thing" 
+            USING btree ("commit_id" ASC NULLS LAST) 
+            TABLESPACE pg_default;
 
-        -- Create or replace function for Commit@iot.navigationLink for HistoricalLocation table
-        CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."HistoricalLocation") RETURNS text AS $$
-            SELECT '/HistoricalLocations(' || $1.id || ')/Commit(' || $1.commit_id || ')';
-        $$ LANGUAGE SQL;
+            -- Create or replace function for Commit@iot.navigationLink for Thing table
+            CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Thing") RETURNS text AS $$
+                SELECT '/Things(' || $1.id || ')/Commit(' || $1.commit_id || ')';
+            $$ LANGUAGE SQL;
 
-        -- Alter the ObservedProperty table to add the commit_id column
-        ALTER TABLE sensorthings."ObservedProperty" 
-        ADD COLUMN IF NOT EXISTS "commit_id" BIGINT NOT NULL
-        REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
+            -- Alter the HistoricalLocation table to add the commit_id column
+            ALTER TABLE sensorthings."HistoricalLocation" 
+            ADD COLUMN IF NOT EXISTS "commit_id" BIGINT NOT NULL
+            REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
 
-        -- Create an index on the commit_id column for ObservedProperty table
-        CREATE INDEX IF NOT EXISTS "idx_observedproperty_commit_id" 
-        ON sensorthings."ObservedProperty" 
-        USING btree ("commit_id" ASC NULLS LAST) 
-        TABLESPACE pg_default;
+            -- Create an index on the commit_id column for HistoricalLocation table
+            CREATE INDEX IF NOT EXISTS "idx_historicallocation_commit_id" 
+            ON sensorthings."HistoricalLocation" 
+            USING btree ("commit_id" ASC NULLS LAST) 
+            TABLESPACE pg_default;
 
-        -- Create or replace function for Commit@iot.navigationLink for ObservedProperty table
-        CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."ObservedProperty") RETURNS text AS $$
-            SELECT '/ObservedProperties(' || $1.id || ')/Commit(' || $1.commit_id || ')';
-        $$ LANGUAGE SQL;
+            -- Create or replace function for Commit@iot.navigationLink for HistoricalLocation table
+            CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."HistoricalLocation") RETURNS text AS $$
+                SELECT '/HistoricalLocations(' || $1.id || ')/Commit(' || $1.commit_id || ')';
+            $$ LANGUAGE SQL;
 
-        -- Alter the Sensor table to add the commit_id column
-        ALTER TABLE sensorthings."Sensor" 
-        ADD COLUMN IF NOT EXISTS "commit_id" BIGINT NOT NULL
-        REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
+            -- Alter the ObservedProperty table to add the commit_id column
+            ALTER TABLE sensorthings."ObservedProperty" 
+            ADD COLUMN IF NOT EXISTS "commit_id" BIGINT NOT NULL
+            REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
 
-        -- Create an index on the commit_id column for Sensor table
-        CREATE INDEX IF NOT EXISTS "idx_sensor_commit_id" 
-        ON sensorthings."Sensor" 
-        USING btree ("commit_id" ASC NULLS LAST) 
-        TABLESPACE pg_default;
+            -- Create an index on the commit_id column for ObservedProperty table
+            CREATE INDEX IF NOT EXISTS "idx_observedproperty_commit_id" 
+            ON sensorthings."ObservedProperty" 
+            USING btree ("commit_id" ASC NULLS LAST) 
+            TABLESPACE pg_default;
 
-        -- Create or replace function for Commit@iot.navigationLink for Sensor table
-        CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Sensor") RETURNS text AS $$
-            SELECT '/Sensors(' || $1.id || ')/Commit(' || $1.commit_id || ')';
-        $$ LANGUAGE SQL;
+            -- Create or replace function for Commit@iot.navigationLink for ObservedProperty table
+            CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."ObservedProperty") RETURNS text AS $$
+                SELECT '/ObservedProperties(' || $1.id || ')/Commit(' || $1.commit_id || ')';
+            $$ LANGUAGE SQL;
 
-        -- Alter the Datastream table to add the commit_id column
-        ALTER TABLE sensorthings."Datastream" 
-        ADD COLUMN IF NOT EXISTS "commit_id" BIGINT
-        REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
+            -- Alter the Sensor table to add the commit_id column
+            ALTER TABLE sensorthings."Sensor" 
+            ADD COLUMN IF NOT EXISTS "commit_id" BIGINT NOT NULL
+            REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
 
-        -- Create an index on the commit_id column for Datastream table
-        CREATE INDEX IF NOT EXISTS "idx_datastream_commit_id" 
-        ON sensorthings."Datastream" 
-        USING btree ("commit_id" ASC NULLS LAST) 
-        TABLESPACE pg_default;
+            -- Create an index on the commit_id column for Sensor table
+            CREATE INDEX IF NOT EXISTS "idx_sensor_commit_id" 
+            ON sensorthings."Sensor" 
+            USING btree ("commit_id" ASC NULLS LAST) 
+            TABLESPACE pg_default;
 
-        -- Create or replace function for Commit@iot.navigationLink for Datastream table
-        CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Datastream") RETURNS text AS $$
-            SELECT '/Datastreams(' || $1.id || ')/Commit(' || $1.commit_id || ')';
-        $$ LANGUAGE SQL;
+            -- Create or replace function for Commit@iot.navigationLink for Sensor table
+            CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Sensor") RETURNS text AS $$
+                SELECT '/Sensors(' || $1.id || ')/Commit(' || $1.commit_id || ')';
+            $$ LANGUAGE SQL;
 
-        -- Alter the FeaturesOfInterest table to add the commit_id column
-        ALTER TABLE sensorthings."FeaturesOfInterest" 
-        ADD COLUMN IF NOT EXISTS "commit_id" BIGINT
-        REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
+            -- Alter the Datastream table to add the commit_id column
+            ALTER TABLE sensorthings."Datastream" 
+            ADD COLUMN IF NOT EXISTS "commit_id" BIGINT
+            REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
 
-        -- Create an index on the commit_id column for FeaturesOfInterest table
-        CREATE INDEX IF NOT EXISTS "idx_featuresofinterest_commit_id" 
-        ON sensorthings."FeaturesOfInterest" 
-        USING btree ("commit_id" ASC NULLS LAST) 
-        TABLESPACE pg_default;
+            -- Create an index on the commit_id column for Datastream table
+            CREATE INDEX IF NOT EXISTS "idx_datastream_commit_id" 
+            ON sensorthings."Datastream" 
+            USING btree ("commit_id" ASC NULLS LAST) 
+            TABLESPACE pg_default;
 
-        -- Create or replace function for Commit@iot.navigationLink for FeaturesOfInterest table
-        CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."FeaturesOfInterest") RETURNS text AS $$
-            SELECT '/FeaturesOfInterest(' || $1.id || ')/Commit(' || $1.commit_id || ')';
-        $$ LANGUAGE SQL;
+            -- Create or replace function for Commit@iot.navigationLink for Datastream table
+            CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Datastream") RETURNS text AS $$
+                SELECT '/Datastreams(' || $1.id || ')/Commit(' || $1.commit_id || ')';
+            $$ LANGUAGE SQL;
 
-        -- Alter the Observation table to add the commit_id column
-        ALTER TABLE sensorthings."Observation" 
-        ADD COLUMN IF NOT EXISTS "commit_id" BIGINT 
-        REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
+            -- Alter the FeaturesOfInterest table to add the commit_id column
+            ALTER TABLE sensorthings."FeaturesOfInterest" 
+            ADD COLUMN IF NOT EXISTS "commit_id" BIGINT
+            REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
 
-        -- Create an index on the commit_id column for Observation table
-        CREATE INDEX IF NOT EXISTS "idx_observation_commit_id" 
-        ON sensorthings."Observation" 
-        USING btree ("commit_id" ASC NULLS LAST) 
-        TABLESPACE pg_default;
-        
-        -- Create or replace function for Commit@iot.navigationLink for Observation table
-        CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Observation") RETURNS text AS $$
-            SELECT CASE 
-                WHEN $1.commit_id IS NOT NULL THEN 
-                    '/Observations(' || $1.id || ')/Commit(' || $1.commit_id || ')'
-                ELSE 
-                    NULL
-            END;
-        $$ LANGUAGE SQL;
+            -- Create an index on the commit_id column for FeaturesOfInterest table
+            CREATE INDEX IF NOT EXISTS "idx_featuresofinterest_commit_id" 
+            ON sensorthings."FeaturesOfInterest" 
+            USING btree ("commit_id" ASC NULLS LAST) 
+            TABLESPACE pg_default;
 
-        -- Create or replace function for Things@iot.navigationLink in Commit table
-        CREATE OR REPLACE FUNCTION "Things@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-            SELECT CASE 
-                WHEN EXISTS (
-                    SELECT 1 
-                    FROM sensorthings."Thing" 
-                    WHERE commit_id = $1.id
-                ) THEN 
-                    '/Commits(' || $1.id || ')/Things'
-                ELSE 
-                    NULL
-            END;
-        $$ LANGUAGE SQL;
+            -- Create or replace function for Commit@iot.navigationLink for FeaturesOfInterest table
+            CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."FeaturesOfInterest") RETURNS text AS $$
+                SELECT '/FeaturesOfInterest(' || $1.id || ')/Commit(' || $1.commit_id || ')';
+            $$ LANGUAGE SQL;
 
-        -- Create or replace function for Locations@iot.navigationLink in Commit table
-        CREATE OR REPLACE FUNCTION "Locations@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-            SELECT CASE 
-                WHEN EXISTS (
-                    SELECT 1 
-                    FROM sensorthings."Location" 
-                    WHERE commit_id = $1.id
-                ) THEN 
-                    '/Commits(' || $1.id || ')/Locations'
-                ELSE 
-                    NULL
-            END;
-        $$ LANGUAGE SQL;
+            -- Alter the Observation table to add the commit_id column
+            ALTER TABLE sensorthings."Observation" 
+            ADD COLUMN IF NOT EXISTS "commit_id" BIGINT 
+            REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
 
-        -- Create or replace function for HistoricalLocations@iot.navigationLink in Commit table
-        CREATE OR REPLACE FUNCTION "HistoricalLocations@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-            SELECT CASE 
-                WHEN EXISTS (
-                    SELECT 1 
-                    FROM sensorthings."HistoricalLocation" 
-                    WHERE commit_id = $1.id
-                ) THEN 
-                    '/Commits(' || $1.id || ')/HistoricalLocations'
-                ELSE 
-                    NULL
-            END;
-        $$ LANGUAGE SQL;
+            -- Create an index on the commit_id column for Observation table
+            CREATE INDEX IF NOT EXISTS "idx_observation_commit_id" 
+            ON sensorthings."Observation" 
+            USING btree ("commit_id" ASC NULLS LAST) 
+            TABLESPACE pg_default;
+            
+            -- Create or replace function for Commit@iot.navigationLink for Observation table
+            CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Observation") RETURNS text AS $$
+                SELECT CASE 
+                    WHEN $1.commit_id IS NOT NULL THEN 
+                        '/Observations(' || $1.id || ')/Commit(' || $1.commit_id || ')'
+                    ELSE 
+                        NULL
+                END;
+            $$ LANGUAGE SQL;
 
-        -- Create or replace function for ObservedProperties@iot.navigationLink in Commit table
-        CREATE OR REPLACE FUNCTION "ObservedProperties@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-            SELECT CASE 
-                WHEN EXISTS (
-                    SELECT 1 
-                    FROM sensorthings."ObservedProperty" 
-                    WHERE commit_id = $1.id
-                ) THEN 
-                    '/Commits(' || $1.id || ')/ObservedProperties'
-                ELSE 
-                    NULL
-            END;
-        $$ LANGUAGE SQL;
+            -- Create or replace function for Things@iot.navigationLink in Commit table
+            CREATE OR REPLACE FUNCTION "Things@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
+                SELECT CASE 
+                    WHEN EXISTS (
+                        SELECT 1 
+                        FROM sensorthings."Thing" 
+                        WHERE commit_id = $1.id
+                    ) THEN 
+                        '/Commits(' || $1.id || ')/Things'
+                    ELSE 
+                        NULL
+                END;
+            $$ LANGUAGE SQL;
 
-        -- Create or replace function for Sensors@iot.navigationLink in Commit table
-        CREATE OR REPLACE FUNCTION "Sensors@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-            SELECT CASE 
-                WHEN EXISTS (
-                    SELECT 1 
-                    FROM sensorthings."Sensor" 
-                    WHERE commit_id = $1.id
-                ) THEN 
-                    '/Commits(' || $1.id || ')/Sensors'
-                ELSE 
-                    NULL
-            END;
-        $$ LANGUAGE SQL;
+            -- Create or replace function for Locations@iot.navigationLink in Commit table
+            CREATE OR REPLACE FUNCTION "Locations@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
+                SELECT CASE 
+                    WHEN EXISTS (
+                        SELECT 1 
+                        FROM sensorthings."Location" 
+                        WHERE commit_id = $1.id
+                    ) THEN 
+                        '/Commits(' || $1.id || ')/Locations'
+                    ELSE 
+                        NULL
+                END;
+            $$ LANGUAGE SQL;
 
-        -- Create or replace function for Datastreams@iot.navigationLink in Commit table
-        CREATE OR REPLACE FUNCTION "Datastreams@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-            SELECT CASE 
-                WHEN EXISTS (
-                    SELECT 1 
-                    FROM sensorthings."Datastream" 
-                    WHERE commit_id = $1.id
-                ) THEN 
-                    '/Commits(' || $1.id || ')/Datastreams'
-                ELSE 
-                    NULL
-            END;
-        $$ LANGUAGE SQL;
+            -- Create or replace function for HistoricalLocations@iot.navigationLink in Commit table
+            CREATE OR REPLACE FUNCTION "HistoricalLocations@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
+                SELECT CASE 
+                    WHEN EXISTS (
+                        SELECT 1 
+                        FROM sensorthings."HistoricalLocation" 
+                        WHERE commit_id = $1.id
+                    ) THEN 
+                        '/Commits(' || $1.id || ')/HistoricalLocations'
+                    ELSE 
+                        NULL
+                END;
+            $$ LANGUAGE SQL;
 
-        -- Create or replace function for FeaturesOfInterest@iot.navigationLink in Commit table
-        CREATE OR REPLACE FUNCTION "FeaturesOfInterest@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-            SELECT CASE 
-                WHEN EXISTS (
-                    SELECT 1 
-                    FROM sensorthings."FeaturesOfInterest" 
-                    WHERE commit_id = $1.id
-                ) THEN 
-                    '/Commits(' || $1.id || ')/FeaturesOfInterest'
-                ELSE 
-                    NULL
-            END;
-        $$ LANGUAGE SQL;
+            -- Create or replace function for ObservedProperties@iot.navigationLink in Commit table
+            CREATE OR REPLACE FUNCTION "ObservedProperties@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
+                SELECT CASE 
+                    WHEN EXISTS (
+                        SELECT 1 
+                        FROM sensorthings."ObservedProperty" 
+                        WHERE commit_id = $1.id
+                    ) THEN 
+                        '/Commits(' || $1.id || ')/ObservedProperties'
+                    ELSE 
+                        NULL
+                END;
+            $$ LANGUAGE SQL;
 
-        -- Create or replace function for Observations@iot.navigationLink in Commit table
-        CREATE OR REPLACE FUNCTION "Observations@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-            SELECT CASE 
-                WHEN EXISTS (
-                    SELECT 1 
-                    FROM sensorthings."Observation" 
-                    WHERE commit_id = $1.id
-                ) THEN 
-                    '/Commits(' || $1.id || ')/Observations'
-                ELSE 
-                    NULL
-            END;
-        $$ LANGUAGE SQL;
+            -- Create or replace function for Sensors@iot.navigationLink in Commit table
+            CREATE OR REPLACE FUNCTION "Sensors@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
+                SELECT CASE 
+                    WHEN EXISTS (
+                        SELECT 1 
+                        FROM sensorthings."Sensor" 
+                        WHERE commit_id = $1.id
+                    ) THEN 
+                        '/Commits(' || $1.id || ')/Sensors'
+                    ELSE 
+                        NULL
+                END;
+            $$ LANGUAGE SQL;
+
+            -- Create or replace function for Datastreams@iot.navigationLink in Commit table
+            CREATE OR REPLACE FUNCTION "Datastreams@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
+                SELECT CASE 
+                    WHEN EXISTS (
+                        SELECT 1 
+                        FROM sensorthings."Datastream" 
+                        WHERE commit_id = $1.id
+                    ) THEN 
+                        '/Commits(' || $1.id || ')/Datastreams'
+                    ELSE 
+                        NULL
+                END;
+            $$ LANGUAGE SQL;
+
+            -- Create or replace function for FeaturesOfInterest@iot.navigationLink in Commit table
+            CREATE OR REPLACE FUNCTION "FeaturesOfInterest@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
+                SELECT CASE 
+                    WHEN EXISTS (
+                        SELECT 1 
+                        FROM sensorthings."FeaturesOfInterest" 
+                        WHERE commit_id = $1.id
+                    ) THEN 
+                        '/Commits(' || $1.id || ')/FeaturesOfInterest'
+                    ELSE 
+                        NULL
+                END;
+            $$ LANGUAGE SQL;
+
+            -- Create or replace function for Observations@iot.navigationLink in Commit table
+            CREATE OR REPLACE FUNCTION "Observations@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
+                SELECT CASE 
+                    WHEN EXISTS (
+                        SELECT 1 
+                        FROM sensorthings."Observation" 
+                        WHERE commit_id = $1.id
+                    ) THEN 
+                        '/Commits(' || $1.id || ')/Observations'
+                    ELSE 
+                        NULL
+                END;
+            $$ LANGUAGE SQL;
+        END IF;
 
         -- Finally, set up schema versioning
         EXECUTE 'SELECT sensorthings.add_schema_to_versioning(''sensorthings'');';
 
-        -- Grant privileges to the roles
-        GRANT ALL PRIVILEGES ON TABLE sensorthings."Commit" TO sensorthings_admin;
-        GRANT ALL PRIVILEGES ON SEQUENCE sensorthings."Commit_id_seq" TO sensorthings_admin;
-        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_admin;
-        GRANT CREATE, USAGE ON SCHEMA sensorthings_history TO sensorthings_admin;
-        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings_history TO sensorthings_admin;
-        
+        RESET ROLE;
+
+        -- Override grants for the administrator
+        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO administrator;
+        GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO administrator;
+
         IF current_setting('custom.authorization')::boolean THEN
 
-            ALTER TABLE sensorthings."Commit"
-            ADD COLUMN "user_id" BIGINT NOT NULL REFERENCES sensorthings."User"(id) ON DELETE CASCADE;
+            -- Override grants for the istsos_user
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings TO istsos_user;
+            REVOKE INSERT, UPDATE, DELETE ON sensorthings."User" FROM istsos_user;
+            REVOKE UPDATE, DELETE ON sensorthings."Commit" FROM istsos_user;
+            GRANT CREATE, USAGE ON SCHEMA sensorthings_history TO istsos_user;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings_history TO istsos_user;
 
-            -- Grant privileges to the roles
-            GRANT ALL PRIVILEGES ON TABLE sensorthings."Commit" TO sensorthings_admin;
-            GRANT ALL PRIVILEGES ON SEQUENCE sensorthings."Commit_id_seq" TO sensorthings_admin;
-            GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_admin;
+            -- Override grants for the istsos_guest
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO istsos_guest;
+            REVOKE SELECT ON sensorthings."User" FROM istsos_guest;
+            GRANT USAGE ON SCHEMA sensorthings_history TO istsos_guest;
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings_history TO istsos_guest;
 
-            GRANT SELECT ON TABLE sensorthings."Commit" TO sensorthings_viewer;
-            GRANT SELECT ON SEQUENCE sensorthings."Commit_id_seq" TO sensorthings_viewer;
-            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_viewer;
+            -- Override grants for the istsos_sensor
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO istsos_sensor;
+            REVOKE SELECT ON sensorthings."User" FROM istsos_sensor;
+            GRANT USAGE ON SCHEMA sensorthings_history TO istsos_sensor;
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings_history TO istsos_sensor;
+            GRANT INSERT ON TABLE sensorthings_history."Datastream" TO istsos_sensor;
+            
+            -- Alter the traveltime views to use the security invoker
+            ALTER VIEW sensorthings."Location_traveltime" SET (security_invoker = on);
+            ALTER VIEW sensorthings."Thing_traveltime" SET (security_invoker = on);
+            ALTER VIEW sensorthings."HistoricalLocation_traveltime" SET (security_invoker = on);
+            ALTER VIEW sensorthings."ObservedProperty_traveltime" SET (security_invoker = on);
+            ALTER VIEW sensorthings."Sensor_traveltime" SET (security_invoker = on);
+            ALTER VIEW sensorthings."Datastream_traveltime" SET (security_invoker = on);
+            ALTER VIEW sensorthings."FeaturesOfInterest_traveltime" SET (security_invoker = on);
+            ALTER VIEW sensorthings."Observation_traveltime" SET (security_invoker = on);
 
-            GRANT SELECT, INSERT ON TABLE sensorthings."Commit" TO sensorthings_editor;
-            GRANT USAGE, SELECT ON SEQUENCE sensorthings."Commit_id_seq" TO sensorthings_editor;
-            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_editor;
-
-            GRANT SELECT ON TABLE sensorthings."Commit" TO sensorthings_sensor;
-            GRANT USAGE, SELECT ON SEQUENCE sensorthings."Commit_id_seq" TO sensorthings_sensor;
-            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_sensor;
-
-            GRANT SELECT, INSERT ON TABLE sensorthings."Commit" TO sensorthings_obs_manager;
-            GRANT USAGE, SELECT ON SEQUENCE sensorthings."Commit_id_seq" TO sensorthings_obs_manager;
-            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_obs_manager;
-
-            -- Grant permissions to the roles on the versioned tables
-            GRANT CREATE, USAGE ON SCHEMA sensorthings_history TO sensorthings_admin;
-            GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings_history TO sensorthings_admin;
-
-            GRANT USAGE ON SCHEMA sensorthings_history TO sensorthings_viewer;
-            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings_history TO sensorthings_viewer;
-
-            GRANT USAGE ON SCHEMA sensorthings_history TO sensorthings_editor;
-            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings_history TO sensorthings_editor;
-
-            GRANT USAGE ON SCHEMA sensorthings_history TO sensorthings_sensor;
-            GRANT INSERT ON TABLE sensorthings_history."Observation" TO sensorthings_sensor;
-            GRANT INSERT ON TABLE sensorthings_history."Datastream" TO sensorthings_sensor;
-
-            GRANT USAGE ON SCHEMA sensorthings_history TO sensorthings_obs_manager;
-            GRANT INSERT, UPDATE, DELETE, SELECT ON TABLE sensorthings_history."Observation" TO sensorthings_obs_manager;
-            GRANT INSERT ON TABLE sensorthings_history."Datastream" TO sensorthings_obs_manager;
         END IF;
     END IF;
 END $body$;

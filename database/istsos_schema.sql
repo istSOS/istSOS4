@@ -1,8 +1,13 @@
-CREATE EXTENSION IF NOT exists postgis;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE SCHEMA sensorthings;
+
+CREATE ROLE administrator WITH CREATEROLE;
+GRANT CREATE, USAGE ON SCHEMA sensorthings TO administrator;
+GRANT CREATE, USAGE ON SCHEMA public TO administrator;
+
+SET ROLE administrator;
 
 CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
@@ -258,7 +263,7 @@ BEGIN
 END $$;
 
 -- Create the trigger function
-CREATE OR REPLACE FUNCTION delete_related_historical_locations() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION sensorthings.delete_related_historical_locations() RETURNS TRIGGER AS $$
 BEGIN
     -- Delete HistoricalLocations where the thing_id matches the deleted Location's thing_id
     DELETE FROM sensorthings."HistoricalLocation"
@@ -276,7 +281,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER before_location_delete
 BEFORE DELETE ON sensorthings."Location"
 FOR EACH ROW
-EXECUTE FUNCTION delete_related_historical_locations();
+EXECUTE FUNCTION sensorthings.delete_related_historical_locations();
 
 CREATE OR REPLACE FUNCTION sensorthings.count_estimate(
 	query text)
@@ -284,7 +289,7 @@ CREATE OR REPLACE FUNCTION sensorthings.count_estimate(
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
-AS $BODY$
+AS $$
 declare
     rec record;
 
@@ -302,7 +307,7 @@ end loop;
 
 return rows;
 end
-$BODY$;
+$$;
 
 CREATE OR REPLACE FUNCTION sensorthings.expand(
     query_ text,
@@ -321,7 +326,7 @@ CREATE OR REPLACE FUNCTION sensorthings.expand(
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
-AS $BODY$
+AS $$
 DECLARE
     result jsonb;
     next_link text;
@@ -432,7 +437,7 @@ BEGIN
 	END IF;
 
 END;
-$BODY$;
+$$;
 
 CREATE OR REPLACE FUNCTION sensorthings.expand_many2many(
 	query_ text,
@@ -452,7 +457,7 @@ CREATE OR REPLACE FUNCTION sensorthings.expand_many2many(
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
-AS $BODY$
+AS $$
 DECLARE
     result jsonb;
     next_link text;
@@ -565,83 +570,17 @@ BEGIN
     
     RETURN json_build_object(table_, result, table_ || '@iot.nextLink', next_link);
 END;
-$BODY$;
+$$;
+
+RESET ROLE;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO administrator;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO administrator;
 
 DO $$
 BEGIN
-
-    -- Create the admin role
-    CREATE ROLE sensorthings_admin WITH CREATEROLE;
-    GRANT CREATE, USAGE ON SCHEMA sensorthings TO sensorthings_admin;
-    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_admin;
-    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_admin;
-    
     EXECUTE format(
-        'CREATE USER %I WITH ENCRYPTED PASSWORD %L CREATEROLE IN ROLE sensorthings_admin',
+        'CREATE USER %I WITH ENCRYPTED PASSWORD %L CREATEROLE IN ROLE administrator',
         current_setting('custom.user'),
         current_setting('custom.password')
     );
-    
-    IF current_setting('custom.authorization', true)::boolean THEN
-
-        -- Create the "User" table if it doesn't exist
-        CREATE TABLE IF NOT EXISTS sensorthings."User"( 
-            "id" BIGSERIAL NOT NULL PRIMARY KEY,
-            "username" VARCHAR(255) UNIQUE NOT NULL,
-            "contact" jsonb DEFAULT NULL,
-            "role" VARCHAR(255) NOT NULL CHECK (role IN ('admin', 'viewer', 'editor', 'sensor', 'obs_manager')),
-            "uri" VARCHAR(255)
-        );
-
-        INSERT INTO sensorthings."User" ("username", "role")
-        VALUES (current_setting('custom.user'), 'admin');
-
-        UPDATE sensorthings."User"
-        SET "uri" = '/Users(' || id || ')'
-        WHERE "username" = current_setting('custom.user');
-
-        -- Create roles and grant privileges
-        GRANT ALL PRIVILEGES ON TABLE sensorthings."User" TO sensorthings_admin;
-        GRANT ALL PRIVILEGES ON SEQUENCE sensorthings."User_id_seq" TO sensorthings_admin;
-        EXECUTE format(
-            'GRANT sensorthings_admin TO %I WITH ADMIN OPTION',
-            current_setting('custom.user')
-        );      
-
-        -- Create the viewer role
-        CREATE ROLE sensorthings_viewer;
-        GRANT USAGE ON SCHEMA sensorthings TO sensorthings_viewer;
-        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_viewer;
-        GRANT SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_viewer;
-        GRANT sensorthings_viewer TO sensorthings_admin WITH ADMIN OPTION;
-
-        -- Create the editor role
-        CREATE ROLE sensorthings_editor;
-        GRANT USAGE ON SCHEMA sensorthings TO sensorthings_editor;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_editor;
-        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_editor;
-        REVOKE INSERT, UPDATE, DELETE ON sensorthings."User" FROM sensorthings_editor;
-        GRANT sensorthings_editor TO sensorthings_admin WITH ADMIN OPTION;
-
-        -- Create the sensor role
-        CREATE ROLE sensorthings_sensor;
-        GRANT USAGE ON SCHEMA sensorthings TO sensorthings_sensor;
-        GRANT INSERT ON TABLE sensorthings."Observation" TO sensorthings_sensor;
-        GRANT UPDATE ("phenomenonTime", "last_foi_id", "observedArea") ON sensorthings."Datastream" TO sensorthings_sensor;
-        GRANT INSERT ON TABLE sensorthings."FeaturesOfInterest" TO sensorthings_sensor;
-        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_sensor;
-        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_sensor;
-        GRANT sensorthings_sensor TO sensorthings_admin WITH ADMIN OPTION;
-
-        -- Create the observation manager role
-        CREATE ROLE sensorthings_obs_manager;
-        GRANT USAGE ON SCHEMA sensorthings TO sensorthings_obs_manager;
-        GRANT INSERT, UPDATE, DELETE, SELECT ON TABLE sensorthings."Observation" TO sensorthings_obs_manager;
-        GRANT UPDATE ("phenomenonTime", "last_foi_id", "observedArea") ON sensorthings."Datastream" TO sensorthings_obs_manager;
-        GRANT INSERT ON TABLE sensorthings."FeaturesOfInterest" TO sensorthings_obs_manager;
-        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_obs_manager;
-        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_obs_manager;
-        GRANT sensorthings_obs_manager TO sensorthings_admin WITH ADMIN OPTION;
-
-    END IF;
 END $$;
