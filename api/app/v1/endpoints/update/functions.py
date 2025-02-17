@@ -1,6 +1,6 @@
 import json
 
-from app import VERSIONING
+from app import AUTHORIZATION, VERSIONING
 from app.utils.utils import (
     handle_associations,
     handle_datetime_fields,
@@ -10,36 +10,31 @@ from app.utils.utils import (
 from app.v1.endpoints.functions import insert_commit
 
 
-async def set_commit(
-    connection, commit_message, current_user, entity_name, entity_id
-):
-    commit_id = None
-    if VERSIONING:
-        if commit_message:
-            commit_author = (
-                current_user["uri"]
-                if current_user and current_user["role"] != "sensor"
-                else "anonymous"
-            )
-            commit_encoding_type = "text/plain"
-            commit = {
-                "message": commit_message,
-                "author": commit_author,
-                "encodingType": commit_encoding_type,
-            }
-            if current_user is not None:
-                commit["user_id"] = current_user["id"]
-            query = f"""
-                SELECT id
-                FROM sensorthings."{entity_name}"
-                WHERE id = $1;
-            """
-            selected_id = await connection.fetchval(query, entity_id)
-            if selected_id:
-                commit_id = await insert_commit(connection, commit, "UPDATE")
-        else:
+async def check_id_exists(connection, entity_name, entity_id):
+    query = f"""
+        SELECT id
+        FROM sensorthings."{entity_name}"
+        WHERE id = $1
+    """
+    return await connection.fetchval(query, entity_id)
+
+
+async def set_commit(connection, commit_message, current_user):
+    if VERSIONING or AUTHORIZATION:
+        if not commit_message:
             raise Exception("No commit message provided")
-    return commit_id
+
+        commit = {
+            "message": commit_message,
+            "author": current_user["uri"] if current_user else "anonymous",
+            "encodingType": "text/plain",
+        }
+
+        if current_user:
+            commit["user_id"] = current_user["id"]
+            if current_user["role"] != "istsos_sensor":
+                return await insert_commit(connection, commit, "UPDATE")
+    return None
 
 
 async def update_entity(

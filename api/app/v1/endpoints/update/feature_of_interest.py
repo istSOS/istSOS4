@@ -10,7 +10,11 @@ from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
-from .functions import set_commit, update_feature_of_interest_entity
+from .functions import (
+    check_id_exists,
+    set_commit,
+    update_feature_of_interest_entity,
+)
 
 v1 = APIRouter()
 
@@ -22,7 +26,7 @@ if AUTHORIZATION:
 
     user = Depends(get_current_user)
 
-if VERSIONING:
+if VERSIONING or AUTHORIZATION:
     message = Header(alias="commit-message")
 
 PAYLOAD_EXAMPLE = {
@@ -61,22 +65,37 @@ async def update_feature_of_interest(
         if not feature_of_interest_id:
             raise Exception("Feature of Interest ID not provided")
 
-        if not payload:
-            return Response(status_code=status.HTTP_200_OK)
-
-        validate_payload_keys(payload, ALLOWED_KEYS)
-
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
                     await set_role(connection, current_user)
 
+                if not await check_id_exists(
+                    connection, "FeaturesOfInterest", feature_of_interest_id
+                ):
+                    if current_user is not None:
+                        await connection.execute("RESET ROLE;")
+
+                    return JSONResponse(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        content={
+                            "code": 404,
+                            "type": "error",
+                            "message": "Feature of Interest not found.",
+                        },
+                    )
+
+                if not payload:
+                    if current_user is not None:
+                        await connection.execute("RESET ROLE;")
+                    return Response(status_code=status.HTTP_200_OK)
+
+                validate_payload_keys(payload, ALLOWED_KEYS)
+
                 commit_id = await set_commit(
                     connection,
                     commit_message,
                     current_user,
-                    "FeaturesOfInterest",
-                    feature_of_interest_id,
                 )
                 if commit_id is not None:
                     payload["commit_id"] = commit_id
