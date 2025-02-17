@@ -172,6 +172,10 @@ async def asyncpg_stream_results(
         async with connection.transaction():
             if current_user is not None:
                 await set_role(connection, current_user)
+            else:
+                if ANONYMOUS_VIEWER:
+                    current_user = {"username": "istsos_guest"}
+                    await set_role(connection, current_user)
 
             if is_count:
                 if COUNT_MODE == "LIMIT_ESTIMATE":
@@ -261,6 +265,7 @@ async def asyncpg_stream_results(
                     as_of = (
                         f'"@iot.as_of": "{as_of_value}",'
                         if VERSIONING
+                        and entity != "Commit"
                         and not single_result
                         and not from_to_value
                         else ""

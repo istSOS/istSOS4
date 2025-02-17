@@ -1,35 +1,31 @@
-from app import VERSIONING
+from app import AUTHORIZATION, VERSIONING
 from app.v1.endpoints.functions import insert_commit
 
 
 async def set_commit(
     connection, commit_message, current_user, entity_name, entity_id
 ):
-    commit_id = None
-    if VERSIONING:
-        if commit_message:
-            commit_author = (
-                current_user["uri"]
-                if current_user and current_user["role"] != "sensor"
-                else "anonymous"
-            )
-            commit_encoding_type = "text/plain"
-            commit = {
-                "message": commit_message,
-                "author": commit_author,
-                "encodingType": commit_encoding_type,
-            }
-            if current_user is not None:
-                commit["user_id"] = current_user["id"]
-            commit_id = await insert_commit(connection, commit, "DELETE")
-            query = f"""
-                UPDATE sensorthings."{entity_name}"
-                SET "commit_id" = $1
-                WHERE id = $2
-            """
-            await connection.execute(query, commit_id, entity_id)
-        else:
+    if VERSIONING or AUTHORIZATION:
+        commit_id = None
+        if not commit_message:
             raise Exception("No commit message provided")
+
+        commit = {
+            "message": commit_message,
+            "author": current_user["uri"] if current_user else "anonymous",
+            "encodingType": "text/plain",
+        }
+
+        if current_user is not None:
+            commit["user_id"] = current_user["id"]
+            if current_user["role"] != "istsos_sensor":
+                commit_id = await insert_commit(connection, commit, "DELETE")
+                query = f"""
+                    UPDATE sensorthings."{entity_name}"
+                    SET "commit_id" = $1
+                    WHERE id = $2
+                """
+                await connection.execute(query, commit_id, entity_id)
 
 
 async def delete_entity(connection, entity_name, entity_id, obs=False):
