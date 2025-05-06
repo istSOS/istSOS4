@@ -15,27 +15,33 @@
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
+from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Body, Depends, Query, status
 from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
 
-PAYLOAD_EXAMPLE = {"policy": "true"}
+PAYLOAD_EXAMPLE = {"users": ["cp1"], "policy": "true"}
+
+ALLOWED_KEYS = [
+    "users",
+    "policy",
+]
 
 
 @v1.api_route(
     "/Policies",
     methods=["PATCH"],
     tags=["Policies"],
-    summary="Update a policy",
-    description="Update a policy for a user",
+    summary="Update a Policy",
+    description="Update a Policy",
     status_code=status.HTTP_200_OK,
 )
 async def update_policy(
-    policy_name: str = Query(
-        alias="policy_name",
+    policy: str = Query(
+        alias="policy",
         description="The name of the policy to update",
     ),
     payload: dict = Body(example=PAYLOAD_EXAMPLE),
@@ -43,57 +49,70 @@ async def update_policy(
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
-        if "policy" not in payload:
-            raise Exception("Missing required properties: 'policy'")
 
         async with pgpool.acquire() as connection:
             async with connection.transaction():
-
                 if current_user is not None:
-                    await set_role(connection, current_user)
+                    if current_user["role"] != "administrator":
+                        raise InsufficientPrivilegeError
 
-                query = """
-                    SELECT tablename, cmd FROM pg_policies
-                    WHERE policyname = $1;
-                """
-                row = await connection.fetchrow(query, policy_name)
+                validate_payload_keys(payload, ALLOWED_KEYS)
 
-                if row is None:
-                    raise Exception(f"Policy '{policy_name}' not found.")
+                if payload.get("users") is not None:
+                    query = """
+                        SELECT sensorthings.add_users_to_policy($1, $2);
+                    """
+                    tablename, cmd = await connection.fetchval(
+                        query, payload["users"], policy
+                    )
+                else:
+                    query = """
+                        SELECT tablename, cmd FROM pg_policies
+                        WHERE policyname = $1;
+                    """
+                    row = await connection.fetchrow(query, policy)
+                    if row is None:
+                        raise Exception(f"Policy '{policy}' not found.")
 
-                tablename, cmd = row["tablename"], row["cmd"]
+                    tablename, cmd = row["tablename"], row["cmd"]
 
-                policy_sql = {
-                    "SELECT": 'ALTER POLICY {} ON sensorthings."{}" USING ({});'.format(
-                        policy_name, tablename, payload["policy"]
-                    ),
-                    "INSERT": 'ALTER POLICY {} ON sensorthings."{}" WITH CHECK ({});'.format(
-                        policy_name, tablename, payload["policy"]
-                    ),
-                    "UPDATE": 'ALTER POLICY {} ON sensorthings."{}" USING ({}) WITH CHECK ({});'.format(
-                        policy_name,
-                        tablename,
-                        payload["policy"],
-                        payload["policy"],
-                    ),
-                    "DELETE": 'ALTER POLICY {} ON sensorthings."{}" USING ({});'.format(
-                        policy_name, tablename, payload["policy"]
-                    ),
-                    "ALL": 'ALTER POLICY {} ON sensorthings."{}" USING ({}) WITH CHECK ({});'.format(
-                        policy_name,
-                        tablename,
-                        payload["policy"],
-                        payload["policy"],
-                    ),
-                }.get(cmd)
+                if payload.get("policy") is not None:
+                    policy_sql = {
+                        "SELECT": 'ALTER POLICY {} ON sensorthings."{}" USING ({});'.format(
+                            policy, tablename, payload["policy"]
+                        ),
+                        "INSERT": 'ALTER POLICY {} ON sensorthings."{}" WITH CHECK ({});'.format(
+                            policy, tablename, payload["policy"]
+                        ),
+                        "UPDATE": 'ALTER POLICY {} ON sensorthings."{}" USING ({}) WITH CHECK ({});'.format(
+                            policy,
+                            tablename,
+                            payload["policy"],
+                            payload["policy"],
+                        ),
+                        "DELETE": 'ALTER POLICY {} ON sensorthings."{}" USING ({});'.format(
+                            policy, tablename, payload["policy"]
+                        ),
+                        "ALL": 'ALTER POLICY {} ON sensorthings."{}" USING ({}) WITH CHECK ({});'.format(
+                            policy,
+                            tablename,
+                            payload["policy"],
+                            payload["policy"],
+                        ),
+                    }.get(cmd)
 
-                await connection.execute(policy_sql)
+                    await connection.execute(policy_sql)
 
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
 
+    except UndefinedObjectError as e:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"message": "Policy not found"},
+        )
     except InsufficientPrivilegeError:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,

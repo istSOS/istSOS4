@@ -32,21 +32,13 @@ if AUTHORIZATION:
     methods=["DELETE"],
     tags=["Policies"],
     summary="Delete a Policy",
-    description="Delete a Policy for a user",
+    description="Delete a Policy",
     status_code=status.HTTP_200_OK,
 )
 async def delete_policy(
-    policy_user: str = Query(
-        alias="policy_user",
-        description="The user to delete the policy for",
-    ),
-    policy_name: str = Query(
-        alias="policy_name",
+    policy: str = Query(
+        alias="policy",
         description="The name of the policy to delete",
-    ),
-    policy_table: str = Query(
-        alias="policy_table",
-        description="The table of the policy to delete (Location, Thing, HistoricalLocation, Sensor, ObservedProperty, Datastream, FeaturesOfInterest, Observation)",
     ),
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -55,30 +47,24 @@ async def delete_policy(
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
+                    if current_user["role"] != "administrator":
+                        raise InsufficientPrivilegeError
+
                     await set_role(connection, current_user)
 
                 query = """
-                    SELECT roles FROM pg_policies
+                    SELECT tablename FROM pg_policies
                     WHERE policyname = $1;
                 """
-                roles = await connection.fetchval(query, policy_name)
+                tablename = await connection.fetchval(query, policy)
 
-                if len(roles) == 1:
-                    query = 'DROP POLICY {} ON sensorthings."{}";'.format(
-                        policy_name, policy_table
-                    )
+                if tablename is None:
+                    raise UndefinedObjectError()
 
-                    await connection.execute(query)
-
-                if len(roles) > 1:
-                    roles.remove(policy_user)
-                    query = """
-                        ALTER POLICY
-                        {} ON sensorthings."{}" TO {};
-                    """.format(
-                        policy_name, policy_table, ", ".join(roles)
-                    )
-                    await connection.execute(query)
+                query = 'DROP POLICY {} ON sensorthings."{}";'.format(
+                    policy, tablename
+                )
+                await connection.execute(query)
 
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
@@ -92,8 +78,8 @@ async def delete_policy(
         )
     except InsufficientPrivilegeError as e:
         return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={"message": "Insufficient privilege"},
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"message": "Insufficient privileges"},
         )
     except Exception as e:
         return JSONResponse(
