@@ -17,11 +17,11 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE SCHEMA sensorthings;
 
-CREATE ROLE administrator WITH CREATEROLE;
-GRANT CREATE, USAGE ON SCHEMA sensorthings TO administrator;
-GRANT CREATE, USAGE ON SCHEMA public TO administrator;
+CREATE ROLE "administrator" WITH CREATEROLE;
+GRANT CREATE, USAGE ON SCHEMA sensorthings TO "administrator";
+GRANT CREATE, USAGE ON SCHEMA public TO "administrator";
 
-SET ROLE administrator;
+SET ROLE "administrator";
 
 CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
@@ -587,13 +587,13 @@ END;
 $$;
 
 RESET ROLE;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO administrator;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO administrator;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO "administrator";
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO "administrator";
 
 DO $$
 BEGIN
     EXECUTE format(
-        'CREATE USER %I WITH ENCRYPTED PASSWORD %L CREATEROLE IN ROLE administrator',
+        'CREATE USER %I WITH ENCRYPTED PASSWORD %L CREATEROLE IN ROLE "administrator"',
         current_setting('custom.user'),
         current_setting('custom.password')
     );
