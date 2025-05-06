@@ -17,7 +17,6 @@ import json
 from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.v1.endpoints.create.policy import create_policies
 from app.v1.endpoints.functions import insert_commit, set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UniqueViolationError
 from fastapi import APIRouter, Body, Depends, status
@@ -29,114 +28,14 @@ PAYLOAD_EXAMPLE = {
     "username": "cp1",
     "password": "qwertz",
     "uri": "https://orcid.org/0000-0004-3456-7890",
-    "permissions": {
-        "type": "viewer",
-        "policy": {
-            "location": {
-                "select": """
-                    id IN (
-                        SELECT DISTINCT tl.location_id
-                        FROM sensorthings."Thing_Location" tl
-                        WHERE tl.location_id = sensorthings."Location".id AND tl.thing_id IN (
-                            SELECT DISTINCT d.thing_id
-                            FROM sensorthings."Datastream" d
-                            WHERE d.thing_id = tl.thing_id
-                        )
-                    )
-                """,
-                "insert": "true",
-                "update": "true",
-                "delete": "true",
-            },
-            "thing": {
-                "select": """
-                    id IN (
-                        SELECT DISTINCT d.thing_id
-                        FROM sensorthings."Datastream" d
-                        WHERE d.thing_id = sensorthings."Thing".id
-                    )
-                """,
-                "insert": "true",
-                "update": "true",
-                "delete": "true",
-            },
-            "historicallocation": {
-                "select": """
-                    id IN (
-                        SELECT DISTINCT t.id
-                        FROM sensorthings."Thing" t
-                        WHERE t.id = sensorthings."HistoricalLocation".thing_id
-                    )
-                """,
-                "insert": "true",
-                "update": "true",
-                "delete": "true",
-            },
-            "observedproperty": {
-                "select": """
-                    id IN (
-                        SELECT DISTINCT d.observedproperty_id
-                        FROM sensorthings."Datastream" d
-                        WHERE d.observedproperty_id = sensorthings."ObservedProperty".id
-                    )
-                """,
-                "insert": "true",
-                "update": "true",
-                "delete": "true",
-            },
-            "sensor": {
-                "select": """
-                    id IN (
-                        SELECT DISTINCT d.sensor_id
-                        FROM sensorthings."Datastream" d
-                        WHERE d.sensor_id = sensorthings."Sensor".id
-                    )
-                """,
-                "insert": "true",
-                "update": "true",
-                "delete": "true",
-            },
-            "datastream": {
-                "select": """
-                    id IN (1, 2, 3) OR current_user::text = (
-                        SELECT u.username
-                        FROM sensorthings."User" u
-                        WHERE u.id = (
-                            SELECT c.user_id
-                            FROM sensorthings."Commit" c
-                            WHERE c.id = sensorthings."Datastream".commit_id
-                        )
-                    )
-                """,
-                "insert": "true",
-                "update": "true",
-                "delete": "true",
-            },
-            "featuresofinterest": {
-                "select": """
-                    id = (
-                        SELECT DISTINCT o.featuresofinterest_id
-                        FROM sensorthings."Observation" o
-                        WHERE o.featuresofinterest_id = sensorthings."FeaturesOfInterest".id
-                )""",
-                "insert": "true",
-                "update": "true",
-                "delete": "true",
-            },
-            "observation": {
-                "select": """
-                    datastream_id = (
-                        SELECT d.id
-                        FROM sensorthings."Datastream" d
-                        WHERE d.id = sensorthings."Observation".datastream_id
-                    )
-                """,
-                "insert": "true",
-                "update": "true",
-                "delete": "true",
-            },
-        },
-    },
+    "role": "viewer",  # viewer, editor, obs_manager, sensor, custom
+}
+
+ROLES = {
+    "viewer": "user",
+    "editor": "user",
+    "obs_manager": "sensor",
+    "sensor": "sensor",
 }
 
 
@@ -164,36 +63,29 @@ async def create_user(
                 },
             )
 
-        async with pgpool.acquire() as conn:
-            async with conn.transaction():
+        async with pgpool.acquire() as connection:
+            async with connection.transaction():
                 if (
                     "username" not in payload
                     or "password" not in payload
-                    or "permissions" not in payload
+                    or "role" not in payload
                 ):
                     return JSONResponse(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         content={
                             "code": 400,
                             "type": "error",
-                            "message": "Missing required properties: 'username' or 'password' or 'permissions'.",
+                            "message": "Missing required properties: 'username' or 'password' or 'role'.",
                         },
                     )
 
                 if current_user is not None:
-                    await set_role(conn, current_user)
+                    if current_user["role"] != "administrator":
+                        raise InsufficientPrivilegeError
+
+                    await set_role(connection, current_user)
 
                 password = payload.pop("password", None)
-
-                permissions = payload.pop("permissions", None)
-                permission_type = permissions.get("type")
-
-                if permission_type == "sensor":
-                    payload["role"] = "istsos_sensor"
-                elif permission_type == "obs_manager":
-                    payload["role"] = "istsos_obs_manager"
-                else:
-                    payload["role"] = "istsos_user"
 
                 for key in list(payload.keys()):
                     if isinstance(payload[key], dict):
@@ -208,7 +100,7 @@ async def create_user(
                     VALUES ({values_placeholders})
                     RETURNING id, username, uri;
                 """
-                user = await conn.fetchrow(query, *payload.values())
+                user = await connection.fetchrow(query, *payload.values())
 
                 if not payload.get("uri"):
                     query = """
@@ -216,31 +108,31 @@ async def create_user(
                         SET uri = $1 || $2 || $3 ||  '/Users(' || sensorthings."User".id || ')'
                         WHERE sensorthings."User".id = $4;
                     """
-                    await conn.execute(
+                    await connection.execute(
                         query, HOSTNAME, SUBPATH, VERSION, user["id"]
                     )
 
-                if payload["role"] == "istsos_sensor":
+                if payload["role"] == "sensor":
                     commit = {
                         "message": "Sensor data",
                         "author": user["uri"],
                         "encodingType": "text/plain",
                         "user_id": user["id"],
                     }
-                    await insert_commit(conn, commit, "CREATE")
+                    await insert_commit(connection, commit, "CREATE")
 
                 if current_user is not None:
-                    await conn.execute("RESET ROLE;")
+                    await connection.execute("RESET ROLE;")
 
-                if payload["role"] == "istsos_obs_manager":
-                    payload["role"] = "istsos_sensor"
+                if payload["role"] in ROLES:
+                    payload["role"] = ROLES[payload["role"]]
 
                 query = """
                     CREATE USER "{username}"
                     WITH ENCRYPTED PASSWORD '{password}'
-                    IN ROLE {role};
+                    IN ROLE "{role}";
                 """
-                await conn.execute(
+                await connection.execute(
                     query.format(
                         username=user["username"],
                         password=password,
@@ -251,33 +143,12 @@ async def create_user(
                 query = """
                     GRANT "{user}" TO "{role}";
                 """
-                await conn.execute(
+                await connection.execute(
                     query.format(
                         user=payload["username"],
                         role=current_user["username"],
                     )
                 )
-
-                if permission_type == "custom":
-                    await create_policies(
-                        conn, payload["username"], permissions["policy"]
-                    )
-                elif permission_type == "viewer":
-                    await conn.execute(
-                        f"SELECT sensorthings.viewer_policy('{payload['username']}');"
-                    )
-                elif permission_type == "editor":
-                    await conn.execute(
-                        f"SELECT sensorthings.editor_policy('{payload['username']}');"
-                    )
-                elif permission_type == "sensor":
-                    await conn.execute(
-                        f"SELECT sensorthings.sensor_policy('{payload['username']}');"
-                    )
-                else:
-                    await conn.execute(
-                        f"SELECT sensorthings.obs_manager_policy('{payload['username']}');"
-                    )
 
         return Response(status_code=status.HTTP_201_CREATED)
 

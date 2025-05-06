@@ -19,6 +19,7 @@ from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import (
     DependentObjectsStillExistError,
     InsufficientPrivilegeError,
+    UndefinedObjectError,
 )
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse, Response
@@ -46,6 +47,9 @@ async def delete_user(
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
+                    if current_user["role"] != "administrator":
+                        raise InsufficientPrivilegeError
+
                     await set_role(connection, current_user)
 
                 query = """
@@ -55,7 +59,12 @@ async def delete_user(
                 await connection.execute(query, user)
 
                 query = """
-                    DROP ROLE IF EXISTS {role};
+                    SELECT sensorthings.remove_user_from_policy($1);         
+                """
+                await connection.execute(query, user)
+
+                query = """
+                    DROP ROLE {role};
                 """
                 await connection.execute(query.format(role=user))
 
@@ -63,6 +72,13 @@ async def delete_user(
                     await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
+
+    except UndefinedObjectError as e:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"message": "User not found"},
+        )
+
     except DependentObjectsStillExistError as e:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
@@ -70,8 +86,8 @@ async def delete_user(
         )
     except InsufficientPrivilegeError as e:
         return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={"message": "Insufficient privilege"},
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"message": "Insufficient privileges"},
         )
     except Exception as e:
         return Response(
