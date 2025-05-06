@@ -22,6 +22,15 @@ async def set_commit(
     if VERSIONING or AUTHORIZATION:
         commit_id = None
         if not commit_message:
+            if current_user and current_user["role"] == "sensor":
+                return await connection.fetchval(
+                    """
+                        SELECT id FROM sensorthings."Commit"
+                        WHERE user_id = $1::bigint
+                    """,
+                    current_user["id"],
+                )
+            await connection.execute("RESET ROLE;")
             raise Exception("No commit message provided")
 
         commit = {
@@ -32,7 +41,7 @@ async def set_commit(
 
         if current_user is not None:
             commit["user_id"] = current_user["id"]
-            if current_user["role"] != "istsos_sensor":
+            if current_user["role"] != "sensor":
                 commit_id = await insert_commit(connection, commit, "DELETE")
                 query = f"""
                     UPDATE sensorthings."{entity_name}"
