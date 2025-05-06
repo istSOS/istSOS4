@@ -36,7 +36,7 @@ if AUTHORIZATION:
     user = Depends(get_current_user)
 
 if VERSIONING or AUTHORIZATION:
-    message = Header(alias="commit-message")
+    message = Header(None, alias="commit-message")
 
 
 @v1.api_route(
@@ -89,6 +89,8 @@ async def delete_observation(
                     )
 
                 if id_deleted is None:
+                    if current_user is not None:
+                        await connection.execute("RESET ROLE;")
                     return JSONResponse(
                         status_code=status.HTTP_404_NOT_FOUND,
                         content={

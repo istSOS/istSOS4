@@ -188,7 +188,7 @@ async def asyncpg_stream_results(
                 await set_role(connection, current_user)
             else:
                 if ANONYMOUS_VIEWER:
-                    current_user = {"username": "istsos_guest"}
+                    current_user = {"username": "guest"}
                     await set_role(connection, current_user)
 
             if is_count:
