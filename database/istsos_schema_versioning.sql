@@ -128,10 +128,10 @@ BEGIN
     EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I_history;', original_schema);
 
     -- Grant privileges to the administrator for sensorthings_history
-    GRANT CREATE, USAGE ON SCHEMA sensorthings_history TO administrator;
-    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings_history TO administrator;
+    GRANT CREATE, USAGE ON SCHEMA sensorthings_history TO "administrator";
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings_history TO "administrator";
 
-    SET ROLE administrator;
+    SET ROLE "administrator";
 
     -- Loop through each table in the original schema in the correct order
     FOR tablename IN
@@ -296,7 +296,7 @@ BEGIN
     -- Check if custom versioning is enabled
     IF current_setting('custom.versioning')::boolean THEN
 
-        SET ROLE administrator;
+        SET ROLE "administrator";
 
         IF NOT current_setting('custom.authorization')::boolean THEN
 
@@ -567,30 +567,30 @@ BEGIN
         RESET ROLE;
 
         -- Override grants for the administrator
-        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO administrator;
-        GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO administrator;
+        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO "administrator";
+        GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO "administrator";
 
         IF current_setting('custom.authorization')::boolean THEN
 
-            -- Override grants for the istsos_user
-            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings TO istsos_user;
-            REVOKE INSERT, UPDATE, DELETE ON sensorthings."User" FROM istsos_user;
-            REVOKE UPDATE, DELETE ON sensorthings."Commit" FROM istsos_user;
-            GRANT CREATE, USAGE ON SCHEMA sensorthings_history TO istsos_user;
-            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings_history TO istsos_user;
+            -- Override grants for the user
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings TO "user";
+            REVOKE INSERT, UPDATE, DELETE ON sensorthings."User" FROM "user";
+            REVOKE UPDATE, DELETE ON sensorthings."Commit" FROM "user";
+            GRANT CREATE, USAGE ON SCHEMA sensorthings_history TO "user";
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings_history TO "user";
 
-            -- Override grants for the istsos_guest
-            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO istsos_guest;
-            REVOKE SELECT ON sensorthings."User" FROM istsos_guest;
-            GRANT USAGE ON SCHEMA sensorthings_history TO istsos_guest;
-            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings_history TO istsos_guest;
+            -- Override grants for the guest
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO "guest";
+            REVOKE SELECT ON sensorthings."User" FROM "guest";
+            GRANT USAGE ON SCHEMA sensorthings_history TO "guest";
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings_history TO "guest";
 
-            -- Override grants for the istsos_sensor
-            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO istsos_sensor;
-            REVOKE SELECT ON sensorthings."User" FROM istsos_sensor;
-            GRANT USAGE ON SCHEMA sensorthings_history TO istsos_sensor;
-            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings_history TO istsos_sensor;
-            GRANT INSERT ON TABLE sensorthings_history."Datastream" TO istsos_sensor;
+            -- Override grants for the sensor
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO "sensor";
+            REVOKE SELECT ON sensorthings."User" FROM "sensor";
+            GRANT USAGE ON SCHEMA sensorthings_history TO "sensor";
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings_history TO "sensor";
+            GRANT INSERT ON TABLE sensorthings_history."Datastream" TO "sensor";
             
             -- Alter the traveltime views to use the security invoker
             ALTER VIEW sensorthings."Location_traveltime" SET (security_invoker = on);

@@ -16,7 +16,7 @@ DO $BODY$
 BEGIN
     IF current_setting('custom.authorization', true)::boolean THEN
 
-        SET ROLE administrator;
+        SET ROLE "administrator";
 
         -- Create the "User" table if it doesn't exist
         CREATE TABLE IF NOT EXISTS sensorthings."User"( 
@@ -37,6 +37,16 @@ BEGIN
         UPDATE sensorthings."User"
         SET "uri" = '/Users(' || id || ')'
         WHERE "username" = current_setting('custom.user');
+
+        CREATE TABLE IF NOT EXISTS sensorthings."Network" (
+            "name" VARCHAR(255) NOT NULL PRIMARY KEY
+        );
+
+        INSERT INTO sensorthings."Network" ("name")  
+        VALUES  
+            ('IDROLOGIA'),  
+            ('IDROGEOLOGIA');  
+
 
         CREATE TABLE IF NOT EXISTS sensorthings."Commit"(
             "id" BIGSERIAL NOT NULL PRIMARY KEY,
@@ -134,8 +144,8 @@ BEGIN
 
         -- Alter the Datastream table to add the commit_id column
         ALTER TABLE sensorthings."Datastream" 
-        ADD COLUMN IF NOT EXISTS "commit_id" BIGINT
-        REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
+            ADD COLUMN IF NOT EXISTS "commit_id" BIGINT REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE,
+            ADD COLUMN IF NOT EXISTS "network" VARCHAR(255) NOT NULL REFERENCES sensorthings."Network"(name);
 
         -- Create an index on the commit_id column for Datastream table
         CREATE INDEX IF NOT EXISTS "idx_datastream_commit_id" 
@@ -303,40 +313,40 @@ BEGIN
         RESET ROLE;
 
          -- Grant permissions to the administrator role
-        GRANT ALL PRIVILEGES ON TABLE sensorthings."Commit" TO administrator;
-        GRANT ALL PRIVILEGES ON SEQUENCE sensorthings."Commit_id_seq" TO administrator;
+        GRANT ALL PRIVILEGES ON TABLE sensorthings."Commit" TO "administrator";
+        GRANT ALL PRIVILEGES ON SEQUENCE sensorthings."Commit_id_seq" TO "administrator";
 
-        -- Create roles for istsos_user
-        CREATE ROLE istsos_user;
-        GRANT USAGE ON SCHEMA sensorthings TO istsos_user;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings TO istsos_user;
-        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO istsos_user;
-        REVOKE INSERT, UPDATE, DELETE ON sensorthings."User" FROM istsos_user;
-        REVOKE UPDATE, DELETE ON sensorthings."Commit" FROM istsos_user;
-        GRANT istsos_user TO administrator WITH ADMIN OPTION;
+        -- Create roles for user
+        CREATE ROLE "user";
+        GRANT USAGE ON SCHEMA sensorthings TO "user";
+        GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings TO "user";
+        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO "user";
+        REVOKE INSERT, UPDATE, DELETE ON sensorthings."User" FROM "user";
+        REVOKE UPDATE, DELETE ON sensorthings."Commit" FROM "user";
+        GRANT "user" TO "administrator" WITH ADMIN OPTION;
 
-        -- Create roles for istsos_guest
-        CREATE ROLE istsos_guest;
-        GRANT USAGE ON SCHEMA sensorthings TO istsos_guest;
-        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO istsos_guest;
-        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO istsos_guest;
-        REVOKE SELECT ON sensorthings."User" FROM istsos_guest;
-        GRANT istsos_guest TO administrator WITH ADMIN OPTION;
+        -- Create roles for guest
+        CREATE ROLE "guest";
+        GRANT USAGE ON SCHEMA sensorthings TO "guest";
+        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO "guest";
+        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO "guest";
+        REVOKE SELECT ON sensorthings."User" FROM "guest";
+        GRANT "guest" TO "administrator" WITH ADMIN OPTION;
 
-        -- Create roles for istsos_sensor
-        CREATE ROLE istsos_sensor;
-        GRANT USAGE ON SCHEMA sensorthings TO istsos_sensor;
-        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO istsos_sensor;
-        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO istsos_sensor;
-        GRANT INSERT, UPDATE, DELETE ON TABLE sensorthings."Observation" TO istsos_sensor;
-        GRANT INSERT ON TABLE sensorthings."FeaturesOfInterest" TO istsos_sensor;
-        GRANT INSERT ON TABLE sensorthings."Commit" TO istsos_sensor;
-        GRANT UPDATE ("phenomenonTime", "last_foi_id", "observedArea") ON sensorthings."Datastream" TO istsos_sensor;
-        GRANT UPDATE ("gen_foi_id") ON sensorthings."Location" TO istsos_sensor;
-        REVOKE SELECT ON sensorthings."User" FROM istsos_sensor;
-        GRANT istsos_sensor TO administrator WITH ADMIN OPTION;
+        -- Create roles for sensor
+        CREATE ROLE "sensor";
+        GRANT USAGE ON SCHEMA sensorthings TO "sensor";
+        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO "sensor";
+        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO "sensor";
+        GRANT INSERT, UPDATE, DELETE ON TABLE sensorthings."Observation" TO "sensor";
+        GRANT INSERT ON TABLE sensorthings."FeaturesOfInterest" TO "sensor";
+        GRANT INSERT ON TABLE sensorthings."Commit" TO "sensor";
+        GRANT UPDATE ("phenomenonTime", "last_foi_id", "observedArea") ON sensorthings."Datastream" TO "sensor";
+        GRANT UPDATE ("gen_foi_id") ON sensorthings."Location" TO "sensor";
+        REVOKE SELECT ON sensorthings."User" FROM "sensor";
+        GRANT "sensor" TO "administrator" WITH ADMIN OPTION;
 
-        SET ROLE administrator;
+        SET ROLE "administrator";
         
         -- Enable row level security
         ALTER TABLE sensorthings."Location" ENABLE ROW LEVEL SECURITY;
@@ -349,67 +359,37 @@ BEGIN
         ALTER TABLE sensorthings."Observation" ENABLE ROW LEVEL SECURITY;
 
         -- Create policies for row level security
-        -- Policy on Location table for istsos_guest
-        CREATE POLICY "anonymous_location"
-        ON sensorthings."Location"
-        FOR SELECT
-        TO istsos_guest
-        USING (true);
+        DO $$ 
+        DECLARE 
+            tablename TEXT;
+        BEGIN
+            FOR tablename IN 
+                SELECT unnest(ARRAY[
+                    'Location', 
+                    'Thing', 
+                    'HistoricalLocation', 
+                    'ObservedProperty', 
+                    'Sensor', 
+                    'Datastream', 
+                    'FeaturesOfInterest', 
+                    'Observation'
+                ])
+            LOOP
+                EXECUTE format(
+                    'CREATE POLICY anonymous_%s ON sensorthings.%I FOR SELECT TO "guest" USING (true);', 
+                    tablename, 
+                    tablename
+                );
+            END LOOP;
+        END $$;
 
-        -- Policy on Thing table for istsos_guest
-        CREATE POLICY "anonymous_thing"
-        ON sensorthings."Thing"
-        FOR SELECT
-        TO istsos_guest
-        USING (true);
-
-        -- Policy on HistoricalLocation table for istsos_guest
-        CREATE POLICY "anonymous_historicallocation"
-        ON sensorthings."HistoricalLocation"
-        FOR SELECT
-        TO istsos_guest
-        USING (true);
-
-        -- Policy on ObservedProperty table for istsos_guest
-        CREATE POLICY "anonymous_observedproperty"
-        ON sensorthings."ObservedProperty"
-        FOR SELECT
-        TO istsos_guest
-        USING (true);
-
-        -- Policy on Sensor table for istsos_guest
-        CREATE POLICY "anonymous_sensor"
-        ON sensorthings."Sensor"
-        FOR SELECT
-        TO istsos_guest
-        USING (true);
-
-        -- Policy on Datastream table for istsos_guest
-        CREATE POLICY "anonymous_datastream"
-        ON sensorthings."Datastream"
-        FOR SELECT
-        TO istsos_guest
-        USING (true);
-        
-        -- Policy on FeaturesOfInterest table for istsos_guest
-        CREATE POLICY "anonymous_featuresofinterest"
-        ON sensorthings."FeaturesOfInterest"
-        FOR SELECT
-        TO istsos_guest
-        USING (true);
-
-        -- Policy on Observation table for istsos_guest
-        CREATE POLICY "anonymous_observation"
-        ON sensorthings."Observation"
-        FOR SELECT
-        TO istsos_guest
-        USING (true);
-
-        CREATE OR REPLACE FUNCTION sensorthings.viewer_policy(username text)
+        CREATE OR REPLACE FUNCTION sensorthings.viewer_policy(users_ text[], policyname_ text)
         RETURNS void AS $$
         DECLARE
             tablename text;
+            user_list_ text;
         BEGIN
+            user_list_ := array_to_string(users_, ', ');
             FOR tablename IN
                 SELECT unnest(ARRAY[
                     'Location', 
@@ -426,19 +406,21 @@ BEGIN
                     'CREATE POLICY %s_viewer_%s
                     ON sensorthings.%I
                     FOR SELECT
-                    TO %I
+                    TO %s
                     USING (TRUE);',
-                    username, tablename, tablename, username
+                    policyname_, tablename, tablename, user_list_
                 );
             END LOOP;
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION sensorthings.editor_policy(username text)
+        CREATE OR REPLACE FUNCTION sensorthings.editor_policy(users_ text[], policyname_ text)
         RETURNS void AS $$
         DECLARE
             tablename text;
+            user_list_ text;
         BEGIN
+            user_list_ := array_to_string(users_, ', ');
             FOR tablename IN
                 SELECT unnest(ARRAY[
                     'Location', 
@@ -455,19 +437,21 @@ BEGIN
                     'CREATE POLICY %s_editor_%s
                     ON sensorthings.%I
                     FOR ALL
-                    TO %I
+                    TO %s
                     USING (TRUE);',
-                    username, tablename, tablename, username
+                    policyname_, tablename, tablename, user_list_
                 );
             END LOOP;
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION sensorthings.sensor_policy(username text)
+        CREATE OR REPLACE FUNCTION sensorthings.sensor_policy(users_ text[], policyname_ text)
         RETURNS void AS $$
         DECLARE
             tablename text;
+            user_list_ text;
         BEGIN
+            user_list_ := array_to_string(users_, ', ');
             FOR tablename IN
                 SELECT unnest(ARRAY[
                     'Location', 
@@ -484,9 +468,9 @@ BEGIN
                     'CREATE POLICY %s_sensor_%s_select
                     ON sensorthings.%I
                     FOR SELECT
-                    TO %I
+                    TO %s
                     USING (TRUE);',
-                    username, tablename, tablename, username
+                    policyname_, tablename, tablename, user_list_
                 );
             END LOOP;
 
@@ -494,38 +478,39 @@ BEGIN
                 'CREATE POLICY %s_sensor_observation_insert
                 ON sensorthings."Observation"
                 FOR INSERT
-                TO %I
+                TO %s
                 WITH CHECK (TRUE);',
-                username, username
+                policyname_, user_list_
             );
 
             EXECUTE format(
-                'CREATE POLICY %s_sensor_featuresffointerest_insert
+                'CREATE POLICY %s_sensor_featuresofinterest_insert
                 ON sensorthings."FeaturesOfInterest"
                 FOR INSERT
-                TO %I
+                TO %s
                 WITH CHECK (TRUE);',
-                username, username
+                policyname_, user_list_
             );
 
             EXECUTE format(
                 'CREATE POLICY %s_sensor_datastream_update
                 ON sensorthings."Datastream"
                 FOR UPDATE
-                TO %I
+                TO %s
                 USING (TRUE)
                 WITH CHECK (TRUE);',
-                username, username
+                policyname_, user_list_
             );
-
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION sensorthings.obs_manager_policy(username text)
+        CREATE OR REPLACE FUNCTION sensorthings.obs_manager_policy(users_ text[], policyname_ text)
         RETURNS void AS $$
         DECLARE
             tablename text;
+            user_list_ text;
         BEGIN
+            user_list_ := array_to_string(users_, ', ');
             FOR tablename IN
                 SELECT unnest(ARRAY[
                     'Location', 
@@ -541,9 +526,9 @@ BEGIN
                     'CREATE POLICY %s_obs_manager_%s_select
                     ON sensorthings.%I
                     FOR SELECT
-                    TO %I
+                    TO %s
                     USING (TRUE);',
-                    username, tablename, tablename, username
+                    policyname_, tablename, tablename, user_list_
                 );
             END LOOP;
 
@@ -551,29 +536,76 @@ BEGIN
                 'CREATE POLICY %s_obs_manager_observation_all
                 ON sensorthings."Observation"
                 FOR ALL
-                TO %I
+                TO %s
                 USING (TRUE);',
-                username, username
+                policyname_, user_list_
             );
 
             EXECUTE format(
                 'CREATE POLICY %s_obs_manager_featuresffointerest_insert
                 ON sensorthings."FeaturesOfInterest"
                 FOR INSERT
-                TO %I
+                TO %s
                 WITH CHECK (TRUE);',
-                username, username
+                policyname_, user_list_
             );
 
             EXECUTE format(
                 'CREATE POLICY %s_obs_manager_datastream_update
                 ON sensorthings."Datastream"
                 FOR UPDATE
-                TO %I
+                TO %s
                 USING (TRUE)
                 WITH CHECK (TRUE);',
-                username, username
+                policyname_, user_list_
             );
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE OR REPLACE FUNCTION sensorthings.remove_user_from_policy(username_ text)
+        RETURNS void AS $$
+        DECLARE
+            old_roles_ text[];
+            new_roles_ text[];
+            tablename_ text;
+            policyname_ text;
+        BEGIN
+            FOR tablename_, policyname_, old_roles_ IN
+                SELECT tablename, policyname, roles
+                FROM pg_policies
+                WHERE username_ = ANY(roles)
+            LOOP
+                new_roles_ := array_remove(old_roles_, username_);
+                IF new_roles_ = '{}' THEN
+                    EXECUTE format('DROP POLICY %I ON sensorthings.%I', policyname_, tablename_);
+                ELSE
+                    EXECUTE format('ALTER POLICY %I ON sensorthings.%I TO %s', policyname_, tablename_, array_to_string(new_roles_, ','));
+                END IF;
+            END LOOP;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE OR REPLACE FUNCTION sensorthings.add_users_to_policy(users_ text[], policyname_ text)
+        RETURNS TABLE(tablename_ text, cmd_ text) AS $$
+        DECLARE
+            tablename_ text;
+            old_roles_ text[];
+            new_roles_ text[];
+            cmd_ text;
+        BEGIN
+            SELECT tablename, roles, cmd INTO tablename_, old_roles_, cmd_
+            FROM pg_policies
+            WHERE policyname = policyname_;
+
+            IF tablename_ IS NULL THEN
+                RAISE EXCEPTION USING ERRCODE = '42704';
+            END IF;
+            
+            new_roles_ := old_roles_ || users_;
+            
+            EXECUTE format('ALTER POLICY %I ON sensorthings.%I TO %s', policyname_, tablename_, array_to_string(new_roles_, ','));
+
+            RETURN QUERY SELECT tablename_, cmd_; 
         END;
         $$ LANGUAGE plpgsql;
 
