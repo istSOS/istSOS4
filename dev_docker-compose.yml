@@ -110,6 +110,15 @@ services:
     volumes:
       - ./docs/mkdocs:/docs
 
+  # You might need to run `sudo chown -R $USER schemaspy/` to fix permissions
+  # schemaspy:
+  #   image: schemaspy/schemaspy:6.2.4
+  #   volumes:
+  #     - ./database/schemaspy/sensorthings_history:/output
+  #   command: [ "-t", "pgsql11", "-db", "istsos", "-host", "database", "-port", "5432", "-s", "sensorthings_history", "-u", "postgres", "-p", "postgres", "-vizjs" ]
+  #   depends_on:
+  #     - database
+
 volumes:
   v-istsos4-database-data:
     name: v-istsos4-database-data

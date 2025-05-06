@@ -34,29 +34,29 @@ if AUTHORIZATION and not ANONYMOUS_VIEWER:
     "/Policies",
     methods=["GET"],
     tags=["Policies"],
-    summary="Get all policies",
-    description="Returns all the policies provided by this api (subject to any parameters set)",
+    summary="Get Policies",
+    description="Get Policies",
     status_code=status.HTTP_200_OK,
 )
 async def get_policies(
-    policy_user: str = Query(
+    user: str = Query(
         None,
-        alias="policy_user",
+        alias="user",
         description="The user to get the policies for",
     ),
-    policy_name: str = Query(
+    policy: str = Query(
         None,
-        alias="policy_name",
+        alias="policy",
         description="The name of the policy to get",
     ),
-    policy_table: str = Query(
+    table: str = Query(
         None,
-        alias="policy_table",
+        alias="table",
         description="The table of the policy to get (Location, Thing, HistoricalLocation, Sensor, ObservedProperty, Datastream, FeaturesOfInterest, Observation)",
     ),
-    policy_operation: str = Query(
+    operation: str = Query(
         None,
-        alias="policy_operation",
+        alias="operation",
         description="The operation of the policy to get (SELECT, INSERT, UPDATE, DELETE, ALL)",
     ),
     current_user=user,
@@ -66,26 +66,29 @@ async def get_policies(
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
+                    if current_user["role"] != "administrator":
+                        raise InsufficientPrivilegeError
+
                     await set_role(connection, current_user)
 
                 params = []
                 conditions = []
 
-                if policy_user is not None:
+                if user is not None:
                     conditions.append(f"${len(params) + 1} = ANY (roles)")
-                    params.append(policy_user)
+                    params.append(user)
 
-                if policy_name is not None:
+                if policy is not None:
                     conditions.append(f"policyname = ${len(params) + 1}")
-                    params.append(str(policy_name))
+                    params.append(str(policy))
 
-                if policy_table is not None:
+                if table is not None:
                     conditions.append(f"tablename = ${len(params) + 1}")
-                    params.append(policy_table)
+                    params.append(table)
 
-                if policy_operation is not None:
+                if operation is not None:
                     conditions.append(f"cmd = ${len(params) + 1}")
-                    params.append(policy_operation)
+                    params.append(operation)
 
                 query = """
                     SELECT row_to_json(t) AS policies
