@@ -77,6 +77,7 @@ from app.v1.endpoints.update import (
 from app.v1.endpoints.update import policy as update_policy
 from app.v1.endpoints.update import sensor as update_sensor
 from app.v1.endpoints.update import thing as update_thing
+from app.v1.endpoints.update import user as update_user
 from fastapi import FastAPI
 
 if AUTHORIZATION:
@@ -140,11 +141,12 @@ v1 = FastAPI(
     swagger_ui_parameters={"defaultModelsExpandDepth": -1},
 )
 
-# Register the user endpoint
+# Register the authorization endpoints (login, user, policy)
 if AUTHORIZATION:
     v1.include_router(login.v1)
     v1.include_router(read_user.v1)
     v1.include_router(create_user.v1)
+    v1.include_router(update_user.v1)
     v1.include_router(delete_user.v1)
     v1.include_router(read_policy.v1)
     v1.include_router(create_policy.v1)
