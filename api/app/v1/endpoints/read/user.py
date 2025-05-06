@@ -44,26 +44,30 @@ async def get_users(
     pool=Depends(get_pool),
 ):
     try:
-        async with pool.acquire() as conn:
-            async with conn.transaction():
+        async with pool.acquire() as connection:
+            async with connection.transaction():
                 if current_user is not None:
-                    await set_role(conn, current_user)
+                    if current_user["role"] != "administrator":
+                        raise InsufficientPrivilegeError
+
+                    await set_role(connection, current_user)
 
                 query = """
                     SELECT row_to_json(t) AS users
                     FROM (SELECT * FROM sensorthings."User") t;
                 """
-                users = await conn.fetch(query)
+                users = await connection.fetch(query)
 
                 users = [ujson.loads(record["users"]) for record in users]
 
                 if current_user is not None:
-                    await conn.execute("RESET ROLE;")
+                    await connection.execute("RESET ROLE;")
 
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
                     content={"value": users},
                 )
+
     except InsufficientPrivilegeError:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
