@@ -46,7 +46,7 @@ async def set_commit(connection, commit_message, current_user):
 
         if current_user:
             commit["user_id"] = current_user["id"]
-            if current_user["role"] != "istsos_sensor":
+            if current_user["role"] != "sensor":
                 return await insert_commit(connection, commit, "UPDATE")
     return None
 

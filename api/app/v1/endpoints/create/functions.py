@@ -30,29 +30,36 @@ from asyncpg.types import Range
 
 
 async def set_commit(connection, commit_message, current_user):
-    if VERSIONING or AUTHORIZATION:
-        if not commit_message:
-            if current_user and current_user["role"] == "istsos_sensor":
-                return await connection.fetchval(
-                    """
-                        SELECT id FROM sensorthings."Commit"
-                        WHERE user_id = $1::bigint
-                    """,
-                    current_user["id"],
-                )
-            raise Exception("No commit message provided")
+    if not (VERSIONING or AUTHORIZATION):
+        return None
 
-        commit = {
-            "message": commit_message,
-            "author": current_user["uri"] if current_user else "anonymous",
-            "encodingType": "text/plain",
-        }
+    if current_user and current_user["role"] == "sensor":
+        if commit_message:
+            await connection.execute("RESET ROLE;")
+            raise Exception("Sensor cannot provide commit message")
 
-        if current_user:
-            commit["user_id"] = current_user["id"]
-            if current_user["role"] != "istsos_sensor":
-                return await insert_commit(connection, commit, "CREATE")
-    return None
+        return await connection.fetchval(
+            """
+                SELECT id FROM sensorthings."Commit"
+                WHERE user_id = $1::bigint
+            """,
+            current_user["id"],
+        )
+
+    if not commit_message:
+        await connection.execute("RESET ROLE;")
+        raise Exception("No commit message provided")
+
+    commit = {
+        "message": commit_message,
+        "author": current_user["uri"] if current_user else "anonymous",
+        "encodingType": "text/plain",
+    }
+
+    if current_user:
+        commit["user_id"] = current_user["id"]
+
+    return await insert_commit(connection, commit, "CREATE")
 
 
 async def create_entity(connection, entity_name, payload):
