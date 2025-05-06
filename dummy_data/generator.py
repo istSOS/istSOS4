@@ -341,59 +341,45 @@ async def generate_datastreams(conn, commit_id):
 
     datastreams = []
     cnt = 1
+    network = None
     for i in range(1, n_things + 1):
         for j in range(1, n_observed_properties + 1):
-            unitOfMeasurement = json.dumps(
-                {
-                    "name": "Centigrade",
-                    "symbol": "C",
-                    "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen",
-                }
-            )
-            description = f"datastream {cnt}"
-            name = f"datastream name {cnt}"
-            observationType = "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"
-            thing_id = i
-            sensor_id = cnt
-            observedproperty_id = j
+            if authorization:
+                network = random.choice(["IDROLOGIA", "IDROGEOLOGIA"])
+
+            datastream = {
+                "unitOfMeasurement": json.dumps(
+                    {
+                        "name": "Centigrade",
+                        "symbol": "C",
+                        "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen",
+                    }
+                ),
+                "description": f"datastream {cnt}",
+                "name": f"datastream name {cnt}",
+                "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement",
+                "thing_id": i,
+                "sensor_id": cnt,
+                "observedproperty_id": j,
+            }
             if commit_id is not None:
-                datastreams.append(
-                    (
-                        unitOfMeasurement,
-                        description,
-                        name,
-                        observationType,
-                        thing_id,
-                        sensor_id,
-                        observedproperty_id,
-                        commit_id,
-                    )
-                )
-            else:
-                datastreams.append(
-                    (
-                        unitOfMeasurement,
-                        description,
-                        name,
-                        observationType,
-                        thing_id,
-                        sensor_id,
-                        observedproperty_id,
-                    )
-                )
+                datastream["commit_id"] = commit_id
+
+            if network is not None:
+                datastream["network"] = network
+
+            datastreams.append(datastream)
             cnt += 1
 
-    if commit_id is not None:
-        insert_sql = """
-            INSERT INTO sensorthings."Datastream" ("unitOfMeasurement", description, name, "observationType", thing_id, sensor_id, observedproperty_id, commit_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        """
-    else:
-        insert_sql = """
-            INSERT INTO sensorthings."Datastream" ("unitOfMeasurement", description, name, "observationType", thing_id, sensor_id, observedproperty_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-        """
-    await conn.executemany(insert_sql, datastreams)
+    keys = ", ".join(f'"{key}"' for key in datastream.keys())
+    values_placeholders = ", ".join(f"${i+1}" for i in range(len(datastream)))
+
+    insert_sql = f"""
+        INSERT INTO sensorthings."Datastream" ({keys})
+        VALUES ({values_placeholders})
+    """
+    for datastream in datastreams:
+        await conn.execute(insert_sql, *datastream.values())
 
 
 async def generate_featuresofinterest(conn, commit_id):
