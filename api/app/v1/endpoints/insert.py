@@ -2,7 +2,7 @@ import json
 import traceback
 from datetime import datetime
 
-from app import DEBUG, EPSG, HOSTNAME, SUBPATH, VERSION
+from app import DEBUG, EPSG, ST_AGGREGATE, HOSTNAME, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
@@ -20,6 +20,7 @@ try:
         from app.utils.utils import response2jsonfile
 except:
     DEBUG = 0
+
 
 
 @v1.api_route("/CreateObservations", methods=["POST"])
@@ -1157,10 +1158,10 @@ async def update_datastream_last_foi_id(conn, foi_id, datastream_id):
         await conn.execute(update_query, foi_id, datastream_id)
         await update_datastream_observedArea(conn, datastream_id, foi_id)
 
-
 async def update_datastream_observedArea(conn, datastream_id, foi_id):
     async with conn.transaction():
-        update_query = f"""
+        if ST_AGGREGATE == "CONVEX_HULL" :
+            update_query = f"""
             UPDATE sensorthings."Datastream"
             SET "observedArea" = ST_ConvexHull(
                 ST_Collect(
@@ -1174,4 +1175,21 @@ async def update_datastream_observedArea(conn, datastream_id, foi_id):
             )
             WHERE id = $2;
         """
-        await conn.execute(update_query, foi_id, datastream_id)
+            await conn.execute(update_query, foi_id, datastream_id)
+        else:
+            update_query = f"""
+            UPDATE sensorthings."Datastream"
+            SET "observedArea" = ST_SetSRID(
+            ST_Extent(
+                ST_Collect(
+                    "observedArea",
+                    (
+                        SELECT "feature"
+                        FROM sensorthings."FeaturesOfInterest"
+                        WHERE id = $1
+                    )
+                )
+            ), {EPSG})
+            WHERE id = $2;
+        """
+            await conn.execute(update_query, foi_id, datastream_id)
