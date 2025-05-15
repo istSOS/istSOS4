@@ -4,6 +4,7 @@ import os
 import random
 from datetime import datetime, time
 
+from api.app.v1.endpoints.delete import EPSG, ST_Aggregate
 import asyncpg
 import isodate
 from asyncpg.types import Range
@@ -21,6 +22,7 @@ date = (
 )
 chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL"))
 epsg = int(os.getenv("EPSG"))
+st_aggregate = (os.getenv("ST_AGGREGATE"))
 
 pgpool = None
 
@@ -347,7 +349,8 @@ async def update_datastream_observed_area(conn):
                 geometries.append(geometry)
 
         if geometries:
-            query = f"""
+            if st_aggregate == "CONVEX_HULL":
+                query = f"""
                 UPDATE sensorthings."Datastream"
                 SET "observedArea" = ST_ConvexHull(
                     ST_Collect(
@@ -355,7 +358,17 @@ async def update_datastream_observed_area(conn):
                     )
                 )
                 WHERE id = $1;
-            """
+                """
+            else:
+                query = f"""
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = Set_SRID(ST_Extent(
+                    ST_Collect(
+                        ARRAY[{', '.join(f"'{g}'::geometry" for g in geometries)}]
+                    )
+                ), {EPSG} )
+                WHERE id = $1;
+                """
 
             # Execute the update query, passing the datastream_id
             await conn.execute(query, ds)

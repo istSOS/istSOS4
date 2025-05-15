@@ -1,6 +1,6 @@
 import traceback
 
-from app import DEBUG
+from app import DEBUG, EPSG, ST_AGGREGATE
 from app.db.asyncpg_db import get_pool
 from app.sta2rest import sta2rest
 from fastapi.responses import JSONResponse, Response
@@ -213,28 +213,40 @@ async def update_datastream_phenomenon_time(
 async def update_datastream_observedArea(conn, datastream_id, feature_id=None):
     async with conn.transaction():
         if feature_id is None:
-            query = """
+            distinct_select =  """
                 WITH distinct_features AS (
                     SELECT DISTINCT ON (foi.id) foi.feature
                     FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
                     WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1
-                ),
-                aggregated_geometry AS (
+                ),"""
+            if ST_AGGREGATE == "CONVEX_HULL":
+                query = distinct_select+"""aggregated_geometry AS (
                     SELECT ST_ConvexHull(ST_Collect(feature)) AS agg_geom
                     FROM distinct_features
                 )
                 UPDATE sensorthings."Datastream"
                 SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
                 WHERE id = $1;
-            """
+                """
+            else:
+                query = distinct_select+ f"""aggregated_geometry AS (
+                    SELECT Set_SRID(ST_Extent(ST_Collect(feature)), {EPSG}) AS agg_geom
+                    FROM distinct_features
+                )
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
+                WHERE id = $1;
+                """
             await conn.execute(query, datastream_id)
         else:
-            query = """
+            distinct_select = """
                 WITH distinct_features AS (
                     SELECT DISTINCT ON (foi.id) foi.feature
                     FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
                     WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1 AND foi.id != $2
-                ),
+                ),"""
+            if ST_AGGREGATE == "CONVEX_HULL":
+                query = distinct_select + """
                 aggregated_geometry AS (
                     SELECT ST_ConvexHull(ST_Collect(feature)) AS agg_geom
                     FROM distinct_features
@@ -242,5 +254,16 @@ async def update_datastream_observedArea(conn, datastream_id, feature_id=None):
                 UPDATE sensorthings."Datastream"
                 SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
                 WHERE id = $1;
-            """
+                """
+            else:
+                query = distinct_select + f"""
+                aggregated_geometry AS (
+                    SELECT Set_SRID(ST_Extent(ST_Collect(feature)), {EPSG}) AS agg_geom
+                    FROM distinct_features
+                )
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
+                WHERE id = $1;
+                """
+
             await conn.execute(query, datastream_id, feature_id)

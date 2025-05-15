@@ -1,7 +1,7 @@
 import json
 import traceback
 
-from app import DEBUG, EPSG, VERSIONING
+from app import DEBUG, EPSG, ST_AGGREGATE, VERSIONING
 from app.db.asyncpg_db import get_pool
 from app.sta2rest import sta2rest
 from app.utils.utils import handle_datetime_fields, handle_result_field
@@ -825,10 +825,10 @@ async def insertCommit(payload, conn):
         """
         return await conn.fetchval(query, *payload.values())
 
-
 async def update_datastream_observedArea(conn, datastream_id):
     async with conn.transaction():
-        query = """
+        if ST_AGGREGATE == "CONVEX_HULL":
+            query = """
             WITH distinct_features AS (
                 SELECT DISTINCT ON (foi.id) foi.feature
                 FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
@@ -841,5 +841,21 @@ async def update_datastream_observedArea(conn, datastream_id):
             UPDATE sensorthings."Datastream"
             SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
             WHERE id = $1;
-        """
-        await conn.execute(query, datastream_id)
+            """
+            await conn.execute(query, datastream_id)
+        else:
+            query = f"""
+            WITH distinct_features AS (
+                SELECT DISTINCT ON (foi.id) foi.feature
+                FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
+                WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1
+            ),
+            aggregated_geometry AS (
+                SELECT Set_SRID(ST_Extent(ST_Collect(feature)), {EPSG}) AS agg_geom
+                FROM distinct_features
+            )
+            UPDATE sensorthings."Datastream"
+            SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
+            WHERE id = $1;
+            """
+            await conn.execute(query, datastream_id)
