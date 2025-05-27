@@ -346,7 +346,7 @@ async def insert_datastream_entity(
         if payload.get("Observations"):
             observations = payload.pop("Observations", [])
 
-        handle_datetime_fields(payload)
+        handle_datetime_fields(payload, True)
 
         if commit_id is not None:
             payload["commit_id"] = commit_id
