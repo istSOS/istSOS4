@@ -15,6 +15,7 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
 from dateutil import parser
@@ -34,7 +35,7 @@ if AUTHORIZATION:
     user = Depends(get_current_user)
 
 if VERSIONING or AUTHORIZATION:
-    message = Header(alias="commit-message")
+    message = Header(None, alias="commit-message")
 
 PAYLOAD_EXAMPLE = [
     {
@@ -87,10 +88,7 @@ async def bulk_observations(
         async with pgpool.acquire() as conn:
             async with conn.transaction():
                 if current_user is not None:
-                    query = 'SET ROLE "{username}";'
-                    await conn.execute(
-                        query.format(username=current_user["username"])
-                    )
+                    await set_role(conn, current_user)
 
                 try:
                     commit_id = await set_commit(
@@ -168,7 +166,7 @@ async def bulk_observations(
                         )
                     except Exception as e:
                         return JSONResponse(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            status_code=status.HTTP_400_BAD_REQUEST,
                             content={
                                 "code": 400,
                                 "type": "error",
