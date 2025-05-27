@@ -19,7 +19,7 @@ from asyncpg.types import Range
 from dateutil import parser
 
 
-def handle_datetime_fields(payload):
+def handle_datetime_fields(payload, datastream=False):
     """
     Converts datetime fields in the payload to datetime objects.
 
@@ -39,7 +39,9 @@ def handle_datetime_fields(payload):
                     upper_inc=True,
                 )
             else:
-                if key == "phenomenonTime":
+                if key == "phenomenonTime" or (
+                    datastream and key == "resultTime"
+                ):
                     payload[key] = Range(
                         parser.parse(payload[key]),
                         parser.parse(payload[key]),

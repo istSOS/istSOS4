@@ -61,6 +61,9 @@ ALLOWED_KEYS = [
     "Observations",
 ]
 
+if AUTHORIZATION:
+    ALLOWED_KEYS.append("network")
+
 
 @v1.api_route(
     "/Datastreams({datastream_id})",
