@@ -46,10 +46,10 @@ BEGIN
         );
 
         INSERT INTO sensorthings."Network" ("name")  
-        VALUES  
-            ('IDROLOGIA'),  
-            ('IDROGEOLOGIA');  
-
+        VALUES
+            ('psos'),
+            ('acsot'),
+            ('defmin');
 
         CREATE TABLE IF NOT EXISTS sensorthings."Commit"(
             "id" BIGSERIAL NOT NULL PRIMARY KEY,
@@ -167,7 +167,7 @@ BEGIN
         ALTER TABLE sensorthings."Datastream" 
             ADD COLUMN IF NOT EXISTS "commit_id" BIGINT REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE,
             ADD COLUMN IF NOT EXISTS "network" VARCHAR(255) NOT NULL REFERENCES sensorthings."Network"(name);
-
+        
         -- Create an index on the commit_id column for Datastream table
         CREATE INDEX IF NOT EXISTS "idx_datastream_commit_id" 
         ON sensorthings."Datastream" 
@@ -205,7 +205,7 @@ BEGIN
         ALTER TABLE sensorthings."Observation" 
         ADD COLUMN IF NOT EXISTS "commit_id" BIGINT 
         REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
-
+        
         -- Create an index on the commit_id column for Observation table
         CREATE INDEX IF NOT EXISTS "idx_observation_commit_id" 
         ON sensorthings."Observation" 
