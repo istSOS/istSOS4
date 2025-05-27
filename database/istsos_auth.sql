@@ -554,6 +554,16 @@ BEGIN
                 WITH CHECK (TRUE);',
                 policyname_, user_list_
             );
+
+            EXECUTE format(
+                'CREATE POLICY %s_sensor_location_update
+                ON sensorthings."Location"
+                FOR UPDATE
+                TO %s
+                USING (TRUE)
+                WITH CHECK (TRUE);',
+                policyname_, user_list_
+            );
         END;
         $$ LANGUAGE plpgsql;
 
@@ -606,6 +616,16 @@ BEGIN
             EXECUTE format(
                 'CREATE POLICY %s_obs_manager_datastream_update
                 ON sensorthings."Datastream"
+                FOR UPDATE
+                TO %s
+                USING (TRUE)
+                WITH CHECK (TRUE);',
+                policyname_, user_list_
+            );
+
+            EXECUTE format(
+                'CREATE POLICY %s_obs_manager_location_update
+                ON sensorthings."Location"
                 FOR UPDATE
                 TO %s
                 USING (TRUE)
