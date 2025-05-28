@@ -34,21 +34,30 @@ async def check_id_exists(connection, entity_name, entity_id):
 
 
 async def set_commit(connection, commit_message, current_user):
-    if VERSIONING or AUTHORIZATION:
-        if not commit_message:
-            raise Exception("No commit message provided")
+    if not (VERSIONING or AUTHORIZATION):
+        return None
 
-        commit = {
-            "message": commit_message,
-            "author": current_user["uri"] if current_user else "anonymous",
-            "encodingType": "text/plain",
-        }
+    if current_user and current_user["role"] == "sensor":
+        if commit_message:
+            await connection.execute("RESET ROLE;")
+            raise Exception("Sensor cannot provide commit message")
 
-        if current_user:
-            commit["user_id"] = current_user["id"]
-            if current_user["role"] != "sensor":
-                return await insert_commit(connection, commit, "UPDATE")
-    return None
+        return None
+
+    if not commit_message:
+        await connection.execute("RESET ROLE;")
+        raise Exception("No commit message provided")
+
+    commit = {
+        "message": commit_message,
+        "author": current_user["uri"] if current_user else "anonymous",
+        "encodingType": "text/plain",
+    }
+
+    if current_user:
+        commit["user_id"] = current_user["id"]
+
+    return await insert_commit(connection, commit, "UPDATE")
 
 
 async def update_entity(
