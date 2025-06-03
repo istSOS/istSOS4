@@ -16,7 +16,7 @@ from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
+from asyncpg.exceptions import InsufficientPrivilegeError, UniqueViolationError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
 
@@ -109,6 +109,15 @@ async def create_observation(
                 "message": "Insufficient privileges.",
             },
         )
+    except UniqueViolationError:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "code": 409,
+                "type": "error",
+                "message": "Observation already exists.",
+            },
+        )
     except Exception as e:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -189,6 +198,15 @@ async def create_observation_for_datastream(
                 "message": "Insufficient privileges.",
             },
         )
+    except UniqueViolationError:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "code": 409,
+                "type": "error",
+                "message": "Observation already exists.",
+            },
+        )
     except Exception as e:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -259,6 +277,15 @@ async def create_observation_for_feature_of_interest(
                 "code": 401,
                 "type": "error",
                 "message": "Insufficient privileges.",
+            },
+        )
+    except UniqueViolationError:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "code": 409,
+                "type": "error",
+                "message": "Observation already exists.",
             },
         )
     except Exception as e:

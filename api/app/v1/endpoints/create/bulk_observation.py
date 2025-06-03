@@ -165,6 +165,8 @@ async def bulk_observations(
                             },
                         )
                     except Exception as e:
+                        if current_user is not None:
+                            await conn.execute("RESET ROLE;")
                         return JSONResponse(
                             status_code=status.HTTP_400_BAD_REQUEST,
                             content={
@@ -285,7 +287,18 @@ async def insertBulkObservation(
             parser.parse(ph_interval.upper),
             upper_inc=True,
         )
-        cols = [
+
+        observation_types = [
+            ot
+            for ot in [
+                "resultNumber",
+                "resultBoolean",
+                "resultString",
+                "resultJSON",
+            ]
+            if ot != observation_type
+        ]
+        cols = observation_types + [
             "phenomenonTime",
             observation_type,
             "resultType",
@@ -300,14 +313,30 @@ async def insertBulkObservation(
                     components[idx] = observation_type
                 idx += 1
 
-            cols = components + [
-                "resultType",
-                "datastream_id",
-                "featuresofinterest_id",
-            ]
+            cols = (
+                observation_types
+                + components
+                + [
+                    "resultType",
+                    "datastream_id",
+                    "featuresofinterest_id",
+                ]
+            )
 
         if (VERSIONING or AUTHORIZATION) and commit_id is not None:
             cols.append("commit_id")
+
+        for item in data:
+            value = item[0]
+            if observation_type == "resultNumber":
+                inserts = [None, str(value), None]
+            elif observation_type == "resultBoolean":
+                inserts = [None, str(value).lower(), None]
+            elif observation_type in {"resultString", "resultJSON"}:
+                inserts = [None, None, None]
+
+            for val in reversed(inserts):
+                item.insert(0, val)
 
         column_names = ", ".join(f'"{col}"' for col in cols)
 
