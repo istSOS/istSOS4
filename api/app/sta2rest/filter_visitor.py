@@ -1,3 +1,17 @@
+# Copyright 2025 SUPSI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Module: STA2REST filter visitor
 
@@ -11,9 +25,6 @@ from typing import Any, Callable, List, Optional, Union
 
 from app import EPSG
 from geoalchemy2 import WKTElement
-from odata_query import ast
-from odata_query import exceptions as ex
-from odata_query import visitor
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -36,6 +47,7 @@ from sqlalchemy.sql.expression import (
     ClauseElement,
     ColumnClause,
     False_,
+    Null,
     True_,
     all_,
     and_,
@@ -44,12 +56,16 @@ from sqlalchemy.sql.expression import (
     extract,
     false,
     literal,
+    null,
     or_,
     true,
 )
 from sqlalchemy.types import Date, Time
 
 from ..models import *
+from .odata_query import ast
+from .odata_query import exceptions as ex
+from .odata_query import visitor
 
 SELECT_MAPPING = {
     "encodingType": "encoding_type",
@@ -79,6 +95,9 @@ class FilterVisitor(visitor.NodeVisitor):
     def visit_Any(self, node: ast.Any) -> str:
         return any_
 
+    def visit_Null(self, node: ast.Null) -> Null:
+        return null()
+
     def visit_Integer(self, node: ast.Integer) -> BindParameter:
         return literal(node.py_val)
 
@@ -94,6 +113,9 @@ class FilterVisitor(visitor.NodeVisitor):
         return literal(node.py_val)
 
     def visit_DateTime(self, node: ast.DateTime) -> BindParameter:
+        return literal(node.py_val)
+
+    def visit_Duration(self, node: ast.Duration) -> BindParameter:
         return literal(node.py_val)
 
     ####################################################################################
@@ -202,38 +224,31 @@ class FilterVisitor(visitor.NodeVisitor):
         prop_inspect = inspect(rel_attr).property
         table_attr = None
 
-        # Check if the property is a JSON column
-        if isinstance(prop_inspect, ColumnProperty) and isinstance(
-            rel_attr.type, JSON
-        ):
+        if isinstance(prop_inspect, RelationshipProperty):
+            self.join_relationships.append(rel_attr)
+            owner_cls = prop_inspect.entity.class_
+            if attributes:
+                table_attr = getattr(owner_cls, attributes[0])
+                path = "{" + ", ".join(attributes[1:] + [node.attr]) + "}"
+                table_attr = table_attr.op("#>")(path)
+            else:
+                table_attr = getattr(owner_cls, node.attr)
+        else:
             name = SELECT_MAPPING.get(name, name)
             table_attr = getattr(globals()[str(rel_attr.table.name)], name)
-
-            for attribute in attributes:
-                table_attr = table_attr.op("->")(attribute)
-            table_attr = table_attr.op("->>")(node.attr)
-            return table_attr
-        elif not isinstance(prop_inspect, RelationshipProperty):
-            raise ValueError(f"Not a relationship: {node.owner}")
-        self.join_relationships.append(rel_attr)
-        owner_cls = prop_inspect.entity.class_
-
-        if attributes:
-            table_attr = getattr(owner_cls, attributes[0])
-            path = "{" + ", ".join(attributes[1:] + [node.attr]) + "}"
+            path = "{" + ", ".join(attributes + [node.attr]) + "}"
             table_attr = table_attr.op("#>")(path)
-        else:
-            table_attr = getattr(owner_cls, node.attr)
 
-        try:
-            return table_attr
-        except AttributeError:
+        if table_attr is None:
             raise ex.InvalidFieldException(node.attr)
+
+        return table_attr
 
     def visit_BinOp(self, node: ast.BinOp) -> Any:
         left = self.visit(node.left)
         right = self.visit(node.right)
         op = self.visit(node.op)
+
         if (
             isinstance(node.left, ast.Identifier)
             and node.left.name == "result"
@@ -262,23 +277,41 @@ class FilterVisitor(visitor.NodeVisitor):
         op = self.visit(node.comparator)
 
         if (
-            "systemTimeValidity" in left.name
-            and f"__{getattr(op, '__name__')}__" == "__eq__"
+            isinstance(node.left, ast.Identifier)
+            and "systemTimeValidity" in left.name
         ):
-            if isinstance(right, list):
-                right = functions.func.tstzrange(
-                    functions.func.timestamptz(right[0]),
-                    functions.func.timestamptz(right[1]),
-                )
-                return left.op("&&")(right)
-            return left.op("@>")(functions.func.timestamptz(right))
+            if getattr(op, "__name__", "") == "eq":
+                if isinstance(right, list):
+                    right = functions.func.tstzrange(
+                        functions.func.timestamptz(right[0]),
+                        functions.func.timestamptz(right[1]),
+                    )
+                    return left.op("&&")(right)
+                return left.op("@>")(functions.func.timestamptz(right))
 
-        if (
-            left.name == "phenomenonTime"
-            or left.name == "validTime"
+        if isinstance(node.left, ast.Attribute) and not isinstance(
+            node.right, ast.Attribute
+        ):
+            right = functions.func.to_jsonb(right)
+
+        if isinstance(node.right, ast.Attribute) and not isinstance(
+            node.left, ast.Attribute
+        ):
+            left = functions.func.to_jsonb(left)
+
+        if isinstance(node.left, ast.Identifier) and (
+            left.name in {"phenomenonTime", "validTime"}
             or (left.name == "resultTime" and left.table.name == "Datastream")
         ):
             return op(left, functions.func.tstzrange(right, right, "[]"))
+
+        if isinstance(node.right, ast.Identifier) and (
+            right.name in {"phenomenonTime", "validTime"}
+            or (
+                right.name == "resultTime" and right.table.name == "Datastream"
+            )
+        ):
+            return op(functions.func.tstzrange(left, left, "[]"), right)
 
         if (
             isinstance(node.left, ast.Identifier)
@@ -296,6 +329,7 @@ class FilterVisitor(visitor.NodeVisitor):
                 self.root_model, op, left
             )
             return or_(*right)
+
         return op(left, right)
 
     def visit_Call(self, node: ast.Call) -> ClauseElement:
@@ -496,12 +530,11 @@ class FilterVisitor(visitor.NodeVisitor):
     def func_now(self) -> functions.Function:
         return functions.now()
 
-    # TODO
-    # def func_mindatetime(self, field: ast._Node) -> functions.Function:
-    #    return functions.mindatetime(field)
+    def func_mindatetime(self):
+        return "-infinity"
 
-    # def func_maxdatetime(self) -> functions.Function:
-    #    return functions.maxdatetime()
+    def func_maxdatetime(self):
+        return "infinity"
 
     ####################################################################################
     # Math Functions

@@ -11,7 +11,7 @@ git clone https://github.com/istSOS/istSOS4.git
 To start the Docker services, run:
 
 ```sh
-docker compose -f dev_docker-compose.yml up -d
+docker compose --env-file .env.dev -f dev_docker-compose.yml up -d
 ```
 
 To switch off the services:
@@ -31,6 +31,13 @@ To switch off the services:
 ```sh
 docker compose -f edu_docker-compose.yml down
 ```
+
+To remove all images and volumes:
+
+```sh
+docker compose -f edu_docker-compose.yml down -v --rmi local
+```
+
 
 ## Use Sensor Things APIs
 
