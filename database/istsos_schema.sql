@@ -1,7 +1,28 @@
-CREATE EXTENSION IF NOT exists postgis;
+-- Copyright 2025 SUPSI
+-- 
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+-- 
+--     https://www.apache.org/licenses/LICENSE-2.0
+-- 
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
+CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE SCHEMA sensorthings;
+
+CREATE ROLE "administrator" WITH CREATEROLE;
+GRANT CREATE, USAGE ON SCHEMA sensorthings TO "administrator";
+GRANT CREATE, USAGE ON SCHEMA public TO "administrator";
+
+SET ROLE "administrator";
 
 CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
@@ -231,33 +252,33 @@ $$ LANGUAGE plpgsql;
 
 DO $$
 BEGIN
-    IF NOT current_setting('custom.duplicates', false)::boolean THEN
+    IF NOT current_setting('custom.duplicates')::boolean THEN
         -- Add the UNIQUE constraint on the 'name' column
-        EXECUTE 'ALTER TABLE sensorthings."Location"
-                 ADD CONSTRAINT unique_location_name UNIQUE ("name");';
+        ALTER TABLE sensorthings."Location"
+        ADD CONSTRAINT unique_location_name UNIQUE ("name");
 
-        EXECUTE 'ALTER TABLE sensorthings."Thing"
-                 ADD CONSTRAINT unique_thing_name UNIQUE ("name");';
+        ALTER TABLE sensorthings."Thing"
+        ADD CONSTRAINT unique_thing_name UNIQUE ("name");
 
-        EXECUTE 'ALTER TABLE sensorthings."ObservedProperty"
-                 ADD CONSTRAINT unique_observedProperty_name UNIQUE ("name");';
+        ALTER TABLE sensorthings."ObservedProperty"
+        ADD CONSTRAINT unique_observedProperty_name UNIQUE ("name");
 
-        EXECUTE 'ALTER TABLE sensorthings."Sensor"
-                 ADD CONSTRAINT unique_sensor_name UNIQUE ("name");';
+        ALTER TABLE sensorthings."Sensor"
+        ADD CONSTRAINT unique_sensor_name UNIQUE ("name");
 
-        EXECUTE 'ALTER TABLE sensorthings."Datastream"
-                 ADD CONSTRAINT unique_datastream_name UNIQUE ("name");';
+        ALTER TABLE sensorthings."Datastream"
+        ADD CONSTRAINT unique_datastream_name UNIQUE ("name");
 
-        EXECUTE 'ALTER TABLE sensorthings."FeaturesOfInterest"
-                 ADD CONSTRAINT unique_featuresOfInterest_name UNIQUE ("name");';
+        ALTER TABLE sensorthings."FeaturesOfInterest"
+        ADD CONSTRAINT unique_featuresOfInterest_name UNIQUE ("name");
 
-        EXECUTE 'ALTER TABLE sensorthings."Observation"
-                 ADD CONSTRAINT unique_observation_phenomenonTime_datastreamId UNIQUE ("phenomenonTime", "datastream_id");';
+        ALTER TABLE sensorthings."Observation"
+        ADD CONSTRAINT unique_observation_phenomenonTime_datastreamId UNIQUE ("phenomenonTime", "datastream_id");
     END IF;
 END $$;
 
 -- Create the trigger function
-CREATE OR REPLACE FUNCTION delete_related_historical_locations() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION sensorthings.delete_related_historical_locations() RETURNS TRIGGER AS $$
 BEGIN
     -- Delete HistoricalLocations where the thing_id matches the deleted Location's thing_id
     DELETE FROM sensorthings."HistoricalLocation"
@@ -275,7 +296,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER before_location_delete
 BEFORE DELETE ON sensorthings."Location"
 FOR EACH ROW
-EXECUTE FUNCTION delete_related_historical_locations();
+EXECUTE FUNCTION sensorthings.delete_related_historical_locations();
 
 CREATE OR REPLACE FUNCTION sensorthings.count_estimate(
 	query text)
@@ -283,7 +304,7 @@ CREATE OR REPLACE FUNCTION sensorthings.count_estimate(
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
-AS $BODY$
+AS $$
 declare
     rec record;
 
@@ -301,7 +322,7 @@ end loop;
 
 return rows;
 end
-$BODY$;
+$$;
 
 CREATE OR REPLACE FUNCTION sensorthings.expand(
     query_ text,
@@ -320,7 +341,7 @@ CREATE OR REPLACE FUNCTION sensorthings.expand(
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
-AS $BODY$
+AS $$
 DECLARE
     result jsonb;
     next_link text;
@@ -431,7 +452,7 @@ BEGIN
 	END IF;
 
 END;
-$BODY$;
+$$;
 
 CREATE OR REPLACE FUNCTION sensorthings.expand_many2many(
 	query_ text,
@@ -451,7 +472,7 @@ CREATE OR REPLACE FUNCTION sensorthings.expand_many2many(
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
-AS $BODY$
+AS $$
 DECLARE
     result jsonb;
     next_link text;
@@ -564,4 +585,17 @@ BEGIN
     
     RETURN json_build_object(table_, result, table_ || '@iot.nextLink', next_link);
 END;
-$BODY$;
+$$;
+
+RESET ROLE;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO "administrator";
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO "administrator";
+
+DO $$
+BEGIN
+    EXECUTE format(
+        'CREATE USER %I WITH ENCRYPTED PASSWORD %L CREATEROLE IN ROLE "administrator"',
+        current_setting('custom.user'),
+        current_setting('custom.password')
+    );
+END $$;

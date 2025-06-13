@@ -1,0 +1,37 @@
+# Tutorial non è online !
+# mancano dati per fare filtri avanzati n(dummy_data=1 & compose up?)
+# vedere eventuali filtri
+
+http://localhost:8018/istsos4/v1.1/Things(1)?$select=name,description
+
+http://localhost:8018/istsos4/v1.1/Things?$filter=properties/depth gt 5
+
+http://localhost:8018/istsos4/v1.1/Things?$expand=Datastreams
+
+http://localhost:8018/istsos4/v1.1/Observations?$filter=result mod 2 eq 0
+
+http://localhost:8018/istsos4/v1.1/Datastreams?$filter=ObservedProperty/name eq 'temperature'
+
+http://localhost:8018/istsos4/v1.1/Observations?$filter=phenomenonTime gt now() sub duration’PT1H’ #####non va mi sa
+
+http://localhost:8018/istsos4/v1.1/Things?$select=@iot.id,description
+
+http://localhost:8018/istsos4/v1.1/Things(1)?$expand=Datastreams
+
+http://localhost:8018/istsos4/v1.1/Things(17)?$select=@iot.id,description&$expand=Datastreams($select=@iot.id,description)
+
+http://localhost:8018/istsos4/v1.1/Observations?$filter=phenomenonTime gt now() sub duration'P1M'
+
+http://localhost:8018/istsos4/v1.1
+
+http://localhost:8018/istsos4/v1.1
+
+http://localhost:8018/istsos4/v1.1
+
+http://localhost:8018/istsos4/v1.1
+
+http://localhost:8018/istsos4/v1.1
+
+http://localhost:8018/istsos4/v1.1
+
+http://localhost:8018/istsos4/v1.1
