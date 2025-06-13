@@ -1,3 +1,17 @@
+# Copyright 2025 SUPSI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.orm import relationship
@@ -11,18 +25,18 @@ class Commit(Base):
 
     id = Column(Integer, primary_key=True)
     self_link = Column("@iot.selfLink", Text)
-    location_navigation_link = Column("Location@iot.navigationLink", Text)
-    thing_navigation_link = Column("Thing@iot.navigationLink", Text)
+    location_navigation_link = Column("Locations@iot.navigationLink", Text)
+    thing_navigation_link = Column("Things@iot.navigationLink", Text)
     historicallocation_navigation_link = Column(
-        "HistoricalLocation@iot.navigationLink", Text
+        "HistoricalLocations@iot.navigationLink", Text
     )
     observedproperty_navigation_link = Column(
-        "ObservedProperty@iot.navigationLink", Text
+        "ObservedProperties@iot.navigationLink", Text
     )
-    sensor_navigation_link = Column("Sensor@iot.navigationLink", Text)
-    datastream_navigation_link = Column("Datastream@iot.navigationLink", Text)
+    sensor_navigation_link = Column("Sensors@iot.navigationLink", Text)
+    datastream_navigation_link = Column("Datastreams@iot.navigationLink", Text)
     featuresofinterest_navigation_link = Column(
-        "FeatureOfInterest@iot.navigationLink", Text
+        "FeaturesOfInterest@iot.navigationLink", Text
     )
     observation_navigation_link = Column(
         "Observations@iot.navigationLink", Text
@@ -31,6 +45,7 @@ class Commit(Base):
     encoding_type = Column("encodingType", String(100))
     message = Column(String(255), nullable=False)
     date = Column(TIMESTAMP, server_default="now()")
+    action_type = Column("actionType", String(100), nullable=False)
     location = relationship("Location", back_populates="commit")
     thing = relationship("Thing", back_populates="commit")
     historicallocation = relationship(
