@@ -2,7 +2,6 @@ fastapi==0.115.4
 pydantic==2.9.2
 uvicorn==0.32.0
 asyncpg==0.30.0
-odata-query==0.10.0b1
 sqlalchemy==2.0.36
 geoalchemy2==0.15.2
 ujson==5.10.0
@@ -10,3 +9,5 @@ redis==5.2.0
 pyjwt==2.9.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.17
+python-dateutil==2.9.0.post0
+sly==0.5

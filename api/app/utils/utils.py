@@ -1,11 +1,25 @@
+# Copyright 2025 SUPSI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 
-from app import HOSTNAME, TOP_VALUE
+from app import EPSG, HOSTNAME, TOP_VALUE
 from asyncpg.types import Range
 from dateutil import parser
 
 
-def handle_datetime_fields(payload):
+def handle_datetime_fields(payload, datastream=False):
     """
     Converts datetime fields in the payload to datetime objects.
 
@@ -25,7 +39,9 @@ def handle_datetime_fields(payload):
                     upper_inc=True,
                 )
             else:
-                if key == "phenomenonTime":
+                if key == "phenomenonTime" or (
+                    datastream and key == "resultTime"
+                ):
                     payload[key] = Range(
                         parser.parse(payload[key]),
                         parser.parse(payload[key]),
@@ -183,3 +199,70 @@ def build_nextLink(full_path, count_links):
         return nextLink
 
     return None
+
+
+def validate_payload_keys(payload, keys):
+    invalid_keys = [key for key in payload.keys() if key not in keys]
+    if invalid_keys:
+        raise Exception(f"Invalid keys in payload: {', '.join(invalid_keys)}")
+
+
+def validate_epsg(key):
+    crs = key.get("crs")
+    if crs is not None:
+        epsg_code = int(crs["properties"].get("name").split(":")[1])
+        if epsg_code != EPSG:
+            raise ValueError(
+                f"Invalid EPSG code. Expected {EPSG}, got {epsg_code}"
+            )
+
+
+def handle_associations(payload, keys):
+    for key in keys:
+        if key in payload:
+            if list(payload[key].keys()) != ["@iot.id"]:
+                raise Exception(
+                    "Invalid format: Each thing dictionary should contain only the '@iot.id' key."
+                )
+            if key != "FeatureOfInterest":
+                payload[f"{key.lower()}_id"] = payload[key]["@iot.id"]
+            else:
+                payload["featuresofinterest_id"] = payload[key]["@iot.id"]
+            payload.pop(key)
+
+
+def check_iot_id_in_payload(payload, entity):
+    if len(payload) > 1:
+        raise ValueError(
+            "Invalid payload format: When providing '@iot.id', no other properties should be included."
+        )
+    if not isinstance(payload["@iot.id"], int):
+        raise ValueError(
+            f"Expected `{entity} (@iot.id)` to be an `int`, got {type(payload['@iot.id']).__name__}"
+        )
+
+
+def check_missing_properties(payload, required_properties):
+    """
+    Check if the payload contains all the required properties.
+
+    Args:
+        payload (dict): The payload containing the properties.
+        required_properties (list): The list of required properties.
+
+    Raises:
+        ValueError: If any of the required properties are missing in the payload.
+
+    Returns:
+        None
+    """
+
+    missing_properties = [
+        f"'{prop}'"
+        for prop in required_properties
+        if f"{prop.lower()}_id" not in payload
+    ]
+    if missing_properties:
+        raise ValueError(
+            f"Missing required properties {', '.join(missing_properties)}"
+        )

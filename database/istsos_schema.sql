@@ -1,8 +1,28 @@
-CREATE EXTENSION IF NOT exists postgis;
+-- Copyright 2025 SUPSI
+-- 
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+-- 
+--     https://www.apache.org/licenses/LICENSE-2.0
+-- 
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
+CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE SCHEMA sensorthings;
+
+CREATE ROLE "administrator" WITH CREATEROLE;
+GRANT CREATE, USAGE ON SCHEMA sensorthings TO "administrator";
+GRANT CREATE, USAGE ON SCHEMA public TO "administrator";
+
+SET ROLE "administrator";
 
 CREATE TABLE IF NOT EXISTS sensorthings."Location" (
     "id" BIGSERIAL NOT NULL PRIMARY KEY,
@@ -258,7 +278,7 @@ BEGIN
 END $$;
 
 -- Create the trigger function
-CREATE OR REPLACE FUNCTION delete_related_historical_locations() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION sensorthings.delete_related_historical_locations() RETURNS TRIGGER AS $$
 BEGIN
     -- Delete HistoricalLocations where the thing_id matches the deleted Location's thing_id
     DELETE FROM sensorthings."HistoricalLocation"
@@ -276,7 +296,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER before_location_delete
 BEFORE DELETE ON sensorthings."Location"
 FOR EACH ROW
-EXECUTE FUNCTION delete_related_historical_locations();
+EXECUTE FUNCTION sensorthings.delete_related_historical_locations();
 
 CREATE OR REPLACE FUNCTION sensorthings.count_estimate(
 	query text)
@@ -284,7 +304,7 @@ CREATE OR REPLACE FUNCTION sensorthings.count_estimate(
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
-AS $BODY$
+AS $$
 declare
     rec record;
 
@@ -302,7 +322,7 @@ end loop;
 
 return rows;
 end
-$BODY$;
+$$;
 
 CREATE OR REPLACE FUNCTION sensorthings.expand(
     query_ text,
@@ -321,7 +341,7 @@ CREATE OR REPLACE FUNCTION sensorthings.expand(
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
-AS $BODY$
+AS $$
 DECLARE
     result jsonb;
     next_link text;
@@ -432,7 +452,7 @@ BEGIN
 	END IF;
 
 END;
-$BODY$;
+$$;
 
 CREATE OR REPLACE FUNCTION sensorthings.expand_many2many(
 	query_ text,
@@ -452,7 +472,7 @@ CREATE OR REPLACE FUNCTION sensorthings.expand_many2many(
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
-AS $BODY$
+AS $$
 DECLARE
     result jsonb;
     next_link text;
@@ -565,57 +585,17 @@ BEGIN
     
     RETURN json_build_object(table_, result, table_ || '@iot.nextLink', next_link);
 END;
-$BODY$;
+$$;
+
+RESET ROLE;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO "administrator";
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO "administrator";
 
 DO $$
 BEGIN
-    IF current_setting('custom.authorization', true)::boolean THEN
-
-        -- Create the "User" table if it doesn't exist
-        CREATE TABLE IF NOT EXISTS sensorthings."User"( 
-            "id" BIGSERIAL NOT NULL PRIMARY KEY,
-            "username" VARCHAR(255) UNIQUE NOT NULL,
-            "contact" jsonb DEFAULT NULL,
-            "role" VARCHAR(255) NOT NULL,
-            "uri" VARCHAR(255)
-        );
-
-        -- Create roles and grant privileges
-        -- Create the admin role
-        CREATE ROLE sensorthings_admin;
-        GRANT CREATE, USAGE ON SCHEMA sensorthings TO sensorthings_admin;
-        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_admin;
-        GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_admin;
-
-        -- Create the viewer role
-        CREATE ROLE sensorthings_viewer;
-        GRANT USAGE ON SCHEMA sensorthings TO sensorthings_viewer;
-        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_viewer;
-        GRANT SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_viewer;
-
-        -- Create the editor role
-        CREATE ROLE sensorthings_editor;
-        GRANT USAGE ON SCHEMA sensorthings TO sensorthings_editor;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_editor;
-        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_editor;
-
-        -- Create the sensor role
-        CREATE ROLE sensorthings_sensor;
-        GRANT USAGE ON SCHEMA sensorthings TO sensorthings_sensor;
-        GRANT INSERT ON TABLE sensorthings."Observation" TO sensorthings_sensor;
-        GRANT UPDATE ("phenomenonTime", "last_foi_id", "observedArea") ON sensorthings."Datastream" TO sensorthings_sensor;
-        GRANT INSERT ON TABLE sensorthings."FeaturesOfInterest" TO sensorthings_sensor;
-        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_sensor;
-        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_sensor;
-
-        -- Create the observation manager role
-        CREATE ROLE sensorthings_obs_manager;
-        GRANT USAGE ON SCHEMA sensorthings TO sensorthings_obs_manager;
-        GRANT INSERT, UPDATE, DELETE, SELECT ON TABLE sensorthings."Observation" TO sensorthings_obs_manager;
-        GRANT UPDATE ("phenomenonTime", "last_foi_id", "observedArea") ON sensorthings."Datastream" TO sensorthings_obs_manager;
-        GRANT INSERT ON TABLE sensorthings."FeaturesOfInterest" TO sensorthings_obs_manager;
-        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO sensorthings_obs_manager;
-        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO sensorthings_obs_manager;
-
-    END IF;
+    EXECUTE format(
+        'CREATE USER %I WITH ENCRYPTED PASSWORD %L CREATEROLE IN ROLE "administrator"',
+        current_setting('custom.user'),
+        current_setting('custom.password')
+    );
 END $$;

@@ -1,3 +1,17 @@
+# Copyright 2025 SUPSI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 
 from app import (
@@ -15,7 +29,6 @@ from app.db.sqlalchemy_db import engine
 from app.models import *
 from app.sta2rest import sta2rest
 from geoalchemy2 import Geometry
-from odata_query.grammar import ODataLexer, ODataParser
 from sqlalchemy import (
     asc,
     case,
@@ -35,6 +48,7 @@ from sqlalchemy.sql.expression import cast
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
 from .filter_visitor import FilterVisitor
+from .odata_query.grammar import ODataLexer, ODataParser
 from .sta_parser.ast import *
 from .sta_parser.visitor import Visitor
 
@@ -85,6 +99,8 @@ class NodeVisitor(Visitor):
         """
 
         prefix, *suffix = node.name.split("/", maxsplit=1)
+        if "@iot" in prefix:
+            prefix = prefix.split(".")[1]
         converted_prefix = sta2rest.STA2REST.SELECT_MAPPING.get(prefix, prefix)
         node.name = (
             f"{converted_prefix}/{suffix[0]}" if suffix else converted_prefix
@@ -586,15 +602,14 @@ class NodeVisitor(Visitor):
                     filter_condition = None
                     if relationship.direction.name == "MANYTOONE":
                         filter_condition = getattr(
-                            entity_class,
+                            globals()[identifier],
                             f"{nested_identifier.replace('TravelTime', '').lower()}_id",
                         ) == getattr(nested_entity_class, "id")
-
                     elif relationship.direction.name == "ONETOMANY":
                         filter_condition = getattr(
                             nested_entity_class,
                             f"{identifier.replace('TravelTime', '').lower()}_id",
-                        ) == getattr(entity_class, "id")
+                        ) == getattr(globals()[identifier], "id")
                     else:
                         filter_condition = getattr(
                             entity_class, "id"
@@ -618,20 +633,6 @@ class NodeVisitor(Visitor):
                     query_estimate_count = query_estimate_count.filter(
                         filter_condition
                     )
-
-                    if node.as_of:
-                        filter_node = FilterNode(
-                            f"system_time_validity eq {node.as_of.value}"
-                        )
-                        filter, _ = self.visit_FilterNode(
-                            filter_node, nested_identifier
-                        )
-                        filters.append(filter)
-                        main_query = main_query.filter(filter)
-                        query_count = query_count.filter(filter)
-                        query_estimate_count = query_estimate_count.filter(
-                            filter
-                        )
 
             # here we create the sub queries for the expand identifiers
             if node.expand.identifiers:
@@ -946,7 +947,7 @@ def get_select_attr(attr, label, nested=False, as_of=None):
             + VERSION
             + attr
             + (
-                f"?$as_of={as_of}"
+                f"?$as_of={as_of.value}"
                 if as_of and label != "Commit@iot.navigationLink"
                 else ""
             )

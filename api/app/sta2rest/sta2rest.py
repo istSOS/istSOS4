@@ -1,3 +1,17 @@
+# Copyright 2025 SUPSI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Module: STA2REST
 
@@ -10,60 +24,13 @@ representations in a REST API.
 import re
 from datetime import datetime, timezone
 
-from app import DEBUG, VERSION, VERSIONING
-from odata_query import grammar
+from app import AUTHORIZATION, DEBUG, VERSION, VERSIONING
+from dateutil.parser import isoparse
 
 from .sta_parser.ast import *
 from .sta_parser.lexer import Lexer
 from .sta_parser.parser import Parser
 from .visitors import NodeVisitor
-
-ODATA_FUNCTIONS = {
-    # String functions
-    "substringof": 2,
-    "endswith": 2,
-    "startswith": 2,
-    "length": 1,
-    "indexof": 2,
-    "substring": (2, 3),
-    "tolower": 1,
-    "toupper": 1,
-    "trim": 1,
-    "concat": 2,
-    # Datetime functions
-    "year": 1,
-    "month": 1,
-    "day": 1,
-    "hour": 1,
-    "minute": 1,
-    "second": 1,
-    "fractionalseconds": 1,
-    "date": 1,
-    "time": 1,
-    "totaloffsetminutes": 1,
-    "now": 0,
-    "mindatetime": 0,
-    "maxdatetime": 0,
-    # Math functions
-    "round": 1,
-    "floor": 1,
-    "ceiling": 1,
-    # Geo functions
-    "geo.distance": 2,
-    "geo.length": 1,
-    "geo.intersects": 2,
-    "st_equals": 2,
-    "st_disjoint": 2,
-    "st_touches": 2,
-    "st_within": 2,
-    "st_overlaps": 2,
-    "st_crosses": 2,
-    "st_intersects": 2,
-    "st_contains": 2,
-    "st_relate": (2, 3),
-}
-grammar.ODATA_FUNCTIONS = ODATA_FUNCTIONS
-
 
 try:
     DEBUG = DEBUG
@@ -318,11 +285,13 @@ class STA2REST:
         "resultQuality": "result_quality",
         "validTime": "valid_time",
         "systemTimeValidity": "system_time_validity",
+        "actionType": "action_type",
+        "selfLink": "self_link",
     }
 
     REVERSE_SELECT_MAPPING = {v: k for k, v in SELECT_MAPPING.items()}
 
-    if VERSIONING:
+    if VERSIONING or AUTHORIZATION:
         for key in DEFAULT_SELECT:
             if key != "Commit":
                 DEFAULT_SELECT[key].append("commit_navigation_link")
@@ -405,12 +374,26 @@ class STA2REST:
         entities = uri["entities"]
 
         if query_ast.as_of:
-            value = datetime.fromisoformat(query_ast.as_of.value)
+            if query_ast.from_to:
+                raise Exception("AS_OF and FROM_TO cannot be used together")
 
-            if value.tzinfo is None:
-                query_ast.as_of.value += "Z"
+            local_timezone = datetime.now().astimezone().tzinfo
 
-            if value > datetime.now(timezone.utc):
+            as_of_value = isoparse(query_ast.as_of.value)
+
+            if as_of_value.tzinfo is None:
+                local_datetime = as_of_value.replace(tzinfo=local_timezone)
+                utc_datetime = local_datetime.astimezone(timezone.utc)
+                query_ast.as_of.value = utc_datetime.isoformat(
+                    timespec="seconds"
+                ).replace("+00:00", "Z")
+            else:
+                utc_datetime = as_of_value.astimezone(timezone.utc)
+                query_ast.as_of.value = utc_datetime.isoformat(
+                    timespec="seconds"
+                ).replace("+00:00", "Z")
+
+            if isoparse(query_ast.as_of.value) > datetime.now(timezone.utc):
                 raise Exception("AS_OF value cannot be in the future")
 
             main_entity += "TravelTime"
@@ -454,36 +437,81 @@ class STA2REST:
                         )
 
         if query_ast.from_to:
-            if (
-                len(entities) == 0
-                and not main_entity_id
-                and not query_ast.expand
-            ):
-                value1 = datetime.fromisoformat(query_ast.from_to.value1)
-                value2 = datetime.fromisoformat(query_ast.from_to.value2)
+            if query_ast.as_of:
+                raise Exception("AS_OF and FROM_TO cannot be used together")
 
-                if value1.tzinfo is None:
-                    query_ast.from_to.value1 += "Z"
+            local_timezone = datetime.now().astimezone().tzinfo
 
-                if value2.tzinfo is None:
-                    query_ast.from_to.value2 += "Z"
-
-                if value1 > value2:
-                    raise Exception(
-                        "FROM_TO value1 cannot be greater than value2"
-                    )
-
-                main_entity += "TravelTime"
-                from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
-                query_ast.filter = FilterNode(
-                    query_ast.filter.filter + f" and {from_to_filter}"
-                    if query_ast.filter
-                    else from_to_filter
-                )
+            from_to_value1 = isoparse(query_ast.from_to.value1)
+            if from_to_value1.tzinfo is None:
+                local_datetime = from_to_value1.replace(tzinfo=local_timezone)
+                utc_datetime = local_datetime.astimezone(timezone.utc)
+                query_ast.from_to.value1 = utc_datetime.isoformat(
+                    timespec="seconds"
+                ).replace("+00:00", "Z")
             else:
-                raise Exception(
-                    "FROM_TO function available only for single entity"
-                )
+                utc_datetime = from_to_value1.astimezone(timezone.utc)
+                query_ast.from_to.value1 = utc_datetime.isoformat(
+                    timespec="seconds"
+                ).replace("+00:00", "Z")
+
+            from_to_value2 = isoparse(query_ast.from_to.value2)
+            if from_to_value2.tzinfo is None:
+                local_datetime = from_to_value2.replace(tzinfo=local_timezone)
+                utc_datetime = local_datetime.astimezone(timezone.utc)
+                query_ast.from_to.value2 = utc_datetime.isoformat(
+                    timespec="seconds"
+                ).replace("+00:00", "Z")
+            else:
+                utc_datetime = from_to_value2.astimezone(timezone.utc)
+                query_ast.from_to.value2 = utc_datetime.isoformat(
+                    timespec="seconds"
+                ).replace("+00:00", "Z")
+
+            if isoparse(query_ast.from_to.value1) > isoparse(
+                query_ast.from_to.value2
+            ):
+                raise Exception("FROM_TO value1 cannot be greater than value2")
+
+            main_entity += "TravelTime"
+            entities = [
+                (entity + "TravelTime", value) for entity, value in entities
+            ]
+            from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
+            query_ast.filter = FilterNode(
+                query_ast.filter.filter + f" and {from_to_filter}"
+                if query_ast.filter
+                else from_to_filter
+            )
+            if query_ast.expand:
+                if (
+                    len(query_ast.expand.identifiers) == 1
+                    and query_ast.expand.identifiers[0].identifier == "Commit"
+                ):
+                    for identifier in query_ast.expand.identifiers:
+                        identifier.identifier = STA2REST.ENTITY_MAPPING.get(
+                            identifier.identifier, identifier.identifier
+                        )
+                        identifier.subquery = (
+                            QueryNode(
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                True,
+                            )
+                            if identifier.subquery is None
+                            else identifier.subquery
+                        )
+                else:
+                    raise Exception(
+                        "Illegal operation: FROM_TO with expand is only valid for Commit"
+                    )
 
         if DEBUG:
             print(f"Main entity: {main_entity}")
@@ -512,6 +540,23 @@ class STA2REST:
                 )
                 if entity[1]:
                     sub_query.filter = FilterNode(f"id eq {entity[1]}")
+
+                if query_ast.as_of:
+                    as_of_filter = (
+                        f"system_time_validity eq {query_ast.as_of.value}"
+                    )
+                    if sub_query.filter:
+                        sub_query.filter = FilterNode(
+                            sub_query.filter.filter + f" and {as_of_filter}"
+                        )
+
+                if query_ast.from_to:
+                    from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
+                    if sub_query.filter:
+                        sub_query.filter = FilterNode(
+                            sub_query.filter.filter + f" and {from_to_filter}"
+                        )
+
                 # Check if we are the last entity
                 if index == len(entities) - 1:
                     # Check if we have a property name
@@ -548,6 +593,9 @@ class STA2REST:
 
         if uri["single"]:
             single_result = True
+
+        if query_ast.from_to:
+            single_result = False
 
         # Check if query has an expand but not a select and does not have sub entities
         if query_ast.expand and not query_ast.select and not entities:

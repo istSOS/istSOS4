@@ -9,21 +9,11 @@ theme:
   name: "material"
   language: en
   favicon: assets/images/favicon.ico
-  logo: assets/images/android-chrome-192x192.png
+  logo: assets/images/istsos_bars_white.png
   font:
     text: Ubuntu
   palette:
     scheme: istsos
-    # - media: "(prefers-color-scheme: light)"
-    #   scheme: default
-    #   toggle:
-    #     icon: material/toggle-switch-off-outline
-    #     name: Switch to dark mode
-    # - media: "(prefers-color-scheme: dark)"
-    #   scheme: slate
-    #   toggle:
-    #     icon: material/toggle-switch
-    #     name: Switch to light mode
   extra_css:
     - extra.css
   features:
@@ -31,54 +21,34 @@ theme:
     - navigation.footer
     - navigation.indexes
     - navigation.top
+    - content.code.copy
 
 nav:
-  # SET HERE THE CONTENT PAGES IN THE APPROPRIATE CHAPTER
-  # =====================================================
-  - The Project:
-      - Introduction: project/introduction.md
-      - History: project/history.md
-      - Resources: project/resources.md
-  - User Documentation:
-      - Installation: userdocs/installation.md
-      - Configuration: userdocs/configuration.md
-      - User Guide: userdocs/userguide.md
-      - FAQ: userdocs/faq.md
-  - Developer Documentation:
-      - Installation: devdocs/installation.md
-      - Configuration: devdocs/configuration.md
-      - API: devdocs/api.md
-      - Extensions: devdocs/extensions.md
+  - Tutorial:
+      - Welcome to the istSOS4-Things tutorial: tutorial/tutorial_index.md
+      - Understanding the Principles and Functionality of istSOS4: tutorial/intro.md
+      - Installing and Configuring istSOS4: tutorial/install.md
+      - Managing Authentication & Authorization:
+          - Concepts and Theory: tutorial/authorization.md
+          - Hands-On Example (Python): tutorial/authorization_notebook.ipynb
+      - Utilizing the SensorThings API:
+          - Register Entities: tutorial/sta_entity.ipynb
+          - Register Observations: tutorial/sta_observation.ipynb
+      - Leveraging the TravelTime Extension for Reproducibility and Data Lineage: tutorial/traveltime.ipynb
+      - Utilizing Python for Data Curation and Quality: tutorial/quality.ipynb
+      - Applying Advanced Filtering Techniques for Data Retrieval: tutorial/filtering.ipynb
+      - Applying Machine Learning and AI for Time Series Data Processing: tutorial/ai.ipynb
   - Team: team.md
 
 extra_css:
   - assets/extra.css
 
-markdown_extensions:
+markdown_extensions: 
   - attr_list
-  - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - md_in_html
   - admonition
-  - pymdownx.details
   - pymdownx.superfences
-  - pymdownx.critic
-  - pymdownx.caret
-  - pymdownx.keys
-  - pymdownx.mark
-  - pymdownx.tilde
-  - pymdownx.magiclink
-  - pymdownx.highlight
-  - pymdownx.tabbed
-  - pymdownx.arithmatex:
-      generic: true
-  - footnotes
-  - toc:
-      permalink: true
 
 plugins:
   - search
-  - mkdocs-video
-  - bibtex:
-      bib_file: "./docs/refs.bib"
-  # - git-revision-date-localized
+  - mkdocs-jupyter

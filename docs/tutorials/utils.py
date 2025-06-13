@@ -70,6 +70,10 @@ class sta:
             username (str): The username of the new user
             password (str): The password of the new user
             role (str): The role of the new user
+            istos_admin_user (str): The username of the istsos admin
+            istos_admin_password (str): The password of the istsos admin
+            uri (Optional[str]): The URI of the new user
+            contact (Optional[str]): The contact of the new user
         Returns:
             requests.models.Response: The response from the API
         """
@@ -111,13 +115,13 @@ class sta:
         tmp_headers = self.headers.copy()
         if commit_message:
             tmp_headers["commit-message"] = commit_message
-        response = requests.post(
-            f"{self.base}Things", json=body, headers=tmp_headers
-        )
+        response = requests.post(f"{self.base}Things", json=body, headers=tmp_headers)
         if "unique" in response.text:
             response.status_code = 409
             logging.warning("Thing already exists")
             return response
+        if self.verbose:
+            logging.info(response.headers.get("Location"))
         response.raise_for_status()
         return response
 
@@ -286,9 +290,7 @@ class sta:
                                 headers=tmp_headers,
                             )
                             if req.status_code == 201:
-                                logging.info(
-                                    f"Observation created successfully ({i})"
-                                )
+                                logging.info(f"Observation created successfully ({i})")
                             else:
                                 logging.warning(req.text)
                                 break
@@ -321,9 +323,7 @@ class sta:
             List[Dict]: The data returned by the API.
         """
         # Query API
-        response = requests.get(
-            self.base + entity, params=params, headers=self.headers
-        )
+        response = requests.get(self.base + entity, params=params, headers=self.headers)
         decoded_url = unquote(response.url)
         logging.info(f"URL: {decoded_url}")
         if response.status_code != 200:
@@ -359,9 +359,7 @@ class sta:
                 data.extend(response_json["value"])
         return data
 
-    def get_dfs_by_datastreams(
-        self, filter, top=15000, orderby="phenomenonTime asc"
-    ):
+    def get_dfs_by_datastreams(self, filter, top=15000, orderby="phenomenonTime asc"):
         """
         Get dataframes by datastreams
         Args:
@@ -385,9 +383,7 @@ class sta:
                 # {"$top": 15000, "$orderby": "phenomenonTime asc"},$
                 travel_time=True,
             )
-            logging.info(
-                f"Number of observations: {len(observations['value'])}"
-            )
+            logging.info(f"Number of observations: {len(observations['value'])}")
             if len(observations["value"]) == 0:
                 logging.info("\n")
                 logging.info("--------------------")
@@ -436,9 +432,7 @@ class sta:
 
         return mymap
 
-    def map_datastreams(
-        self, datastreams: List[Dict], center=None
-    ) -> pd.DataFrame:
+    def map_datastreams(self, datastreams: List[Dict], center=None) -> pd.DataFrame:
         """
         Map the datastreams to a pandas dataframe
         Args:
@@ -456,9 +450,7 @@ class sta:
                 observed_area = datastream.get("observedArea", None)
                 if observed_area:
                     coordinates = observed_area["coordinates"][0]
-                    switched_coordinates = [
-                        [lat, lon] for lon, lat in coordinates
-                    ]
+                    switched_coordinates = [[lat, lon] for lon, lat in coordinates]
                     folium.Polygon(
                         locations=switched_coordinates,
                         tooltip=datastream["name"],
