@@ -1,3 +1,17 @@
+# Copyright 2025 SUPSI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import asyncio
 import json
 import os
@@ -9,19 +23,31 @@ import asyncpg
 import isodate
 from asyncpg.types import Range
 
-create_dummy_data = int(os.getenv("DUMMY_DATA"))
-delete_dummy_data = int(os.getenv("CLEAR_DATA"))
-n_things = int(os.getenv("N_THINGS"))
-n_observed_properties = int(os.getenv("N_OBSERVED_PROPERTIES"))
-interval = isodate.parse_duration(os.getenv("INTERVAL"))
-frequency = isodate.parse_duration(os.getenv("FREQUENCY"))
-date = (
-    datetime.strptime(os.getenv("START_DATETIME"), "%Y-%m-%dT%H:%M:%S.%f%z")
-    if os.getenv("START_DATETIME")
-    else datetime.combine(datetime.now().today(), time.min)
+hostname = os.getenv("HOSTNAME", "http://localhost:8018")
+subpath = os.getenv("SUBPATH", "/istsos4")
+version = os.getenv("VERSION", "/v1.1")
+versioning = int(os.getenv("VERSIONING"), 0)
+pg_db = os.getenv("POSTGRES_DB", "istsos")
+pg_user = os.getenv("ISTSOS_ADMIN", "admin")
+pg_password = os.getenv("ISTSOS_ADMIN_PASSWORD", "admin")
+pg_host = os.getenv("POSTGRES_HOST", "database")
+pg_port = os.getenv("POSTGRES_PORT", "5432")
+pg_write_port = os.getenv("POSTGRES_PORT_WRITE")
+create_dummy_data = int(os.getenv("DUMMY_DATA", 1))
+delete_dummy_data = int(os.getenv("CLEAR_DATA", 0))
+n_things = int(os.getenv("N_THINGS", 10))
+n_observed_properties = int(os.getenv("N_OBSERVED_PROPERTIES", 2))
+interval = isodate.parse_duration(os.getenv("INTERVAL", "P1Y"))
+frequency = isodate.parse_duration(os.getenv("FREQUENCY", "PT5M"))
+date = datetime.strptime(
+    os.getenv(
+        "START_DATETIME", datetime.combine(datetime.now().today(), time.min)
+    ),
+    "%Y-%m-%dT%H:%M:%S.%f%z",
 )
-chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL"))
-epsg = int(os.getenv("EPSG"))
+chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL", "P1Y"))
+epsg = int(os.getenv("EPSG", 4326))
+authorization = int(os.getenv("AUTHORIZATION", 0))
 st_aggregate = (os.getenv("ST_AGGREGATE"))
 
 pgpool = None
@@ -34,15 +60,47 @@ async def get_pool():
     Returns:
         asyncpg.pool.Pool: The connection pool object.
     """
-    global pgpool
-    if not pgpool:
-        pgpool = await asyncpg.create_pool(
-            dsn=f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@database:5432/{os.getenv('POSTGRES_DB')}"
+
+    if pg_write_port:
+        return await asyncpg.create_pool(
+            dsn=f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_write_port}/{pg_db}"
         )
-    return pgpool
+    return await asyncpg.create_pool(
+        dsn=f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_db}"
+    )
 
 
-async def generate_things(conn):
+async def get_user(conn):
+    query = """
+        SELECT id, uri
+        FROM sensorthings."User"
+        WHERE username = $1;
+    """
+    return await conn.fetchrow(query, pg_user)
+
+
+async def generate_commit(conn, user_id, user_uri):
+    if authorization:
+        query = """
+            INSERT INTO sensorthings."Commit" (author, "encodingType", message, "actionType", user_id)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id;
+        """
+        return await conn.fetchval(
+            query, user_uri, "text/plain", "dummy data", "CREATE", user_id
+        )
+    else:
+        query = """
+            INSERT INTO sensorthings."Commit" (author, "encodingType", message, "actionType")
+            VALUES ($1, $2, $3, $4)
+            RETURNING id;
+        """
+        return await conn.fetchval(
+            query, user_uri, "text/plain", "dummy data", "CREATE"
+        )
+
+
+async def generate_things(conn, commit_id):
     """
     Generate a list of things and insert them into the database.
 
@@ -52,21 +110,32 @@ async def generate_things(conn):
     Returns:
         None
     """
+
     things = []
     for i in range(1, n_things + 1):
         description = f"thing {i}"
         name = f"thing name {i}"
         properties = json.dumps({"reference": f"{i}"})
-        things.append((description, name, properties))
+        if commit_id is not None:
+            things.append((description, name, properties, commit_id))
+        else:
+            things.append((description, name, properties))
 
-    insert_sql = """
-    INSERT INTO sensorthings."Thing" (description, name, properties)
-    VALUES ($1, $2, $3)
-    """
+    if commit_id is not None:
+        insert_sql = """
+            INSERT INTO sensorthings."Thing" (description, name, properties, commit_id)
+            VALUES ($1, $2, $3, $4)
+        """
+    else:
+        insert_sql = """
+            INSERT INTO sensorthings."Thing" (description, name, properties)
+            VALUES ($1, $2, $3)
+        """
+
     await conn.executemany(insert_sql, things)
 
 
-async def generate_locations(conn):
+async def generate_locations(conn, commit_id):
     """
     Generate locations and insert them into the database.
 
@@ -76,6 +145,7 @@ async def generate_locations(conn):
     Returns:
         None
     """
+
     locations = []
     for i in range(1, n_things + 1):
         lon = random.uniform(-180, 180)
@@ -86,12 +156,23 @@ async def generate_locations(conn):
         name = f"location name {i}"
         location = f"SRID={epsg};POINT({lon} {lat})"
         encodingType = "application/geo+json"
-        locations.append((description, name, location, encodingType))
+        if commit_id is not None:
+            locations.append(
+                (description, name, location, encodingType, commit_id)
+            )
+        else:
+            locations.append((description, name, location, encodingType))
 
-    insert_sql = """
-    INSERT INTO sensorthings."Location" (description, name, location, "encodingType")
-    VALUES ($1, $2, $3::public.geometry, $4)
-    """
+    if commit_id is not None:
+        insert_sql = """
+            INSERT INTO sensorthings."Location" (description, name, location, "encodingType", commit_id)
+            VALUES ($1, $2, $3::public.geometry, $4, $5)
+        """
+    else:
+        insert_sql = """
+            INSERT INTO sensorthings."Location" (description, name, location, "encodingType")
+            VALUES ($1, $2, $3::public.geometry, $4)
+        """
     await conn.executemany(insert_sql, locations)
 
 
@@ -105,6 +186,7 @@ async def generate_things_locations(conn):
     Returns:
     None
     """
+
     things_locations = []
     for i in range(1, n_things + 1):
         thing_id = i
@@ -118,7 +200,7 @@ async def generate_things_locations(conn):
     await conn.executemany(insert_sql, things_locations)
 
 
-async def generate_historicallocations(conn):
+async def generate_historicallocations(conn, commit_id):
     """
     Generate historical locations for things and insert them into the database.
 
@@ -133,12 +215,21 @@ async def generate_historicallocations(conn):
     for i in range(1, n_things + 1):
         time += frequency
         thing_id = i
-        historicallocations.append((time, thing_id))
+        if commit_id is not None:
+            historicallocations.append((time, thing_id, commit_id))
+        else:
+            historicallocations.append((time, thing_id))
 
-    insert_sql = """
-    INSERT INTO sensorthings."HistoricalLocation" (time, thing_id)
-    VALUES ($1, $2)
-    """
+    if commit_id is not None:
+        insert_sql = """
+            INSERT INTO sensorthings."HistoricalLocation" (time, thing_id, commit_id)
+            VALUES ($1, $2, $3)
+        """
+    else:
+        insert_sql = """
+            INSERT INTO sensorthings."HistoricalLocation" (time, thing_id)
+            VALUES ($1, $2)
+        """
     await conn.executemany(insert_sql, historicallocations)
 
 
@@ -152,6 +243,7 @@ async def generate_locations_historicallocations(conn):
     Returns:
         None
     """
+
     locations_historicallocations = []
     for i in range(1, n_things + 1):
         location_id = i
@@ -167,7 +259,7 @@ async def generate_locations_historicallocations(conn):
     await conn.executemany(insert_sql, locations_historicallocations)
 
 
-async def generate_observedProperties(conn):
+async def generate_observedProperties(conn, commit_id):
     """
     Generate observed properties and insert them into the database.
 
@@ -177,21 +269,33 @@ async def generate_observedProperties(conn):
     Returns:
         None
     """
+
     observedProperties = []
     for i in range(1, n_observed_properties + 1):
         name = f"{random.choice(['Temperature', 'Humidity', 'Pressure', 'Light', 'CO2', 'Motion'])}_{i}"
         definition = f"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/{name}"
         description = f"observedProperty {i}"
-        observedProperties.append((name, definition, description))
+        if commit_id is not None:
+            observedProperties.append(
+                (name, definition, description, commit_id)
+            )
+        else:
+            observedProperties.append((name, definition, description))
 
-    insert_sql = """
-    INSERT INTO sensorthings."ObservedProperty" (name, definition, description)
-    VALUES ($1, $2, $3)
-    """
+    if commit_id is not None:
+        insert_sql = """
+            INSERT INTO sensorthings."ObservedProperty" (name, definition, description, commit_id)
+            VALUES ($1, $2, $3, $4)
+        """
+    else:
+        insert_sql = """
+            INSERT INTO sensorthings."ObservedProperty" (name, definition, description)
+            VALUES ($1, $2, $3)
+        """
     await conn.executemany(insert_sql, observedProperties)
 
 
-async def generate_sensors(conn):
+async def generate_sensors(conn, commit_id):
     """
     Generate a list of sensors with random descriptions, names, encoding types, and metadata.
 
@@ -201,22 +305,34 @@ async def generate_sensors(conn):
     Returns:
         None
     """
+
     sensors = []
     for i in range(1, n_things * n_observed_properties + 1):
         description = f"sensor {i}"
         name = f"sensor name {i}"
         encodingType = "application/pdf"
         metadata = f"{random.choice(['Temperature', 'Humidity', 'Pressure', 'Light', 'CO2', 'Motion'])} sensor"
-        sensors.append((description, name, encodingType, metadata))
+        if commit_id is not None:
+            sensors.append(
+                (description, name, encodingType, metadata, commit_id)
+            )
+        else:
+            sensors.append((description, name, encodingType, metadata))
 
-    insert_sql = """
-    INSERT INTO sensorthings."Sensor" (description, name, "encodingType", metadata)
-    VALUES ($1, $2, $3, $4)
-    """
+    if commit_id is not None:
+        insert_sql = """
+            INSERT INTO sensorthings."Sensor" (description, name, "encodingType", metadata, commit_id)
+            VALUES ($1, $2, $3, $4, $5)
+        """
+    else:
+        insert_sql = """
+            INSERT INTO sensorthings."Sensor" (description, name, "encodingType", metadata)
+            VALUES ($1, $2, $3, $4)
+        """
     await conn.executemany(insert_sql, sensors)
 
 
-async def generate_datastreams(conn):
+async def generate_datastreams(conn, commit_id):
     """
     Generate datastreams and insert them into the database.
 
@@ -226,44 +342,51 @@ async def generate_datastreams(conn):
     Returns:
         None
     """
+
     datastreams = []
     cnt = 1
+    network = None
     for i in range(1, n_things + 1):
         for j in range(1, n_observed_properties + 1):
-            unitOfMeasurement = json.dumps(
-                {
-                    "name": "Centigrade",
-                    "symbol": "C",
-                    "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen",
-                }
-            )
-            description = f"datastream {cnt}"
-            name = f"datastream name {cnt}"
-            observationType = "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"
-            thing_id = i
-            sensor_id = cnt
-            observedproperty_id = j
-            datastreams.append(
-                (
-                    unitOfMeasurement,
-                    description,
-                    name,
-                    observationType,
-                    thing_id,
-                    sensor_id,
-                    observedproperty_id,
-                )
-            )
+            if authorization:
+                network = random.choice(["IDROLOGIA", "IDROGEOLOGIA"])
+
+            datastream = {
+                "unitOfMeasurement": json.dumps(
+                    {
+                        "name": "Centigrade",
+                        "symbol": "C",
+                        "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen",
+                    }
+                ),
+                "description": f"datastream {cnt}",
+                "name": f"datastream name {cnt}",
+                "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement",
+                "thing_id": i,
+                "sensor_id": cnt,
+                "observedproperty_id": j,
+            }
+            if commit_id is not None:
+                datastream["commit_id"] = commit_id
+
+            if network is not None:
+                datastream["network"] = network
+
+            datastreams.append(datastream)
             cnt += 1
 
-    insert_sql = """
-    INSERT INTO sensorthings."Datastream" ("unitOfMeasurement", description, name, "observationType", thing_id, sensor_id, observedproperty_id)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    keys = ", ".join(f'"{key}"' for key in datastream.keys())
+    values_placeholders = ", ".join(f"${i+1}" for i in range(len(datastream)))
+
+    insert_sql = f"""
+        INSERT INTO sensorthings."Datastream" ({keys})
+        VALUES ({values_placeholders})
     """
-    await conn.executemany(insert_sql, datastreams)
+    for datastream in datastreams:
+        await conn.execute(insert_sql, *datastream.values())
 
 
-async def generate_featuresofinterest(conn):
+async def generate_featuresofinterest(conn, commit_id):
     """
     Generate features of interest and insert them into the database.
 
@@ -273,6 +396,7 @@ async def generate_featuresofinterest(conn):
     Returns:
         None
     """
+
     featuresofinterest = []
     for i in range(1, n_things + 1):
         lon = random.uniform(-180, 180)
@@ -283,28 +407,58 @@ async def generate_featuresofinterest(conn):
         name = f"featuresofinterest name {i}"
         encodingType = "application/geo+json"
         feature = f"SRID={epsg};POINT({lon} {lat})"
-        featuresofinterest.append((description, name, encodingType, feature))
+        if commit_id is not None:
+            featuresofinterest.append(
+                (description, name, encodingType, feature, commit_id)
+            )
+        else:
+            featuresofinterest.append(
+                (description, name, encodingType, feature)
+            )
 
-    insert_sql = """
-    INSERT INTO sensorthings."FeaturesOfInterest" (description, name, "encodingType", feature)
-    VALUES ($1, $2, $3, $4::public.geometry)
-    """
+    if commit_id is not None:
+        insert_sql = """
+            INSERT INTO sensorthings."FeaturesOfInterest" (description, name, "encodingType", feature, commit_id)
+            VALUES ($1, $2, $3, $4::public.geometry, $5)
+        """
+    else:
+        insert_sql = """
+            INSERT INTO sensorthings."FeaturesOfInterest" (description, name, "encodingType", feature)
+            VALUES ($1, $2, $3, $4::public.geometry)
+        """
     await conn.executemany(insert_sql, featuresofinterest)
 
 
-async def insert_observations(conn, observations):
-    await conn.copy_records_to_table(
-        "Observation",
-        records=observations,
-        schema_name="sensorthings",
-        columns=[
-            "phenomenonTime",
-            "resultNumber",
-            "resultType",
-            "datastream_id",
-            "featuresofinterest_id",
-        ],
+async def insert_observations(conn, observations, commit_id):
+    cols = [
+        "phenomenonTime",
+        "resultNumber",
+        "resultType",
+        "datastream_id",
+        "featuresofinterest_id",
+    ]
+
+    if commit_id is not None:
+        cols.append("commit_id")
+
+    column_names = ", ".join(f'"{col}"' for col in cols)
+
+    values_placeholders = ", ".join(
+        f"({', '.join(['$' + str(i + 1 + j * len(observations[0])) for i in range(len(observations[0]))])})"
+        for j in range(len(observations))
     )
+
+    query = f"""
+        INSERT INTO sensorthings."Observation"
+        ({column_names})
+        VALUES {values_placeholders};
+    """
+
+    flattened_values = [
+        item for observation in observations for item in observation
+    ]
+
+    await conn.execute(query, *flattened_values)
 
 
 async def update_datastream_phenomenon_time(conn, observations, datastream_id):
@@ -374,7 +528,7 @@ async def update_datastream_observed_area(conn):
             await conn.execute(query, ds)
 
 
-async def generate_observations(conn):
+async def generate_observations(conn, commit_id):
     """
     Generates observations and inserts them into the database.
 
@@ -384,6 +538,7 @@ async def generate_observations(conn):
     Returns:
         None
     """
+
     observations = []
 
     for j in range(1, n_things * n_observed_properties + 1):
@@ -402,17 +557,29 @@ async def generate_observations(conn):
             datastream_id = j
             featuresofinterest_id = random.randint(1, n_things)
 
-            observations.append(
-                (
-                    phenomenonTimeRange,
-                    resultNumber,
-                    resultType,
-                    datastream_id,
-                    featuresofinterest_id,
+            if commit_id is not None:
+                observations.append(
+                    (
+                        phenomenonTimeRange,
+                        resultNumber,
+                        resultType,
+                        datastream_id,
+                        featuresofinterest_id,
+                        commit_id,
+                    )
                 )
-            )
+            else:
+                observations.append(
+                    (
+                        phenomenonTimeRange,
+                        resultNumber,
+                        resultType,
+                        datastream_id,
+                        featuresofinterest_id,
+                    )
+                )
             if phenomenonTime >= (check_date + chunk):
-                await insert_observations(conn, observations)
+                await insert_observations(conn, observations, commit_id)
                 await update_datastream_phenomenon_time(
                     conn, observations, datastream_id
                 )
@@ -420,7 +587,7 @@ async def generate_observations(conn):
                 observations = []
 
     if observations:
-        await insert_observations(conn, observations)
+        await insert_observations(conn, observations, commit_id)
         await update_datastream_phenomenon_time(
             conn, observations, datastream_id
         )
@@ -440,21 +607,34 @@ async def create_data():
     After the creation is complete, the database connection is closed.
     """
     pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.transaction():
+    try:
+        async with pool.acquire() as conn:
             try:
-                await generate_things(conn)
-                await generate_locations(conn)
+                user_id = None
+                user_uri = "anonymous"
+                if authorization:
+                    user = await get_user(conn)
+                    user_id = user["id"]
+                    user_uri = user["uri"]
+
+                commit_id = None
+                if versioning or authorization:
+                    commit_id = await generate_commit(conn, user_id, user_uri)
+
+                await generate_things(conn, commit_id)
+                await generate_locations(conn, commit_id)
                 await generate_things_locations(conn)
-                await generate_historicallocations(conn)
+                await generate_historicallocations(conn, commit_id)
                 await generate_locations_historicallocations(conn)
-                await generate_observedProperties(conn)
-                await generate_sensors(conn)
-                await generate_datastreams(conn)
-                await generate_featuresofinterest(conn)
-                await generate_observations(conn)
+                await generate_observedProperties(conn, commit_id)
+                await generate_sensors(conn, commit_id)
+                await generate_datastreams(conn, commit_id)
+                await generate_featuresofinterest(conn, commit_id)
+                await generate_observations(conn, commit_id)
             except Exception as e:
                 print(f"An error occured: {e}")
+    finally:
+        await pool.close()
 
 
 async def delete_data():
@@ -480,9 +660,14 @@ async def delete_data():
     After the deletion is complete, the database connection is closed.
     """
     pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.transaction():
+    try:
+        async with pool.acquire() as conn:
             try:
+                if authorization:
+                    await conn.execute('DELETE FROM sensorthings."User"')
+                if versioning or authorization:
+                    await conn.execute('DELETE FROM sensorthings."Commit"')
+
                 await conn.execute('DELETE FROM sensorthings."Thing"')
                 await conn.execute('DELETE FROM sensorthings."Location"')
                 await conn.execute('DELETE FROM sensorthings."Thing_Location"')
@@ -503,8 +688,8 @@ async def delete_data():
                 await conn.execute('DELETE FROM sensorthings."Observation"')
             except Exception as e:
                 print(f"An error occurred: {e}")
-            finally:
-                await conn.close()
+    finally:
+        await pool.close()
 
 
 if __name__ == "__main__":

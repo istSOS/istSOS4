@@ -1,2 +1,14 @@
 FROM squidfunk/mkdocs-material:latest
-RUN pip install mkdocs-video mkdocs-bibtex mkdocs-badges neoteroi-mkdocs markdown-include
+
+RUN apk add --no-cache \
+    gcc \
+    python3-dev \
+    musl-dev \
+    linux-headers
+
+RUN pip install --upgrade pip && \
+    pip install mkdocs-jupyter mkdocs-material mkdocstrings
+
+EXPOSE 8000
+
+CMD ["serve", "-a", "0.0.0.0:8000"]
