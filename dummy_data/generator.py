@@ -47,7 +47,7 @@ date = datetime.strptime(
 chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL", "P1Y"))
 epsg = int(os.getenv("EPSG", 4326))
 authorization = int(os.getenv("AUTHORIZATION", 0))
-st_aggregate = (os.getenv("ST_AGGREGATE"))
+st_aggregate = (os.getenv("ST_AGGREGATE", "CONVEX_HULL"))
 
 pgpool = None
 
