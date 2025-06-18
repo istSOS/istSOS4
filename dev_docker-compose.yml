@@ -9,13 +9,20 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DATADIR: /var/lib/postgresql/data
     command: >
-      postgres -c custom.versioning="${VERSIONING}" -c custom.duplicates="${DUPLICATES}" -c custom.epsg="${EPSG}" -c log_statement="all" -c log_destination="stderr"
+      postgres
+        -c custom.versioning=${VERSIONING:-0}
+        -c custom.authorization=${AUTHORIZATION:-0}
+        -c custom.duplicates=${DUPLICATES:-0}
+        -c custom.epsg=${EPSG:-4326}
+        -c custom.user=${ISTSOS_ADMIN:-admin}
+        -c custom.password=${ISTSOS_ADMIN_PASSWORD:-admin}
+        -c log_statement="all"
+        -c log_destination="stderr"
+        -c log_duration="on"
     ports:
       - "45432:5432"
     volumes:
       - v-istsos4-database-data:/var/lib/postgresql/data
-    env_file:
-      - .env
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
       interval: 10s
@@ -33,8 +40,9 @@ services:
       DEBUG: ${DEBUG}
       VERSIONING: ${VERSIONING}
       POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      ISTSOS_ADMIN: ${ISTSOS_ADMIN}
+      ISTSOS_ADMIN_PASSWORD: ${ISTSOS_ADMIN_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
       PG_MAX_OVERFLOW: ${PG_MAX_OVERFLOW}
       PG_POOL_SIZE: ${PG_POOL_SIZE}
       PG_POOL_TIMEOUT: ${PG_POOL_TIMEOUT}
@@ -44,6 +52,11 @@ services:
       PARTITION_CHUNK: ${PARTITION_CHUNK}
       REDIS: ${REDIS}
       EPSG: ${EPSG}
+      AUTHORIZATION: ${AUTHORIZATION}
+      SECRET_KEY: ${SECRET_KEY}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+      ALGORITHM: ${ALGORITHM}
+      ANONYMOUS_VIEWER: ${ANONYMOUS_VIEWER}
     command: uvicorn --reload --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - 8018:5000
@@ -62,9 +75,14 @@ services:
       context: ./dummy_data
       dockerfile: Dockerfile
     environment:
+      HOSTNAME: ${HOSTNAME}
+      SUBPATH: ${SUBPATH}
+      VERSION: ${VERSION}
+      VERSIONING: ${VERSIONING}
       POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      ISTSOS_ADMIN: ${ISTSOS_ADMIN}
+      ISTSOS_ADMIN_PASSWORD: ${ISTSOS_ADMIN_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
       DUMMY_DATA: ${DUMMY_DATA}
       CLEAR_DATA: ${CLEAR_DATA}
       N_THINGS: ${N_THINGS}
@@ -74,6 +92,7 @@ services:
       START_DATETIME: ${START_DATETIME}
       CHUNK_INTERVAL: ${CHUNK_INTERVAL}
       EPSG: ${EPSG}
+      AUTHORIZATION: ${AUTHORIZATION}
     command: python3 generator.py
     volumes:
       - ./dummy_data:/dummy_data
@@ -86,11 +105,18 @@ services:
     build:
       context: ./docs/mkdocs
       dockerfile: dockerfile
-    #restart: always
     ports:
       - 8019:8000
     volumes:
       - ./docs/mkdocs:/docs
+# You might need to run `sudo chown -R $USER schemaspy/` to fix permissions
+# schemaspy:
+#   image: schemaspy/schemaspy:6.2.4
+#   volumes:
+#     - ./database/schemaspy/sensorthings_history:/output
+#   command: [ "-t", "pgsql11", "-db", "istsos", "-host", "database", "-port", "5432", "-s", "sensorthings_history", "-u", "postgres", "-p", "postgres", "-vizjs" ]
+#   depends_on:
+#     - database
 
 volumes:
   v-istsos4-database-data:

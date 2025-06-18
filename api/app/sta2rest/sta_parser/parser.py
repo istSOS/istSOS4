@@ -1,3 +1,17 @@
+# Copyright 2025 SUPSI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Parser for the SensorThings API query language.
 
@@ -123,8 +137,8 @@ class Parser:
         if self.check_token("EXPAND"):
             self.match("EXPAND")
             dollar_expand = True
-        if self.check_token("EXPAND_SEPARATOR"):
-            self.match("EXPAND_SEPARATOR")
+        if self.check_token("SEGMENT_SEPARATOR"):
+            self.match("SEGMENT_SEPARATOR")
         identifiers = []
         while self.current_token.type != "OPTIONS_SEPARATOR":
             tmp = self.current_token.value
@@ -133,7 +147,7 @@ class Parser:
             # Check if there is a subquery
             if self.check_token("LEFT_PAREN"):
                 identifier.subquery = self.parse_subquery()
-            elif self.check_token("EXPAND_SEPARATOR"):
+            elif self.check_token("SEGMENT_SEPARATOR"):
                 self.expand_identifiers.append(tmp)
                 identifier.subquery = self.parse_subquery()
 
@@ -148,7 +162,7 @@ class Parser:
                     if self.tokens[0].value in self.expand_identifiers:
                         self.match("VALUE_SEPARATOR")
                         self.match("EXPAND_IDENTIFIER")
-                        self.match("EXPAND_SEPARATOR")
+                        self.match("SEGMENT_SEPARATOR")
                     else:
                         self.expand_identifiers = []
                         break
@@ -251,7 +265,7 @@ class Parser:
         """
         self.match("ASOF")
         value = self.current_token.value
-        self.match("TIMESTAMP")
+        self.match("DATETIME")
 
         return ast.AsOfNode(value)
 
@@ -264,11 +278,10 @@ class Parser:
         """
         self.match("FROMTO")
         value1 = self.current_token.value
-        self.match("TIMESTAMP")
-        self.match("VALUE_SEPARATOR")
-        self.match("WHITESPACE")
+        self.match("DATETIME")
+        self.match("SEGMENT_SEPARATOR")
         value2 = self.current_token.value
-        self.match("TIMESTAMP")
+        self.match("DATETIME")
         return ast.FromToNode(value1, value2)
 
     def parse_result_format(self):
@@ -311,7 +324,7 @@ class Parser:
                 filter = self.parse_filter(True)
             elif self.current_token.type == "EXPAND":
                 expand = self.parse_expand()
-            elif self.current_token.type == "EXPAND_SEPARATOR":
+            elif self.current_token.type == "SEGMENT_SEPARATOR":
                 expand = self.parse_expand()
             elif self.current_token.type == "ORDERBY":
                 orderby = self.parse_orderby()

@@ -1,12 +1,27 @@
+# Copyright 2025 SUPSI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 
 import ujson
 from app import (
+    ANONYMOUS_VIEWER,
+    AUTHORIZATION,
     COUNT_ESTIMATE_THRESHOLD,
     COUNT_MODE,
-    DEBUG,
     HOSTNAME,
     PARTITION_CHUNK,
     REDIS,
@@ -16,27 +31,28 @@ from app import (
 )
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
+from app.oauth import get_current_user
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
 from app.utils.utils import build_nextLink
+from app.v1.endpoints.functions import set_role
+from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy.exc import TimeoutError
-from sqlalchemy.orm import Session
-from sqlalchemy.sql import text
 
-from fastapi import APIRouter, Depends, Request, status
+from .query_parameters import CommonQueryParams, get_common_query_params
 
 v1 = APIRouter()
 
-try:
-    DEBUG = DEBUG
-    if DEBUG:
-        from app.utils.utils import response2jsonfile
-except:
-    DEBUG = 0
+
+user = Header(default=None, include_in_schema=False)
+
+if AUTHORIZATION and not ANONYMOUS_VIEWER:
+    from app.oauth import get_current_user
+
+    user = Depends(get_current_user)
 
 
-def __handle_root(request: Request):
+def __handle_root():
     """
     Handle the root path.
 
@@ -60,8 +76,6 @@ def __handle_root(request: Request):
         "value": value,
         "serverSettings": serverSettings,
     }
-    if DEBUG:
-        response2jsonfile(request, response, "requests.json")
     return response
 
 
@@ -71,33 +85,25 @@ async def wrapped_result_generator(first_item, result):
         yield item
 
 
-@v1.api_route("/{path_name:path}", methods=["GET"])
+@v1.api_route(
+    "/{path_name:path}",
+    methods=["GET"],
+    tags=["Catch All"],
+    summary="Catch all GET requests",
+    description="Handles all GET requests to the API",
+)
 async def catch_all_get(
     request: Request,
     path_name: str,
-    pgpool=Depends(get_pool),
+    current_user=user,
+    pool=Depends(get_pool),
+    params: CommonQueryParams = Depends(get_common_query_params),
 ):
-    """
-    Handle GET requests for all paths.
 
-    Args:
-        request (Request): The incoming request object.
-        path_name (str): The path name extracted from the URL.
-        pgpool (Session): The database session.
-
-    Returns:
-        dict: The response data.
-
-    Raises:
-        JSONResponse: If the requested resource is not found.
-        JSONResponse: If there is a bad request.
-    """
     if not path_name:
-        # Handle the root path
-        return __handle_root(request)
+        return __handle_root()
 
     try:
-        # get full path from request
         full_path = request.url.path
         if request.url.query:
             full_path += "?" + request.url.query
@@ -127,7 +133,7 @@ async def catch_all_get(
         result = asyncpg_stream_results(
             main_entity,
             main_query,
-            pgpool,
+            pool,
             top_value,
             is_count,
             count_queries,
@@ -135,6 +141,7 @@ async def catch_all_get(
             from_to_value,
             single_result,
             full_path,
+            current_user,
         )
 
         try:
@@ -143,15 +150,6 @@ async def catch_all_get(
                 wrapped_result_generator(first_item, result),
                 media_type="application/json",
                 status_code=status.HTTP_200_OK,
-            )
-        except TimeoutError:
-            return JSONResponse(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                content={
-                    "code": 503,
-                    "type": "error",
-                    "message": "Service Unavailable",
-                },
             )
         except Exception as e:
             return JSONResponse(
@@ -182,33 +180,43 @@ async def asyncpg_stream_results(
     from_to_value,
     single_result,
     full_path,
+    current_user,
 ):
-    async with pgpool.acquire() as conn:
-        async with conn.transaction():
+    async with pgpool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
+            else:
+                if ANONYMOUS_VIEWER:
+                    current_user = {"username": "guest"}
+                    await set_role(connection, current_user)
+
             if is_count:
                 if COUNT_MODE == "LIMIT_ESTIMATE":
-                    query_count = await conn.fetchval(count_queries[0])
+                    query_count = await connection.fetchval(count_queries[0])
                     if query_count == COUNT_ESTIMATE_THRESHOLD:
-                        query_count = await conn.fetchval(
+                        query_count = await connection.fetchval(
                             "SELECT sensorthings.count_estimate($1) AS estimated_count",
                             count_queries[1],
                         )
                 elif COUNT_MODE == "ESTIMATE_LIMIT":
-                    query_count = await conn.fetchval(
+                    query_count = await connection.fetchval(
                         "SELECT sensorthings.count_estimate($1) AS estimated_count",
                         count_queries[0],
                     )
                     if query_count < COUNT_ESTIMATE_THRESHOLD:
-                        query_count = await conn.fetchval(count_queries[1])
+                        query_count = await connection.fetchval(
+                            count_queries[1]
+                        )
                 else:
-                    query_count = await conn.fetchval(count_queries[0])
+                    query_count = await connection.fetchval(count_queries[0])
 
             iot_count = (
                 '"@iot.count": ' + str(query_count) + ","
                 if is_count and not single_result
                 else ""
             )
-            await conn.execute(f"DECLARE my_cursor CURSOR FOR {query}")
+            await connection.execute(f"DECLARE my_cursor CURSOR FOR {query}")
 
             start_json = ""
             is_first_partition = True
@@ -218,11 +226,13 @@ async def asyncpg_stream_results(
                 as_of_value = (
                     as_of_value
                     if as_of_value is not None
-                    else datetime.now().isoformat()
+                    else datetime.now(timezone.utc)
+                    .isoformat(timespec="seconds")
+                    .replace("+00:00", "Z")
                 )
 
             while True:
-                partition = await conn.fetch(
+                partition = await connection.fetch(
                     f"FETCH {PARTITION_CHUNK} FROM my_cursor"
                 )
                 if not partition:
@@ -269,6 +279,7 @@ async def asyncpg_stream_results(
                     as_of = (
                         f'"@iot.as_of": "{as_of_value}",'
                         if VERSIONING
+                        and entity != "Commit"
                         and not single_result
                         and not from_to_value
                         else ""
@@ -291,4 +302,7 @@ async def asyncpg_stream_results(
             if has_rows and not single_result:
                 yield "]}"
 
-            await conn.execute("CLOSE my_cursor")
+            await connection.execute("CLOSE my_cursor")
+
+            if current_user is not None:
+                await connection.execute("RESET ROLE")

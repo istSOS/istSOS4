@@ -1,0 +1,724 @@
+{
+	"info": {
+		"_postman_id": "fc79186a-2805-49c7-9f11-94b8c188130f",
+		"name": "CUD",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "39765875"
+	},
+	"item": [
+		{
+			"name": "Create DB (deep insert)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n   \"description\":\"thing 1\",\n   \"name\":\"thing name 1\",\n   \"properties\":{\n      \"reference\":\"first\"\n   },\n   \"Locations\":[\n      {\n         \"description\":\"location 1\",\n         \"name\":\"location name 1\",\n         \"location\":{\n            \"type\":\"Point\",\n            \"coordinates\":[\n               -117.05,\n               51.05\n            ]\n         },\n         \"encodingType\":\"application/vnd.geo+json\"\n      }\n   ],\n   \"Datastreams\":[\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Lumen\",\n            \"symbol\":\"lm\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 1\",\n         \"name\":\"datastream name 1\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"properties\":{\n            \"min\":0,\n            \"max\":100\n         },\n         \"ObservedProperty\":{\n            \"name\":\"Luminous Flux\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux\",\n            \"description\":\"observedProperty 1\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 1\",\n            \"name\":\"sensor name 1\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Light flux sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-03T00:00:00Z\",\n               \"result\":true\n            },\n            {\n               \"phenomenonTime\":\"2015-03-04T00:00:00Z\",\n               \"result\":{\n                  \"value\":4\n               }\n            }\n         ]\n      },\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Centigrade\",\n            \"symbol\":\"C\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 2\",\n         \"name\":\"datastream name 2\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"ObservedProperty\":{\n            \"name\":\"Tempretaure\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/Tempreture\",\n            \"description\":\"observedProperty 2\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 2\",\n            \"name\":\"sensor name 2\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Tempreture sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-05T00:00:00Z\",\n               \"result\":\"5\"\n            },\n            {\n               \"phenomenonTime\":\"2015-03-06T00:00:00Z/2015-03-07T00:00:00Z\",\n               \"result\":6\n            }\n         ]\n      }\n   ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Things",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Things"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "1. Things",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"thing 1\",\n    \"name\": \"thing name 1\",\n    \"properties\": { \"reference\": \"first\" }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Things",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Things"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. Things (old Location)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"thing 1\",\n    \"name\": \"thing name 1\",\n    \"properties\": { \"reference\": \"first\" },\n    \"Locations\": [\n        {\n            \"@iot.id\": 1\n        }\n    ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Things",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Things"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "3. Things (new Location)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"thing 1\",\n    \"name\": \"thing name 1\",\n    \"properties\": { \"reference\": \"first\" },\n    \"Locations\": [\n        {\n            \"description\": \"location 1\",\n            \"name\": \"location name 1\",\n            \"location\": { \"type\": \"Point\", \"coordinates\": [-117.05, 51.05] },\n            \"encodingType\": \"application/vnd.geo+json\"\n        }\n    ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Things",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Things"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "1. Locations",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"location 1\",\n    \"name\": \"location name 1\",\n    \"location\": { \"type\": \"Point\", \"coordinates\": [-117.05, 51.05] },\n    \"encodingType\": \"application/vnd.geo+json\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Locations",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Locations"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. Locations (old Thing)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"location 1\",\n    \"name\": \"location name 1\",\n    \"location\": { \"type\": \"Point\", \"coordinates\": [-117.05, 51.05] },\n    \"encodingType\": \"application/vnd.geo+json\",\n    \"Thing\": {\n        \"@iot.id\": 1\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Locations",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Locations"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "3. Locations (new Thing)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"location 1\",\n    \"name\": \"location name 1\",\n    \"location\": { \"type\": \"Point\", \"coordinates\": [-117.05, 51.05] },\n    \"encodingType\": \"application/vnd.geo+json\",\n    \"Thing\": {\n        \"description\": \"thing 1\",\n        \"name\": \"thing name 1\",\n        \"properties\": { \"reference\": \"first\" }\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Locations",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Locations"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "1. Sensors",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"sensor 1\",\n    \"name\": \"sensor name 1\",\n    \"encodingType\": \"application/pdf\",\n    \"metadata\": \"Light flux sensor\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Sensors",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Sensors"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. Sensors (old Datastream)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"sensor 1\",\n    \"name\": \"sensor name 1\",\n    \"encodingType\": \"application/pdf\",\n    \"metadata\": \"Light flux sensor\",\n    \"Datastreams\": [\n        {\n            \"@iot.id\": 1\n        }\n    ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Sensors",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Sensors"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "3. Sensors (new Datastream)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"sensor 1\",\n    \"name\": \"sensor name 1\",\n    \"encodingType\": \"application/pdf\",\n    \"metadata\": \"Light flux sensor\",\n    \"Datastreams\": [\n        {\n            \"unitOfMeasurement\": {\n                \"name\": \"Centigrade\",\n                \"symbol\": \"C\",\n                \"definition\": \"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n            },\n            \"description\": \"datastream 2\",\n            \"name\": \"datastream name 2\",\n            \"observationType\": \"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n            \"ObservedProperty\": {\n                \"name\": \"Tempretaure\",\n                \"definition\": \"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/Tempreture\",\n                \"description\": \"observedProperty 2\"\n            },\n            \"Thing\": {\n                \"@iot.id\": 1\n            }\n        }\n    ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Sensors",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Sensors"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "1. ObservedProperties",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"Luminous Flux\",\n    \"definition\": \"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux\",\n    \"description\": \"observedProperty 1\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/ObservedProperties",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"ObservedProperties"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. ObservedProperties (old Datastream)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"Luminous Flux\",\n    \"definition\": \"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux\",\n    \"description\": \"observedProperty 1\",\n    \"Datastreams\": [\n        {\n            \"@iot.id\": 1\n        }\n    ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/ObservedProperties",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"ObservedProperties"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "3. ObservedProperties (new Datastream)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"Luminous Flux\",\n    \"definition\": \"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux\",\n    \"description\": \"observedProperty 1\",\n    \"Datastreams\": [\n        {\n            \"unitOfMeasurement\": {\n                \"name\": \"Centigrade\",\n                \"symbol\": \"C\",\n                \"definition\": \"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n            },\n            \"description\": \"datastream 2\",\n            \"name\": \"datastream name 2\",\n            \"observationType\": \"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n            \"ObservedProperty\": {\n                \"name\": \"Tempretaure\",\n                \"definition\": \"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/Tempreture\",\n                \"description\": \"observedProperty 2\"\n            },\n            \"Thing\": {\n                \"@iot.id\": 1\n            }\n        }\n    ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/ObservedProperties",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"ObservedProperties"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "1. Datastreams",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"unitOfMeasurement\": {\n        \"name\": \"Lumen\",\n        \"symbol\": \"lm\",\n        \"definition\": \"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n    },\n    \"description\": \"datastream 1\",\n    \"name\": \"datastream name 1\",\n    \"observationType\": \"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n    \"ObservedProperty\": {\n        \"name\": \"Luminous Flux\",\n        \"definition\": \"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux\",\n        \"description\": \"observedProperty 1\"\n    },\n    \"Sensor\": {\n        \"description\": \"sensor 1\",\n        \"name\": \"sensor name 1\",\n        \"encodingType\": \"application/pdf\",\n        \"metadata\": \"Light flux sensor\"\n    },\n    \"Thing\": {\n        \"@iot.id\": 1\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Datastreams",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Datastreams"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. Datastreams (with Observation)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"unitOfMeasurement\": {\n        \"name\": \"Lumen\",\n        \"symbol\": \"lm\",\n        \"definition\": \"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n    },\n    \"description\": \"datastream 1\",\n    \"name\": \"datastream name 1\",\n    \"observationType\": \"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n    \"ObservedProperty\": {\n        \"@iot.id\": 2\n    },\n    \"Sensor\": {\n        \"@iot.id\": 2\n    },\n    \"Thing\": {\n        \"@iot.id\": 2\n    },\n    \"Observations\": [\n        { \n            \"@iot.id\": 1\n        },\n        {\n            \"phenomenonTime\": \"2015-03-04T00:00:00Z\",\n            \"result\": 4\n        },\n        {\n            \"phenomenonTime\": \"2015-03-04T00:00:00Z\",\n            \"result\": 4,\n            \"FeatureOfInterest\": {\n                \"name\": \"A weather station.\",\n                \"description\": \"A weather station.\",\n                \"feature\": {\n                    \"type\": \"Point\",\n                    \"coordinates\": [\n                        -114.05,\n                        51.05\n                    ]\n                },\n                \"encodingType\": \"application/vnd.geo+json\"\n            }\n        }\n        \n    ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8080/FROST-Server/v1.1/Datastreams",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"FROST-Server",
+						"v1.1",
+						"Datastreams"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "1. Observation",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"phenomenonTime\": \"2015-03-01T00:00:00Z\",\n    \"result\": 100,\n    \"Datastream\": {\n        \"unitOfMeasurement\": {\n            \"name\": \"Lumen\",\n            \"symbol\": \"lm\",\n            \"definition\": \"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n        },\n        \"description\": \"datastream 1\",\n        \"name\": \"datastream name 1\",\n        \"observationType\": \"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n        \"ObservedProperty\": {\n            \"name\": \"Luminous Flux\",\n            \"definition\": \"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux\",\n            \"description\": \"observedProperty 1\"\n        },\n        \"Sensor\": {\n            \"description\": \"sensor 1\",\n            \"name\": \"sensor name 1\",\n            \"encodingType\": \"application/pdf\",\n            \"metadata\": \"Light flux sensor\"\n        },\n        \"Thing\": {\n            \"@iot.id\": 1\n        }\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Observations",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Observations"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. Observations (old Feature)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"phenomenonTime\": \"2015-03-01T00:00:00Z\",\n    \"result\": 100,\n    \"Datastream\": {\n        \"@iot.id\": 1\n    },\n    \"FeatureOfInterest\": {\n        \"@iot.id\": 1\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Observations",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Observations"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "3. Observations (new Feature)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"phenomenonTime\": \"2015-03-01T00:00:00Z\",\n    \"result\": 100,\n    \"FeatureOfInterest\": {\n        \"name\": \"A weather station.\",\n        \"description\": \"A weather station.\",\n        \"feature\": {\n            \"type\": \"Point\",\n            \"coordinates\": [\n                -114.05,\n                51.05\n            ]\n        },\n        \"encodingType\": \"application/vnd.geo+json\"\n    },\n    \"Datastream\": {\n        \"@iot.id\": 1\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Observations",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Observations"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "1. FeaturesOfInterest",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"A weather station.\",\n    \"description\": \"A weather station.\",\n    \"feature\": {\n        \"type\": \"Point\",\n        \"coordinates\": [\n            -114.05,\n            51.05\n        ]\n    },\n    \"encodingType\": \"application/vnd.geo+json\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/FeaturesOfInterest",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"FeaturesOfInterest"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. FeaturesOfInterest (with Observation)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"A weather station.\",\n    \"description\": \"A weather station.\",\n    \"feature\": {\n        \"type\": \"Point\",\n        \"coordinates\": [\n            -114.05,\n            51.05\n        ]\n    },\n    \"encodingType\": \"application/vnd.geo+json\",\n    \"Observations\": [\n        {\n            \"@iot.id\": 1\n        },\n        {\n            \"phenomenonTime\": \"2015-03-01T00:00:00Z\",\n            \"result\": 100,\n            \"Datastream\": {\n                \"@iot.id\": 1\n            }\n        }\n    ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/FeaturesOfInterest",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"FeaturesOfInterest"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "FeaturesOfInterest",
+			"request": {
+				"method": "PATCH",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"location 1\",\n    \"name\": \"location name 1\",\n    \"feature\": { \"type\": \"Point\", \"coordinates\": [-11.05, 51.05] },\n    \"encodingType\": \"application/vnd.geo+json\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/FeaturesOfInterest(2)",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"FeaturesOfInterest(2)"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "FeaturesOfInterest",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/FeaturesOfInterest(1)",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"FeaturesOfInterest(1)"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

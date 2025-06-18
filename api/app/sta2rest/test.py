@@ -1,3 +1,17 @@
+# Copyright 2025 SUPSI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Module: STA2REST Test
 
@@ -6,25 +20,28 @@ Author: Filippo Finke
 This module provides unit tests for the STA2REST module.
 """
 import unittest
+
 from sta2rest import STA2REST
+
 
 class STA2RESTTestCase(unittest.TestCase):
     """
     Test case for STA2REST module.
     """
+
     def test_convert_entity(self):
         """
         Test the conversion of entities.
         """
         entity_mappings = {
-            "Things": 'Thing',
-            "Locations": 'Location',
-            "Sensors": 'Sensor',
-            "ObservedProperties": 'ObservedProperty',
-            "Datastreams": 'Datastream',
-            "Observations": 'Observation',
-            "FeaturesOfInterest": 'FeatureOfInterest',
-            "HistoricalLocations": 'HistoricalLocation'
+            "Things": "Thing",
+            "Locations": "Location",
+            "Sensors": "Sensor",
+            "ObservedProperties": "ObservedProperty",
+            "Datastreams": "Datastream",
+            "Observations": "Observation",
+            "FeaturesOfInterest": "FeatureOfInterest",
+            "HistoricalLocations": "HistoricalLocation",
             # Add more entity mappings as needed
         }
 
@@ -38,8 +55,7 @@ class STA2RESTTestCase(unittest.TestCase):
 
         # Test the parsing of URIs
         tests = [
-            "/v1.1/ObservedProperties"
-            "/v1.1/Things(1)",
+            "/v1.1/ObservedProperties" "/v1.1/Things(1)",
             "/v1.1/Observations(1)/resultTime",
             "/v1.1/Observations(1)/resultTime/$value",
             "/v1.1/Datastreams(1)/Observations",
@@ -48,7 +64,7 @@ class STA2RESTTestCase(unittest.TestCase):
             "/v1.1/Datastreams(1)/Observations(1)/resultTime",
             "/v1.1/Datastreams(1)/Observations(1)/FeatureOfInterest",
         ]
-        
+
         # Test the parsing of URIs with query
         for test in tests:
             print(test)
@@ -62,14 +78,10 @@ class STA2RESTTestCase(unittest.TestCase):
         # TODO(@filippofinke): fix test cases
 
         query_mappings = {
-            "$filter=type eq 'temperature'&$orderby=timestamp desc&$top=10&$skip=5":
-                "type=eq.temperature&order=timestamp.desc&offset=5&limit=10",
-            "$filter=type eq 'humidity'&$top=5":
-                "type=eq.humidity&limit=5",
-            "$orderby=timestamp asc&$skip=2":
-                "order=timestamp.asc&offset=2",
-            "$select=id,name,description,properties&$top=1000&$filter=properties/type eq 'station'&$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))":
-            "Datastream.Observation.order=phenomenonTime.desc&Datastream.Observation.limit=1&select=id,name,description,properties,Location(*),Datastream(id,name,unitOfMeasurement),ObservedProperty(name),Observation(result,phenomenonTime)&properties->>type=eq.station&limit=1000",
+            "$filter=type eq 'temperature'&$orderby=timestamp desc&$top=10&$skip=5": "type=eq.temperature&order=timestamp.desc&offset=5&limit=10",
+            "$filter=type eq 'humidity'&$top=5": "type=eq.humidity&limit=5",
+            "$orderby=timestamp asc&$skip=2": "order=timestamp.asc&offset=2",
+            "$select=id,name,description,properties&$top=1000&$filter=properties/type eq 'station'&$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))": "Datastream.Observation.order=phenomenonTime.desc&Datastream.Observation.limit=1&select=id,name,description,properties,Location(*),Datastream(id,name,unitOfMeasurement),ObservedProperty(name),Observation(result,phenomenonTime)&properties->>type=eq.station&limit=1000",
             "$select=id,description&$expand=Datastreams($select=id,description)": "select=id,description,Datastream(id,description)",
             "$expand=Datastreams": "select=Datastream(*)",
             "$expand=Observations,ObservedProperty": "select=Observation(*),ObservedProperty(*)",
@@ -101,6 +113,7 @@ class STA2RESTTestCase(unittest.TestCase):
             print("QUERY", query)
             self.assertEqual(STA2REST.convert_query(query), expected)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Run all tests
     unittest.main()

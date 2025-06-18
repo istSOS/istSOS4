@@ -1,0 +1,679 @@
+{
+	"info": {
+		"_postman_id": "661639fc-dfab-451b-9635-e40531ea039c",
+		"name": "AUTHORIZATION",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "39765875"
+	},
+	"item": [
+		{
+			"name": "NO VERSIONING",
+			"item": [
+				{
+					"name": "Things (deep)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "bearer XXX",
+								"type": "default"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n   \"description\":\"thing 1\",\n   \"name\":\"thing name 1\",\n   \"properties\":{\n      \"reference\":\"first\"\n   },\n   \"Locations\":[\n      {\n         \"description\":\"location 1\",\n         \"name\":\"location name 1\",\n         \"location\":{\n            \"type\":\"Point\",\n            \"coordinates\":[\n               -117.05,\n               51.05\n            ]\n         },\n         \"encodingType\":\"application/vnd.geo+json\"\n      }\n   ],\n   \"Datastreams\":[\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Lumen\",\n            \"symbol\":\"lm\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 1\",\n         \"name\":\"datastream name 1\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"properties\":{\n            \"min\":0,\n            \"max\":100\n         },\n         \"ObservedProperty\":{\n            \"name\":\"Luminous Flux\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux\",\n            \"description\":\"observedProperty 1\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 1\",\n            \"name\":\"sensor name 1\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Light flux sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-03T00:00:00Z\",\n               \"result\":true\n            },\n            {\n               \"phenomenonTime\":\"2015-03-04T00:00:00Z\",\n               \"result\":{\n                  \"value\":4\n               }\n            }\n         ]\n      },\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Centigrade\",\n            \"symbol\":\"C\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 2\",\n         \"name\":\"datastream name 2\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"ObservedProperty\":{\n            \"name\":\"Tempretaure\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/Tempreture\",\n            \"description\":\"observedProperty 2\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 2\",\n            \"name\":\"sensor name 2\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Tempreture sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-05T00:00:00Z\",\n               \"result\":\"5\"\n            },\n            {\n               \"phenomenonTime\":\"2015-03-06T00:00:00Z/2015-03-07T00:00:00Z\",\n               \"result\":6\n            }\n         ]\n      }\n   ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8018/istsos4/v1.1/Things",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "8018",
+							"path": [
+								"istsos4",
+								"v1.1",
+								"Things"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Observations",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "bearer XXX",
+								"type": "default"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"phenomenonTime\": \"2015-03-03T00:00:00Z\",\n    \"result\": true,\n    \"FeatureOfInterest\": {\n        \"name\": \"A weather station.\",\n        \"description\": \"A weather station.\",\n        \"feature\": {\n            \"type\": \"Point\",\n            \"coordinates\": [\n                -114.05,\n                51.05\n            ]\n        },\n        \"encodingType\": \"application/vnd.geo+json\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8018/istsos4/v1.1/Datastreams(1)/Observations",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "8018",
+							"path": [
+								"istsos4",
+								"v1.1",
+								"Datastreams(1)",
+								"Observations"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Observations",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "bearer XXX",
+								"type": "default"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"result\": 40\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8018/istsos4/v1.1/Observations(3)",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8018",
+							"path": [
+								"istsos4",
+								"v1.1",
+								"Observations(3)"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Observations",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "bearer XXX",
+								"type": "default"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8018/istsos4/v1.1/Observations(3)",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8018",
+							"path": [
+								"istsos4",
+								"v1.1",
+								"Observations(3)"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "BulkObservations",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "bearer XXX",
+								"type": "default"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n   {\n      \"Datastream\":{\n         \"@iot.id\":1\n      },\n      \"components\":[\n         \"result\",\n         \"phenomenonTime\",\n         \"resultTime\",\n         \"resultQuality\"\n      ],\n      \"dataArray\":[\n         [\n            1.750000,\n            \"2023-01-01T00:10:00+01:00\",\n            \"2023-01-01T00:10:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.610000,\n            \"2023-01-01T00:20:00+01:00\",\n            \"2023-01-01T00:20:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.690000,\n            \"2023-01-01T00:30:00+01:00\",\n            \"2023-01-01T00:30:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.720000,\n            \"2023-01-01T00:40:00+01:00\",\n            \"2023-01-01T00:40:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.660000,\n            \"2023-01-01T00:50:00+01:00\",\n            \"2023-01-01T00:50:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.760000,\n            \"2023-01-01T01:00:00+01:00\",\n            \"2023-01-01T01:00:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.710000,\n            \"2023-01-01T01:10:00+01:00\",\n            \"2023-01-01T01:10:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.860000,\n            \"2023-01-01T01:20:00+01:00\",\n            \"2023-01-01T01:20:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.870000,\n            \"2023-01-01T01:30:00+01:00\",\n            \"2023-01-01T01:30:00+01:00\",\n            \"100\"\n         ]\n      ]\n   }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8018/istsos4/v1.1/BulkObservations",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "8018",
+							"path": [
+								"istsos4",
+								"v1.1",
+								"BulkObservations"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "VERSIONING",
+			"item": [
+				{
+					"name": "Things (deep)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "bearer XXX",
+								"type": "default"
+							},
+							{
+								"key": "Commit-message",
+								"value": "XXX",
+								"type": "default"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n   \"description\":\"thing 1\",\n   \"name\":\"thing name 1\",\n   \"properties\":{\n      \"reference\":\"first\"\n   },\n   \"Locations\":[\n      {\n         \"description\":\"location 1\",\n         \"name\":\"location name 1\",\n         \"location\":{\n            \"type\":\"Point\",\n            \"coordinates\":[\n               -117.05,\n               51.05\n            ]\n         },\n         \"encodingType\":\"application/vnd.geo+json\"\n      }\n   ],\n   \"Datastreams\":[\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Lumen\",\n            \"symbol\":\"lm\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 1\",\n         \"name\":\"datastream name 1\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"properties\":{\n            \"min\":0,\n            \"max\":100\n         },\n         \"ObservedProperty\":{\n            \"name\":\"Luminous Flux\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux\",\n            \"description\":\"observedProperty 1\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 1\",\n            \"name\":\"sensor name 1\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Light flux sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-03T00:00:00Z\",\n               \"result\":true\n            },\n            {\n               \"phenomenonTime\":\"2015-03-04T00:00:00Z\",\n               \"result\":{\n                  \"value\":4\n               }\n            }\n         ]\n      },\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Centigrade\",\n            \"symbol\":\"C\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 2\",\n         \"name\":\"datastream name 2\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"ObservedProperty\":{\n            \"name\":\"Tempretaure\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/Tempreture\",\n            \"description\":\"observedProperty 2\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 2\",\n            \"name\":\"sensor name 2\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Tempreture sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-05T00:00:00Z\",\n               \"result\":\"5\"\n            },\n            {\n               \"phenomenonTime\":\"2015-03-06T00:00:00Z/2015-03-07T00:00:00Z\",\n               \"result\":6\n            }\n         ]\n      }\n   ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8018/istsos4/v1.1/Things",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "8018",
+							"path": [
+								"istsos4",
+								"v1.1",
+								"Things"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Observations",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "bearer XXX",
+								"type": "default"
+							},
+							{
+								"key": "Commit-message",
+								"value": "XXX",
+								"type": "default"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"phenomenonTime\": \"2015-03-03T00:00:00Z\",\n    \"result\": true,\n    \"FeatureOfInterest\": {\n        \"name\": \"A weather station.\",\n        \"description\": \"A weather station.\",\n        \"feature\": {\n            \"type\": \"Point\",\n            \"coordinates\": [\n                -114.05,\n                51.05\n            ]\n        },\n        \"encodingType\": \"application/vnd.geo+json\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8018/istsos4/v1.1/Datastreams(1)/Observations",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "8018",
+							"path": [
+								"istsos4",
+								"v1.1",
+								"Datastreams(1)",
+								"Observations"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Observations",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "bearer XXX",
+								"type": "default"
+							},
+							{
+								"key": "Commit-message",
+								"value": "XXX",
+								"type": "default"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"result\": 40\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8018/istsos4/v1.1/Observations(4)",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8018",
+							"path": [
+								"istsos4",
+								"v1.1",
+								"Observations(4)"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Observations",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "bearer XXX",
+								"type": "default"
+							},
+							{
+								"key": "Commit-Message",
+								"value": "XXX",
+								"type": "default"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8018/istsos4/v1.1/Observations(4)",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8018",
+							"path": [
+								"istsos4",
+								"v1.1",
+								"Observations(4)"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "BulkObservations",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "bearer XXX",
+								"type": "default"
+							},
+							{
+								"key": "Commit-message",
+								"value": "XXX",
+								"type": "default"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n   {\n      \"Datastream\":{\n         \"@iot.id\":1\n      },\n      \"components\":[\n         \"result\",\n         \"phenomenonTime\",\n         \"resultTime\",\n         \"resultQuality\"\n      ],\n      \"dataArray\":[\n         [\n            1.750000,\n            \"2023-01-01T00:10:00+01:00\",\n            \"2023-01-01T00:10:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.610000,\n            \"2023-01-01T00:20:00+01:00\",\n            \"2023-01-01T00:20:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.690000,\n            \"2023-01-01T00:30:00+01:00\",\n            \"2023-01-01T00:30:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.720000,\n            \"2023-01-01T00:40:00+01:00\",\n            \"2023-01-01T00:40:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.660000,\n            \"2023-01-01T00:50:00+01:00\",\n            \"2023-01-01T00:50:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.760000,\n            \"2023-01-01T01:00:00+01:00\",\n            \"2023-01-01T01:00:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.710000,\n            \"2023-01-01T01:10:00+01:00\",\n            \"2023-01-01T01:10:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.860000,\n            \"2023-01-01T01:20:00+01:00\",\n            \"2023-01-01T01:20:00+01:00\",\n            \"100\"\n         ],\n         [\n            1.870000,\n            \"2023-01-01T01:30:00+01:00\",\n            \"2023-01-01T01:30:00+01:00\",\n            \"100\"\n         ]\n      ]\n   }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8018/istsos4/v1.1/BulkObservations",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "8018",
+							"path": [
+								"istsos4",
+								"v1.1",
+								"BulkObservations"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Users (admin)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"firstname\": \"Alice\",\n    \"lastname\": \"Smith\",\n    \"password\": \"securePass1!\",\n    \"email\": \"alice.smith@example.com\",\n    \"role\": \"admin\",\n    \"uri\": \"https://orcid.org/0000-0002-1234-5678\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8018/istsos4/v1.1/users",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"users"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Users (editor)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"firstname\": \"Bob\",\n    \"lastname\": \"Johnson\",\n    \"password\": \"myp@ssword42\",\n    \"email\": \"bob.johnson@example.com\",\n    \"role\": \"editor\",\n    \"uri\": \"https://orcid.org/0000-0003-2345-6789\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8018/istsos4/v1.1/users",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"users"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Users (viewer)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"firstname\": \"Carol\",\n    \"lastname\": \"Williams\",\n    \"password\": \"P@ssword789\",\n    \"email\": \"carol.williams@example.com\",\n    \"role\": \"viewer\",\n    \"uri\": \"https://orcid.org/0000-0004-3456-7890\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8018/istsos4/v1.1/users",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"users"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Users (obs_manager)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": " {\n    \"firstname\": \"David\",\n    \"lastname\": \"Brown\",\n    \"password\": \"d@v1dp@ss\",\n    \"email\": \"david.brown@example.com\",\n    \"role\": \"obs_manager\",\n    \"uri\": \"https://orcid.org/0000-0005-4567-8901\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8018/istsos4/v1.1/users",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"users"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Users (sensor)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"firstname\": \"Eve\",\n    \"lastname\": \"Taylor\",\n    \"password\": \"Eve@1234\",\n    \"email\": \"eve.taylor@example.com\",\n    \"role\": \"sensor\",\n    \"uri\": \"https://orcid.org/0000-0006-5678-9012\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8018/istsos4/v1.1/users",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"users"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Login",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "grant_type",
+							"value": "password",
+							"type": "default"
+						},
+						{
+							"key": "username",
+							"value": "XXX",
+							"type": "default"
+						},
+						{
+							"key": "password",
+							"value": "XXX",
+							"type": "default"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:8018/istsos4/v1.1/login",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Things",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "bearer XXX",
+						"type": "default"
+					}
+				],
+				"url": {
+					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Things",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Things"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Observations",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "bearer XXX",
+						"type": "default"
+					}
+				],
+				"url": {
+					"raw": "http://localhost:8018/istsos4/v1.1/Observations?$expand=Commit",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8018",
+					"path": [
+						"istsos4",
+						"v1.1",
+						"Observations"
+					],
+					"query": [
+						{
+							"key": "$expand",
+							"value": "Commit"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
