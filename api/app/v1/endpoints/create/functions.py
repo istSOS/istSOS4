@@ -15,7 +15,7 @@
 import json
 from datetime import datetime
 
-from app import AUTHORIZATION, HOSTNAME, SUBPATH, VERSION, VERSIONING
+from app import AUTHORIZATION, EPSG, HOSTNAME, SUBPATH, ST_AGGREGATE, VERSION, VERSIONING
 from app.utils.utils import (
     check_iot_id_in_payload,
     check_missing_properties,
@@ -632,20 +632,37 @@ async def generate_feature_of_interest(payload, connection, commit_id=None):
 
 async def update_datastream_observedArea(conn, datastream_id, foi_id):
     async with conn.transaction():
-        update_query = f"""
-            UPDATE sensorthings."Datastream"
-            SET "observedArea" = ST_ConvexHull(
-                ST_Collect(
-                    "observedArea",
-                    (
-                        SELECT "feature"
-                        FROM sensorthings."FeaturesOfInterest"
-                        WHERE id = $1
+        if ST_AGGREGATE == "CONVEX_HULL":
+            update_query = """
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = ST_ConvexHull(
+                    ST_Collect(
+                        "observedArea",
+                        (
+                            SELECT "feature"
+                            FROM sensorthings."FeaturesOfInterest"
+                            WHERE id = $1
+                        )
                     )
                 )
-            )
-            WHERE id = $2;
-        """
+                WHERE id = $2;
+            """
+        else:
+            update_query = f"""
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = Set_SRID(ST_Extent(
+                    ST_Collect(
+                        "observedArea",
+                        (
+                            SELECT "feature"
+                            FROM sensorthings."FeaturesOfInterest"
+                            WHERE id = $1
+                        )
+                    ), {EPSG})
+                )
+                WHERE id = $2;
+            """
+
         await conn.execute(update_query, foi_id, datastream_id)
 
 

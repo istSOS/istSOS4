@@ -18,7 +18,6 @@ import os
 import random
 from datetime import datetime, time
 
-from api.app.v1.endpoints.delete import EPSG, ST_Aggregate
 import asyncpg
 import isodate
 from asyncpg.types import Range
@@ -520,7 +519,7 @@ async def update_datastream_observed_area(conn):
                     ST_Collect(
                         ARRAY[{', '.join(f"'{g}'::geometry" for g in geometries)}]
                     )
-                ), {EPSG} )
+                ), {epsg} )
                 WHERE id = $1;
                 """
 
