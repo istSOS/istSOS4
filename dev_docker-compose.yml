@@ -109,7 +109,6 @@ services:
       - 8019:8000
     volumes:
       - ./docs/mkdocs:/docs
-<<<<<<< v4.0.0
 
   # You might need to run `sudo chown -R $USER schemaspy/` to fix permissions
   # schemaspy:
@@ -119,8 +118,6 @@ services:
   #   command: [ "-t", "pgsql11", "-db", "istsos", "-host", "database", "-port", "5432", "-s", "sensorthings_history", "-u", "postgres", "-p", "postgres", "-vizjs" ]
   #   depends_on:
   #     - database
-=======
->>>>>>> main
 
 volumes:
   v-istsos4-database-data:
