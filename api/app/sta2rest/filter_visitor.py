@@ -292,12 +292,12 @@ class FilterVisitor(visitor.NodeVisitor):
         if isinstance(node.left, ast.Attribute) and not isinstance(
             node.right, ast.Attribute
         ):
-            right = functions.func.to_jsonb(right)
+            right = functions.func.to_jsonb(cast(right, Text))
 
         if isinstance(node.right, ast.Attribute) and not isinstance(
             node.left, ast.Attribute
         ):
-            left = functions.func.to_jsonb(left)
+            left = functions.func.to_jsonb(cast(left, Text))
 
         if isinstance(node.left, ast.Identifier) and (
             left.name in {"phenomenonTime", "validTime"}
