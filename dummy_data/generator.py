@@ -345,7 +345,7 @@ async def generate_datastreams(conn, commit_id):
     for i in range(1, n_things + 1):
         for j in range(1, n_observed_properties + 1):
             if authorization:
-                network = random.choice(["IDROLOGIA", "IDROGEOLOGIA"])
+                network = random.choice(["psos", "acsot"])
 
             datastream = {
                 "unitOfMeasurement": json.dumps(
