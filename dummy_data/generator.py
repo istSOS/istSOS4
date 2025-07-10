@@ -355,6 +355,13 @@ async def generate_datastreams(conn, commit_id):
                         "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen",
                     }
                 ),
+                "properties": json.dumps(
+                    {
+                        "resolution": "PT10M",
+                        "qualityIndexLimits": {"max": "", "min": ""},
+                        "acquisitionInterval": "PT10M",
+                    }
+                ),
                 "description": f"datastream {cnt}",
                 "name": f"datastream name {cnt}",
                 "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement",
@@ -538,7 +545,7 @@ async def generate_observations(conn, commit_id):
                 upper_inc=True,
             )
             resultNumber = random.randint(1, 100)
-            resultType = 1
+            resultType = 0
             datastream_id = j
             featuresofinterest_id = random.randint(1, n_things)
 
