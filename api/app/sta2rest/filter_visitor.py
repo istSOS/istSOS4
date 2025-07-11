@@ -37,7 +37,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm.attributes import InstrumentedAttribute
-from sqlalchemy.orm.properties import ColumnProperty
 from sqlalchemy.orm.relationships import RelationshipProperty
 from sqlalchemy.sql import functions
 from sqlalchemy.sql.expression import (
@@ -292,12 +291,14 @@ class FilterVisitor(visitor.NodeVisitor):
         if isinstance(node.left, ast.Attribute) and not isinstance(
             node.right, ast.Attribute
         ):
-            right = functions.func.to_jsonb(cast(right, Text))
+            if not isinstance(left, InstrumentedAttribute):
+                right = functions.func.to_jsonb(cast(right, Text))
 
         if isinstance(node.right, ast.Attribute) and not isinstance(
             node.left, ast.Attribute
         ):
-            left = functions.func.to_jsonb(cast(left, Text))
+            if not isinstance(right, InstrumentedAttribute):
+                left = functions.func.to_jsonb(cast(left, Text))
 
         if isinstance(node.left, ast.Identifier) and (
             left.name in {"phenomenonTime", "validTime"}
@@ -569,20 +570,29 @@ class FilterVisitor(visitor.NodeVisitor):
         self, field: ast.Identifier, geography: ast.Geography
     ) -> functions.Function:
         return functions.func.ST_Distance(
-            getattr(globals()[self.root_model], field.name),
+            getattr(
+                globals()[self.root_model],
+                SELECT_MAPPING.get(field.name, field.name),
+            ),
             WKTElement(geography.val, srid=EPSG),
         )
 
     def func_geolength(self, field: ast.Identifier) -> functions.Function:
         return functions.func.ST_Length(
-            getattr(globals()[self.root_model], field.name)
+            getattr(
+                globals()[self.root_model],
+                SELECT_MAPPING.get(field.name, field.name),
+            )
         )
 
     def func_geointersects(
         self, field: ast.Identifier, geography: ast.Geography
     ) -> functions.Function:
         return functions.func.ST_Intersects(
-            getattr(globals()[self.root_model], field.name),
+            getattr(
+                globals()[self.root_model],
+                SELECT_MAPPING.get(field.name, field.name),
+            ),
             WKTElement(geography.val, srid=EPSG),
         )
 
@@ -590,7 +600,10 @@ class FilterVisitor(visitor.NodeVisitor):
         self, field: ast.Identifier, geography: ast.Geography
     ) -> functions.Function:
         return functions.func.ST_Equals(
-            getattr(globals()[self.root_model], field.name),
+            getattr(
+                globals()[self.root_model],
+                SELECT_MAPPING.get(field.name, field.name),
+            ),
             WKTElement(geography.val, srid=EPSG),
         )
 
@@ -598,7 +611,10 @@ class FilterVisitor(visitor.NodeVisitor):
         self, field: ast.Identifier, geography: ast.Geography
     ) -> functions.Function:
         return functions.func.ST_Disjoint(
-            getattr(globals()[self.root_model], field.name),
+            getattr(
+                globals()[self.root_model],
+                SELECT_MAPPING.get(field.name, field.name),
+            ),
             WKTElement(geography.val, srid=EPSG),
         )
 
@@ -606,7 +622,10 @@ class FilterVisitor(visitor.NodeVisitor):
         self, field: ast.Identifier, geography: ast.Geography
     ) -> functions.Function:
         return functions.func.ST_Touches(
-            getattr(globals()[self.root_model], field.name),
+            getattr(
+                globals()[self.root_model],
+                SELECT_MAPPING.get(field.name, field.name),
+            ),
             WKTElement(geography.val, srid=EPSG),
         )
 
@@ -614,7 +633,10 @@ class FilterVisitor(visitor.NodeVisitor):
         self, field: ast.Identifier, geography: ast.Geography
     ) -> functions.Function:
         return functions.func.ST_Within(
-            getattr(globals()[self.root_model], field.name),
+            getattr(
+                globals()[self.root_model],
+                SELECT_MAPPING.get(field.name, field.name),
+            ),
             WKTElement(geography.val, srid=EPSG),
         )
 
@@ -622,7 +644,10 @@ class FilterVisitor(visitor.NodeVisitor):
         self, field: ast.Identifier, geography: ast.Geography
     ) -> functions.Function:
         return functions.func.ST_Overlaps(
-            getattr(globals()[self.root_model], field.name),
+            getattr(
+                globals()[self.root_model],
+                SELECT_MAPPING.get(field.name, field.name),
+            ),
             WKTElement(geography.val, srid=EPSG),
         )
 
@@ -630,7 +655,10 @@ class FilterVisitor(visitor.NodeVisitor):
         self, field: ast.Identifier, geography: ast.Geography
     ) -> functions.Function:
         return functions.func.ST_Crosses(
-            getattr(globals()[self.root_model], field.name),
+            getattr(
+                globals()[self.root_model],
+                SELECT_MAPPING.get(field.name, field.name),
+            ),
             WKTElement(geography.val, srid=EPSG),
         )
 
@@ -638,7 +666,10 @@ class FilterVisitor(visitor.NodeVisitor):
         self, field: ast.Identifier, geography: ast.Geography
     ) -> functions.Function:
         return functions.func.ST_Intersects(
-            getattr(globals()[self.root_model], field.name),
+            getattr(
+                globals()[self.root_model],
+                SELECT_MAPPING.get(field.name, field.name),
+            ),
             WKTElement(geography.val, srid=EPSG),
         )
 
@@ -646,7 +677,10 @@ class FilterVisitor(visitor.NodeVisitor):
         self, field: ast.Identifier, geography: ast.Geography
     ) -> functions.Function:
         return functions.func.ST_Contains(
-            getattr(globals()[self.root_model], field.name),
+            getattr(
+                globals()[self.root_model],
+                SELECT_MAPPING.get(field.name, field.name),
+            ),
             WKTElement(geography.val, srid=EPSG),
         )
 
@@ -657,7 +691,10 @@ class FilterVisitor(visitor.NodeVisitor):
         intersectionMatrixPattern: Optional[ast._Node] = None,
     ) -> functions.Function:
         return functions.func.ST_Relate(
-            getattr(globals()[self.root_model], field.name),
+            getattr(
+                globals()[self.root_model],
+                SELECT_MAPPING.get(field.name, field.name),
+            ),
             WKTElement(geography.val, srid=EPSG),
             self.visit(intersectionMatrixPattern),
         )
