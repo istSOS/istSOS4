@@ -47,6 +47,9 @@ date = datetime.strptime(
 chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL", "P1Y"))
 epsg = int(os.getenv("EPSG", 4326))
 authorization = int(os.getenv("AUTHORIZATION", 0))
+st_aggregate = (os.getenv("ST_AGGREGATE", "CONVEX_HULL"))
+
+pgpool = None
 
 
 observedProperties = []
@@ -524,7 +527,8 @@ async def update_datastream_observed_area(conn):
                 geometries.append(geometry)
 
         if geometries:
-            query = f"""
+            if st_aggregate == "CONVEX_HULL":
+                query = f"""
                 UPDATE sensorthings."Datastream"
                 SET "observedArea" = ST_ConvexHull(
                     ST_Collect(
@@ -532,7 +536,17 @@ async def update_datastream_observed_area(conn):
                     )
                 )
                 WHERE id = $1;
-            """
+                """
+            else:
+                query = f"""
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = Set_SRID(ST_Extent(
+                    ST_Collect(
+                        ARRAY[{', '.join(f"'{g}'::geometry" for g in geometries)}]
+                    )
+                ), {epsg} )
+                WHERE id = $1;
+                """
 
             # Execute the update query, passing the datastream_id
             await conn.execute(query, ds)
