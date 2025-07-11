@@ -49,6 +49,9 @@ epsg = int(os.getenv("EPSG", 4326))
 authorization = int(os.getenv("AUTHORIZATION", 0))
 
 
+observedProperties = []
+
+
 async def get_pool():
     """
     Retrieves or creates a connection pool to the PostgreSQL database.
@@ -110,7 +113,7 @@ async def generate_things(conn, commit_id):
     things = []
     for i in range(1, n_things + 1):
         description = f"thing {i}"
-        name = f"thing name {i}"
+        name = f"thing_name_{i}"
         properties = json.dumps({"reference": f"{i}"})
         if commit_id is not None:
             things.append((description, name, properties, commit_id))
@@ -149,7 +152,7 @@ async def generate_locations(conn, commit_id):
         # elevation = random.uniform(0, 1000)
 
         description = f"location {i}"
-        name = f"location name {i}"
+        name = f"location_name_{i}"
         location = f"SRID={epsg};POINT({lon} {lat})"
         encodingType = "application/geo+json"
         if commit_id is not None:
@@ -206,6 +209,7 @@ async def generate_historicallocations(conn, commit_id):
     Returns:
         None
     """
+
     historicallocations = []
     time = date
     for i in range(1, n_things + 1):
@@ -255,6 +259,13 @@ async def generate_locations_historicallocations(conn):
     await conn.executemany(insert_sql, locations_historicallocations)
 
 
+mapping_op = {
+    "meteo:air:rainfall": ["P", "Millimeter", "mm"],
+    "meteo:air:temperature": ["T", "Celsius degree", "°C"],
+    "meteo:air:humidity": ["H", "Percentage", "%"],
+}
+
+
 async def generate_observedProperties(conn, commit_id):
     """
     Generate observed properties and insert them into the database.
@@ -266,11 +277,12 @@ async def generate_observedProperties(conn, commit_id):
         None
     """
 
-    observedProperties = []
+    keys = list(mapping_op)
     for i in range(1, n_observed_properties + 1):
-        name = f"{random.choice(['Temperature', 'Humidity', 'Pressure', 'Light', 'CO2', 'Motion'])}_{i}"
-        definition = f"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/{name}"
-        description = f"observedProperty {i}"
+        key = keys[(i - 1) % len(keys)]
+        name = f"{key}_{i}"
+        definition = "{}"
+        description = key.replace(":", " ")
         if commit_id is not None:
             observedProperties.append(
                 (name, definition, description, commit_id)
@@ -305,7 +317,7 @@ async def generate_sensors(conn, commit_id):
     sensors = []
     for i in range(1, n_things * n_observed_properties + 1):
         description = f"sensor {i}"
-        name = f"sensor name {i}"
+        name = f"sensor_name_{i}"
         encodingType = "application/pdf"
         metadata = f"{random.choice(['Temperature', 'Humidity', 'Pressure', 'Light', 'CO2', 'Motion'])} sensor"
         if commit_id is not None:
@@ -345,14 +357,18 @@ async def generate_datastreams(conn, commit_id):
     for i in range(1, n_things + 1):
         for j in range(1, n_observed_properties + 1):
             if authorization:
-                network = random.choice(["psos", "acsot"])
+                network = random.choice(["psos", "acsot", "defmin"])
 
             datastream = {
                 "unitOfMeasurement": json.dumps(
                     {
-                        "name": "Centigrade",
-                        "symbol": "C",
-                        "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen",
+                        "name": mapping_op[
+                            observedProperties[j - 1][0].rsplit("_", 1)[0]
+                        ][1],
+                        "symbol": mapping_op[
+                            observedProperties[j - 1][0].rsplit("_", 1)[0]
+                        ][2],
+                        "definition": "",
                     }
                 ),
                 "properties": json.dumps(
@@ -363,7 +379,9 @@ async def generate_datastreams(conn, commit_id):
                     }
                 ),
                 "description": f"datastream {cnt}",
-                "name": f"datastream name {cnt}",
+                "name": f"{mapping_op[
+                            observedProperties[j - 1][0].rsplit("_", 1)[0]
+                        ][0]}_datastream_{cnt}",
                 "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement",
                 "thing_id": i,
                 "sensor_id": cnt,
@@ -407,7 +425,7 @@ async def generate_featuresofinterest(conn, commit_id):
         # elevation = random.uniform(0, 1000)
 
         description = f"featuresofinterest {i}"
-        name = f"featuresofinterest name {i}"
+        name = f"featuresofinterest_name_{i}"
         encodingType = "application/geo+json"
         feature = f"SRID={epsg};POINT({lon} {lat})"
         if commit_id is not None:
@@ -532,7 +550,6 @@ async def generate_observations(conn, commit_id):
     """
 
     observations = []
-
     for j in range(1, n_things * n_observed_properties + 1):
         phenomenonTime = date
         check_date = date
