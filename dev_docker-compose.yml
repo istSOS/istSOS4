@@ -20,7 +20,7 @@ services:
         -c log_destination="stderr"
         -c log_duration="on"
     ports:
-      - "45432:5432"
+      - "${POSTGRES_EXTERNAL_PORT}:5432"
     volumes:
       - v-istsos4-database-data:/var/lib/postgresql/data
     healthcheck:
@@ -34,7 +34,7 @@ services:
       context: ./api
       dockerfile: Dockerfile
     environment:
-      HOSTNAME: ${HOSTNAME}
+      HOSTNAME: ${HOSTNAME}:${EXTERNAL_PORT}
       SUBPATH: ${SUBPATH}
       VERSION: ${VERSION}
       DEBUG: ${DEBUG}
@@ -59,7 +59,7 @@ services:
       ANONYMOUS_VIEWER: ${ANONYMOUS_VIEWER}
     command: uvicorn --reload --host 0.0.0.0 --port 5000 app.main:app
     ports:
-      - 8018:5000
+      - ${EXTERNAL_PORT}:5000
     volumes:
       - ./api/app:/code/app
     working_dir: /code
@@ -75,7 +75,7 @@ services:
       context: ./dummy_data
       dockerfile: Dockerfile
     environment:
-      HOSTNAME: ${HOSTNAME}
+      HOSTNAME: ${HOSTNAME}:${EXTERNAL_PORT}
       SUBPATH: ${SUBPATH}
       VERSION: ${VERSION}
       VERSIONING: ${VERSIONING}

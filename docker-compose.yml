@@ -18,7 +18,7 @@ services:
         -c log_destination="stderr"
         -c log_duration="on"
     ports:
-      - "45432:5432"
+      - "${POSTGRES_EXTERNAL_PORT}:5432"
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
       interval: 10s
@@ -28,7 +28,7 @@ services:
   api:
     image: ghcr.io/istsos/istsos4/api:1.9
     environment:
-      HOSTNAME: ${HOSTNAME}
+      HOSTNAME: ${HOSTNAME}:${EXTERNAL_PORT}
       SUBPATH: ${SUBPATH}
       VERSION: ${VERSION}
       DEBUG: ${DEBUG}
@@ -53,7 +53,7 @@ services:
       ANONYMOUS_VIEWER: ${ANONYMOUS_VIEWER}
     command: uvicorn --timeout-keep-alive 75 --workers 2 --host 0.0.0.0 --port 5000 app.main:app
     ports:
-      - 8018:5000
+      - ${EXTERNAL_PORT}:5000
     working_dir: /code
 
   redis:
@@ -65,7 +65,7 @@ services:
     command: python3 generator.py
     working_dir: /dummy_data
     environment:
-      HOSTNAME: ${HOSTNAME}
+      HOSTNAME: ${HOSTNAME}:${EXTERNAL_PORT}
       SUBPATH: ${SUBPATH}
       VERSION: ${VERSION}
       VERSIONING: ${VERSIONING}
