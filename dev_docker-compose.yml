@@ -34,7 +34,7 @@ services:
       context: ./api
       dockerfile: Dockerfile
     environment:
-      HOSTNAME: ${HOSTNAME}:${EXTERNAL_PORT}
+      HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
       VERSION: ${VERSION}
       DEBUG: ${DEBUG}
@@ -75,7 +75,7 @@ services:
       context: ./dummy_data
       dockerfile: Dockerfile
     environment:
-      HOSTNAME: ${HOSTNAME}:${EXTERNAL_PORT}
+      HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
       VERSION: ${VERSION}
       VERSIONING: ${VERSIONING}

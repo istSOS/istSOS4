@@ -28,7 +28,7 @@ services:
   api:
     image: ghcr.io/istsos/istsos4/api:1.9
     environment:
-      HOSTNAME: ${HOSTNAME}:${EXTERNAL_PORT}
+      HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
       VERSION: ${VERSION}
       DEBUG: ${DEBUG}
@@ -65,7 +65,7 @@ services:
     command: python3 generator.py
     working_dir: /dummy_data
     environment:
-      HOSTNAME: ${HOSTNAME}:${EXTERNAL_PORT}
+      HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
       VERSION: ${VERSION}
       VERSIONING: ${VERSIONING}
