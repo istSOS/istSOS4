@@ -36,14 +36,15 @@ v1 = APIRouter()
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
 ):
-    user = await authenticate_user(form_data.username, form_data.password)
-    if not user:
+    user_data = await authenticate_user(form_data.username, form_data.password)
+    if not user_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token, expire = create_access_token(data={"sub": user})
+    access_token, expire = create_access_token(data=user_data)
+
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content={
