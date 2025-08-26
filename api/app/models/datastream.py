@@ -36,6 +36,7 @@ class Datastream(Base):
         "Observations@iot.navigationLink", Text
     )
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
+    network_navigation_link = Column("Network@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     unit_of_measurement = Column("unitOfMeasurement", JSON, nullable=False)
@@ -60,6 +61,7 @@ class Datastream(Base):
         nullable=False,
     )
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
+    network_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Network.id"))
     thing = relationship("Thing", back_populates="datastream")
     sensor = relationship("Sensor", back_populates="datastream")
     observedproperty = relationship(
@@ -67,3 +69,4 @@ class Datastream(Base):
     )
     observation = relationship("Observation", back_populates="datastream")
     commit = relationship("Commit", back_populates="datastream")
+    network = relationship("Network", back_populates="datastream")

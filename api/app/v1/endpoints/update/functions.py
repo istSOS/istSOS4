@@ -14,7 +14,7 @@
 
 import json
 
-from app import AUTHORIZATION, VERSIONING
+from app import AUTHORIZATION, NETWORK, VERSIONING
 from app.utils.utils import (
     handle_associations,
     handle_datetime_fields,
@@ -102,7 +102,7 @@ async def update_location_entity(
     location_id,
     payload,
 ):
-    if payload["location"]:
+    if payload.get("location"):
         validate_epsg(payload["location"])
 
     if "Things" in payload:
@@ -135,14 +135,25 @@ async def update_location_entity(
                     thing_id,
                     location_id,
                 )
-            historical_location_id = await connection.fetchval(
-                """
-                    INSERT INTO sensorthings."HistoricalLocation" ("thing_id")
-                    VALUES ($1)
-                    RETURNING id;
+            if payload.get("commit_id"):
+                historical_location_id = await connection.fetchval(
+                    """
+                        INSERT INTO sensorthings."HistoricalLocation" ("thing_id", "commit_id")
+                        VALUES ($1, $2)
+                        RETURNING id;
+                    """,
+                    thing_id,
+                    payload.get("commit_id"),
+                )
+            else:
+                historical_location_id = await connection.fetchval(
+                    """
+                        INSERT INTO sensorthings."HistoricalLocation" ("thing_id")
+                        VALUES ($1)
+                        RETURNING id;
                 """,
-                thing_id,
-            )
+                    thing_id,
+                )
             await connection.execute(
                 """
                     INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id")
@@ -191,14 +202,25 @@ async def update_thing_entity(connection, thing_id, payload):
                     thing_id,
                     location_id,
                 )
-            historical_location_id = await connection.fetchval(
-                """
-                    INSERT INTO sensorthings."HistoricalLocation" ("thing_id")
-                    VALUES ($1)
-                    RETURNING id;
-                """,
-                thing_id,
-            )
+            if payload.get("commit_id"):
+                historical_location_id = await connection.fetchval(
+                    """
+                        INSERT INTO sensorthings."HistoricalLocation" ("thing_id", "commit_id")
+                        VALUES ($1, $2)
+                        RETURNING id;
+                    """,
+                    thing_id,
+                    payload.get("commit_id"),
+                )
+            else:
+                historical_location_id = await connection.fetchval(
+                    """
+                        INSERT INTO sensorthings."HistoricalLocation" ("thing_id")
+                        VALUES ($1)
+                        RETURNING id;
+                    """,
+                    thing_id,
+                )
             await connection.execute(
                 """
                     INSERT INTO sensorthings."Location_HistoricalLocation" ("location_id", "historicallocation_id")
@@ -306,7 +328,14 @@ async def update_observed_property_entity(
 async def update_datastream_entity(connection, datastream_id, payload):
     handle_datetime_fields(payload)
 
-    handle_associations(payload, ["Thing", "Sensor", "ObservedProperty"])
+    handle_associations(
+        payload,
+        (
+            ["Thing", "Sensor", "ObservedProperty", "Network"]
+            if NETWORK
+            else ["Thing", "Sensor", "ObservedProperty"]
+        ),
+    )
 
     await handle_nested_entities(
         connection,
@@ -351,6 +380,20 @@ async def update_observation_entity(connection, observation_id, payload):
 
     if payload:
         await update_entity(connection, "Observation", observation_id, payload)
+
+
+async def update_network_entity(connection, network_id, payload):
+    await handle_nested_entities(
+        connection,
+        payload,
+        network_id,
+        "Datastreams",
+        "network_id",
+        "Datastream",
+    )
+
+    if payload:
+        await update_entity(connection, "Network", network_id, payload)
 
 
 async def handle_nested_entities(

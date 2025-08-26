@@ -10,6 +10,7 @@ services:
       DATADIR: /var/lib/postgresql/data
     command: >
       postgres
+        -c custom.network=${NETWORK:-0}
         -c custom.versioning=${VERSIONING:-0}
         -c custom.authorization=${AUTHORIZATION:-0}
         -c custom.duplicates=${DUPLICATES:-0}
@@ -20,7 +21,7 @@ services:
         -c log_destination="stderr"
         -c log_duration="on"
     ports:
-      - "${POSTGRES_EXTERNAL_PORT}:5432"
+      - ${POSTGRES_EXTERNAL_PORT}:5432
     volumes:
       - v-istsos4-database-data:/var/lib/postgresql/data
     healthcheck:
@@ -57,6 +58,7 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
       ALGORITHM: ${ALGORITHM}
       ANONYMOUS_VIEWER: ${ANONYMOUS_VIEWER}
+      NETWORK: ${NETWORK}
     command: uvicorn --reload --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - ${EXTERNAL_PORT}:5000
@@ -93,6 +95,7 @@ services:
       CHUNK_INTERVAL: ${CHUNK_INTERVAL}
       EPSG: ${EPSG}
       AUTHORIZATION: ${AUTHORIZATION}
+      NETWORK: ${NETWORK}
     command: python3 generator.py
     volumes:
       - ./dummy_data:/dummy_data

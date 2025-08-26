@@ -21,6 +21,8 @@ from .historical_location import HistoricalLocation
 from .historical_location_traveltime import HistoricalLocationTravelTime
 from .location import Location
 from .location_traveltime import LocationTravelTime
+from .network import Network
+from .network_traveltime import NetworkTravelTime
 from .observation import Observation
 from .observation_traveltime import ObservationTravelTime
 from .observed_property import ObservedProperty
@@ -31,6 +33,7 @@ from .thing import Thing
 from .thing_traveltime import ThingTravelTime
 
 __all__ = [
+    "Network",
     "Commit",
     "Location",
     "Thing",
@@ -40,6 +43,7 @@ __all__ = [
     "Datastream",
     "FeaturesOfInterest",
     "Observation",
+    "NetworkTravelTime",
     "LocationTravelTime",
     "ThingTravelTime",
     "HistoricalLocationTravelTime",

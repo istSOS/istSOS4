@@ -41,16 +41,6 @@ BEGIN
         SET "uri" = '/Users(' || id || ')'
         WHERE "username" = current_setting('custom.user');
 
-        CREATE TABLE IF NOT EXISTS sensorthings."Network" (
-            "name" VARCHAR(255) NOT NULL PRIMARY KEY
-        );
-
-        INSERT INTO sensorthings."Network" ("name")  
-        VALUES
-            ('psos'),
-            ('acsot'),
-            ('defmin');
-
         CREATE TABLE IF NOT EXISTS sensorthings."Commit"(
             "id" BIGSERIAL NOT NULL PRIMARY KEY,
             "author" VARCHAR(255) NOT NULL,
@@ -165,8 +155,7 @@ BEGIN
 
         -- Alter the Datastream table to add the commit_id column
         ALTER TABLE sensorthings."Datastream" 
-            ADD COLUMN IF NOT EXISTS "commit_id" BIGINT REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE,
-            ADD COLUMN IF NOT EXISTS "network" VARCHAR(255) NOT NULL REFERENCES sensorthings."Network"(name);
+            ADD COLUMN IF NOT EXISTS "commit_id" BIGINT REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
         
         -- Create an index on the commit_id column for Datastream table
         CREATE INDEX IF NOT EXISTS "idx_datastream_commit_id" 
@@ -363,6 +352,49 @@ BEGIN
         ALTER TABLE sensorthings."Commit"
         ADD COLUMN "user_id" BIGINT NOT NULL REFERENCES sensorthings."User"(id) ON DELETE CASCADE;
 
+        IF current_setting('custom.network')::boolean THEN
+            -- Alter the Network table to add the commit_id column
+            ALTER TABLE sensorthings."Network" 
+            ADD COLUMN "commit_id" BIGINT NOT NULL 
+            REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
+
+            -- Create an index on the commit_id column for Network table
+            CREATE INDEX IF NOT EXISTS idx_network_commit_id 
+            ON sensorthings."Network" 
+            USING btree ("commit_id" ASC NULLS LAST) 
+            TABLESPACE pg_default;
+
+            -- Create or replace function for Commit@iot.navigationLink for Network table
+            EXECUTE format('
+                CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Network")
+                RETURNS text AS $$
+                   SELECT CASE
+                    WHEN $1.commit_id IS NOT NULL THEN 
+                        ''/Networks('' || $1.id || '')/Commit('' || $1.commit_id || '')''
+                    ELSE 
+                        NULL
+                    END;
+                $$ LANGUAGE SQL;
+            ');
+
+            -- Create or replace function for Networks@iot.navigationLink in Commit table
+            EXECUTE format('
+                CREATE OR REPLACE FUNCTION "Networks@iot.navigationLink"(sensorthings."Commit")
+                RETURNS text AS $$
+                    SELECT CASE 
+                        WHEN EXISTS (
+                            SELECT 1 
+                            FROM sensorthings."Network" 
+                            WHERE commit_id = $1.id
+                        ) THEN 
+                            ''/Commits('' || $1.id || '')/Network''
+                        ELSE 
+                            NULL
+                    END;
+                $$ LANGUAGE SQL;
+            ');
+        END IF;
+
         RESET ROLE;
 
          -- Grant permissions to the administrator role
@@ -376,6 +408,9 @@ BEGIN
         GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO "user";
         REVOKE INSERT, UPDATE, DELETE ON sensorthings."User" FROM "user";
         REVOKE UPDATE, DELETE ON sensorthings."Commit" FROM "user";
+        IF current_setting('custom.network')::boolean THEN
+            REVOKE INSERT, UPDATE, DELETE ON sensorthings."Network" FROM "user";
+        END IF;
         GRANT "user" TO "administrator" WITH ADMIN OPTION;
 
         -- Create roles for guest
@@ -410,23 +445,31 @@ BEGIN
         ALTER TABLE sensorthings."Datastream" ENABLE ROW LEVEL SECURITY;
         ALTER TABLE sensorthings."FeaturesOfInterest" ENABLE ROW LEVEL SECURITY;
         ALTER TABLE sensorthings."Observation" ENABLE ROW LEVEL SECURITY;
+        IF current_setting('custom.network')::boolean THEN
+            ALTER TABLE sensorthings."Network" ENABLE ROW LEVEL SECURITY;
+        END IF;
 
         -- Create policies for row level security
         DO $$ 
         DECLARE 
             tablename TEXT;
+            tables TEXT[];
         BEGIN
-            FOR tablename IN 
-                SELECT unnest(ARRAY[
-                    'Location', 
-                    'Thing', 
-                    'HistoricalLocation', 
-                    'ObservedProperty', 
-                    'Sensor', 
-                    'Datastream', 
-                    'FeaturesOfInterest', 
-                    'Observation'
-                ])
+            tables := ARRAY[
+                'Location', 
+                'Thing', 
+                'HistoricalLocation', 
+                'ObservedProperty', 
+                'Sensor', 
+                'Datastream', 
+                'FeaturesOfInterest', 
+                'Observation'
+            ];
+            IF current_setting('custom.network')::boolean THEN
+                tables := tables || ARRAY['Network'];
+            END IF;
+
+            FOR tablename IN SELECT unnest(tables)
             LOOP
                 EXECUTE format(
                     'CREATE POLICY anonymous_%s ON sensorthings.%I FOR SELECT TO "guest" USING (true);', 
@@ -441,19 +484,24 @@ BEGIN
         DECLARE
             tablename text;
             user_list_ text;
+            tables TEXT[];
         BEGIN
             user_list_ := array_to_string(users_, ', ');
-            FOR tablename IN
-                SELECT unnest(ARRAY[
-                    'Location', 
-                    'Thing', 
-                    'HistoricalLocation', 
-                    'ObservedProperty', 
-                    'Sensor', 
-                    'Datastream', 
-                    'FeaturesOfInterest', 
-                    'Observation'
-                ])
+            tables := ARRAY[
+                'Location', 
+                'Thing', 
+                'HistoricalLocation', 
+                'ObservedProperty', 
+                'Sensor', 
+                'Datastream', 
+                'FeaturesOfInterest', 
+                'Observation'
+            ];
+            IF current_setting('custom.network')::boolean THEN
+                tables := tables || ARRAY['Network'];
+            END IF;
+
+            FOR tablename IN SELECT unnest(tables)
             LOOP
                 EXECUTE format(
                     'CREATE POLICY %s_viewer_%s
@@ -472,19 +520,24 @@ BEGIN
         DECLARE
             tablename text;
             user_list_ text;
+            tables TEXT[];
         BEGIN
             user_list_ := array_to_string(users_, ', ');
-            FOR tablename IN
-                SELECT unnest(ARRAY[
-                    'Location', 
-                    'Thing', 
-                    'HistoricalLocation', 
-                    'ObservedProperty', 
-                    'Sensor', 
-                    'Datastream', 
-                    'FeaturesOfInterest', 
-                    'Observation'
-                ])
+            tables := ARRAY[
+                'Location', 
+                'Thing', 
+                'HistoricalLocation', 
+                'ObservedProperty', 
+                'Sensor', 
+                'Datastream', 
+                'FeaturesOfInterest', 
+                'Observation'
+            ];
+            IF current_setting('custom.network')::boolean THEN
+                tables := tables || ARRAY['Network'];
+            END IF;
+
+            FOR tablename IN SELECT unnest(tables)
             LOOP
                 EXECUTE format(
                     'CREATE POLICY %s_editor_%s
@@ -503,19 +556,24 @@ BEGIN
         DECLARE
             tablename text;
             user_list_ text;
+            tables TEXT[];
         BEGIN
             user_list_ := array_to_string(users_, ', ');
-            FOR tablename IN
-                SELECT unnest(ARRAY[
-                    'Location', 
-                    'Thing', 
-                    'HistoricalLocation', 
-                    'ObservedProperty', 
-                    'Sensor', 
-                    'Datastream', 
-                    'FeaturesOfInterest', 
-                    'Observation'
-                ])
+            tables := ARRAY[
+                'Location', 
+                'Thing', 
+                'HistoricalLocation', 
+                'ObservedProperty', 
+                'Sensor', 
+                'Datastream', 
+                'FeaturesOfInterest', 
+                'Observation'
+            ];
+            IF current_setting('custom.network')::boolean THEN
+                tables := tables || ARRAY['Network'];
+            END IF;
+
+            FOR tablename IN SELECT unnest(tables)
             LOOP
                 EXECUTE format(
                     'CREATE POLICY %s_sensor_%s_select
@@ -572,18 +630,23 @@ BEGIN
         DECLARE
             tablename text;
             user_list_ text;
+            tables TEXT[];
         BEGIN
             user_list_ := array_to_string(users_, ', ');
-            FOR tablename IN
-                SELECT unnest(ARRAY[
-                    'Location', 
-                    'Thing', 
-                    'HistoricalLocation', 
-                    'ObservedProperty', 
-                    'Sensor', 
-                    'Datastream', 
-                    'FeaturesOfInterest'
-                ])
+            tables := ARRAY[
+                'Location', 
+                'Thing', 
+                'HistoricalLocation', 
+                'ObservedProperty', 
+                'Sensor', 
+                'Datastream', 
+                'FeaturesOfInterest'
+            ];
+            IF current_setting('custom.network')::boolean THEN
+                tables := tables || ARRAY['Network'];
+            END IF;
+
+            FOR tablename IN SELECT unnest(tables)
             LOOP
                 EXECUTE format(
                     'CREATE POLICY %s_obs_manager_%s_select

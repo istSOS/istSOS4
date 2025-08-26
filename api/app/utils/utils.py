@@ -266,3 +266,16 @@ def check_missing_properties(payload, required_properties):
         raise ValueError(
             f"Missing required properties {', '.join(missing_properties)}"
         )
+
+
+def insert_navigation_link(default_select: dict, key: str, link: str):
+    """
+    Insert `new navigation_link` into `default_select[key]` after the last *_navigation_link.
+    """
+    nav_links = [
+        i
+        for i, v in enumerate(default_select[key])
+        if v.endswith("_navigation_link")
+    ]
+    insert_pos = nav_links[-1] + 1 if nav_links else len(default_select[key])
+    default_select[key].insert(insert_pos, link)

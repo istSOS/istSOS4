@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import AUTHORIZATION
+from app import AUTHORIZATION, NETWORK
 from app.v1.endpoints.create import bulk_observation, data_array_observation
 from app.v1.endpoints.create import datastream as create_datastream
 from app.v1.endpoints.create import (
@@ -23,6 +23,7 @@ from app.v1.endpoints.create import (
 )
 from app.v1.endpoints.create import location as create_location
 from app.v1.endpoints.create import login
+from app.v1.endpoints.create import network as create_network
 from app.v1.endpoints.create import observation as create_observation
 from app.v1.endpoints.create import (
     observed_property as create_observed_property,
@@ -39,6 +40,7 @@ from app.v1.endpoints.delete import (
     historical_location as delete_historical_location,
 )
 from app.v1.endpoints.delete import location as delete_location
+from app.v1.endpoints.delete import network as delete_network
 from app.v1.endpoints.delete import observation as delete_observation
 from app.v1.endpoints.delete import (
     observed_property as delete_observed_property,
@@ -55,6 +57,7 @@ from app.v1.endpoints.read import (
     historical_location as read_historical_location,
 )
 from app.v1.endpoints.read import location as read_location
+from app.v1.endpoints.read import network as read_network
 from app.v1.endpoints.read import observation as read_observation
 from app.v1.endpoints.read import observed_property as read_observed_property
 from app.v1.endpoints.read import policy as read_policy
@@ -70,6 +73,7 @@ from app.v1.endpoints.update import (
     historical_location as update_historical_location,
 )
 from app.v1.endpoints.update import location as update_location
+from app.v1.endpoints.update import network as update_network
 from app.v1.endpoints.update import observation as update_observation
 from app.v1.endpoints.update import (
     observed_property as update_observed_property,
@@ -93,6 +97,14 @@ if AUTHORIZATION:
     ]
 else:
     tags_metadata = []
+
+if NETWORK:
+    tags_metadata += [
+        {
+            "name": "Networks",
+            "description": "Networks that can be used to group datastreams.",
+        },
+    ]
 
 tags_metadata += [
     {
@@ -152,6 +164,13 @@ if AUTHORIZATION:
     v1.include_router(create_policy.v1)
     v1.include_router(update_policy.v1)
     v1.include_router(delete_policy.v1)
+
+
+if NETWORK:
+    v1.include_router(read_network.v1)
+    v1.include_router(create_network.v1)
+    v1.include_router(update_network.v1)
+    v1.include_router(delete_network.v1)
 
 # Register the read endpoints
 v1.include_router(read_location.v1)

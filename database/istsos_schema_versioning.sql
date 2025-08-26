@@ -121,6 +121,7 @@ LANGUAGE plpgsql
 AS $body$
 DECLARE
     tablename text;
+    tables text[];
 BEGIN
 
     RESET ROLE;
@@ -133,9 +134,24 @@ BEGIN
 
     SET ROLE "administrator";
 
+    tables := ARRAY[
+        'Location',
+        'Thing',
+        'HistoricalLocation',
+        'ObservedProperty',
+        'Sensor',
+        'Datastream',
+        'FeaturesOfInterest',
+        'Observation'
+    ];
+
+    -- Conditionally add Network
+    IF current_setting('custom.network')::boolean THEN
+        tables := tables || ARRAY['Network'];
+    END IF;
+
     -- Loop through each table in the original schema in the correct order
-    FOR tablename IN
-        SELECT unnest(array['Location', 'Thing', 'HistoricalLocation', 'ObservedProperty', 'Sensor', 'Datastream', 'FeaturesOfInterest', 'Observation'])
+    FOR tablename IN SELECT unnest(tables)
         LOOP
             -- Add versioning to each table
             EXECUTE format('SELECT sensorthings.add_table_to_versioning(%L, %L);', tablename, original_schema);
@@ -241,6 +257,12 @@ BEGIN
         SELECT '/Datastreams(' || $1.id || ')/Commit(' || $1.commit_id || ')';
     $$ LANGUAGE SQL;
 
+    IF current_setting('custom.network')::boolean THEN
+        CREATE OR REPLACE FUNCTION "Network@iot.navigationLink"(sensorthings."Datastream_traveltime") RETURNS text AS $$
+            SELECT '/Datastreams(' || $1.id || ')/Network(' || $1.network_id || ')';
+        $$ LANGUAGE SQL;
+    END IF;
+
     CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."FeaturesOfInterest_traveltime") RETURNS text AS $$
         SELECT '/FeaturesOfInterest(' || $1.id || ')';
     $$ LANGUAGE SQL;
@@ -266,12 +288,7 @@ BEGIN
     $$ LANGUAGE SQL;
 
     CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Observation_traveltime") RETURNS text AS $$
-        SELECT CASE 
-            WHEN $1.commit_id IS NOT NULL THEN 
-                '/Observations(' || $1.id || ')/Commit(' || $1.commit_id || ')'
-            ELSE 
-                NULL
-        END;
+        SELECT '/Observations(' || $1.id || ')/Commit(' || $1.commit_id || ')'
     $$ LANGUAGE SQL;
 
     CREATE OR REPLACE FUNCTION result(sensorthings."Observation_traveltime") RETURNS jsonb AS $$ 
@@ -285,6 +302,20 @@ BEGIN
             END; 
         END; 
     $$ LANGUAGE plpgsql;
+
+    IF current_setting('custom.network')::boolean THEN
+        CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Network_traveltime") RETURNS text AS $$
+            SELECT '/Networks(' || $1.id || ')';
+        $$ LANGUAGE SQL;
+
+        CREATE OR REPLACE FUNCTION "Datastreams@iot.navigationLink"(sensorthings."Network_traveltime") RETURNS text AS $$
+            SELECT '/Networks(' || $1.id || ')/Datastreams';
+        $$ LANGUAGE SQL;
+
+        CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Network_traveltime") RETURNS text AS $$
+            SELECT '/Networks(' || $1.id || ')/Commit(' || $1.commit_id || ')'
+        $$ LANGUAGE SQL;
+    END IF;
 
 
     RAISE NOTICE 'Schema % is now versionized.', original_schema;
@@ -448,6 +479,29 @@ BEGIN
                 END;
             $$ LANGUAGE SQL;
 
+            IF current_setting('custom.network')::boolean THEN
+                -- Alter the Network table to add the commit_id column
+                ALTER TABLE sensorthings."Network" 
+                ADD COLUMN IF NOT EXISTS "commit_id" BIGINT 
+                REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
+
+                -- Create an index on the commit_id column for Network table
+                CREATE INDEX IF NOT EXISTS "idx_network_commit_id" 
+                ON sensorthings."Network" 
+                USING btree ("commit_id" ASC NULLS LAST) 
+                TABLESPACE pg_default;
+
+                -- Create or replace function for Commit@iot.navigationLink for Network table
+                CREATE OR REPLACE FUNCTION "Commit@iot.navigationLink"(sensorthings."Network") RETURNS text AS $$
+                    SELECT CASE 
+                        WHEN $1.commit_id IS NOT NULL THEN 
+                            '/Networks(' || $1.id || ')/Commit(' || $1.commit_id || ')'
+                        ELSE 
+                            NULL
+                    END;
+                $$ LANGUAGE SQL;
+            END IF;
+
             -- Create or replace function for Things@iot.navigationLink in Commit table
             CREATE OR REPLACE FUNCTION "Things@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
                 SELECT CASE 
@@ -559,6 +613,22 @@ BEGIN
                         NULL
                 END;
             $$ LANGUAGE SQL;
+
+            IF current_setting('custom.network')::boolean THEN
+                -- Create or replace function for Networks@iot.navigationLink in Commit table
+                CREATE OR REPLACE FUNCTION "Networks@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
+                    SELECT CASE 
+                        WHEN EXISTS (
+                            SELECT 1 
+                            FROM sensorthings."Network" 
+                            WHERE commit_id = $1.id
+                        ) THEN 
+                            '/Commits(' || $1.id || ')/Networks'
+                        ELSE 
+                            NULL
+                    END;
+                $$ LANGUAGE SQL;
+            END IF;
         END IF;
 
         -- Finally, set up schema versioning
@@ -576,8 +646,14 @@ BEGIN
             GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings TO "user";
             REVOKE INSERT, UPDATE, DELETE ON sensorthings."User" FROM "user";
             REVOKE UPDATE, DELETE ON sensorthings."Commit" FROM "user";
+            IF current_setting('custom.network')::boolean THEN
+                REVOKE INSERT, UPDATE, DELETE ON sensorthings."Network" FROM "user";
+            END IF;
             GRANT CREATE, USAGE ON SCHEMA sensorthings_history TO "user";
             GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings_history TO "user";
+            IF current_setting('custom.network')::boolean THEN
+                REVOKE INSERT, UPDATE, DELETE ON sensorthings_history."Network" FROM "user";
+            END IF;
 
             -- Override grants for the guest
             GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO "guest";
@@ -601,6 +677,7 @@ BEGIN
             ALTER VIEW sensorthings."Datastream_traveltime" SET (security_invoker = on);
             ALTER VIEW sensorthings."FeaturesOfInterest_traveltime" SET (security_invoker = on);
             ALTER VIEW sensorthings."Observation_traveltime" SET (security_invoker = on);
+            ALTER VIEW sensorthings."Network_traveltime" SET (security_invoker = on);
 
         END IF;
     END IF;
