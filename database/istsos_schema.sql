@@ -277,6 +277,40 @@ BEGIN
     END IF;
 END $$;
 
+DO $BODY$
+BEGIN
+    IF current_setting('custom.network')::boolean THEN
+
+        CREATE TABLE IF NOT EXISTS sensorthings."Network" (
+            "id" BIGSERIAL NOT NULL PRIMARY KEY,
+            "name" VARCHAR(255) NOT NULL
+        );
+
+        CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Network") RETURNS text AS $$
+            SELECT '/Networks(' || $1.id || ')';
+        $$ LANGUAGE SQL;
+
+        CREATE OR REPLACE FUNCTION "Datastreams@iot.navigationLink"(sensorthings."Network") RETURNS text AS $$
+            SELECT '/Network(' || $1.id || ')/Datastreams';
+        $$ LANGUAGE SQL;
+
+        ALTER TABLE sensorthings."Datastream" 
+            ADD COLUMN IF NOT EXISTS "network_id" BIGINT NOT NULL REFERENCES sensorthings."Network"(id) ON DELETE CASCADE;
+
+        CREATE OR REPLACE FUNCTION "Network@iot.navigationLink"(sensorthings."Datastream") RETURNS text AS $$
+            SELECT '/Datastreams(' || $1.id || ')/Network';
+        $$ LANGUAGE SQL;
+
+        CREATE INDEX IF NOT EXISTS "idx_datastream_network_id" ON sensorthings."Datastream" USING btree ("network_id" ASC NULLS LAST) TABLESPACE pg_default;
+        
+        IF NOT current_setting('custom.duplicates')::boolean THEN
+            ALTER TABLE sensorthings."Network"
+            ADD CONSTRAINT unique_network_name UNIQUE ("name");
+        END IF;
+
+    END IF;
+END $BODY$;
+
 -- Create the trigger function
 CREATE OR REPLACE FUNCTION sensorthings.delete_related_historical_locations() RETURNS TRIGGER AS $$
 BEGIN

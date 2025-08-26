@@ -34,6 +34,7 @@ class DatastreamTravelTime(Base):
         "Observations@iot.navigationLink", Text
     )
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
+    network_navigation_link = Column("Network@iot.navigationLink", Text)
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     unit_of_measurement = Column("unitOfMeasurement", JSON, nullable=False)
@@ -46,12 +47,15 @@ class DatastreamTravelTime(Base):
     sensor_id = Column(Integer)
     observedproperty_id = Column(Integer)
     commit_id = Column(Integer)
+    network_id = Column(Integer)
 
     thing = Column("Thing")
     sensor = Column("Sensor")
     observedproperty = Column("ObservedProperty")
     observation = Column("Observation")
     commit = Column("Commit")
+    network = Column("Network")
+
     system_time_validity = Column("systemTimeValidity", TSTZRANGE)
 
     __table_args__ = (

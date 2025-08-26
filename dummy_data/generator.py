@@ -47,7 +47,7 @@ date = datetime.strptime(
 chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL", "P1Y"))
 epsg = int(os.getenv("EPSG", 4326))
 authorization = int(os.getenv("AUTHORIZATION", 0))
-
+network = int(os.getenv("NETWORK", 0))
 
 observedProperties = []
 
@@ -97,6 +97,43 @@ async def generate_commit(conn, user_id, user_uri):
         return await conn.fetchval(
             query, user_uri, "text/plain", "dummy data", "CREATE"
         )
+
+
+async def generate_networks(conn, commit_id):
+    """
+    Generate two different networks and insert them into the database.
+
+    Args:
+        conn: The asyncpg connection object.
+        commit_id: The commit id to associate with the networks (optional).
+
+    Returns:
+        List of inserted network IDs.
+    """
+
+    names = random.sample(["psos", "acsot", "defmin"], 2)
+
+    inserted_ids = []
+    if commit_id is not None:
+        insert_sql = """
+            INSERT INTO sensorthings."Network" (name, commit_id)
+            VALUES ($1, $2)
+            RETURNING id;
+        """
+        for name in names:
+            row = await conn.fetchrow(insert_sql, name, commit_id)
+            inserted_ids.append(row["id"])
+    else:
+        insert_sql = """
+            INSERT INTO sensorthings."Network" (name)
+            VALUES ($1)
+            RETURNING id;
+        """
+        for name in names:
+            row = await conn.fetchrow(insert_sql, name)
+            inserted_ids.append(row["id"])
+
+    return inserted_ids
 
 
 async def generate_things(conn, commit_id):
@@ -340,7 +377,7 @@ async def generate_sensors(conn, commit_id):
     await conn.executemany(insert_sql, sensors)
 
 
-async def generate_datastreams(conn, commit_id):
+async def generate_datastreams(conn, commit_id, network_ids):
     """
     Generate datastreams and insert them into the database.
 
@@ -353,11 +390,8 @@ async def generate_datastreams(conn, commit_id):
 
     datastreams = []
     cnt = 1
-    network = None
     for i in range(1, n_things + 1):
         for j in range(1, n_observed_properties + 1):
-            if authorization:
-                network = random.choice(["psos", "acsot", "defmin"])
 
             datastream = {
                 "unitOfMeasurement": json.dumps(
@@ -390,8 +424,8 @@ async def generate_datastreams(conn, commit_id):
             if commit_id is not None:
                 datastream["commit_id"] = commit_id
 
-            if network is not None:
-                datastream["network"] = network
+            if network_ids:
+                datastream["network_id"] = random.choice(network_ids)
 
             datastreams.append(datastream)
             cnt += 1
@@ -630,6 +664,11 @@ async def create_data():
                 if versioning or authorization:
                     commit_id = await generate_commit(conn, user_id, user_uri)
 
+                if network:
+                    network_ids = await generate_networks(conn, commit_id)
+                else:
+                    network_ids = []
+
                 await generate_things(conn, commit_id)
                 await generate_locations(conn, commit_id)
                 await generate_things_locations(conn)
@@ -637,7 +676,7 @@ async def create_data():
                 await generate_locations_historicallocations(conn)
                 await generate_observedProperties(conn, commit_id)
                 await generate_sensors(conn, commit_id)
-                await generate_datastreams(conn, commit_id)
+                await generate_datastreams(conn, commit_id, network_ids)
                 await generate_featuresofinterest(conn, commit_id)
                 await generate_observations(conn, commit_id)
             except Exception as e:

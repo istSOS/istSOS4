@@ -15,7 +15,7 @@
 import json
 from datetime import datetime
 
-from app import AUTHORIZATION, HOSTNAME, SUBPATH, VERSION, VERSIONING
+from app import AUTHORIZATION, HOSTNAME, NETWORK, SUBPATH, VERSION, VERSIONING
 from app.utils.utils import (
     check_iot_id_in_payload,
     check_missing_properties,
@@ -242,6 +242,8 @@ async def insert_historical_location_entity(connection, payload, commit_id):
 async def insert_sensor_entity(connection, payload, commit_id):
     async with connection.transaction():
 
+        datastreams = payload.pop("Datastreams", [])
+
         if commit_id is not None:
             payload["commit_id"] = commit_id
 
@@ -249,7 +251,6 @@ async def insert_sensor_entity(connection, payload, commit_id):
             connection, "Sensor", payload
         )
 
-        datastreams = payload.pop("Datastreams", [])
         if datastreams:
             for datastream in datastreams:
                 await insert_datastream_entity(
@@ -264,6 +265,8 @@ async def insert_sensor_entity(connection, payload, commit_id):
 
 async def insert_observed_property_entity(connection, payload, commit_id):
     async with connection.transaction():
+        datastreams = payload.pop("Datastreams", [])
+
         if commit_id is not None:
             payload["commit_id"] = commit_id
 
@@ -271,7 +274,6 @@ async def insert_observed_property_entity(connection, payload, commit_id):
             connection, "ObservedProperty", payload
         )
 
-        datastreams = payload.pop("Datastreams", [])
         if datastreams:
             for datastream in datastreams:
                 await insert_datastream_entity(
@@ -290,6 +292,7 @@ async def insert_datastream_entity(
     thing_id=None,
     sensor_id=None,
     observed_property_id=None,
+    network_id=None,
     commit_id=None,
 ):
     async with connection.transaction():
@@ -302,12 +305,14 @@ async def insert_datastream_entity(
                 payload["Sensor"] = {"@iot.id": sensor_id}
             if observed_property_id is not None:
                 payload["ObservedProperty"] = {"@iot.id": observed_property_id}
+            if network_id is not None:
+                payload["Network"] = {"@iot.id": network_id}
 
             iot_id = payload.pop("@iot.id")
             await update_datastream_entity(connection, iot_id, payload)
 
             return (
-                payload["@iot.id"],
+                iot_id,
                 f"{HOSTNAME}{SUBPATH}{VERSION}/Datastreams({iot_id})",
             )
 
@@ -338,8 +343,23 @@ async def insert_datastream_entity(
             commit_id,
         )
 
+        if NETWORK:
+            await handle_associations(
+                payload,
+                "Network",
+                network_id,
+                insert_network_entity,
+                connection,
+                commit_id,
+            )
+
         check_missing_properties(
-            payload, ["Thing", "Sensor", "ObservedProperty"]
+            payload,
+            (
+                ["Thing", "Sensor", "ObservedProperty", "Network"]
+                if NETWORK
+                else ["Thing", "Sensor", "ObservedProperty"]
+            ),
         )
 
         observations = []
@@ -507,6 +527,30 @@ async def insert_observation_entity(
         )
 
         return observation_id, observation_self_link
+
+
+async def insert_network_entity(connection, payload, commit_id):
+    async with connection.transaction():
+
+        datastreams = payload.pop("Datastreams", [])
+
+        if commit_id is not None:
+            payload["commit_id"] = commit_id
+
+        network_id, network_selfLink = await create_entity(
+            connection, "Network", payload
+        )
+
+        if datastreams:
+            for datastream in datastreams:
+                await insert_datastream_entity(
+                    connection,
+                    datastream,
+                    network_id=network_id,
+                    commit_id=commit_id,
+                )
+
+        return network_id, network_selfLink
 
 
 async def update_datastream_last_foi_id(conn, foi_id, datastream_id):

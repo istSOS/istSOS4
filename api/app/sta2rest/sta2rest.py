@@ -24,7 +24,8 @@ representations in a REST API.
 import re
 from datetime import datetime, timezone
 
-from app import AUTHORIZATION, DEBUG, VERSION, VERSIONING
+from app import AUTHORIZATION, DEBUG, NETWORK, VERSION, VERSIONING
+from app.utils.utils import insert_navigation_link
 from dateutil.parser import isoparse
 
 from .sta_parser.ast import *
@@ -46,6 +47,7 @@ class STA2REST:
 
     # Mapping from SensorThings entities to their corresponding database table names
     ENTITY_MAPPING = {
+        "Networks": "Network",
         "Commits": "Commit",
         "Things": "Thing",
         "Locations": "Location",
@@ -55,6 +57,7 @@ class STA2REST:
         "Observations": "Observation",
         "FeaturesOfInterest": "FeaturesOfInterest",
         "HistoricalLocations": "HistoricalLocation",
+        "Network": "Network",
         "Commit": "Commit",
         "Thing": "Thing",
         "Location": "Location",
@@ -68,6 +71,14 @@ class STA2REST:
 
     # Default columns for each entity
     DEFAULT_SELECT = {
+        "Network": ["id", "self_link", "datastream_navigation_link", "name"],
+        "NetworkTravelTime": [
+            "id",
+            "self_link",
+            "datastream_navigation_link",
+            "name",
+            "system_time_validity",
+        ],
         "Commit": [
             "id",
             "self_link",
@@ -294,7 +305,26 @@ class STA2REST:
     if VERSIONING or AUTHORIZATION:
         for key in DEFAULT_SELECT:
             if key != "Commit":
-                DEFAULT_SELECT[key].append("commit_navigation_link")
+                insert_navigation_link(
+                    DEFAULT_SELECT, key, "commit_navigation_link"
+                )
+
+    if NETWORK:
+        insert_navigation_link(
+            DEFAULT_SELECT, "Datastream", "network_navigation_link"
+        )
+
+        if VERSIONING or AUTHORIZATION:
+            insert_navigation_link(
+                DEFAULT_SELECT, "Commit", "network_navigation_link"
+            )
+
+        if VERSIONING:
+            insert_navigation_link(
+                DEFAULT_SELECT,
+                "DatastreamTravelTime",
+                "network_navigation_link",
+            )
 
     @staticmethod
     def get_default_column_names(entity: str) -> list:
@@ -666,7 +696,7 @@ class STA2REST:
         keys_list = list(STA2REST.ENTITY_MAPPING.keys())
         if entity_name in keys_list:
             index = keys_list.index(entity_name)
-            if index > 8:
+            if index > 9:
                 single = True
         # Parse first entity
         main_entity = STA2REST.parse_entity(parts.pop(0))
