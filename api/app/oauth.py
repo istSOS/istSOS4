@@ -62,17 +62,19 @@ async def authenticate_user(username: str, password: str):
             host=POSTGRES_HOST,
             port=POSTGRES_PORT,
         )
-        query = 'SELECT role FROM sensorthings."User" WHERE username=$1'
-        row = await connection.fetchrow(query, username)
-        if not row:
-            return None
-        role = row["role"]
     except asyncpg.InvalidPasswordError:
         return None
     finally:
         if connection is not None:
             await connection.close()
-    return {"sub": username, "role": role}
+
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        query = 'SELECT role FROM sensorthings."User" WHERE username=$1'
+        row = await connection.fetchrow(query, username)
+        if not row:
+            return None
+    return {"sub": username, "role": row["role"]}
 
 
 def create_access_token(data: dict):
