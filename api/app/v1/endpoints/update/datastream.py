@@ -62,7 +62,7 @@ ALLOWED_KEYS = [
 ]
 
 if AUTHORIZATION:
-    ALLOWED_KEYS.append("network")
+    ALLOWED_KEYS.append("Network")
 
 
 @v1.api_route(
