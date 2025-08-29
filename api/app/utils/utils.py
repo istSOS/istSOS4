@@ -279,3 +279,60 @@ def insert_navigation_link(default_select: dict, key: str, link: str):
     ]
     insert_pos = nav_links[-1] + 1 if nav_links else len(default_select[key])
     default_select[key].insert(insert_pos, link)
+
+
+def build_expand(expand_node):
+    parts = []
+    for e in expand_node.identifiers:
+        # Start with the base expand identifier
+        segment = e.identifier
+
+        subparts = []
+
+        # Handle $select
+        if e.subquery and e.subquery.select:
+            select_str = ",".join(
+                j.name for j in e.subquery.select.identifiers
+            )
+            subparts.append(f"$select={select_str}")
+
+        # Handle $filter
+        if e.subquery and e.subquery.filter:
+            subparts.append(f"$filter={e.subquery.filter.filter}")
+
+        # Handle $orderby
+        if e.subquery and e.subquery.orderby:
+            orderby_str = ",".join(
+                f"{j.identifier} {j.order}"
+                for j in e.subquery.orderby.identifiers
+            )
+            subparts.append(f"$orderby={orderby_str}")
+
+        # Handle $top
+        if e.subquery and e.subquery.top is not None:
+            subparts.append(f"$top={e.subquery.top.count}")
+
+        # Handle $skip
+        if e.subquery and e.subquery.skip is not None:
+            subparts.append(f"$skip={e.subquery.skip.count}")
+
+        # Handle $count
+        if e.subquery and e.subquery.count:
+            if e.subquery.count is True:
+                subparts.append(f"$count=true")
+            else:
+                subparts.append(f"$count=false")
+
+        # Handle nested $expand (recursive call)
+        if e.subquery and e.subquery.expand:
+            nested_expand = build_expand(e.subquery.expand)
+            if nested_expand:
+                subparts.append(f"$expand={nested_expand}")
+
+        # If we collected subparts, wrap them in parentheses after the identifier
+        if subparts:
+            segment += f"({';'.join(subparts)})"
+
+        parts.append(segment)
+
+    return ",".join(parts)
