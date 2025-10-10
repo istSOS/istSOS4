@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
@@ -20,7 +19,7 @@ from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
-from .functions import check_id_exists, set_commit, update_datastream_entity
+from .functions import check_id_exists, set_commit, update_network_entity
 
 v1 = APIRouter()
 
@@ -36,53 +35,30 @@ if VERSIONING or AUTHORIZATION:
     message = Header(alias="commit-message")
 
 PAYLOAD_EXAMPLE = {
-    "unitOfMeasurement": {
-        "name": "Lumen",
-        "symbol": "lm",
-        "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen",
-    },
-    "description": "datastream 1",
-    "name": "datastream name 1",
-    "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement",
+    "name": "network 1",
 }
 
-ALLOWED_KEYS = [
-    "name",
-    "description",
-    "unitOfMeasurement",
-    "observationType",
-    "observedArea",
-    "phenomenonTime",
-    "resultTime",
-    "properties",
-    "Thing",
-    "Sensor",
-    "ObservedProperty",
-    "Observations",
-]
-
-if AUTHORIZATION:
-    ALLOWED_KEYS.append("Network")
+ALLOWED_KEYS = ["name", "Datastreams"]
 
 
 @v1.api_route(
-    "/Datastreams({datastream_id})",
+    "/Networks({network_id})",
     methods=["PATCH"],
-    tags=["Datastreams"],
-    summary="Update a Datastream",
-    description="Update a Datastream",
+    tags=["Networks"],
+    summary="Update a Network",
+    description="Update a Network",
     status_code=status.HTTP_200_OK,
 )
-async def update_datastream(
-    datastream_id: int,
+async def update_network(
+    network_id: int,
     payload: dict = Body(example=PAYLOAD_EXAMPLE),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
-        if not datastream_id:
-            raise Exception("Datastream ID not provided")
+        if not network_id:
+            raise Exception("Network ID not provided")
 
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -90,7 +66,7 @@ async def update_datastream(
                     await set_role(connection, current_user)
 
                 if not await check_id_exists(
-                    connection, "Datastream", datastream_id
+                    connection, "Network", network_id
                 ):
                     if current_user is not None:
                         await connection.execute("RESET ROLE;")
@@ -100,7 +76,7 @@ async def update_datastream(
                         content={
                             "code": 404,
                             "type": "error",
-                            "message": "Datastream not found.",
+                            "message": "Sensor not found.",
                         },
                     )
 
@@ -119,11 +95,7 @@ async def update_datastream(
                 if commit_id is not None:
                     payload["commit_id"] = commit_id
 
-                await update_datastream_entity(
-                    connection,
-                    datastream_id,
-                    payload,
-                )
+                await update_network_entity(connection, network_id, payload)
 
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")

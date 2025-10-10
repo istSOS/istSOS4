@@ -28,6 +28,7 @@ from app.db.redis_db import redis
 from app.db.sqlalchemy_db import engine
 from app.models import *
 from app.sta2rest import sta2rest
+from app.utils.utils import build_expand
 from geoalchemy2 import Geometry
 from sqlalchemy import (
     asc,
@@ -334,6 +335,25 @@ class NodeVisitor(Visitor):
                 expand_identifier.subquery
                 and expand_identifier.subquery.expand
             ):
+                for i in expand_identifier.subquery.expand.identifiers:
+                    select_node = ""
+                    if i.subquery and i.subquery.select:
+                        select_node = ",".join(
+                            j.name for j in i.subquery.select.identifiers
+                        )
+                    filter_node = ""
+                    if i.subquery and i.subquery.filter:
+                        filter_node = i.subquery.filter.filter
+                    orderby_node = ""
+                    if i.subquery and i.subquery.orderby:
+                        orderby_node = ",".join(
+                            f"{j.identifier} {j.order}"
+                            for j in i.subquery.orderby.identifiers
+                        )
+                    expand_node = ""
+                    if i.subquery and i.subquery.expand:
+                        expand_node = build_expand(i.subquery.expand)
+
                 nested_expand_queries = self.visit_ExpandNode(
                     expand_identifier.subquery.expand,
                     expand_identifier.identifier,
@@ -367,6 +387,10 @@ class NodeVisitor(Visitor):
                             get_query_compiled(nested_expand_query[0]),
                             nested_expand_query,
                             label_name,
+                            select_node,
+                            filter_node,
+                            orderby_node,
+                            expand_node,
                         )
                     )
 
@@ -636,6 +660,25 @@ class NodeVisitor(Visitor):
 
             # here we create the sub queries for the expand identifiers
             if node.expand.identifiers:
+                for i in node.expand.identifiers:
+                    select_node = ""
+                    if i.subquery and i.subquery.select:
+                        select_node = ",".join(
+                            j.name for j in i.subquery.select.identifiers
+                        )
+                    filter_node = ""
+                    if i.subquery and i.subquery.filter:
+                        filter_node = i.subquery.filter.filter
+                    orderby_node = ""
+                    if i.subquery and i.subquery.orderby:
+                        orderby_node = ",".join(
+                            f"{j.identifier} {j.order}"
+                            for j in i.subquery.orderby.identifiers
+                        )
+                    expand_node = ""
+                    if i.subquery and i.subquery.expand:
+                        expand_node = build_expand(i.subquery.expand)
+
                 # Visit the expand node
                 expand_queries = self.visit_ExpandNode(
                     node.expand, self.main_entity
@@ -668,6 +711,10 @@ class NodeVisitor(Visitor):
                             get_query_compiled(expand_query[0]),
                             expand_query,
                             label_name,
+                            select_node,
+                            filter_node,
+                            orderby_node,
+                            expand_node,
                         )
                     )
 
@@ -979,22 +1026,47 @@ def get_query_compiled(query):
     )
 
 
-def get_expand_function(relationship, compiled_query, sub_query, label):
+def get_expand_function(
+    relationship,
+    compiled_query,
+    sub_query,
+    label,
+    select_node,
+    filter_node,
+    orderby_node,
+    expand_node,
+):
     if relationship.direction.name != "MANYTOMANY":
         return expand_function(
             compiled_query,
             sub_query,
             label,
+            select_node,
+            filter_node,
+            orderby_node,
+            expand_node,
         )
     return expand_many2many_function(
         compiled_query,
         sub_query,
         label,
         relationship,
+        select_node,
+        filter_node,
+        orderby_node,
+        expand_node,
     )
 
 
-def expand_function(compiled_query, sub_query, label_name):
+def expand_function(
+    compiled_query,
+    sub_query,
+    label_name,
+    select_node,
+    filter_node,
+    orderby_node,
+    expand_node,
+):
     return func.sensorthings.expand(
         str(compiled_query),
         ("{}".format(sub_query[1].name) if sub_query[1] is not None else "id"),
@@ -1025,11 +1097,22 @@ def expand_function(compiled_query, sub_query, label_name):
         sub_query[8],
         COUNT_MODE,
         COUNT_ESTIMATE_THRESHOLD,
+        select_node,
+        filter_node,
+        orderby_node,
+        expand_node,
     ).label(label_name)
 
 
 def expand_many2many_function(
-    compiled_query, sub_query, label_name, relationship
+    compiled_query,
+    sub_query,
+    label_name,
+    relationship,
+    select_node,
+    filter_node,
+    orderby_node,
+    expand_node,
 ):
     return func.sensorthings.expand_many2many(
         str(compiled_query),
@@ -1049,4 +1132,8 @@ def expand_many2many_function(
         sub_query[8],
         COUNT_MODE,
         COUNT_ESTIMATE_THRESHOLD,
+        select_node,
+        filter_node,
+        orderby_node,
+        expand_node,
     ).label(label_name)

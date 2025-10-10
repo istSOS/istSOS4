@@ -41,6 +41,7 @@ class Commit(Base):
     observation_navigation_link = Column(
         "Observations@iot.navigationLink", Text
     )
+    network_navigation_link = Column("Networks@iot.navigationLink", Text)
     author = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100))
     message = Column(String(255), nullable=False)
@@ -60,3 +61,4 @@ class Commit(Base):
         "FeaturesOfInterest", back_populates="commit"
     )
     observation = relationship("Observation", back_populates="commit")
+    network = relationship("Network", back_populates="commit")

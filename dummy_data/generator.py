@@ -50,6 +50,9 @@ authorization = int(os.getenv("AUTHORIZATION", 0))
 st_aggregate = (os.getenv("ST_AGGREGATE", "CONVEX_HULL"))
 
 pgpool = None
+network = int(os.getenv("NETWORK", 0))
+
+observedProperties = []
 
 
 async def get_pool():
@@ -99,6 +102,43 @@ async def generate_commit(conn, user_id, user_uri):
         )
 
 
+async def generate_networks(conn, commit_id):
+    """
+    Generate two different networks and insert them into the database.
+
+    Args:
+        conn: The asyncpg connection object.
+        commit_id: The commit id to associate with the networks (optional).
+
+    Returns:
+        List of inserted network IDs.
+    """
+
+    names = random.sample(["psos", "acsot", "defmin"], 2)
+
+    inserted_ids = []
+    if commit_id is not None:
+        insert_sql = """
+            INSERT INTO sensorthings."Network" (name, commit_id)
+            VALUES ($1, $2)
+            RETURNING id;
+        """
+        for name in names:
+            row = await conn.fetchrow(insert_sql, name, commit_id)
+            inserted_ids.append(row["id"])
+    else:
+        insert_sql = """
+            INSERT INTO sensorthings."Network" (name)
+            VALUES ($1)
+            RETURNING id;
+        """
+        for name in names:
+            row = await conn.fetchrow(insert_sql, name)
+            inserted_ids.append(row["id"])
+
+    return inserted_ids
+
+
 async def generate_things(conn, commit_id):
     """
     Generate a list of things and insert them into the database.
@@ -113,7 +153,7 @@ async def generate_things(conn, commit_id):
     things = []
     for i in range(1, n_things + 1):
         description = f"thing {i}"
-        name = f"thing name {i}"
+        name = f"thing_name_{i}"
         properties = json.dumps({"reference": f"{i}"})
         if commit_id is not None:
             things.append((description, name, properties, commit_id))
@@ -152,7 +192,7 @@ async def generate_locations(conn, commit_id):
         # elevation = random.uniform(0, 1000)
 
         description = f"location {i}"
-        name = f"location name {i}"
+        name = f"location_name_{i}"
         location = f"SRID={epsg};POINT({lon} {lat})"
         encodingType = "application/geo+json"
         if commit_id is not None:
@@ -209,6 +249,7 @@ async def generate_historicallocations(conn, commit_id):
     Returns:
         None
     """
+
     historicallocations = []
     time = date
     for i in range(1, n_things + 1):
@@ -258,6 +299,13 @@ async def generate_locations_historicallocations(conn):
     await conn.executemany(insert_sql, locations_historicallocations)
 
 
+mapping_op = {
+    "meteo:air:rainfall": ["P", "Millimeter", "mm"],
+    "meteo:air:temperature": ["T", "Celsius degree", "°C"],
+    "meteo:air:humidity": ["H", "Percentage", "%"],
+}
+
+
 async def generate_observedProperties(conn, commit_id):
     """
     Generate observed properties and insert them into the database.
@@ -269,11 +317,12 @@ async def generate_observedProperties(conn, commit_id):
         None
     """
 
-    observedProperties = []
+    keys = list(mapping_op)
     for i in range(1, n_observed_properties + 1):
-        name = f"{random.choice(['Temperature', 'Humidity', 'Pressure', 'Light', 'CO2', 'Motion'])}_{i}"
-        definition = f"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/{name}"
-        description = f"observedProperty {i}"
+        key = keys[(i - 1) % len(keys)]
+        name = f"{key}_{i}"
+        definition = "{}"
+        description = key.replace(":", " ")
         if commit_id is not None:
             observedProperties.append(
                 (name, definition, description, commit_id)
@@ -308,7 +357,7 @@ async def generate_sensors(conn, commit_id):
     sensors = []
     for i in range(1, n_things * n_observed_properties + 1):
         description = f"sensor {i}"
-        name = f"sensor name {i}"
+        name = f"sensor_name_{i}"
         encodingType = "application/pdf"
         metadata = f"{random.choice(['Temperature', 'Humidity', 'Pressure', 'Light', 'CO2', 'Motion'])} sensor"
         if commit_id is not None:
@@ -331,7 +380,7 @@ async def generate_sensors(conn, commit_id):
     await conn.executemany(insert_sql, sensors)
 
 
-async def generate_datastreams(conn, commit_id):
+async def generate_datastreams(conn, commit_id, network_ids):
     """
     Generate datastreams and insert them into the database.
 
@@ -344,22 +393,32 @@ async def generate_datastreams(conn, commit_id):
 
     datastreams = []
     cnt = 1
-    network = None
     for i in range(1, n_things + 1):
         for j in range(1, n_observed_properties + 1):
-            if authorization:
-                network = random.choice(["IDROLOGIA", "IDROGEOLOGIA"])
 
             datastream = {
                 "unitOfMeasurement": json.dumps(
                     {
-                        "name": "Centigrade",
-                        "symbol": "C",
-                        "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen",
+                        "name": mapping_op[
+                            observedProperties[j - 1][0].rsplit("_", 1)[0]
+                        ][1],
+                        "symbol": mapping_op[
+                            observedProperties[j - 1][0].rsplit("_", 1)[0]
+                        ][2],
+                        "definition": "",
+                    }
+                ),
+                "properties": json.dumps(
+                    {
+                        "resolution": "PT10M",
+                        "qualityIndexLimits": {"max": "", "min": ""},
+                        "acquisitionInterval": "PT10M",
                     }
                 ),
                 "description": f"datastream {cnt}",
-                "name": f"datastream name {cnt}",
+                "name": f"{mapping_op[
+                            observedProperties[j - 1][0].rsplit("_", 1)[0]
+                        ][0]}_datastream_{cnt}",
                 "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement",
                 "thing_id": i,
                 "sensor_id": cnt,
@@ -368,8 +427,8 @@ async def generate_datastreams(conn, commit_id):
             if commit_id is not None:
                 datastream["commit_id"] = commit_id
 
-            if network is not None:
-                datastream["network"] = network
+            if network_ids:
+                datastream["network_id"] = random.choice(network_ids)
 
             datastreams.append(datastream)
             cnt += 1
@@ -403,7 +462,7 @@ async def generate_featuresofinterest(conn, commit_id):
         # elevation = random.uniform(0, 1000)
 
         description = f"featuresofinterest {i}"
-        name = f"featuresofinterest name {i}"
+        name = f"featuresofinterest_name_{i}"
         encodingType = "application/geo+json"
         feature = f"SRID={epsg};POINT({lon} {lat})"
         if commit_id is not None:
@@ -539,7 +598,6 @@ async def generate_observations(conn, commit_id):
     """
 
     observations = []
-
     for j in range(1, n_things * n_observed_properties + 1):
         phenomenonTime = date
         check_date = date
@@ -552,7 +610,7 @@ async def generate_observations(conn, commit_id):
                 upper_inc=True,
             )
             resultNumber = random.randint(1, 100)
-            resultType = 1
+            resultType = 0
             datastream_id = j
             featuresofinterest_id = random.randint(1, n_things)
 
@@ -620,6 +678,11 @@ async def create_data():
                 if versioning or authorization:
                     commit_id = await generate_commit(conn, user_id, user_uri)
 
+                if network:
+                    network_ids = await generate_networks(conn, commit_id)
+                else:
+                    network_ids = []
+
                 await generate_things(conn, commit_id)
                 await generate_locations(conn, commit_id)
                 await generate_things_locations(conn)
@@ -627,7 +690,7 @@ async def create_data():
                 await generate_locations_historicallocations(conn)
                 await generate_observedProperties(conn, commit_id)
                 await generate_sensors(conn, commit_id)
-                await generate_datastreams(conn, commit_id)
+                await generate_datastreams(conn, commit_id, network_ids)
                 await generate_featuresofinterest(conn, commit_id)
                 await generate_observations(conn, commit_id)
             except Exception as e:
