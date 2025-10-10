@@ -409,6 +409,11 @@ class ODataParser(Parser):
         p.list_items.append(p.common_expr)
         return p.list_items
 
+    @_('"(" BWS common_expr BWS ")"')
+    def list_expr(self, p):
+        ":meta private:"
+        return ast.List([p.common_expr])
+
     @_('"(" BWS common_expr BWS "," BWS ")"')
     def list_expr(self, p):
         ":meta private:"

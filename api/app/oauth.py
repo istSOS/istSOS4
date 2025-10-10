@@ -67,7 +67,14 @@ async def authenticate_user(username: str, password: str):
     finally:
         if connection is not None:
             await connection.close()
-    return username
+
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        query = 'SELECT role FROM sensorthings."User" WHERE username=$1'
+        row = await connection.fetchrow(query, username)
+        if not row:
+            return None
+    return {"sub": username, "role": row["role"]}
 
 
 def create_access_token(data: dict):
@@ -81,7 +88,9 @@ def create_access_token(data: dict):
 
 
 def create_refresh_token(payload: dict):
-    return create_access_token(data={"sub": payload.get("sub")})
+    return create_access_token(
+        data={"sub": payload.get("sub"), "role": payload.get("role")}
+    )
 
 
 def decode_token(token: str):
