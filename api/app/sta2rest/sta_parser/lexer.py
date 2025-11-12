@@ -45,12 +45,14 @@ TOKEN_TYPES = {
     + r"(?:Z|[+-](?:[01]\d|2[0-3]):?[0-5]\d)?",
     "EXPAND_IDENTIFIER": r"[_a-zA-Z@](?:\.?\w){0,127}",
     "IDENTIFIER": r"[_a-zA-Z@](?:\.?\w){0,127}",
-    "INTEGER": r"[0-9]+",
+    "DECIMAL": r"\d+\.\d+",
+    "INTEGER": r"\d+",
     "STRING": r"'[^']*'",
     "LEFT_PAREN": r"\(",
     "RIGHT_PAREN": r"\)",
     "WHITESPACE": r"\s+",
     "SEGMENT_SEPARATOR": r"\/",
+    "MINUS": r"-",
 }
 
 
