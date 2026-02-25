@@ -77,7 +77,7 @@ def get_result_type_and_column(input):
     Determines the result type and column name based on the input string.
 
     Args:
-        input_string (str): The input string to evaluate.
+        input: The value to evaluate, could be any data type, str, bool, int or float.
 
     Returns:
         tuple: A tuple containing the result type and column name.
@@ -107,7 +107,7 @@ def get_result_type_and_column(input):
             ["resultBoolean", "resultString", "resultNumber", "resultJSON"]
         )
         values.extend([input, str(input).lower(), None, None])
-    elif isinstance(input, int) or isinstance(input, float):
+    elif isinstance(input, (int, float)) :
         result_type = 0
         columns.extend(
             ["resultNumber", "resultString", "resultBoolean", "resultJSON"]
