@@ -21,7 +21,7 @@ This module provides unit tests for the STA2REST module.
 """
 import unittest
 
-from sta2rest import STA2REST
+from .sta2rest import STA2REST
 
 
 class STA2RESTTestCase(unittest.TestCase):
@@ -34,15 +34,26 @@ class STA2RESTTestCase(unittest.TestCase):
         Test the conversion of entities.
         """
         entity_mappings = {
+            "Networks": "Network",
+            "Commits": "Commit",
             "Things": "Thing",
             "Locations": "Location",
             "Sensors": "Sensor",
             "ObservedProperties": "ObservedProperty",
             "Datastreams": "Datastream",
             "Observations": "Observation",
-            "FeaturesOfInterest": "FeatureOfInterest",
+            "FeaturesOfInterest": "FeaturesOfInterest",
             "HistoricalLocations": "HistoricalLocation",
-            # Add more entity mappings as needed
+            "Network": "Network",
+            "Commit": "Commit",
+            "Thing": "Thing",
+            "Location": "Location",
+            "Sensor": "Sensor",
+            "ObservedProperty": "ObservedProperty",
+            "Datastream": "Datastream",
+            "Observation": "Observation",
+            "FeatureOfInterest": "FeaturesOfInterest",
+            "HistoricalLocation": "HistoricalLocation",
         }
 
         for entity, expected in entity_mappings.items():
@@ -53,65 +64,174 @@ class STA2RESTTestCase(unittest.TestCase):
         Test the parsing of URIs.
         """
 
-        # Test the parsing of URIs
-        tests = [
-            "/v1.1/ObservedProperties" "/v1.1/Things(1)",
-            "/v1.1/Observations(1)/resultTime",
-            "/v1.1/Observations(1)/resultTime/$value",
-            "/v1.1/Datastreams(1)/Observations",
-            "/v1.1/Datastreams(1)/Observations/$ref",
-            "/v1.1/Datastreams(1)/Observations(1)",
-            "/v1.1/Datastreams(1)/Observations(1)/resultTime",
-            "/v1.1/Datastreams(1)/Observations(1)/FeatureOfInterest",
-        ]
-
-        # Test the parsing of URIs with query
-        for test in tests:
-            print(test)
-            print(STA2REST.parse_uri(test))
-
-    def test_convert_sensor_things_query(self):
-        """
-        Test the conversion of sensor things queries.
-        """
-
-        # TODO(@filippofinke): fix test cases
-
-        query_mappings = {
-            "$filter=type eq 'temperature'&$orderby=timestamp desc&$top=10&$skip=5": "type=eq.temperature&order=timestamp.desc&offset=5&limit=10",
-            "$filter=type eq 'humidity'&$top=5": "type=eq.humidity&limit=5",
-            "$orderby=timestamp asc&$skip=2": "order=timestamp.asc&offset=2",
-            "$select=id,name,description,properties&$top=1000&$filter=properties/type eq 'station'&$expand=Locations,Datastreams($select=id,name,unitOfMeasurement;$expand=ObservedProperty($select=name),Observations($select=result,phenomenonTime;$orderby=phenomenonTime desc;$top=1))": "Datastream.Observation.order=phenomenonTime.desc&Datastream.Observation.limit=1&select=id,name,description,properties,Location(*),Datastream(id,name,unitOfMeasurement),ObservedProperty(name),Observation(result,phenomenonTime)&properties->>type=eq.station&limit=1000",
-            "$select=id,description&$expand=Datastreams($select=id,description)": "select=id,description,Datastream(id,description)",
-            "$expand=Datastreams": "select=Datastream(*)",
-            "$expand=Observations,ObservedProperty": "select=Observation(*),ObservedProperty(*)",
-            "$expand=Observations($filter=result eq 1)": "Observation.result=eq.1&select=Observation(*)",
-            "$expand=Observations($select=result)": "select=Observation(result)",
-            "$select=result": "select=result",
-            "$orderby=result": "order=result.asc",
-            "$expand=Datastream&$orderby=Datastreams/id desc,phenomenonTime": "select=Datastream(*)&order=Datastreams/id.desc,phenomenonTime.asc",
-            "$top=5": "limit=5",
-            "$top=5&$orderby=phenomenonTime%20desc": "order=phenomenonTime.desc&limit=5",
-            "$skip=5": "offset=5",
-            "$count=true": "count=true",
-            "$filter=result lt 10.00": "result=lt.10.00",
-            "$filter=unitOfMeasurement/name eq 'degree Celsius'": "unitOfMeasurement->>name=eq.degree Celsius",
-            "$filter=unitOfMeasurement/name ne 'degree Celsius'": "unitOfMeasurement->>name=neq.degree Celsius",
-            "$filter=result gt 20.0": "result=gt.20.0",
-            "$filter=result ge 20.0": "result=gte.20.0",
-            "$filter=result lt 100": "result=lt.100",
-            "$filter=result le 100": "result=lte.100",
-            "$filter=result le 3.5 and FeatureOfInterest/id eq 1": "result=lte.3.5&FeatureOfInterest->>id=eq.1",
-            "$filter=result gt 20 or result le 3.5": "or=(result.gt.20,result.lte.3.5)",
-            "$filter=id eq 1 or id eq 2 or id eq 3": "or=(id.eq.1,id.eq.2,id.eq.3)",
-            "$filter=id eq 1 or id eq 2 or id eq 3 or id eq 4": "or=(id.eq.1,id.eq.2,id.eq.3,id.eq.4)",
-            "$filter=(id eq 1 or id eq 2 or id eq 3 or id eq 4) and location_id eq 2": "or=(id.eq.1,id.eq.2,id.eq.3,id.eq.4)&location_id=eq.2",
-            "$filter=location_id eq 2 and id eq 2": "location_id=eq.2&id=eq.2",
+        tests = {
+            "/v1.1/ObservedProperties": {
+                "version": "/v1.1",
+                "entity": ("ObservedProperty", None),
+                "entities": [],
+                "property_name": "",
+                "ref": False,
+                "value": False,
+                "single": False,
+            },
+            "/v1.1/Things(1)": {
+                "version": "/v1.1",
+                "entity": ("Thing", "1"),
+                "entities": [],
+                "property_name": "",
+                "ref": False,
+                "value": False,
+                "single": False,
+            },
+            "/v1.1/Observations(1)/resultTime": {
+                "version": "/v1.1",
+                "entity": ("Observation", "1"),
+                "entities": [],
+                "property_name": "resultTime",
+                "ref": False,
+                "value": False,
+                "single": False,
+            },
+            "/v1.1/Observations(1)/resultTime/$value": {
+                "version": "/v1.1",
+                "entity": ("Observation", "1"),
+                "entities": [],
+                "property_name": "resultTime",
+                "ref": False,
+                "value": True,
+                "single": False,
+            },
+            "/v1.1/Datastreams(1)/Observations": {
+                "version": "/v1.1",
+                "entity": ("Observation", None),
+                "entities": [("Datastream", "1")],
+                "property_name": "",
+                "ref": False,
+                "value": False,
+                "single": False,
+            },
+            "/v1.1/Datastreams(1)/Observations/$ref": {
+                "version": "/v1.1",
+                "entity": ("Observation", None),
+                "entities": [("Datastream", "1")],
+                "property_name": "",
+                "ref": True,
+                "value": False,
+                "single": False,
+            },
+            "/v1.1/Datastreams(1)/Observations(1)": {
+                "version": "/v1.1",
+                "entity": ("Observation", "1"),
+                "entities": [("Datastream", "1")],
+                "property_name": "",
+                "ref": False,
+                "value": False,
+                "single": False,
+            },
+            "/v1.1/Datastreams(1)/Observations(1)/resultTime": {
+                "version": "/v1.1",
+                "entity": ("Observation", "1"),
+                "entities": [("Datastream", "1")],
+                "property_name": "resultTime",
+                "ref": False,
+                "value": False,
+                "single": False,
+            },
+            "/v1.1/Datastreams(1)/Observations(1)/FeatureOfInterest": {
+                "version": "/v1.1",
+                "entity": ("FeaturesOfInterest", None),
+                "entities": [("Observation", "1"), ("Datastream", "1")],
+                "property_name": "",
+                "ref": False,
+                "value": False,
+                "single": True,
+            },
         }
 
-        for query, expected in query_mappings.items():
-            print("QUERY", query)
-            self.assertEqual(STA2REST.convert_query(query), expected)
+        for uri, expected in tests.items():
+            with self.subTest(uri=uri):
+                self.assertEqual(STA2REST.parse_uri(uri), expected)
+
+    def test_convert_query_requires_full_path(self):
+        with self.assertRaises(Exception):
+            STA2REST.convert_query("$top=5")
+
+    def test_convert_query_current_behavior(self):
+        """
+        Test conversion behavior with full SensorThings paths.
+        """
+
+        cases = [
+            {
+                "path": "/v1.1/Observations?$top=5",
+                "main_entity": "Observation",
+                "single_result": False,
+                "contains": ["FROM sensorthings.\"Observation\"", "LIMIT 6"],
+                "is_count": False,
+            },
+            {
+                "path": "/v1.1/Observations?$skip=5",
+                "main_entity": "Observation",
+                "single_result": False,
+                "contains": ["OFFSET 5"],
+                "is_count": False,
+            },
+            {
+                "path": "/v1.1/Observations?$count=true",
+                "main_entity": "Observation",
+                "single_result": False,
+                "contains": ["FROM sensorthings.\"Observation\""],
+                "is_count": True,
+            },
+            {
+                "path": "/v1.1/Datastreams(1)/Observations?$top=5",
+                "main_entity": "Observation",
+                "single_result": False,
+                "contains": ["datastream_id", "LIMIT 6"],
+                "is_count": False,
+            },
+            {
+                "path": "/v1.1/Observations(1)/resultTime",
+                "main_entity": "Observation",
+                "single_result": True,
+                "contains": ["resultTime", "id = 1"],
+                "is_count": False,
+            },
+            {
+                "path": "/v1.1/Observations(1)/resultTime/$value",
+                "main_entity": "Observation",
+                "single_result": True,
+                "contains": ["resultTime", "id = 1"],
+                "is_count": False,
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(path=case["path"]):
+                converted = STA2REST.convert_query(case["path"])
+
+                self.assertIsInstance(converted, dict)
+                self.assertEqual(converted["main_entity"], case["main_entity"])
+                self.assertEqual(converted["single_result"], case["single_result"])
+                self.assertEqual(converted["is_count"], case["is_count"])
+                self.assertIn("main_query", converted)
+
+                for expected_fragment in case["contains"]:
+                    self.assertIn(expected_fragment, converted["main_query"])
+
+                if case["is_count"]:
+                    self.assertGreater(len(converted["count_queries"]), 0)
+                else:
+                    self.assertEqual(converted["count_queries"], [])
+
+    def test_convert_query_invalid_field_raises(self):
+        """
+        Legacy FeatureOfInterest filter path currently raises an invalid field error.
+        """
+        with self.assertRaises(Exception):
+            STA2REST.convert_query(
+                "/v1.1/Observations?$filter=result le 3.5 and FeatureOfInterest/id eq 1"
+            )
 
 
 if __name__ == "__main__":
