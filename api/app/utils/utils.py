@@ -274,16 +274,28 @@ def validate_epsg(key):
 
 
 def handle_associations(payload, keys):
+    """
+    Safely extract and map association fields to their corresponding *_id properties.
+
+    Args:
+        payload (dict): The payload containing associations.
+        keys (list): List of association field names to process.
+
+    Raises:
+        ValueError: If an association payload is invalid or malformed.
+    """
+
     for key in keys:
         if key in payload:
-            if list(payload[key].keys()) != ["@iot.id"]:
-                raise Exception(
-                    "Invalid format: Each thing dictionary should contain only the '@iot.id' key."
-                )
+            try:
+                iot_id = extract_iot_id(payload[key])
+            except ValueError as e:
+                raise ValueError(f"Invalid association for '{key}': {e}")
+            
             if key != "FeatureOfInterest":
-                payload[f"{key.lower()}_id"] = payload[key]["@iot.id"]
+                payload[f"{key.lower()}_id"] = iot_id
             else:
-                payload["featuresofinterest_id"] = payload[key]["@iot.id"]
+                payload["featuresofinterest_id"] = iot_id
             payload.pop(key)
 
 
