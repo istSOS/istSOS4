@@ -17,7 +17,6 @@ import json
 from app import EPSG, HOSTNAME, TOP_VALUE
 from asyncpg.types import Range
 from dateutil import parser
-from datetime import datetime
 
 
 def safe_parse_datetime(value):
