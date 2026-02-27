@@ -17,6 +17,52 @@ import json
 from app import EPSG, HOSTNAME, TOP_VALUE
 from asyncpg.types import Range
 from dateutil import parser
+from datetime import datetime
+
+
+def safe_parse_datetime(value):
+    """
+    Safely parse a datetime string using dateutil.parser.
+    Returns a datetime object or None if parsing fails.
+
+    Args:
+        value (Any): Input value to parse.
+
+    Returns:
+        Optional[datetime]: Parsed datetime or None if invalid.
+    """
+
+    if value is None:
+        return None
+    try:
+        return parser.parse(value)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    
+
+def extract_iot_id(data):
+    """
+    Extract and validate the '@iot.id' key from an association dictionary.
+
+    Args:
+        data (Dict[str, Any]): Association dictionary containing '@iot.id'.
+
+    Returns:
+        int: The validated @iot.id value.
+
+    Raises:
+        ValueError: If the structure is invalid or @iot.id is not an integer.
+    """
+
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected dict for association, got {type(data).__name__}")
+    if "@iot.id" not in data:
+        raise ValueError("Missing '@iot.id' in association payload")
+
+    iot_id = data["@iot.id"]
+    if not isinstance(iot_id, int):
+        raise ValueError(f"Expected int for '@iot.id', got {type(iot_id).__name__}")
+    return iot_id
 
 
 def handle_datetime_fields(payload, datastream=False):
