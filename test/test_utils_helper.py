@@ -4,6 +4,8 @@ Testing the freshly created helper functions.
 Since the test directory is located in this way, I had to first find project root
 where api directory was and then insert it to path manually.
 
+Usage: Perform 'pytest -v' in the terminal
+
 Author : Vishmayraj
 """
 
