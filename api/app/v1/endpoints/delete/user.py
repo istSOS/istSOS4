@@ -14,6 +14,7 @@
 
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.utils.utils import pg_quote_ident, validate_username
 from app.oauth import get_current_user
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import (
@@ -44,6 +45,16 @@ async def delete_user(
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
+        if not validate_username(user):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "code": 400,
+                    "type": "error",
+                    "message": "Invalid username: only letters, digits and underscores allowed (3\u201363 characters).",
+                },
+            )
+
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
@@ -63,10 +74,7 @@ async def delete_user(
                 """
                 await connection.execute(query, user)
 
-                query = """
-                    DROP ROLE {role};
-                """
-                await connection.execute(query.format(role=user))
+                await connection.execute(f"DROP ROLE {pg_quote_ident(user)};")
 
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
