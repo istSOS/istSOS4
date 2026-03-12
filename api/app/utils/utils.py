@@ -207,6 +207,12 @@ def validate_payload_keys(payload, keys):
         raise Exception(f"Invalid keys in payload: {', '.join(invalid_keys)}")
 
 
+def validate_required_keys(payload, required_keys):
+    missing = [key for key in required_keys if key not in payload]
+    if missing:
+        raise Exception(f"Missing required fields: {', '.join(missing)}")
+
+
 def validate_epsg(key):
     crs = key.get("crs")
     if crs is not None:
