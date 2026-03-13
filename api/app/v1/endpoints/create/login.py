@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from app import REDIS
 from app.db.redis_db import redis
 from app.oauth import (
     authenticate_user,
@@ -81,7 +82,8 @@ async def refresh_token(authorization=Header()):
 
     expire = payload.get("exp")
 
-    redis.set(token, "refreshed", ex=expire)
+    if REDIS:
+        redis.set(token, "refreshed", exat=payload.get("exp"))
 
     access_token, expire = create_refresh_token(payload)
 
@@ -112,14 +114,15 @@ async def logout(authorization=Header()):
     token = authorization[len(prefix) :].strip()
 
     try:
-        expire = decode_token(token).get("exp")
+        payload = decode_token(token)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid token",
         )
 
-    redis.set(token, "logged_out", ex=expire)
+    if REDIS:
+        redis.set(token, "logged_out", exat=payload.get("exp"))
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,

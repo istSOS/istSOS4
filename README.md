@@ -6,6 +6,18 @@
 git clone https://github.com/istSOS/istSOS4.git
 ```
 
+## Environment setup
+
+Before starting any environment, copy the example env file and fill in your values:
+
+```sh
+cp .env.example .env
+```
+
+At minimum set `SECRET_KEY` (required for authentication) and the Postgres/admin
+passwords before running the stack.  All other variables default to sensible
+development values.
+
 ## Start DEV environment
 
 To start the Docker services, run:
