@@ -353,7 +353,7 @@ async def update_datastream_entity(connection, datastream_id, payload):
 async def update_feature_of_interest_entity(
     connection, feature_of_interest_id, payload
 ):
-    if payload["feature"]:
+    if payload.get("feature"):
         validate_epsg(payload["feature"])
 
     await handle_nested_entities(
