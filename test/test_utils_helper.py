@@ -250,3 +250,34 @@ class TestFloatInput:
         _, values, columns = get_result_type_and_column(3.14)
         assert_column_value(columns, values, "resultBoolean", None)
         assert_column_value(columns, values, "resultJSON", None)
+
+
+class TestInvalidInput:
+
+    def test_none_raises(self):
+        with pytest.raises(Exception, match="Cannot cast result to a valid type"):
+            get_result_type_and_column(None)
+
+    def test_list_raises(self):
+        with pytest.raises(Exception, match="Cannot cast result to a valid type"):
+            get_result_type_and_column([1, 2, 3])
+
+    def test_tuple_raises(self):
+        with pytest.raises(Exception, match="Cannot cast result to a valid type"):
+            get_result_type_and_column((1, 2))
+
+    def test_set_raises(self):
+        with pytest.raises(Exception, match="Cannot cast result to a valid type"):
+            get_result_type_and_column({1, 2, 3})
+
+    def test_bytes_raises(self):
+        with pytest.raises(Exception, match="Cannot cast result to a valid type"):
+            get_result_type_and_column(b"bytes")
+
+    def test_custom_object_raises(self):
+        class Foo:
+            """Dummy class representing an unsupported result type."""
+            pass
+        with pytest.raises(Exception, match="Cannot cast result to a valid type"):
+            get_result_type_and_column(Foo())
+
