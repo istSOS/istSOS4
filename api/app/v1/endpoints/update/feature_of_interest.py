@@ -14,13 +14,13 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import validate_payload_keys
+from app.utils.utils import handle_duplicate_error, validate_payload_keys
 from app.v1.endpoints.functions import (
     get_datastreams_from_foi,
     set_role,
     update_datastream_observedArea,
 )
-from asyncpg.exceptions import InsufficientPrivilegeError
+from asyncpg.exceptions import InsufficientPrivilegeError, UniqueViolationError
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
@@ -133,6 +133,8 @@ async def update_feature_of_interest(
                     await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
+    except UniqueViolationError as e:
+        return handle_duplicate_error(e)
     except InsufficientPrivilegeError:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
