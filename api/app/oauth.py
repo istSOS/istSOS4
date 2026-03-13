@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 import asyncpg
@@ -30,6 +32,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
 
+logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="Login")
 
 
@@ -52,7 +55,14 @@ async def get_user_from_db(username: str):
     return None
 
 
-async def authenticate_user(username: str, password: str):
+@asynccontextmanager
+async def get_auth_connection(username: str, password: str):
+    """
+    Context manager for authentication connections.
+    
+    Ensures connection is properly closed even on errors.
+    Includes timeout protection and comprehensive error handling.
+    """
     connection = None
     try:
         connection = await asyncpg.connect(
@@ -61,20 +71,74 @@ async def authenticate_user(username: str, password: str):
             database=POSTGRES_DB,
             host=POSTGRES_HOST,
             port=POSTGRES_PORT,
+            timeout=5.0,  # Connection timeout
+            command_timeout=10.0,  # Command execution timeout
         )
+        yield connection
     except asyncpg.InvalidPasswordError:
-        return None
+        # Invalid credentials - return None to signal auth failure
+        yield None
+    except asyncpg.TooManyConnectionsError:
+        logger.error("Database connection limit reached during authentication")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service temporarily unavailable - too many connections"
+        )
+    except (asyncpg.PostgresConnectionError, asyncpg.PostgresIOError) as e:
+        logger.error(f"Database connection error during authentication: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service temporarily unavailable"
+        )
+    except asyncpg.PostgresError as e:
+        logger.error(f"Database error during authentication: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service error"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error during authentication: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service temporarily unavailable"
+        )
     finally:
         if connection is not None:
-            await connection.close()
+            try:
+                await connection.close()
+            except Exception as e:
+                logger.error(f"Error closing authentication connection: {e}")
 
+
+async def authenticate_user(username: str, password: str):
+    """
+    Authenticate user using PostgreSQL's built-in authentication.
+    
+    Uses a context manager to ensure connections are properly closed
+    and includes comprehensive error handling.
+    """
+    # Step 1: Verify credentials with PostgreSQL
+    async with get_auth_connection(username, password) as auth_conn:
+        if auth_conn is None:
+            # Invalid credentials
+            return None
+    
+    # Step 2: Get user role from User table (using connection pool)
     pool = await get_pool()
     async with pool.acquire() as connection:
         query = 'SELECT role FROM sensorthings."User" WHERE username=$1'
         row = await connection.fetchrow(query, username)
+        
         if not row:
+            # User authenticated with PostgreSQL but not in User table
+            # This indicates an inconsistent state
+            logger.warning(
+                f"User '{username}' authenticated with PostgreSQL "
+                "but not found in User table"
+            )
             return None
-    return {"sub": username, "role": row["role"]}
+        
+        return {"sub": username, "role": row["role"]}
 
 
 def create_access_token(data: dict):
