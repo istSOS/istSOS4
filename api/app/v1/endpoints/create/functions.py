@@ -15,7 +15,16 @@
 import json
 from datetime import datetime
 
-from app import AUTHORIZATION, HOSTNAME, NETWORK, SUBPATH, ST_AGGREGATE, VERSION, VERSIONING
+from app import (
+    AUTHORIZATION,
+    EPSG,
+    HOSTNAME,
+    NETWORK,
+    ST_AGGREGATE,
+    SUBPATH,
+    VERSION,
+    VERSIONING,
+)
 from app.utils.utils import (
     check_iot_id_in_payload,
     check_missing_properties,
