@@ -1,6 +1,7 @@
 services:
   database:
     image: ghcr.io/istsos/istsos4/database:1.6
+    restart: always
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -27,7 +28,8 @@ services:
       retries: 5
 
   api:
-    image: ghcr.io/istsos/istsos4/api:1.12
+    image: ghcr.io/istsos/istsos4/api:1.14
+    restart: always
     environment:
       HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
@@ -53,6 +55,7 @@ services:
       ALGORITHM: ${ALGORITHM}
       ANONYMOUS_VIEWER: ${ANONYMOUS_VIEWER}
       NETWORK: ${NETWORK}
+      ST_AGGREGATE: ${ST_AGGREGATE}
     command: uvicorn --timeout-keep-alive 75 --workers 2 --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - ${EXTERNAL_PORT}:5000
@@ -63,7 +66,7 @@ services:
     restart: always
 
   dummy_data:
-    image: ghcr.io/istsos/istsos4/dummy_data:1.6
+    image: ghcr.io/istsos/istsos4/dummy_data:1.7
     command: python3 generator.py
     working_dir: /dummy_data
     environment:
@@ -86,6 +89,7 @@ services:
       EPSG: ${EPSG}
       AUTHORIZATION: ${AUTHORIZATION}
       NETWORK: ${NETWORK}
+      ST_AGGREGATE: ${ST_AGGREGATE}
     depends_on:
       database:
         condition: service_healthy
