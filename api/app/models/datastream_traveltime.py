@@ -35,7 +35,7 @@ class DatastreamTravelTime(Base):
     )
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
     network_navigation_link = Column("Network@iot.navigationLink", Text)
-    name = Column(String(255), unique=True, nullable=False)
+    name = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     unit_of_measurement = Column("unitOfMeasurement", JSON, nullable=False)
     observation_type = Column("observationType", String(100), nullable=False)
