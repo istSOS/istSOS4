@@ -13,16 +13,24 @@
 # limitations under the License.
 
 import json
+import logging
 
 from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.v1.endpoints.functions import insert_commit, set_role
-from asyncpg.exceptions import InsufficientPrivilegeError, UniqueViolationError
+from asyncpg.exceptions import (
+    InsufficientPrivilegeError,
+    PostgresConnectionError,
+    QueryCanceledError,
+    TooManyConnectionsError,
+    UniqueViolationError,
+)
 from fastapi import APIRouter, Body, Depends, status
 from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
+logger = logging.getLogger(__name__)
 
 PAYLOAD_EXAMPLE = {
     "username": "cp1",
@@ -159,11 +167,24 @@ async def create_user(
         )
     except InsufficientPrivilegeError:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={"message": "Insufficient privileges."},
         )
-    except Exception as e:
+    except (PostgresConnectionError, TooManyConnectionsError):
+        logger.exception("Database temporarily unavailable during user creation")
         return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"message": str(e)},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"message": "Database temporarily unavailable."},
+        )
+    except QueryCanceledError:
+        logger.exception("Database timeout during user creation")
+        return JSONResponse(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            content={"message": "Database request timed out."},
+        )
+    except Exception:
+        logger.exception("Unexpected error during user creation")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": "Internal server error."},
         )
