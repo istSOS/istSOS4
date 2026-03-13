@@ -96,9 +96,18 @@ class TestStringInput:
         assert_column_value(columns, values, "resultString", "")
 
     def test_numeric_looking_string_stays_string(self):
-        """ "42" is a str, therefore no content based type inference should occur."""
+        """ "42" is a str. Therefore no content-based type inference should occur."""
         result_type, _, _ = get_result_type_and_column("42")
         assert result_type == 3
+
+    def test_boolean_looking_string_stays_string(self):
+        result_type, _, _ = get_result_type_and_column("true")
+        assert result_type == 3
+
+    def test_unicode_string(self):
+        result_type, values, columns = get_result_type_and_column("温度")
+        assert result_type == 3
+        assert_column_value(columns, values, "resultString", "温度")
 
 
 class TestDictInput:
@@ -118,6 +127,16 @@ class TestDictInput:
         assert_column_value(columns, values, "resultNumber", None)
         assert_column_value(columns, values, "resultString", None)
 
+    def test_empty_dict(self):
+        result_type, values, columns = get_result_type_and_column({})
+        assert result_type == 2
+        assert_column_value(columns, values, "resultJSON", {})
+
+    def test_nested_dict(self):
+        payload = {"sensor": {"id": 1, "value": 99.5}}
+        result_type, values, columns = get_result_type_and_column(payload)
+        assert result_type == 2
+        assert_column_value(columns, values, "resultJSON", payload)
 
     def test_original_dict_reference_is_preserved(self):
         """No copy should be made, the DB layer receives the same object."""
@@ -157,6 +176,14 @@ class TestBoolInput:
         _, values, columns = get_result_type_and_column(False)
         assert_column_value(columns, values, "resultBoolean", False)
 
+    def test_result_string_is_lowercase_true(self):
+        """SensorThings expects "true", not Python's "True"."""
+        _, values, columns = get_result_type_and_column(True)
+        assert_column_value(columns, values, "resultString", "true")
+
+    def test_result_string_is_lowercase_false(self):
+        _, values, columns = get_result_type_and_column(False)
+        assert_column_value(columns, values, "resultString", "false")
 
     def test_other_columns_are_none(self):
         _, values, columns = get_result_type_and_column(True)
@@ -186,6 +213,12 @@ class TestIntInput:
         _, values, columns = get_result_type_and_column(42)
         assert_column_value(columns, values, "resultBoolean", None)
         assert_column_value(columns, values, "resultJSON", None)
+
+    def test_zero_is_numeric_not_falsy(self):
+        """0 is falsy in Python, ensure isinstance is used, not truthiness."""
+        result_type, values, columns = get_result_type_and_column(0)
+        assert result_type == 0
+        assert_column_value(columns, values, "resultNumber", 0)
 
 
 class TestFloatInput:
