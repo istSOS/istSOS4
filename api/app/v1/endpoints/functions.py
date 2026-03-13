@@ -125,6 +125,6 @@ async def update_datastream_observedArea(conn, datastream_id, feature_id=None):
                     )
                     UPDATE sensorthings."Datastream"
                     SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
-                    WHERE id = $1;)
+                    WHERE id = $1;
                 """
             await conn.execute(query, datastream_id, feature_id)
