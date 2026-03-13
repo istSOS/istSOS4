@@ -36,7 +36,10 @@ from api.app.utils.utils import (
     get_result_type_and_column, 
     extract_iot_id)
 
-# Helper Function
+
+# Helper functions
+
+
 def assert_column_value(columns, values, column_name, expected_value):
     """Assert that a named column holds the expected value."""
     assert column_name in columns, (
@@ -48,7 +51,16 @@ def assert_column_value(columns, values, column_name, expected_value):
     )
 
 
+# safe_parse_datetime
+
+
 class TestDatetimeParsing:
+    """
+    Tests for safe_parse_datetime(), which wraps dateutil.parser.parse
+    and returns None instead of raising on invalid input.
+    Covers valid ISO strings and inputs that should silently return None.
+    """
+
     def test_safe_parse_datetime_valid(self):
         assert safe_parse_datetime("2024-02-01T12:00Z") is not None
 
@@ -57,26 +69,38 @@ class TestDatetimeParsing:
         assert safe_parse_datetime("N/A") is None
 
 
+# extract_iot_id
+
+
 class TestIotIdExtraction:
+    """
+    Tests for extract_iot_id(), which pulls the '@iot.id' integer from
+    an association dict. The function must raise ValueError for anything
+    that is not a dict, missing the key, or has a non-integer value.
+    """
+
     def test_extract_iot_id_valid(self):
         assert extract_iot_id({"@iot.id": 42}) == 42
 
     def test_extract_iot_id_invalid_structure(self):
-        try:
+        with pytest.raises(ValueError, match="dict"):
             extract_iot_id("not a dict")
-        except ValueError as e:
-            assert "dict" in str(e)
 
     def test_extract_iot_id_missing_key(self):
-        try:
+        with pytest.raises(ValueError, match="Missing '@iot.id'"):
             extract_iot_id({})
-        except ValueError as e:
-            assert "Missing '@iot.id'" in str(e)
+
+
+# get_result_type_and_column 
 
 
 class TestReturnStructure:
-    """The function must always return a 3-tuple of (int, list, list)
-    where values and columns have equal length and always contain 4 entries."""
+    """
+    Verifies the shape of the return value regardless of input type.
+    The function must always return a 3-tuple of (int, list, list)
+    where values and columns have equal length and always contain
+    exactly 4 entries, one per DB result column.
+    """
 
     def test_returns_a_three_element_tuple(self):
         result = get_result_type_and_column("hello")
@@ -98,6 +122,12 @@ class TestReturnStructure:
 
 
 class TestStringInput:
+    """
+    Verifies that a str value is classified as result_type = 3 and stored
+    in resultString. All other columns must be None. No content-based
+    inference should occur, a string that looks like a number or boolean
+    must still be treated as a string.
+    """
 
     def test_result_type_is_3(self):
         result_type, _, _ = get_result_type_and_column("hello")
@@ -134,6 +164,12 @@ class TestStringInput:
 
 
 class TestDictInput:
+    """
+    Verifies that a dict value is classified as result_type = 2 and stored
+    in resultJSON. All other columns must be None. The original dict
+    reference must be preserved, no copying should occur since the
+    DB layer expects to receive the exact object passed in.
+    """
 
     def test_result_type_is_2(self):
         result_type, _, _ = get_result_type_and_column({"temp": 22})
@@ -170,6 +206,13 @@ class TestDictInput:
 
 
 class TestBoolInput:
+    """
+    Verifies that a bool value is classified as result_type = 1 and stored
+    in resultBoolean. The string form must be lower-case ('true'/'false')
+    to match the SensorThings convention. Critically, since bool is a
+    subclass of int in Python, this branch must be checked before the
+    numeric branch to avoid misclassifying True/False as result_type = 0.
+    """
 
     def test_result_type_is_1_for_true(self):
         result_type, _, _ = get_result_type_and_column(True)
@@ -215,6 +258,12 @@ class TestBoolInput:
 
 
 class TestIntInput:
+    """
+    Verifies that an int value is classified as result_type = 0 and stored
+    in resultNumber. resultString receives the str() form for text-based
+    queries. Covers positive, negative, and zero, including the falsy
+    zero trap where a truthiness check would incorrectly skip the branch.
+    """
 
     def test_result_type_is_0_for_positive_int(self):
         result_type, _, _ = get_result_type_and_column(42)
@@ -245,6 +294,12 @@ class TestIntInput:
 
 
 class TestFloatInput:
+    """
+    Verifies that a float value is classified as result_type = 0 alongside
+    int, and stored in resultNumber. resultString receives str(value),
+    which preserves the decimal point (str(1.0) -> "1.0"). Covers
+    positive, negative, and zero floats.
+    """
 
     def test_result_type_is_0_for_float(self):
         result_type, _, _ = get_result_type_and_column(3.14)
@@ -276,6 +331,12 @@ class TestFloatInput:
 
 
 class TestInvalidInput:
+    """
+    Verifies that any unsupported type raises Exception with the message
+    'Cannot cast result to a valid type'. Covers None, list, tuple, set,
+    bytes, and a custom object, basically anything the function has no branch for
+    must fail loudly rather than silently returning wrong data.
+    """
 
     def test_none_raises(self):
         with pytest.raises(Exception, match="Cannot cast result to a valid type"):
@@ -306,8 +367,12 @@ class TestInvalidInput:
 
 
 class TestColumnOrdering:
-    """The first column must always be the active (non-None) one,
-    since callers zip values and columns and expect this contract."""
+    """
+    Verifies that the first column in the returned list is always the
+    active (non-None) one. Callers zip values and columns together and
+    rely on this ordering contract, if it breaks, the wrong column gets
+    written to in the DB.
+    """
 
     def test_first_column_is_result_string_for_string(self):
         _, _, columns = get_result_type_and_column("hello")
@@ -330,7 +395,7 @@ class TestColumnOrdering:
         assert columns[0] == "resultNumber"
 
     def test_first_value_is_never_none(self):
-        """value[0] must always be the actual payload, never None."""
+        """values[0] must always be the actual payload, never None."""
         cases = ["hello", {"k": "v"}, True, 42, 3.14]
         for val in cases:
             _, values, _ = get_result_type_and_column(val)
