@@ -17,7 +17,6 @@ from datetime import datetime
 
 from app import (
     AUTHORIZATION,
-    EPSG,
     HOSTNAME,
     NETWORK,
     ST_AGGREGATE,
@@ -703,7 +702,7 @@ async def update_datastream_observedArea(conn, datastream_id, foi_id):
         else:
             update_query = f"""
                 UPDATE sensorthings."Datastream"
-                SET "observedArea" = Set_SRID(ST_Extent(
+                SET "observedArea" = ST_Envelope(
                     ST_Collect(
                         "observedArea",
                         (
@@ -711,7 +710,7 @@ async def update_datastream_observedArea(conn, datastream_id, foi_id):
                             FROM sensorthings."FeaturesOfInterest"
                             WHERE id = $1
                         )
-                    ), {EPSG})
+                    )
                 )
                 WHERE id = $2;
             """
