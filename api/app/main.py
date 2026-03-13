@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+from contextlib import asynccontextmanager
 
 from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
@@ -32,9 +33,16 @@ async def initialize_pool():
             await asyncio.sleep(1)  # Use asyncio.sleep for asynchronous sleep
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await initialize_pool()
+    yield
+
+
 app = FastAPI(
     title="OGC SensorThings API",
     description="A SensorThings API implementation in Python using FastAPI.",
+    lifespan=lifespan,
     openapi_tags=[
         {
             "name": "Read root",
@@ -60,12 +68,6 @@ def __handle_root():
         "serverSettings": serverSettings,
     }
     return response
-
-
-@app.on_event("startup")
-async def startup_event():
-    await initialize_pool()  # Call the initialize_pool function at startup
-
 
 @app.get(f"{SUBPATH}{VERSION}", tags=["Read root"])
 async def read_root():
