@@ -41,3 +41,6 @@ ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 5))
 ANONYMOUS_VIEWER = int(os.getenv("ANONYMOUS_VIEWER", 0))
 NETWORK = int(os.getenv("NETWORK", 0))
+
+if AUTHORIZATION and SECRET_KEY is None:
+	raise ValueError("SECRET_KEY must be set when AUTHORIZATION is enabled")
