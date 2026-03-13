@@ -13,7 +13,7 @@
 # limitations under the License.
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import validate_payload_keys
+from app.utils.utils import validate_payload_keys, validate_required_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
@@ -41,6 +41,8 @@ PAYLOAD_EXAMPLE = {
 
 ALLOWED_KEYS = ["name", "Datastreams"]
 
+REQUIRED_KEYS = ["name"]
+
 
 @v1.api_route(
     "/Networks",
@@ -65,6 +67,7 @@ async def create_network(
             raise Exception("Only content-type application/json is supported.")
 
         validate_payload_keys(payload, ALLOWED_KEYS)
+        validate_required_keys(payload, REQUIRED_KEYS)
 
         async with pool.acquire() as connection:
             async with connection.transaction():
