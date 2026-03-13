@@ -409,3 +409,32 @@ def build_expand(expand_node):
         parts.append(segment)
 
     return ",".join(parts)
+
+
+import re
+
+_USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{3,63}$')
+
+
+def validate_username(username: str) -> bool:
+    """Return True if *username* contains only letters, digits and underscores
+    and is between 3 and 63 characters long."""
+    return bool(_USERNAME_RE.match(username))
+
+
+def pg_quote_ident(name: str) -> str:
+    """Safely double-quote a PostgreSQL identifier (role name, username, etc.).
+
+    Doubles any embedded double-quote characters and wraps the result in
+    double quotes, matching the behaviour of PostgreSQL's quote_ident().
+    """
+    return '"' + name.replace('"', '""') + '"'
+
+
+def pg_quote_literal(val: str) -> str:
+    """Safely single-quote a PostgreSQL string literal.
+
+    Doubles any embedded single-quote characters and wraps the result in
+    single quotes, matching the behaviour of PostgreSQL's quote_literal().
+    """
+    return "'" + val.replace("'", "''") + "'"
