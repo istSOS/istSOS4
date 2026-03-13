@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from app import REDIS
 from app.db.redis_db import redis
 from app.oauth import (
     authenticate_user,
@@ -19,7 +20,6 @@ from app.oauth import (
     create_refresh_token,
     decode_token,
 )
-from app import REDIS
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -83,7 +83,7 @@ async def refresh_token(authorization=Header()):
     expire = payload.get("exp")
 
     if REDIS:
-        redis.set(token, "refreshed", ex=expire)
+        redis.set(token, "refreshed", exat=payload.get("exp"))
 
     access_token, expire = create_refresh_token(payload)
 
@@ -114,7 +114,7 @@ async def logout(authorization=Header()):
     token = authorization[len(prefix) :].strip()
 
     try:
-        expire = decode_token(token).get("exp")
+        payload = decode_token(token)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -122,7 +122,7 @@ async def logout(authorization=Header()):
         )
 
     if REDIS:
-        redis.set(token, "logged_out", ex=expire)
+        redis.set(token, "logged_out", exat=payload.get("exp"))
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,

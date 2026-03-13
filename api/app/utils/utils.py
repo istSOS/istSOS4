@@ -13,10 +13,14 @@
 # limitations under the License.
 
 import json
+import re
+from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
 from app import EPSG, HOSTNAME, TOP_VALUE
 from asyncpg.types import Range
 from dateutil import parser
+
+_USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,63}$")
 
 
 def safe_parse_datetime(value):
@@ -37,7 +41,7 @@ def safe_parse_datetime(value):
         return parser.parse(value)
     except (ValueError, TypeError, OverflowError):
         return None
-    
+
 
 def extract_iot_id(data):
     """
@@ -54,13 +58,17 @@ def extract_iot_id(data):
     """
 
     if not isinstance(data, dict):
-        raise ValueError(f"Expected dict for association, got {type(data).__name__}")
+        raise ValueError(
+            f"Expected dict for association, got {type(data).__name__}"
+        )
     if "@iot.id" not in data:
         raise ValueError("Missing '@iot.id' in association payload")
 
     iot_id = data["@iot.id"]
     if not isinstance(iot_id, int):
-        raise ValueError(f"Expected int for '@iot.id', got {type(iot_id).__name__}")
+        raise ValueError(
+            f"Expected int for '@iot.id', got {type(iot_id).__name__}"
+        )
     return iot_id
 
 
@@ -162,7 +170,7 @@ def get_result_type_and_column(input):
             ["resultBoolean", "resultString", "resultNumber", "resultJSON"]
         )
         values.extend([input, str(input).lower(), None, None])
-    elif isinstance(input, (int, float)) :
+    elif isinstance(input, (int, float)):
         result_type = 0
         columns.extend(
             ["resultNumber", "resultString", "resultBoolean", "resultJSON"]
@@ -214,40 +222,33 @@ def build_nextLink(full_path, count_links):
     new_top_value = TOP_VALUE
 
     # Handle $top
-    if "$top" in nextLink:
-        start_index = nextLink.find("$top=") + 5
-        end_index = len(nextLink)
-        for char in ("&", ";", ")"):
-            char_index = nextLink.find(char, start_index)
-            if char_index != -1 and char_index < end_index:
-                end_index = char_index
-        top_value = int(nextLink[start_index:end_index])
-        new_top_value = top_value
-        nextLink = (
-            nextLink[:start_index] + str(new_top_value) + nextLink[end_index:]
-        )
-    else:
-        if "?" in nextLink:
-            nextLink = nextLink + f"&$top={new_top_value}"
-        else:
-            nextLink = nextLink + f"?$top={new_top_value}"
+    parsed = urlparse(nextLink)
 
-    # Handle $skip
-    if "$skip" in nextLink:
-        start_index = nextLink.find("$skip=") + 6
-        end_index = len(nextLink)
-        for char in ("&", ";", ")"):
-            char_index = nextLink.find(char, start_index)
-            if char_index != -1 and char_index < end_index:
-                end_index = char_index
-        skip_value = int(nextLink[start_index:end_index])
-        new_skip_value = skip_value + new_top_value
-        nextLink = (
-            nextLink[:start_index] + str(new_skip_value) + nextLink[end_index:]
-        )
+    # Decode query parameters into a dict: {key: [values]}
+    query_params = parse_qs(parsed.query, keep_blank_values=True)
+
+    # Handle $top
+    if "$top" in query_params:
+        top_value = int(query_params["$top"][0])
+        query_params["$top"] = [str(top_value)]
+        new_top_value = top_value
     else:
-        new_skip_value = new_top_value
-        nextLink = nextLink + f"&$skip={new_skip_value}"
+        query_params["$top"] = [str(new_top_value)]
+
+    # ---- Handle $skip ----
+    if "$skip" in query_params:
+        skip_value = int(query_params["$skip"][0])
+        query_params["$skip"] = [str(skip_value + new_top_value)]
+    else:
+        query_params["$skip"] = [str(new_top_value)]
+
+    # nextLink = urlunparse(
+    #     parsed._replace(query=urlencode(query_params, doseq=True))
+    # )
+
+    new_query = urlencode(query_params, doseq=True, quote_via=quote)
+
+    nextLink = urlunparse(parsed._replace(query=new_query))
 
     # Only return the nextLink if there's more data to fetch
     if new_top_value < count_links:
@@ -296,7 +297,7 @@ def handle_associations(payload, keys):
                 iot_id = extract_iot_id(payload[key])
             except ValueError as e:
                 raise ValueError(f"Invalid association for '{key}': {e}")
-            
+
             if key != "FeatureOfInterest":
                 payload[f"{key.lower()}_id"] = iot_id
             else:
@@ -409,11 +410,6 @@ def build_expand(expand_node):
         parts.append(segment)
 
     return ",".join(parts)
-
-
-import re
-
-_USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{3,63}$')
 
 
 def validate_username(username: str) -> bool:
