@@ -3,6 +3,7 @@ services:
     build:
       context: ./database
       dockerfile: Dockerfile
+    restart: always
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -34,6 +35,7 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
+    restart: always
     environment:
       HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
@@ -108,10 +110,12 @@ services:
     build:
       context: ./docs/mkdocs
       dockerfile: dockerfile
+    restart: always
     ports:
       - 8019:8000
     volumes:
       - ./docs/mkdocs:/docs
+
 # You might need to run `sudo chown -R $USER schemaspy/` to fix permissions
 # schemaspy:
 #   image: schemaspy/schemaspy:6.2.4
