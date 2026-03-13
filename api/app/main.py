@@ -13,12 +13,25 @@
 # limitations under the License.
 
 import asyncio
+import logging
 
-from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
+from app import (
+    AUTHORIZATION,
+    DEBUG,
+    HOSTNAME,
+    POSTGRES_PORT_WRITE,
+    SECRET_KEY,
+    SUBPATH,
+    VERSION,
+)
+from app.auth_config import validate_auth_config
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.settings import serverSettings, tables
 from app.v1 import api
 from fastapi import FastAPI
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 async def initialize_pool():
@@ -64,6 +77,9 @@ def __handle_root():
 
 @app.on_event("startup")
 async def startup_event():
+    warnings = validate_auth_config(AUTHORIZATION, SECRET_KEY, DEBUG)
+    for warning_message in warnings:
+        LOGGER.warning(warning_message)
     await initialize_pool()  # Call the initialize_pool function at startup
 
 
