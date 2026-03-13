@@ -1,6 +1,7 @@
 services:
   database:
     image: ghcr.io/istsos/istsos4/database:1.6
+    restart: always
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -28,6 +29,7 @@ services:
 
   api:
     image: ghcr.io/istsos/istsos4/api:1.12
+    restart: always
     environment:
       HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
