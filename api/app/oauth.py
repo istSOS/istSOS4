@@ -16,6 +16,8 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+
 import asyncpg
 import jwt
 from app import (
@@ -153,10 +155,14 @@ def create_access_token(data: dict):
 
 
 def create_refresh_token(payload: dict):
-    return create_access_token(
-        data={"sub": payload.get("sub"), "role": payload.get("role")}
-    )
-
+    to_encode = {
+        "sub": payload.get("sub"),
+        "role": payload.get("role"),
+    }
+    expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt, int(expire.timestamp())
 
 def decode_token(token: str):
     return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
