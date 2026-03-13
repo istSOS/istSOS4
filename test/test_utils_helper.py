@@ -281,3 +281,36 @@ class TestInvalidInput:
         with pytest.raises(Exception, match="Cannot cast result to a valid type"):
             get_result_type_and_column(Foo())
 
+
+class TestColumnOrdering:
+    """The first column must always be the active (non-None) one,
+    since callers zip values and columns and expect this contract."""
+
+    def test_first_column_is_result_string_for_string(self):
+        _, _, columns = get_result_type_and_column("hello")
+        assert columns[0] == "resultString"
+
+    def test_first_column_is_result_json_for_dict(self):
+        _, _, columns = get_result_type_and_column({"k": "v"})
+        assert columns[0] == "resultJSON"
+
+    def test_first_column_is_result_boolean_for_bool(self):
+        _, _, columns = get_result_type_and_column(True)
+        assert columns[0] == "resultBoolean"
+
+    def test_first_column_is_result_number_for_int(self):
+        _, _, columns = get_result_type_and_column(42)
+        assert columns[0] == "resultNumber"
+
+    def test_first_column_is_result_number_for_float(self):
+        _, _, columns = get_result_type_and_column(3.14)
+        assert columns[0] == "resultNumber"
+
+    def test_first_value_is_never_none(self):
+        """value[0] must always be the actual payload, never None."""
+        cases = ["hello", {"k": "v"}, True, 42, 3.14]
+        for val in cases:
+            _, values, _ = get_result_type_and_column(val)
+            assert values[0] is not None, (
+                f"values[0] was None for input {val!r}"
+            )
