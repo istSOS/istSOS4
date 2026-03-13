@@ -74,6 +74,29 @@ class TestIotIdExtraction:
             assert "Missing '@iot.id'" in str(e)
 
 
+class TestReturnStructure:
+    """The function must always return a 3-tuple of (int, list, list)
+    where values and columns have equal length and always contain 4 entries."""
+
+    def test_returns_a_three_element_tuple(self):
+        result = get_result_type_and_column("hello")
+        assert isinstance(result, tuple) and len(result) == 3
+
+    def test_first_element_is_an_integer(self):
+        result_type, _, _ = get_result_type_and_column("hello")
+        assert isinstance(result_type, int)
+
+    def test_values_and_columns_have_equal_length(self):
+        _, values, columns = get_result_type_and_column(42)
+        assert len(values) == len(columns)
+
+    def test_always_returns_exactly_four_columns(self):
+        for sample in ["text", 1, 1.5, True, {"k": "v"}]:
+            _, values, columns = get_result_type_and_column(sample)
+            assert len(columns) == 4, f"Expected 4 columns for {sample!r}"
+            assert len(values) == 4, f"Expected 4 values for {sample!r}"
+
+
 class TestStringInput:
 
     def test_result_type_is_3(self):
