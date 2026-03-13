@@ -19,6 +19,7 @@ from app.oauth import (
     create_refresh_token,
     decode_token,
 )
+from app import REDIS
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -81,7 +82,8 @@ async def refresh_token(authorization=Header()):
 
     expire = payload.get("exp")
 
-    redis.set(token, "refreshed", ex=expire)
+    if REDIS:
+        redis.set(token, "refreshed", ex=expire)
 
     access_token, expire = create_refresh_token(payload)
 
@@ -119,7 +121,8 @@ async def logout(authorization=Header()):
             detail="Invalid token",
         )
 
-    redis.set(token, "logged_out", ex=expire)
+    if REDIS:
+        redis.set(token, "logged_out", ex=expire)
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,
