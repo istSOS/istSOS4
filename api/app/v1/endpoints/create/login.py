@@ -65,7 +65,7 @@ async def login(
 )
 async def refresh_token(authorization=Header()):
     prefix = "Bearer "
-    if not authorization.lower().startswith(prefix.lower()):
+    if not authorization or not authorization.lower().startswith(prefix.lower()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid authorization header format",
@@ -106,7 +106,7 @@ async def refresh_token(authorization=Header()):
 )
 async def logout(authorization=Header()):
     prefix = "Bearer "
-    if not authorization.lower().startswith(prefix.lower()):
+    if not authorization or not authorization.lower().startswith(prefix.lower()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid authorization header format",
