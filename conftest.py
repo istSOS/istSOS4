@@ -1,6 +1,8 @@
 """
-This file helps run the tests by providing it a path, it is 
-needed because the test directory is far away from the files 
+conftest.py — pytest configuration for the istSOS4 test suite.
+
+Adds the project root and api/ to sys.path so all test files
+can use clean absolute imports without managing paths themselves.
 """
 
 import sys
