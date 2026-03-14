@@ -54,6 +54,16 @@ async def delete_user(
                     "message": "Invalid username: only letters, digits and underscores allowed (3\u201363 characters).",
                 },
             )
+        # Prevent authenticated users from deleting their own account
+        if current_user is not None and current_user["username"] == user:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                "code": 400,
+                "type": "error",
+                "message": "Deleting the currently authenticated user is not allowed."
+                },
+            )
 
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -62,6 +72,23 @@ async def delete_user(
                         raise InsufficientPrivilegeError
 
                     await set_role(connection, current_user)
+
+                # Check if the user exists before attempting deletion
+                query = """
+                    SELECT 1 FROM sensorthings."User"
+                    WHERE username = $1;
+                """
+                exists = await connection.fetchrow(query, user)
+
+                if not exists:
+                    return JSONResponse(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        content={
+                            "code": 404,
+                            "type": "error",
+                            "message": "User not found"
+                        },
+                    )
 
                 query = """
                     DELETE FROM sensorthings."User"
@@ -98,7 +125,11 @@ async def delete_user(
             content={"message": "Insufficient privileges"},
         )
     except Exception as e:
-        return Response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"message": str(e)},
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "code": 500,
+                "type": "error",
+                "message": "Unexpected error while deleting user"
+            },
         )
