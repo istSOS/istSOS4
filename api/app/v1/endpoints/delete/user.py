@@ -54,6 +54,13 @@ async def delete_user(
                     "message": "Invalid username: only letters, digits and underscores allowed (3\u201363 characters).",
                 },
             )
+        if current_user is not None and current_user["username"] == user:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "detail": "Deleting the currently authenticated user is not allowed."
+                },
+            )
 
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -98,7 +105,7 @@ async def delete_user(
             content={"message": "Insufficient privileges"},
         )
     except Exception as e:
-        return Response(
+        return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"message": str(e)},
         )
