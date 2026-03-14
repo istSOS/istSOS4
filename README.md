@@ -18,6 +18,13 @@ At minimum set `SECRET_KEY` (required for authentication) and the Postgres/admin
 passwords before running the stack.  All other variables default to sensible
 development values.
 
+Login endpoint protection is enabled by default and can be tuned with:
+
+- `LOGIN_RATE_LIMIT_ENABLED` (default `1`)
+- `LOGIN_MAX_ATTEMPTS` (default `5`)
+- `LOGIN_WINDOW_SECONDS` (default `60`)
+- `LOGIN_BLOCK_SECONDS` (default `300`)
+
 ## Start DEV environment
 
 To start the Docker services, run:
