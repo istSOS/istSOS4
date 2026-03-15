@@ -14,7 +14,7 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import validate_payload_keys
+from app.utils.utils import validate_payload_keys, validate_required_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
@@ -51,6 +51,8 @@ ALLOWED_KEYS = [
     "Datastreams",
 ]
 
+REQUIRED_KEYS = ["name", "encodingType", "metadata"]
+
 
 @v1.api_route(
     "/Sensors",
@@ -75,6 +77,7 @@ async def create_sensor(
             raise Exception("Only content-type application/json is supported.")
 
         validate_payload_keys(payload, ALLOWED_KEYS)
+        validate_required_keys(payload, REQUIRED_KEYS)
 
         async with pool.acquire() as connection:
             async with connection.transaction():
