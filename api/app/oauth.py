@@ -22,6 +22,7 @@ from app import (
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PORT,
+    REDIS,
     SECRET_KEY,
 )
 from app.db.asyncpg_db import get_pool
@@ -105,7 +106,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     )
 
     try:
-        if redis.get(token) is not None:
+        if REDIS and redis.get(token) is not None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has been revoked",
