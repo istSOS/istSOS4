@@ -97,14 +97,14 @@ async def update_datastream_observedArea(conn, datastream_id, feature_id=None):
                         WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1
                     ),
                     aggregated_geometry AS (
-                        SELECT Set_SRID(ST_Extent(ST_Collect(feature)), {EPSG}) AS agg_geom
+                        SELECT ST_Envelope(ST_Collect(feature)) AS agg_geom
                         FROM distinct_features
                     )
                     UPDATE sensorthings."Datastream"
                     SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
                     WHERE id = $1;
                 """
-            await conn.execute(query, datastream_id) 
+            await conn.execute(query, datastream_id)
         else:
             if ST_AGGREGATE == "CONVEX_HULL":
                 query = """
@@ -129,11 +129,11 @@ async def update_datastream_observedArea(conn, datastream_id, feature_id=None):
                         WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1 AND foi.id != $2
                     ),
                     aggregated_geometry AS (
-                        SELECT Set_SRID(ST_Extent( ST_Collect(feature)), {EPSG}) AS agg_geom
+                        SELECT ST_Envelope(ST_Collect(feature)) AS agg_geom
                         FROM distinct_features
                     )
                     UPDATE sensorthings."Datastream"
                     SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
-                    WHERE id = $1;)
+                    WHERE id = $1;
                 """
             await conn.execute(query, datastream_id, feature_id)
