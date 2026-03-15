@@ -24,6 +24,7 @@ from app import (
     VERSIONING,
 )
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.v1.endpoints.functions import set_role
 from app.utils.utils import (
     check_iot_id_in_payload,
     check_missing_properties,
@@ -110,10 +111,7 @@ async def data_array_observation(
         async with pool.acquire() as conn:
             async with conn.transaction():
                 if current_user is not None:
-                    query = 'SET ROLE "{username}";'
-                    await conn.execute(
-                        query.format(username=current_user["username"])
-                    )
+                    await set_role(conn, current_user)
 
                 try:
                     commit_id = await set_commit(
