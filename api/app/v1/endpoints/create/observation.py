@@ -65,7 +65,7 @@ ALLOWED_KEYS = [
 )
 async def create_observation(
     request: Request,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -148,7 +148,7 @@ PAYLOAD_EXAMPLE_DATASTREAM = {
 async def create_observation_for_datastream(
     request: Request,
     datastream_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE_DATASTREAM),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE_DATASTREAM}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -229,7 +229,7 @@ async def create_observation_for_datastream(
 async def create_observation_for_feature_of_interest(
     request: Request,
     feature_of_interest_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
