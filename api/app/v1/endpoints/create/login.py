@@ -131,7 +131,7 @@ async def logout(authorization: str | None = Header(default=None)):
     token = _extract_bearer_token(authorization)
 
     try:
-        expire = decode_token(token).get("exp")
+        payload = decode_token(token)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
