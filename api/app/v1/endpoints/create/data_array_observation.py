@@ -99,7 +99,7 @@ PAYLOAD_EXAMPLE = [
     status_code=status.HTTP_201_CREATED,
 )
 async def data_array_observation(
-    payload: list = Body(example=PAYLOAD_EXAMPLE),
+    payload: list = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
