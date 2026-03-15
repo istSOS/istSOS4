@@ -62,7 +62,7 @@ REQUIRED_KEYS = ["name", "definition", "description"]
 )
 async def create_observed_property(
     request: Request,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
