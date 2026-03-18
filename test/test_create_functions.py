@@ -1,10 +1,7 @@
 """
 Tests for selected functions in api/app/v1/endpoints/create/functions.py
 
-Covers two functions:
-    set_commit()          — all branching logic before the DB call
-    handle_associations() — the two pure branches (entity_id given, @iot.id in payload)
-
+Covers set_commit(), handle_associations(), and create_entity().
 No live database needed for any of these tests.
 
 Author: Vishmayraj
@@ -13,7 +10,7 @@ Author: Vishmayraj
 import sys
 import os
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 API_DIR = os.path.join(PROJECT_ROOT, "api")
@@ -21,7 +18,11 @@ API_DIR = os.path.join(PROJECT_ROOT, "api")
 sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, API_DIR)
 
-from app.v1.endpoints.create.functions import set_commit, handle_associations
+from app.v1.endpoints.create.functions import (
+    set_commit,
+    handle_associations,
+    create_entity,
+)
 
 MODULE = "app.v1.endpoints.create.functions"
 
@@ -34,9 +35,7 @@ def make_connection(fetchval_return=None):
     return conn
 
 
-# =============================================================================
-# set_commit
-# =============================================================================
+# set_commit tests cover all branching logic before the DB call.
 
 class TestSetCommitDisabled:
     """Both VERSIONING and AUTHORIZATION are False, return None immediately, no DB touched."""
@@ -233,7 +232,7 @@ class TestSetCommitPayloadBuilding:
     async def test_returns_id_from_insert_commit(self):
         conn = make_connection()
 
-        async def fake_insert_commit(connection, commit, action):
+        async def fake_insert_commit(_, __, ___):
             return 42
 
         with patch(f"{MODULE}.VERSIONING", True), \
@@ -243,17 +242,12 @@ class TestSetCommitPayloadBuilding:
         assert result == 42
 
 
-# =============================================================================
-# handle_associations
-#
-# Three branches exist in the source:
-#   (a) entity_id given directly  → sets payload key, no DB call
-#   (b) @iot.id in payload        → extracts id, no DB call
-#   (c) neither                   → calls insert_func (DB path, skipped here)
-# =============================================================================
+# handle_associations has three branches. Only the two pure ones are tested here:
+# entity_id passed directly, and @iot.id found in payload. The third branch
+# calls insert_func and hits the DB, so it is skipped in this file.
 
 class TestHandleAssociationsEntityIdGiven:
-    """entity_id is passed directly — payload gets the id key set, insert_func is never called."""
+    """entity_id is passed directly, payload gets the id key set, insert_func is never called."""
 
     @pytest.mark.asyncio
     async def test_sets_lowercase_id_key(self):
@@ -279,7 +273,7 @@ class TestHandleAssociationsEntityIdGiven:
 
 
 class TestHandleAssociationsIotIdInPayload:
-    """entity_id is None but payload has @iot.id — id is extracted, original key removed, no DB call."""
+    """entity_id is None but payload has @iot.id, id is extracted, original key removed, no DB call."""
 
     @pytest.mark.asyncio
     async def test_extracts_iot_id_into_payload(self):
@@ -302,3 +296,59 @@ class TestHandleAssociationsIotIdInPayload:
         insert_func = AsyncMock()
         await handle_associations(payload, "Datastream", None, insert_func, conn, None)
         insert_func.assert_not_called()
+
+
+# create_entity tests check that the correct SQL placeholder is generated
+# for geometry columns. ST_GeomFromGeoJSON() should wrap the placeholder
+# for "location" and "feature" keys, and plain $N for everything else.
+
+class TestCreateEntityGeometryBranchBug:
+    """Geometry columns get ST_GeomFromGeoJSON as the placeholder, non-geometry columns get plain $N."""
+
+    def make_conn_with_query_capture(self):
+        """Connection mock that captures the query string passed to fetchval."""
+        captured = {}
+        conn = AsyncMock()
+
+        async def fake_fetchval(query, *_args):
+            captured["query"] = query
+            return 1
+
+        conn.fetchval = fake_fetchval
+        conn.transaction = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=None),
+            __aexit__=AsyncMock(return_value=False),
+        ))
+        return conn, captured
+
+    @pytest.mark.asyncio
+    async def test_location_key_uses_st_geomfromgeojson(self):
+        """A location payload should produce ST_GeomFromGeoJSON($1) in the INSERT query, not plain $1."""
+        conn, captured = self.make_conn_with_query_capture()
+        payload = {"location": '{"type": "Point", "coordinates": [0, 0]}'}
+
+        await create_entity(conn, "Location", payload)
+
+        assert "ST_GeomFromGeoJSON" in captured.get("query", "")
+
+    @pytest.mark.asyncio
+    async def test_feature_key_uses_st_geomfromgeojson(self):
+        """A feature payload should produce ST_GeomFromGeoJSON($1) in the INSERT query, not plain $1."""
+        conn, captured = self.make_conn_with_query_capture()
+        payload = {"feature": '{"type": "Point", "coordinates": [1, 1]}'}
+
+        await create_entity(conn, "FeaturesOfInterest", payload)
+
+        assert "ST_GeomFromGeoJSON" in captured.get("query", "")
+
+    @pytest.mark.asyncio
+    async def test_non_geometry_key_uses_plain_placeholder(self):
+        """A non-geometry key like name should always produce a plain $1 placeholder."""
+        conn, captured = self.make_conn_with_query_capture()
+        payload = {"name": "test sensor"}
+
+        await create_entity(conn, "Sensor", payload)
+
+        query = captured.get("query", "")
+        assert "$1" in query
+        assert "ST_GeomFromGeoJSON" not in query
