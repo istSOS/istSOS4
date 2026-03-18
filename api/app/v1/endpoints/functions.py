@@ -15,14 +15,13 @@
 import json
 
 from app import ST_AGGREGATE
+from app.utils.utils import pg_quote_ident
 
 
 async def set_role(connection, current_user):
     async with connection.transaction():
-        query = 'SET ROLE "{username}";'
-        await connection.execute(
-            query.format(username=current_user["username"])
-        )
+        query = f"SET ROLE {pg_quote_ident(current_user['username'])};"
+        await connection.execute(query)
 
 
 async def insert_commit(connection, payload, action):
