@@ -72,7 +72,7 @@ async def create_entity(connection, entity_name, payload):
         values_placeholders = ", ".join(
             (
                 f"${i+1}"
-                if key != "location" or key != "feature"
+                if key != "location" and key != "feature"
                 else f"ST_GeomFromGeoJSON(${i+1})"
             )
             for i in range(len(payload))
