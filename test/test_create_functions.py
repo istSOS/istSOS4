@@ -1,7 +1,11 @@
 """
-Tests for set_commit() in api/app/v1/endpoints/create/functions.py
+Tests for selected functions in api/app/v1/endpoints/create/functions.py
 
-Covers all branching logic before the DB call, no live database needed.
+Covers two functions:
+    set_commit()          — all branching logic before the DB call
+    handle_associations() — the two pure branches (entity_id given, @iot.id in payload)
+
+No live database needed for any of these tests.
 
 Author: Vishmayraj
 """
@@ -17,7 +21,7 @@ API_DIR = os.path.join(PROJECT_ROOT, "api")
 sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, API_DIR)
 
-from app.v1.endpoints.create.functions import set_commit
+from app.v1.endpoints.create.functions import set_commit, handle_associations
 
 MODULE = "app.v1.endpoints.create.functions"
 
@@ -29,6 +33,10 @@ def make_connection(fetchval_return=None):
     conn.fetchval = AsyncMock(return_value=fetchval_return)
     return conn
 
+
+# =============================================================================
+# set_commit
+# =============================================================================
 
 class TestSetCommitDisabled:
     """Both VERSIONING and AUTHORIZATION are False, return None immediately, no DB touched."""
@@ -133,7 +141,7 @@ class TestSetCommitPayloadBuilding:
         conn = make_connection()
         captured = {}
 
-        async def fake_insert_commit(connection, commit, action):
+        async def fake_insert_commit(_, commit, __):
             captured.update(commit)
             return 55
 
@@ -149,7 +157,7 @@ class TestSetCommitPayloadBuilding:
         conn = make_connection()
         captured = {}
 
-        async def fake_insert_commit(connection, commit, action):
+        async def fake_insert_commit(_, commit, __):
             captured.update(commit)
             return 55
 
@@ -164,7 +172,7 @@ class TestSetCommitPayloadBuilding:
         conn = make_connection()
         captured = {}
 
-        async def fake_insert_commit(connection, commit, action):
+        async def fake_insert_commit(_, commit, __):
             captured.update(commit)
             return 77
 
@@ -180,7 +188,7 @@ class TestSetCommitPayloadBuilding:
         conn = make_connection()
         captured = {}
 
-        async def fake_insert_commit(connection, commit, action):
+        async def fake_insert_commit(_, commit, __):
             captured.update(commit)
             return 77
 
@@ -196,7 +204,7 @@ class TestSetCommitPayloadBuilding:
         conn = make_connection()
         captured_action = {}
 
-        async def fake_insert_commit(connection, commit, action):
+        async def fake_insert_commit(_, commit, action):
             captured_action["action"] = action
             return 1
 
@@ -211,7 +219,7 @@ class TestSetCommitPayloadBuilding:
         conn = make_connection()
         captured = {}
 
-        async def fake_insert_commit(connection, commit, action):
+        async def fake_insert_commit(_, commit, __):
             captured.update(commit)
             return 1
 
@@ -233,3 +241,64 @@ class TestSetCommitPayloadBuilding:
             result = await set_commit(conn, "msg", None)
 
         assert result == 42
+
+
+# =============================================================================
+# handle_associations
+#
+# Three branches exist in the source:
+#   (a) entity_id given directly  → sets payload key, no DB call
+#   (b) @iot.id in payload        → extracts id, no DB call
+#   (c) neither                   → calls insert_func (DB path, skipped here)
+# =============================================================================
+
+class TestHandleAssociationsEntityIdGiven:
+    """entity_id is passed directly — payload gets the id key set, insert_func is never called."""
+
+    @pytest.mark.asyncio
+    async def test_sets_lowercase_id_key(self):
+        payload = {}
+        conn = AsyncMock()
+        await handle_associations(payload, "Datastream", 42, AsyncMock(), conn, None)
+        assert payload["datastream_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_does_not_call_insert_func(self):
+        payload = {}
+        conn = AsyncMock()
+        insert_func = AsyncMock()
+        await handle_associations(payload, "Sensor", 10, insert_func, conn, None)
+        insert_func.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_works_for_observed_property_key(self):
+        payload = {}
+        conn = AsyncMock()
+        await handle_associations(payload, "ObservedProperty", 5, AsyncMock(), conn, None)
+        assert payload["observedproperty_id"] == 5
+
+
+class TestHandleAssociationsIotIdInPayload:
+    """entity_id is None but payload has @iot.id — id is extracted, original key removed, no DB call."""
+
+    @pytest.mark.asyncio
+    async def test_extracts_iot_id_into_payload(self):
+        payload = {"Datastream": {"@iot.id": 99}}
+        conn = AsyncMock()
+        await handle_associations(payload, "Datastream", None, AsyncMock(), conn, None)
+        assert payload["datastream_id"] == 99
+
+    @pytest.mark.asyncio
+    async def test_removes_original_key_from_payload(self):
+        payload = {"Sensor": {"@iot.id": 3}}
+        conn = AsyncMock()
+        await handle_associations(payload, "Sensor", None, AsyncMock(), conn, None)
+        assert "Sensor" not in payload
+
+    @pytest.mark.asyncio
+    async def test_does_not_call_insert_func_for_iot_id(self):
+        payload = {"Datastream": {"@iot.id": 7}}
+        conn = AsyncMock()
+        insert_func = AsyncMock()
+        await handle_associations(payload, "Datastream", None, insert_func, conn, None)
+        insert_func.assert_not_called()
