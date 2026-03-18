@@ -123,3 +123,113 @@ class TestSetCommitNoMessage:
         with patch(f"{MODULE}.VERSIONING", True):
             with pytest.raises(Exception, match="No commit message provided"):
                 await set_commit(conn, None, None)
+
+
+class TestSetCommitPayloadBuilding:
+    """All preconditions pass -- checks author, user_id, action, and encodingType in the built commit dict."""
+
+    @pytest.mark.asyncio
+    async def test_anonymous_author_is_anonymous_string(self):
+        conn = make_connection()
+        captured = {}
+
+        async def fake_insert_commit(connection, commit, action):
+            captured.update(commit)
+            return 55
+
+        with patch(f"{MODULE}.VERSIONING", True), \
+             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+            result = await set_commit(conn, "init", None)
+
+        assert captured["author"] == "anonymous"
+        assert result == 55
+
+    @pytest.mark.asyncio
+    async def test_anonymous_user_has_no_user_id_in_commit(self):
+        conn = make_connection()
+        captured = {}
+
+        async def fake_insert_commit(connection, commit, action):
+            captured.update(commit)
+            return 55
+
+        with patch(f"{MODULE}.VERSIONING", True), \
+             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+            await set_commit(conn, "init", None)
+
+        assert "user_id" not in captured
+
+    @pytest.mark.asyncio
+    async def test_authenticated_author_is_user_uri(self):
+        conn = make_connection()
+        captured = {}
+
+        async def fake_insert_commit(connection, commit, action):
+            captured.update(commit)
+            return 77
+
+        user = {"role": "administrator", "id": 3, "uri": "http://example.com/users/3"}
+        with patch(f"{MODULE}.VERSIONING", True), \
+             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+            await set_commit(conn, "update sensor", user)
+
+        assert captured["author"] == "http://example.com/users/3"
+
+    @pytest.mark.asyncio
+    async def test_authenticated_user_id_is_set_in_commit(self):
+        conn = make_connection()
+        captured = {}
+
+        async def fake_insert_commit(connection, commit, action):
+            captured.update(commit)
+            return 77
+
+        user = {"role": "administrator", "id": 3, "uri": "http://example.com/users/3"}
+        with patch(f"{MODULE}.VERSIONING", True), \
+             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+            await set_commit(conn, "update sensor", user)
+
+        assert captured["user_id"] == 3
+
+    @pytest.mark.asyncio
+    async def test_action_passed_to_insert_commit_is_create(self):
+        conn = make_connection()
+        captured_action = {}
+
+        async def fake_insert_commit(connection, commit, action):
+            captured_action["action"] = action
+            return 1
+
+        with patch(f"{MODULE}.VERSIONING", True), \
+             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+            await set_commit(conn, "msg", None)
+
+        assert captured_action["action"] == "CREATE"
+
+    @pytest.mark.asyncio
+    async def test_encoding_type_is_text_plain(self):
+        conn = make_connection()
+        captured = {}
+
+        async def fake_insert_commit(connection, commit, action):
+            captured.update(commit)
+            return 1
+
+        with patch(f"{MODULE}.VERSIONING", True), \
+             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+            await set_commit(conn, "msg", None)
+
+        assert captured["encodingType"] == "text/plain"
+
+    @pytest.mark.asyncio
+    async def test_returns_id_from_insert_commit(self):
+        conn = make_connection()
+
+        async def fake_insert_commit(connection, commit, action):
+            return 42
+
+        with patch(f"{MODULE}.VERSIONING", True), \
+             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+            result = await set_commit(conn, "msg", None)
+
+        assert result == 42
