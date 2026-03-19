@@ -15,6 +15,7 @@
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.utils.utils import pg_quote_ident
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import DuplicateObjectError, InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, status
@@ -168,7 +169,7 @@ async def create_policies(connection, users, policies, name):
         "observation": "Observation",
         "featuresofinterest": "FeaturesOfInterest",
     }
-    users = ", ".join(users)
+    roles_sql = ", ".join(pg_quote_ident(user) for user in users)
     for table, operations in policies.items():
         table = table_mapping.get(table)
 
@@ -178,7 +179,7 @@ async def create_policies(connection, users, policies, name):
                     CREATE POLICY "{name}_{table.lower()}_{operation}"
                     ON sensorthings."{table}"
                     FOR {operation}
-                    TO "{users}"
+                    TO {roles_sql}
                     USING ({condition});
                 """
             else:
@@ -187,7 +188,7 @@ async def create_policies(connection, users, policies, name):
                         CREATE POLICY "{name}_{table.lower()}_{operation}"
                         ON sensorthings."{table}"
                         FOR {operation}
-                        TO "{users}"
+                        TO {roles_sql}
                         WITH CHECK ({condition});
                     """
                 else:
@@ -195,7 +196,7 @@ async def create_policies(connection, users, policies, name):
                         CREATE POLICY "{name}_{table.lower()}_{operation}"
                         ON sensorthings."{table}"
                         FOR {operation}
-                        TO "{users}"
+                        TO {roles_sql}
                         USING ({condition})
                         WITH CHECK ({condition});
                     """
