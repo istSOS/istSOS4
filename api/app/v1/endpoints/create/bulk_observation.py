@@ -15,6 +15,7 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.utils.utils import extract_iot_id
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
@@ -105,9 +106,7 @@ async def bulk_observations(
                     )
 
                 for observation_set in payload:
-                    datastream_id = observation_set.get("Datastream", {}).get(
-                        "@iot.id"
-                    )
+                    datastream_id = extract_iot_id(observation_set.get("Datastream", {}))
                     components = observation_set.get("components", [])
                     data_array = observation_set.get("dataArray", [])
 
