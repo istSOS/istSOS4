@@ -17,11 +17,8 @@ from datetime import datetime
 
 from app import (
     AUTHORIZATION,
-    HOSTNAME,
     NETWORK,
     ST_AGGREGATE,
-    SUBPATH,
-    VERSION,
     VERSIONING,
 )
 from app.utils.utils import (
@@ -30,6 +27,7 @@ from app.utils.utils import (
     handle_datetime_fields,
     handle_result_field,
     validate_epsg,
+    build_self_link
 )
 from app.v1.endpoints.functions import insert_commit
 from app.v1.endpoints.update.datastream import update_datastream_entity
@@ -93,14 +91,7 @@ async def create_entity(connection, entity_name, payload):
         inserted_id = await connection.fetchval(
             insert_query, *payload.values()
         )
-        if entity_name == "ObservedProperty":
-            entity_name = "ObservedProperties"
-        else:
-            if entity_name != "FeaturesOfInterest":
-                entity_name = f"{entity_name}s"
-        inserted_self_link = (
-            f"{HOSTNAME}{SUBPATH}{VERSION}/{entity_name}({inserted_id})"
-        )
+        inserted_self_link = build_self_link(entity_name, inserted_id)
 
         return inserted_id, inserted_self_link
 
@@ -319,9 +310,11 @@ async def insert_datastream_entity(
             iot_id = payload.pop("@iot.id")
             await update_datastream_entity(connection, iot_id, payload)
 
+            observation_self_link = build_self_link("Datastream", iot_id)
+
             return (
                 iot_id,
-                f"{HOSTNAME}{SUBPATH}{VERSION}/Datastreams({iot_id})",
+                observation_self_link
             )
 
         await handle_associations(
@@ -449,9 +442,11 @@ async def insert_observation_entity(
             iot_id = payload.pop("@iot.id")
             await update_observation_entity(connection, iot_id, payload)
 
+            observation_self_link = build_self_link("Observation", observation_id)
+
             return (
                 iot_id,
-                f"{HOSTNAME}{SUBPATH}{VERSION}/Observations({iot_id})",
+                observation_self_link
             )
 
         await handle_associations(
