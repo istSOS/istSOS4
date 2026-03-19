@@ -310,11 +310,9 @@ async def insert_datastream_entity(
             iot_id = payload.pop("@iot.id")
             await update_datastream_entity(connection, iot_id, payload)
 
-            observation_self_link = build_self_link("Datastream", iot_id)
-
             return (
                 iot_id,
-                observation_self_link
+                build_self_link("Datastream", iot_id)
             )
 
         await handle_associations(
@@ -442,11 +440,9 @@ async def insert_observation_entity(
             iot_id = payload.pop("@iot.id")
             await update_observation_entity(connection, iot_id, payload)
 
-            observation_self_link = build_self_link("Observation", observation_id)
-
             return (
                 iot_id,
-                observation_self_link
+                build_self_link("Observation", iot_id)
             )
 
         await handle_associations(
