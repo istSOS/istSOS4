@@ -16,11 +16,24 @@ import json
 import re
 from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
-from app import EPSG, HOSTNAME, TOP_VALUE
+from app import EPSG, HOSTNAME, TOP_VALUE, SUBPATH, VERSION
 from asyncpg.types import Range
 from dateutil import parser
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,63}$")
+
+# Entity name mapping to match the existing convention in create_entity
+ENTITY_URL_NAMES = {
+    "Thing": "Things",
+    "Location": "Locations",
+    "Sensor": "Sensors",
+    "Datastream": "Datastreams",
+    "Observation": "Observations",
+    "ObservedProperty": "ObservedProperties",
+    "FeatureOfInterest": "FeaturesOfInterest",
+    "HistoricalLocation": "HistoricalLocations",
+    "Network": "Networks",
+}
 
 
 def safe_parse_datetime(value):
@@ -215,6 +228,31 @@ def response2jsonfile(request, response, filename, body="", status_code=200):
             }
         )
         f.write(json.dumps(r, indent=4))
+
+
+def build_self_link(entity_name, entity_id):
+    """
+    Build a SensorThings API qualified self-link for an entity.
+
+    Args:
+        entity_name: STA entity type e.g. "Datastream", "Thing"
+        entity_id: the integer id of the entity
+
+    Returns:
+        Full self-link URL string e.g.
+        "https://example.org/sta/v1.1/Datastreams(42)"
+
+    Raises:
+        ValueError: if entity_name is not a recognised STA entity type
+    """
+    url_name = ENTITY_URL_NAMES.get(entity_name)
+    if url_name is None:
+        raise ValueError(
+            f"Unknown entity name '{entity_name}'. "
+            f"Expected one of: {', '.join(ENTITY_URL_NAMES.keys())}"
+        )
+    
+    return f"{HOSTNAME}{SUBPATH}{VERSION}/{url_name}({entity_id})"
 
 
 def build_nextLink(full_path, count_links):
