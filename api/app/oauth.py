@@ -126,20 +126,27 @@ async def authenticate_user(username: str, password: str):
     
     # Step 2: Get user role from User table (using connection pool)
     pool = await get_pool()
-    async with pool.acquire() as connection:
-        query = 'SELECT role FROM sensorthings."User" WHERE username=$1'
-        row = await connection.fetchrow(query, username)
-        
-        if not row:
-            # User authenticated with PostgreSQL but not in User table
-            # This indicates an inconsistent state
-            logger.warning(
-                f"User '{username}' authenticated with PostgreSQL "
-                "but not found in User table"
-            )
-            return None
-        
-        return {"sub": username, "role": row["role"]}
+    try:
+        async with pool.acquire() as connection:
+            query = 'SELECT role FROM sensorthings."User" WHERE username=$1'
+            row = await connection.fetchrow(query, username)
+
+            if not row:
+                # User authenticated with PostgreSQL but not in User table
+                # This indicates an inconsistent state
+                logger.warning(
+                    f"User '{username}' authenticated with PostgreSQL "
+                    "but not found in User table"
+                )
+                return None
+
+            return {"sub": username, "role": row["role"]}
+    except TypeError as e:
+        logger.error(f"Unexpected pool acquire error during authentication: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service temporarily unavailable",
+        )
 
 
 def create_access_token(data: dict):
