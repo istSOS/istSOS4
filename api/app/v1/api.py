@@ -49,6 +49,7 @@ from app.v1.endpoints.delete import policy as delete_policy
 from app.v1.endpoints.delete import sensor as delete_sensor
 from app.v1.endpoints.delete import thing as delete_thing
 from app.v1.endpoints.delete import user as delete_user
+from app.v1.endpoints.read import conformance as read_conformance
 from app.v1.endpoints.read import datastream as read_datastream
 from app.v1.endpoints.read import (
     feature_of_interest as read_feature_of_interest,
@@ -143,6 +144,10 @@ tags_metadata += [
         "name": "Observations",
         "description": "Individual measurements recorded at a given point in time.",
     },
+    {
+        "name": "Conformance",
+        "description": "OGC SensorThings API 1.1 conformance classes implemented by this server.",
+    },
 ]
 
 v1 = FastAPI(
@@ -173,6 +178,7 @@ if NETWORK:
     v1.include_router(delete_network.v1)
 
 # Register the read endpoints
+v1.include_router(read_conformance.v1)
 v1.include_router(read_location.v1)
 v1.include_router(read_thing.v1)
 v1.include_router(read_historical_location.v1)
