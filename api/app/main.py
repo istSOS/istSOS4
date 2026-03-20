@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+from contextlib import asynccontextmanager
 
 from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
@@ -24,12 +25,18 @@ from fastapi import FastAPI
 async def initialize_pool():
     while True:
         try:
-            await get_pool()  # Ensure get_pool() is awaited
+            await get_pool()
             if POSTGRES_PORT_WRITE:
                 await get_pool_w()
             break
-        except Exception as e:
-            await asyncio.sleep(1)  # Use asyncio.sleep for asynchronous sleep
+        except Exception:
+            await asyncio.sleep(1)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await initialize_pool()
+    yield
 
 
 app = FastAPI(
@@ -40,13 +47,12 @@ app = FastAPI(
             "name": "Read root",
         }
     ],
+    lifespan=lifespan,
 )
 
 
 def __handle_root():
-    # Handle the root path
     value = []
-    # append the domain to the path for each table
     for table in tables:
         value.append(
             {
@@ -60,11 +66,6 @@ def __handle_root():
         "serverSettings": serverSettings,
     }
     return response
-
-
-@app.on_event("startup")
-async def startup_event():
-    await initialize_pool()  # Call the initialize_pool function at startup
 
 
 @app.get(f"{SUBPATH}{VERSION}", tags=["Read root"])
