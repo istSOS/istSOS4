@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
@@ -21,6 +23,9 @@ from fastapi import APIRouter, Body, Depends, status
 from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
+
+_UNSAFE_POLICY_TOKENS_RE = re.compile(r";|--|/\*|\*/|\x00")
+_VALID_OPERATION_KEYS = {"select", "insert", "update", "delete"}
 
 PAYLOAD_EXAMPLE = {
     "users": ["cp1"],
@@ -158,6 +163,21 @@ async def create_policy(
 
 
 async def create_policies(connection, users, policies, name):
+    def quote_identifier(value: str) -> str:
+        if not isinstance(value, str) or value.strip() == "":
+            raise ValueError("Invalid SQL identifier")
+        return '"' + value.replace('"', '""') + '"'
+
+    def validate_policy_expression(value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("Policy condition must be a string")
+        expression = value.strip()
+        if expression == "":
+            raise ValueError("Policy condition must not be empty")
+        if _UNSAFE_POLICY_TOKENS_RE.search(expression):
+            raise ValueError("Unsafe policy condition")
+        return expression
+
     table_mapping = {
         "location": "Location",
         "thing": "Thing",
@@ -168,35 +188,52 @@ async def create_policies(connection, users, policies, name):
         "observation": "Observation",
         "featuresofinterest": "FeaturesOfInterest",
     }
-    users = ", ".join(users)
-    for table, operations in policies.items():
-        table = table_mapping.get(table)
+    if not isinstance(users, list) or len(users) == 0:
+        raise ValueError("Users list must not be empty")
+
+    quoted_users = ", ".join(quote_identifier(user) for user in users)
+
+    for table_key, operations in policies.items():
+        table = table_mapping.get(table_key)
+        if table is None:
+            raise ValueError(f"Unsupported table key: {table_key}")
+
+        if not isinstance(operations, dict) or len(operations) == 0:
+            raise ValueError(f"No operations provided for table: {table_key}")
+
+        safe_table = quote_identifier(table)
 
         for operation, condition in operations.items():
+            if operation not in _VALID_OPERATION_KEYS:
+                raise ValueError(f"Unsupported operation: {operation}")
+
+            safe_name = quote_identifier(f"{name}_{table.lower()}_{operation}")
+            safe_condition = validate_policy_expression(condition)
+
             if operation in ["select", "delete"]:
                 query = f"""
-                    CREATE POLICY "{name}_{table.lower()}_{operation}"
-                    ON sensorthings."{table}"
+                    CREATE POLICY {safe_name}
+                    ON sensorthings.{safe_table}
                     FOR {operation}
-                    TO "{users}"
-                    USING ({condition});
+                    TO {quoted_users}
+                    USING ({safe_condition});
                 """
             else:
                 if operation == "insert":
                     query = f"""
-                        CREATE POLICY "{name}_{table.lower()}_{operation}"
-                        ON sensorthings."{table}"
+                        CREATE POLICY {safe_name}
+                        ON sensorthings.{safe_table}
                         FOR {operation}
-                        TO "{users}"
-                        WITH CHECK ({condition});
+                        TO {quoted_users}
+                        WITH CHECK ({safe_condition});
                     """
                 else:
                     query = f"""
-                        CREATE POLICY "{name}_{table.lower()}_{operation}"
-                        ON sensorthings."{table}"
+                        CREATE POLICY {safe_name}
+                        ON sensorthings.{safe_table}
                         FOR {operation}
-                        TO "{users}"
-                        USING ({condition})
-                        WITH CHECK ({condition});
+                        TO {quoted_users}
+                        USING ({safe_condition})
+                        WITH CHECK ({safe_condition});
                     """
             await connection.execute(query)
