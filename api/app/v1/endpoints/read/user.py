@@ -25,7 +25,7 @@ v1 = APIRouter()
 
 user = Header(default=None, include_in_schema=False)
 
-if AUTHORIZATION and not ANONYMOUS_VIEWER:
+if AUTHORIZATION:
     from app.oauth import get_current_user
 
     user = Depends(get_current_user)
