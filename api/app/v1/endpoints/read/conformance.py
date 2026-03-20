@@ -27,6 +27,18 @@ v1 = APIRouter()
     status_code=status.HTTP_200_OK,
 )
 async def get_conformance():
+    """
+    Return the OGC SensorThings API 1.1 conformance classes.
+
+    The conformance list declares which parts of the STA specification
+    this server implements. Metadata connectors such as DCAT-AP and STAC
+    harvesters use this endpoint to populate dcat:endpointDescription
+    and dct:conformsTo without parsing the root response.
+
+    Returns:
+        JSONResponse: A JSON object with a 'value' key containing
+        the list of conformance class URIs.
+    """
     try:
         return JSONResponse(
             status_code=status.HTTP_200_OK,
