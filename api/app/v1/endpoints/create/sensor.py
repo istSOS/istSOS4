@@ -52,7 +52,7 @@ ALLOWED_KEYS = [
 ]
 
 REQUIRED_KEYS = ["name", "encodingType", "metadata"]
-ALLOWED_CREATOR_ROLES = ["administrator", "editor"]
+DENIED_CREATOR_ROLES = ["viewer"]
 
 
 @v1.api_route(
@@ -83,7 +83,7 @@ async def create_sensor(
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
-                    if current_user["role"] not in ALLOWED_CREATOR_ROLES:
+                    if current_user["role"] in DENIED_CREATOR_ROLES:
                         raise InsufficientPrivilegeError
                     await set_role(connection, current_user)
 

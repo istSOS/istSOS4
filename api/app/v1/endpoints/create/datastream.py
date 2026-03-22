@@ -67,6 +67,8 @@ ALLOWED_KEYS = [
 if AUTHORIZATION:
     ALLOWED_KEYS.append("Network")
 
+DENIED_CREATOR_ROLES = ["viewer"]
+
 
 @v1.api_route(
     "/Datastreams",
@@ -95,6 +97,8 @@ async def create_datastream(
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
+                    if current_user["role"] in DENIED_CREATOR_ROLES:
+                        raise InsufficientPrivilegeError
                     await set_role(connection, current_user)
 
                 commit_id = await set_commit(
@@ -180,6 +184,8 @@ async def create_datastream_for_thing(
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
+                    if current_user["role"] in DENIED_CREATOR_ROLES:
+                        raise InsufficientPrivilegeError
                     await set_role(connection, current_user)
 
                 commit_id = await set_commit(
@@ -265,6 +271,8 @@ async def create_datastream_for_sensor(
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
+                    if current_user["role"] in DENIED_CREATOR_ROLES:
+                        raise InsufficientPrivilegeError
                     await set_role(connection, current_user)
 
                 commit_id = await set_commit(
@@ -353,6 +361,8 @@ async def create_datastream_for_observed_property(
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
+                    if current_user["role"] in DENIED_CREATOR_ROLES:
+                        raise InsufficientPrivilegeError
                     await set_role(connection, current_user)
 
                 commit_id = await set_commit(
