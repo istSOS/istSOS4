@@ -72,6 +72,21 @@ CREATE OR REPLACE FUNCTION "Datastreams@iot.navigationLink"(sensorthings."Thing"
     SELECT '/Things(' || $1.id || ')/Datastreams';
 $$ LANGUAGE SQL;
 
+CREATE OR REPLACE FUNCTION "phenomenonTime"(sensorthings."Thing") RETURNS tstzrange AS $$
+BEGIN
+    RETURN (
+        SELECT tstzrange(
+            min(lower(d."phenomenonTime")),
+            max(upper(d."phenomenonTime")),
+            '[]'
+        )
+        FROM sensorthings."Datastream" d
+        WHERE d."thing_id" = $1.id
+          AND d."phenomenonTime" IS NOT NULL
+    );
+END;
+$$ LANGUAGE plpgsql STABLE;
+
 CREATE TABLE IF NOT EXISTS sensorthings."Thing_Location" (
     "thing_id" BIGINT NOT NULL REFERENCES sensorthings."Thing"(id) ON DELETE CASCADE,
     "location_id" BIGINT NOT NULL REFERENCES sensorthings."Location"(id) ON DELETE CASCADE,
