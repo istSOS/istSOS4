@@ -15,7 +15,12 @@
 import json
 
 from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
-from app.utils.utils import pg_quote_ident, pg_quote_literal, validate_username
+from app.utils.utils import (
+    extract_iot_id,
+    pg_quote_ident,
+    pg_quote_literal,
+    validate_username,
+)
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.v1.endpoints.functions import insert_commit, set_role
@@ -98,6 +103,10 @@ async def create_user(
 
                 password = payload.pop("password", None)
 
+                if "@iot.id" in payload:
+                    payload["id"] = extract_iot_id(payload)
+                    payload.pop("@iot.id")
+
                 for key in list(payload.keys()):
                     if isinstance(payload[key], dict):
                         payload[key] = json.dumps(payload[key])
@@ -112,6 +121,11 @@ async def create_user(
                     RETURNING id, username, uri;
                 """
                 user = await connection.fetchrow(query, *payload.values())
+
+                if "id" in payload:
+                    await connection.execute(
+                        "SELECT setval(pg_get_serial_sequence('sensorthings.\"User\"', 'id'), (SELECT MAX(id) FROM sensorthings.\"User\"))"
+                    )
 
                 if not payload.get("uri"):
                     query = """
