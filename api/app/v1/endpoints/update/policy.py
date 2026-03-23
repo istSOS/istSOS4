@@ -52,59 +52,63 @@ async def update_policy(
 
         async with pgpool.acquire() as connection:
             async with connection.transaction():
+                role_switched = False
                 if current_user is not None:
                     if current_user["role"] != "administrator":
                         raise InsufficientPrivilegeError
+                    await set_role(connection, current_user)
+                    role_switched = True
 
-                validate_payload_keys(payload, ALLOWED_KEYS)
+                try:
+                    validate_payload_keys(payload, ALLOWED_KEYS)
 
-                if payload.get("users") is not None:
-                    query = """
-                        SELECT sensorthings.add_users_to_policy($1, $2);
-                    """
-                    tablename, cmd = await connection.fetchval(
-                        query, payload["users"], policy
-                    )
-                else:
-                    query = """
-                        SELECT tablename, cmd FROM pg_policies
-                        WHERE policyname = $1;
-                    """
-                    row = await connection.fetchrow(query, policy)
-                    if row is None:
-                        raise Exception(f"Policy '{policy}' not found.")
+                    if payload.get("users") is not None:
+                        query = """
+                            SELECT sensorthings.add_users_to_policy($1, $2);
+                        """
+                        tablename, cmd = await connection.fetchval(
+                            query, payload["users"], policy
+                        )
+                    else:
+                        query = """
+                            SELECT tablename, cmd FROM pg_policies
+                            WHERE policyname = $1;
+                        """
+                        row = await connection.fetchrow(query, policy)
+                        if row is None:
+                            raise Exception(f"Policy '{policy}' not found.")
 
-                    tablename, cmd = row["tablename"], row["cmd"]
+                        tablename, cmd = row["tablename"], row["cmd"]
 
-                if payload.get("policy") is not None:
-                    policy_sql = {
-                        "SELECT": 'ALTER POLICY {} ON sensorthings."{}" USING ({});'.format(
-                            policy, tablename, payload["policy"]
-                        ),
-                        "INSERT": 'ALTER POLICY {} ON sensorthings."{}" WITH CHECK ({});'.format(
-                            policy, tablename, payload["policy"]
-                        ),
-                        "UPDATE": 'ALTER POLICY {} ON sensorthings."{}" USING ({}) WITH CHECK ({});'.format(
-                            policy,
-                            tablename,
-                            payload["policy"],
-                            payload["policy"],
-                        ),
-                        "DELETE": 'ALTER POLICY {} ON sensorthings."{}" USING ({});'.format(
-                            policy, tablename, payload["policy"]
-                        ),
-                        "ALL": 'ALTER POLICY {} ON sensorthings."{}" USING ({}) WITH CHECK ({});'.format(
-                            policy,
-                            tablename,
-                            payload["policy"],
-                            payload["policy"],
-                        ),
-                    }.get(cmd)
+                    if payload.get("policy") is not None:
+                        policy_sql = {
+                            "SELECT": 'ALTER POLICY {} ON sensorthings."{}" USING ({});'.format(
+                                policy, tablename, payload["policy"]
+                            ),
+                            "INSERT": 'ALTER POLICY {} ON sensorthings."{}" WITH CHECK ({});'.format(
+                                policy, tablename, payload["policy"]
+                            ),
+                            "UPDATE": 'ALTER POLICY {} ON sensorthings."{}" USING ({}) WITH CHECK ({});'.format(
+                                policy,
+                                tablename,
+                                payload["policy"],
+                                payload["policy"],
+                            ),
+                            "DELETE": 'ALTER POLICY {} ON sensorthings."{}" USING ({});'.format(
+                                policy, tablename, payload["policy"]
+                            ),
+                            "ALL": 'ALTER POLICY {} ON sensorthings."{}" USING ({}) WITH CHECK ({});'.format(
+                                policy,
+                                tablename,
+                                payload["policy"],
+                                payload["policy"],
+                            ),
+                        }.get(cmd)
 
-                    await connection.execute(policy_sql)
-
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
+                        await connection.execute(policy_sql)
+                finally:
+                    if role_switched:
+                        await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
 
