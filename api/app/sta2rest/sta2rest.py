@@ -128,6 +128,7 @@ class STA2REST:
             "name",
             "description",
             "properties",
+            "observed_area",
         ],
         "ThingTravelTime": [
             "id",
@@ -138,6 +139,7 @@ class STA2REST:
             "name",
             "description",
             "properties",
+            "observed_area",
             "system_time_validity",
         ],
         "HistoricalLocation": [
