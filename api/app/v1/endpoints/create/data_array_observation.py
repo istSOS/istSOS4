@@ -30,6 +30,7 @@ from app.utils.utils import (
     handle_datetime_fields,
     handle_result_field,
 )
+from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
@@ -110,10 +111,7 @@ async def data_array_observation(
         async with pool.acquire() as conn:
             async with conn.transaction():
                 if current_user is not None:
-                    query = 'SET ROLE "{username}";'
-                    await conn.execute(
-                        query.format(username=current_user["username"])
-                    )
+                    await set_role(conn, current_user)
 
                 try:
                     commit_id = await set_commit(
