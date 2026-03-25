@@ -191,7 +191,7 @@ async def asyncpg_stream_results(
                     current_user = {"username": "guest"}
                     await set_role(connection, current_user)
 
-            if is_count:
+            if not single_result and count_queries:
                 if COUNT_MODE == "LIMIT_ESTIMATE":
                     query_count = await connection.fetchval(count_queries[0])
                     if query_count == COUNT_ESTIMATE_THRESHOLD:
@@ -210,10 +210,12 @@ async def asyncpg_stream_results(
                         )
                 else:
                     query_count = await connection.fetchval(count_queries[0])
+            else:
+                query_count = None
 
             iot_count = (
                 '"@iot.count": ' + str(query_count) + ","
-                if is_count and not single_result
+                if query_count is not None and not single_result
                 else ""
             )
             await connection.execute(f"DECLARE my_cursor CURSOR FOR {query}")
