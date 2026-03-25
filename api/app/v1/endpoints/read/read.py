@@ -274,6 +274,8 @@ async def asyncpg_stream_results(
                     next_link_json = (
                         f'"@iot.nextLink": "{next_link}",'
                         if next_link and not single_result
+                        else '"@iot.nextLink": null,'
+                        if not single_result
                         else ""
                     )
                     as_of = (
