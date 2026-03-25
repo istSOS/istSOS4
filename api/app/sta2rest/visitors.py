@@ -788,7 +788,7 @@ class NodeVisitor(Visitor):
         is_count = self.visit_CountNode(node.count) if node.count else False
 
         count_queries = []
-        if is_count:
+        if not self.single_result:
             if COUNT_MODE in {"LIMIT_ESTIMATE", "ESTIMATE_LIMIT"}:
                 estimate_query_str = str(
                     query_estimate_count.compile(
