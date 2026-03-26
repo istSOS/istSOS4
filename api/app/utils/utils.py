@@ -23,6 +23,25 @@ from dateutil import parser
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,63}$")
 
 
+def require_json_content_type(request):
+    """
+    Ensure the request content type is JSON, allowing standard parameters
+    like ``charset=utf-8``.
+
+    Args:
+        request (Request): Incoming FastAPI request.
+
+    Raises:
+        Exception: If the request does not declare a JSON content type.
+    """
+
+    content_type = request.headers.get("content-type", "")
+    media_type = content_type.split(";", 1)[0].strip().lower()
+
+    if media_type != "application/json":
+        raise Exception("Only content-type application/json is supported.")
+
+
 def safe_parse_datetime(value):
     """
     Safely parse a datetime string using dateutil.parser.
