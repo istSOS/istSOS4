@@ -15,7 +15,7 @@
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.utils.utils import validate_payload_keys
+from app.utils.utils import pg_quote_ident, validate_payload_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Body, Depends, Query, status
@@ -77,29 +77,26 @@ async def update_policy(
                     tablename, cmd = row["tablename"], row["cmd"]
 
                 if payload.get("policy") is not None:
+                    condition = payload["policy"]
+                    if not isinstance(condition, str) or not condition.strip():
+                        raise Exception("Policy expression must be a non-empty string.")
+
+                    policy_ident = pg_quote_ident(policy)
+                    table_ident = pg_quote_ident(tablename)
+                    cmd_upper = (cmd or "").upper()
+
                     policy_sql = {
-                        "SELECT": 'ALTER POLICY {} ON sensorthings."{}" USING ({});'.format(
-                            policy, tablename, payload["policy"]
-                        ),
-                        "INSERT": 'ALTER POLICY {} ON sensorthings."{}" WITH CHECK ({});'.format(
-                            policy, tablename, payload["policy"]
-                        ),
-                        "UPDATE": 'ALTER POLICY {} ON sensorthings."{}" USING ({}) WITH CHECK ({});'.format(
-                            policy,
-                            tablename,
-                            payload["policy"],
-                            payload["policy"],
-                        ),
-                        "DELETE": 'ALTER POLICY {} ON sensorthings."{}" USING ({});'.format(
-                            policy, tablename, payload["policy"]
-                        ),
-                        "ALL": 'ALTER POLICY {} ON sensorthings."{}" USING ({}) WITH CHECK ({});'.format(
-                            policy,
-                            tablename,
-                            payload["policy"],
-                            payload["policy"],
-                        ),
-                    }.get(cmd)
+                        "SELECT": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({condition});",
+                        "INSERT": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} WITH CHECK ({condition});",
+                        "UPDATE": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({condition}) WITH CHECK ({condition});",
+                        "DELETE": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({condition});",
+                        "ALL": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({condition}) WITH CHECK ({condition});",
+                    }.get(cmd_upper)
+
+                    if policy_sql is None:
+                        raise Exception(
+                            f"Unsupported policy command '{cmd}'."
+                        )
 
                     await connection.execute(policy_sql)
 
