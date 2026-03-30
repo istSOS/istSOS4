@@ -15,7 +15,7 @@
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.v1.endpoints.functions import set_role
+from app.utils.utils import pg_quote_ident
 from asyncpg.exceptions import DuplicateObjectError, InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, status
 from fastapi.responses import JSONResponse, Response
@@ -168,34 +168,68 @@ async def create_policies(connection, users, policies, name):
         "observation": "Observation",
         "featuresofinterest": "FeaturesOfInterest",
     }
-    users = ", ".join(users)
-    for table, operations in policies.items():
-        table = table_mapping.get(table)
+    if not users:
+        raise Exception("At least one user is required to create a policy.")
+
+    users_sql = ", ".join(pg_quote_ident(user) for user in users)
+
+    for table_key, operations in policies.items():
+        table = table_mapping.get(table_key)
+        if table is None:
+            raise Exception(f"Unsupported table '{table_key}' in policy.")
+
+        if not isinstance(operations, dict) or not operations:
+            raise Exception(
+                f"Invalid operations for table '{table_key}'."
+            )
 
         for operation, condition in operations.items():
-            if operation in ["select", "delete"]:
+            operation_lc = operation.lower()
+            if operation_lc not in [
+                "select",
+                "insert",
+                "update",
+                "delete",
+                "all",
+            ]:
+                raise Exception(
+                    f"Unsupported operation '{operation}' for table '{table_key}'."
+                )
+
+            if not isinstance(condition, str) or not condition.strip():
+                raise Exception(
+                    f"Invalid condition for '{table_key}.{operation}'."
+                )
+
+            policy_name = pg_quote_ident(
+                f"{name}_{table.lower()}_{operation_lc}"
+            )
+            table_name = pg_quote_ident(table)
+            operation_sql = operation_lc.upper()
+
+            if operation_lc in ["select", "delete"]:
                 query = f"""
-                    CREATE POLICY "{name}_{table.lower()}_{operation}"
-                    ON sensorthings."{table}"
-                    FOR {operation}
-                    TO "{users}"
+                    CREATE POLICY {policy_name}
+                    ON sensorthings.{table_name}
+                    FOR {operation_sql}
+                    TO {users_sql}
                     USING ({condition});
                 """
             else:
-                if operation == "insert":
+                if operation_lc == "insert":
                     query = f"""
-                        CREATE POLICY "{name}_{table.lower()}_{operation}"
-                        ON sensorthings."{table}"
-                        FOR {operation}
-                        TO "{users}"
+                        CREATE POLICY {policy_name}
+                        ON sensorthings.{table_name}
+                        FOR {operation_sql}
+                        TO {users_sql}
                         WITH CHECK ({condition});
                     """
                 else:
                     query = f"""
-                        CREATE POLICY "{name}_{table.lower()}_{operation}"
-                        ON sensorthings."{table}"
-                        FOR {operation}
-                        TO "{users}"
+                        CREATE POLICY {policy_name}
+                        ON sensorthings.{table_name}
+                        FOR {operation_sql}
+                        TO {users_sql}
                         USING ({condition})
                         WITH CHECK ({condition});
                     """
