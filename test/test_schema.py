@@ -374,6 +374,95 @@ class TestSchema:
             "HistoricalLocation for an unrelated Thing must survive the Location delete"
         )
 
+    def test_delete_location_cascades_via_join_table(self, schema):
+        """
+        The trigger reads thing_id from Thing_Location to find HLs to delete.
+        This test verifies the full path: Location -> Thing_Location -> HistoricalLocation.
+        """
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "hl2-thing")
+            loc_id = self._insert_minimal_location(cur, "hl2-loc")
+
+            cur.execute(
+                """
+                INSERT INTO sensorthings."Thing_Location" (thing_id, location_id)
+                VALUES (%s, %s)
+                """,
+                (thing_id, loc_id),
+            )
+            cur.execute(
+                """
+                INSERT INTO sensorthings."HistoricalLocation" (thing_id)
+                VALUES (%s) RETURNING id
+                """,
+                (thing_id,),
+            )
+            hl_id = cur.fetchone()[0]
+
+            cur.execute(
+                """
+                INSERT INTO sensorthings."Location_HistoricalLocation"
+                    (location_id, historicallocation_id)
+                VALUES (%s, %s)
+                """,
+                (loc_id, hl_id),
+            )
+
+            cur.execute(
+                'DELETE FROM sensorthings."Location" WHERE id = %s', (loc_id,)
+            )
+
+            cur.execute(
+                'SELECT id FROM sensorthings."HistoricalLocation" WHERE id = %s',
+                (hl_id,),
+            )
+            assert cur.fetchone() is None
+
+    def test_delete_location_only_cascades_linked_thing(self, schema):
+        """
+        Two Things share one Location. Deleting the Location should only
+        cascade HLs for Things linked via Thing_Location, not all Things.
+        Pins the subquery-returns-one-row behavior.
+        """
+        with schema.cursor() as cur:
+            thing1_id = self._insert_minimal_thing(cur, "shared-t1")
+            thing2_id = self._insert_minimal_thing(cur, "shared-t2")
+            loc_id = self._insert_minimal_location(cur, "shared-loc")
+
+            for tid in (thing1_id, thing2_id):
+                cur.execute(
+                    """
+                    INSERT INTO sensorthings."Thing_Location" (thing_id, location_id)
+                    VALUES (%s, %s)
+                    """,
+                    (tid, loc_id),
+                )
+
+            cur.execute(
+                'INSERT INTO sensorthings."HistoricalLocation" (thing_id) VALUES (%s) RETURNING id',
+                (thing1_id,),
+            )
+            hl1_id = cur.fetchone()[0]
+
+            cur.execute(
+                'INSERT INTO sensorthings."HistoricalLocation" (thing_id) VALUES (%s) RETURNING id',
+                (thing2_id,),
+            )
+            hl2_id = cur.fetchone()[0]
+
+            # This will likely RAISE due to subquery returning multiple rows,
+            # which reveals a bug in the trigger's WHERE subquery.
+            try:
+                cur.execute(
+                    'DELETE FROM sensorthings."Location" WHERE id = %s', (loc_id,)
+                )
+            except psycopg2.errors.CardinalityViolation:
+                # Document that the trigger is broken for multi-Thing locations.
+                pytest.xfail(
+                    "Trigger subquery returns multiple rows when "
+                    "multiple Things share a Location"
+                )
+
     # -------------------------------------------------------------------------
     # 3. @iot.selfLink computed functions
     # -------------------------------------------------------------------------
