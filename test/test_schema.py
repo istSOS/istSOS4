@@ -420,14 +420,15 @@ class TestSchema:
 
     def test_delete_location_only_cascades_linked_thing(self, schema):
         """
-        Two Things share one Location. Deleting the Location should only
-        cascade HLs for Things linked via Thing_Location, not all Things.
-        Pins the subquery-returns-one-row behavior.
+        Two Things share one Location. Deleting that Location should cascade
+        HistoricalLocations for all linked Things, not raise CardinalityViolation.
         """
         with schema.cursor() as cur:
             thing1_id = self._insert_minimal_thing(cur, "shared-t1")
             thing2_id = self._insert_minimal_thing(cur, "shared-t2")
+            thing3_id = self._insert_minimal_thing(cur, "unrelated-t3")
             loc_id = self._insert_minimal_location(cur, "shared-loc")
+            other_loc_id = self._insert_minimal_location(cur, "other-loc")
 
             for tid in (thing1_id, thing2_id):
                 cur.execute(
@@ -437,6 +438,15 @@ class TestSchema:
                     """,
                     (tid, loc_id),
                 )
+
+            # thing3 is linked to a different location - its HL must survive
+            cur.execute(
+                """
+                INSERT INTO sensorthings."Thing_Location" (thing_id, location_id)
+                VALUES (%s, %s)
+                """,
+                (thing3_id, other_loc_id),
+            )
 
             cur.execute(
                 'INSERT INTO sensorthings."HistoricalLocation" (thing_id) VALUES (%s) RETURNING id',
@@ -450,18 +460,30 @@ class TestSchema:
             )
             hl2_id = cur.fetchone()[0]
 
-            # This will likely RAISE due to subquery returning multiple rows,
-            # which reveals a bug in the trigger's WHERE subquery.
-            try:
-                cur.execute(
-                    'DELETE FROM sensorthings."Location" WHERE id = %s', (loc_id,)
-                )
-            except psycopg2.errors.CardinalityViolation:
-                # Document that the trigger is broken for multi-Thing locations.
-                pytest.xfail(
-                    "Trigger subquery returns multiple rows when "
-                    "multiple Things share a Location"
-                )
+            cur.execute(
+                'INSERT INTO sensorthings."HistoricalLocation" (thing_id) VALUES (%s) RETURNING id',
+                (thing3_id,),
+            )
+            hl3_id = cur.fetchone()[0]
+
+            # Should not raise
+            cur.execute(
+                'DELETE FROM sensorthings."Location" WHERE id = %s', (loc_id,)
+            )
+
+            # HL1 and HL2 (linked Things) must be gone
+            cur.execute(
+                'SELECT id FROM sensorthings."HistoricalLocation" WHERE id = ANY(%s)',
+                ([hl1_id, hl2_id],),
+            )
+            assert cur.fetchall() == [], "HLs for linked Things should be deleted"
+
+            # HL3 (unrelated Thing) must survive
+            cur.execute(
+                'SELECT id FROM sensorthings."HistoricalLocation" WHERE id = %s',
+                (hl3_id,),
+            )
+            assert cur.fetchone() is not None, "HL for unrelated Thing must not be deleted"
 
     # -------------------------------------------------------------------------
     # 3. @iot.selfLink computed functions
