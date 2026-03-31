@@ -88,6 +88,19 @@ class TestSchema:
         yield conn
 
         conn.close()
+    
+    def _insert_minimal_location(self, cur, name="test-loc"):
+        cur.execute(
+            """
+            INSERT INTO sensorthings."Location"
+                ("name", "description", "encodingType", "location")
+            VALUES (%s, 'desc', 'application/geo+json',
+                    ST_SetSRID(ST_MakePoint(9.0, 46.0), 4326))
+            RETURNING id
+            """,
+            (name,),
+        )
+        return self._get_id(cur.fetchone())
 
     def _insert_minimal_thing(self, cur, name="test-thing"):
         cur.execute(
@@ -250,3 +263,86 @@ class TestSchema:
             obs_id = self._insert_observation(cur, ds_id, foi_id, 99)
             result = self._get_result(cur, obs_id)
         assert result is None
+
+    # -------------------------------------------------------------------------
+    # 2. delete_related_historical_locations trigger
+    # -------------------------------------------------------------------------
+
+    def test_delete_location_cascades_historical_location(self, schema):
+        """
+        Deleting a Location that is linked to a Thing via Thing_Location
+        must fire the BEFORE DELETE trigger and remove the HistoricalLocation
+        associated with that Thing.
+        """
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "hl-thing")
+            loc_id = self._insert_minimal_location(cur, "hl-loc")
+
+            cur.execute(
+                """
+                INSERT INTO sensorthings."Thing_Location"
+                    ("thing_id", "location_id")
+                VALUES (%s, %s)
+                """,
+                (thing_id, loc_id),
+            )
+
+            cur.execute(
+                """
+                INSERT INTO sensorthings."HistoricalLocation"
+                    ("thing_id")
+                VALUES (%s)
+                RETURNING id
+                """,
+                (thing_id,),
+            )
+            hl_id = cur.fetchone()[0]
+
+            cur.execute(
+                'DELETE FROM sensorthings."Location" WHERE id = %s',
+                (loc_id,),
+            )
+
+            cur.execute(
+                'SELECT id FROM sensorthings."HistoricalLocation" WHERE id = %s',
+                (hl_id,),
+            )
+            row = cur.fetchone()
+
+        assert row is None, (
+            f"HistoricalLocation {hl_id} should have been deleted by the trigger"
+        )
+
+    def test_delete_location_not_linked_does_not_affect_other_hl(self, schema):
+        """
+        Deleting an unlinked Location must not delete HistoricalLocations
+        belonging to unrelated Things.
+        """
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "safe-thing")
+            unrelated_loc_id = self._insert_minimal_location(cur, "unrelated-loc")
+
+            cur.execute(
+                """
+                INSERT INTO sensorthings."HistoricalLocation" ("thing_id")
+                VALUES (%s)
+                RETURNING id
+                """,
+                (thing_id,),
+            )
+            hl_id = cur.fetchone()[0]
+
+            cur.execute(
+                'DELETE FROM sensorthings."Location" WHERE id = %s',
+                (unrelated_loc_id,),
+            )
+
+            cur.execute(
+                'SELECT id FROM sensorthings."HistoricalLocation" WHERE id = %s',
+                (hl_id,),
+            )
+            row = cur.fetchone()
+
+        assert row is not None, (
+            "HistoricalLocation for an unrelated Thing must survive the Location delete"
+        )
