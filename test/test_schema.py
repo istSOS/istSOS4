@@ -76,12 +76,9 @@ class TestSchema:
     def schema(self):
         _recreate_database()
 
-        # 🔥 connection 1: setup
         setup_conn = _get_raw_conn()
         _load_schema(setup_conn)
         setup_conn.close()
-
-        # 🔥 connection 2: test usage
         conn = psycopg2.connect(DSN)
         conn.autocommit = False
 
@@ -436,3 +433,108 @@ class TestSchema:
             )
             link = cur.fetchone()[0]
         assert link == f"/Observations({obs_id})"
+
+    # -------------------------------------------------------------------------
+    # 4. expand() nextLink pagination sentinel
+    # -------------------------------------------------------------------------
+
+    def _insert_n_things(self, cur, n, prefix):
+        """Insert n Things and return their ids."""
+        ids = []
+        for i in range(n):
+            thing_id = self._insert_minimal_thing(cur, f"{prefix}-thing-{i}")
+            ids.append(thing_id)
+        return ids
+
+    def test_expand_nextlink_present_when_overflow(self, schema):
+        """
+        When the number of matching rows exceeds limit_ - 1,
+        expand() must return a non-null @iot.nextLink in the JSON.
+
+        We insert 3 Things and call expand with limit_=3 targeting one of them
+        directly. But expand's one_to_many branch filters WHERE d.fk_field = fk_id,
+        so we need fk_field to genuinely match multiple rows.
+
+        We use the Datastream -> Observation pattern via actual FK columns:
+        insert 1 Datastream and 3 Observations, then call expand on Observations
+        with datastream_id as fk_field and limit=3 (so limit-1=2, but 3 rows
+        exist -> overflow).
+        """
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "pg-thing")
+            sensor_id = self._insert_minimal_sensor(cur, "pg-sensor")
+            op_id = self._insert_minimal_observed_property(cur, "pg-op")
+            ds_id = self._insert_minimal_datastream(cur, thing_id, sensor_id, op_id, "pg-ds")
+            foi_id = self._insert_minimal_foi(cur, "pg-foi")
+
+            # insert 3 observations with explicitly distinct phenomenonTime values
+            # to avoid the unique_observation_phenomenontime_datastreamid constraint
+            for i in range(3):
+                cur.execute(
+                    """
+                    INSERT INTO sensorthings."Observation"
+                        ("resultType", "resultString", "datastream_id",
+                        "featuresofinterest_id", "phenomenonTime")
+                    VALUES (%s, %s, %s, %s,
+                        tstzrange(
+                            now() + (%s || ' seconds')::interval,
+                            now() + (%s || ' seconds')::interval,
+                            '[]'
+                        ))
+                    """,
+                    (3, f"obs-{i}", ds_id, foi_id, i, i),
+                )
+
+            query = 'SELECT * FROM sensorthings."Observation"'
+            cur.execute(
+                """
+                SELECT sensorthings.expand(
+                    %s, 'datastream_id', %s,
+                    3, 0, true, false, 'Observation', '', false
+                )
+                """,
+                (query, ds_id),
+            )
+            result = cur.fetchone()[0]
+
+        if isinstance(result, str):
+            result = json.loads(result)
+
+        next_link = result.get("Observation@iot.nextLink")
+        assert next_link is not None, (
+            "expand() should produce a non-null @iot.nextLink when rows exceed limit_-1"
+        )
+
+    def test_expand_nextlink_null_when_under_limit(self, schema):
+        """
+        When the number of matching rows is strictly below limit_ - 1,
+        expand() must return null for @iot.nextLink.
+        """
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "pg2-thing")
+            sensor_id = self._insert_minimal_sensor(cur, "pg2-sensor")
+            op_id = self._insert_minimal_observed_property(cur, "pg2-op")
+            ds_id = self._insert_minimal_datastream(cur, thing_id, sensor_id, op_id, "pg2-ds")
+            foi_id = self._insert_minimal_foi(cur, "pg2-foi")
+
+            self._insert_observation(cur, ds_id, foi_id, 3, resultString="only-one")
+
+            query = 'SELECT * FROM sensorthings."Observation"'
+            cur.execute(
+                """
+                SELECT sensorthings.expand(
+                    %s, 'datastream_id', %s,
+                    10, 0, true, false, 'Observation', '', false
+                )
+                """,
+                (query, ds_id),
+            )
+            result = cur.fetchone()[0]
+
+        if isinstance(result, str):
+            result = json.loads(result)
+
+        next_link = result.get("Observation@iot.nextLink")
+        assert next_link is None, (
+            "expand() should return null @iot.nextLink when row count < limit_-1"
+        )
