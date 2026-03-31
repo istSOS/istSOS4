@@ -8,12 +8,10 @@ Tests:
   4. expand() nextLink pagination sentinel (present vs absent)
 
 Run with:
-  TEST_DB_DSN=postgresql://... pytest test_schema.py -v
-  or rely on the default: postgresql://postgres:postgres@localhost:5432/istsos_test
+    pytest test/test_schema.py -v
 """
 
 import json
-import os
 import pathlib
 import psycopg2
 import psycopg2.extras
