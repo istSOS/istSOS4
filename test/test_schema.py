@@ -224,6 +224,23 @@ class TestSchema:
             result = self._get_result(cur, obs_id)
         assert result == 42.5
 
+    def test_result_type_0_null_value(self, schema):
+        """resultType 0 with NULL resultNumber -> to_jsonb(NULL) = 'null'::jsonb."""
+        with schema.cursor() as cur:
+            ds_id, foi_id = self._setup_ds_foi(cur)
+            cur.execute(
+                """
+                INSERT INTO sensorthings."Observation"
+                    ("resultType", "resultNumber", "datastream_id", "featuresofinterest_id")
+                VALUES (0, NULL, %s, %s) RETURNING id
+                """,
+                (ds_id, foi_id),
+            )
+            obs_id = cur.fetchone()[0]
+            result = self._get_result(cur, obs_id)
+        # to_jsonb(NULL::float8) returns NULL in jsonb context
+        assert result is None
+
     def test_result_type_1_boolean_true(self, schema):
         """resultType 1 -> to_jsonb(resultBoolean) returns True."""
         with schema.cursor() as cur:
@@ -243,10 +260,9 @@ class TestSchema:
     def test_result_type_2_json(self, schema):
         """resultType 2 -> resultJSON is returned as-is (jsonb passthrough)."""
         payload = {"sensor": "temp", "unit": "C"}
-        with schema.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        with schema.cursor() as cur:
             ds_id, foi_id = self._setup_ds_foi(cur)
             obs_id = self._insert_observation(cur, ds_id, foi_id, 2, resultJSON=payload)
-        with schema.cursor() as cur:
             result = self._get_result(cur, obs_id)
         assert result == payload
 
