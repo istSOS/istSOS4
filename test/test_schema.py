@@ -72,7 +72,7 @@ class TestSchema:
     Each test method rolls back its own data changes.
     """
 
-    @pytest.fixture(autouse=True, scope="function")
+    @pytest.fixture(autouse=True, scope="class")
     def schema(self):
         _recreate_database()
 
@@ -89,6 +89,11 @@ class TestSchema:
 
         conn.close()
     
+    @pytest.fixture(autouse=True)
+    def rollback(self, schema):
+        yield
+        schema.rollback()
+
     def _insert_minimal_location(self, cur, name="test-loc"):
         cur.execute(
             """
