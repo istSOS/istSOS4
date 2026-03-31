@@ -346,3 +346,88 @@ class TestSchema:
         assert row is not None, (
             "HistoricalLocation for an unrelated Thing must survive the Location delete"
         )
+
+    # -------------------------------------------------------------------------
+    # 3. @iot.selfLink computed functions
+    # -------------------------------------------------------------------------
+
+    def test_selflink_thing(self, schema):
+        """@iot.selfLink for Thing returns '/Things(<id>)'."""
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "sl-thing")
+            cur.execute(
+                'SELECT "@iot.selfLink"(t) FROM sensorthings."Thing" t WHERE id = %s',
+                (thing_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/Things({thing_id})"
+
+    def test_selflink_location(self, schema):
+        """@iot.selfLink for Location returns '/Locations(<id>)'."""
+        with schema.cursor() as cur:
+            loc_id = self._insert_minimal_location(cur, "sl-loc")
+            cur.execute(
+                'SELECT "@iot.selfLink"(l) FROM sensorthings."Location" l WHERE id = %s',
+                (loc_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/Locations({loc_id})"
+
+    def test_selflink_sensor(self, schema):
+        """@iot.selfLink for Sensor returns '/Sensors(<id>)'."""
+        with schema.cursor() as cur:
+            sensor_id = self._insert_minimal_sensor(cur, "sl-sensor")
+            cur.execute(
+                'SELECT "@iot.selfLink"(s) FROM sensorthings."Sensor" s WHERE id = %s',
+                (sensor_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/Sensors({sensor_id})"
+
+    def test_selflink_observed_property(self, schema):
+        """@iot.selfLink for ObservedProperty returns '/ObservedProperties(<id>)'."""
+        with schema.cursor() as cur:
+            op_id = self._insert_minimal_observed_property(cur, "sl-op")
+            cur.execute(
+                'SELECT "@iot.selfLink"(op) FROM sensorthings."ObservedProperty" op WHERE id = %s',
+                (op_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/ObservedProperties({op_id})"
+
+    def test_selflink_datastream(self, schema):
+        """@iot.selfLink for Datastream returns '/Datastreams(<id>)'."""
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "sl-ds-thing")
+            sensor_id = self._insert_minimal_sensor(cur, "sl-ds-sensor")
+            op_id = self._insert_minimal_observed_property(cur, "sl-ds-op")
+            ds_id = self._insert_minimal_datastream(cur, thing_id, sensor_id, op_id, "sl-ds")
+            cur.execute(
+                'SELECT "@iot.selfLink"(d) FROM sensorthings."Datastream" d WHERE id = %s',
+                (ds_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/Datastreams({ds_id})"
+
+    def test_selflink_features_of_interest(self, schema):
+        """@iot.selfLink for FeaturesOfInterest returns '/FeaturesOfInterest(<id>)'."""
+        with schema.cursor() as cur:
+            foi_id = self._insert_minimal_foi(cur, "sl-foi")
+            cur.execute(
+                'SELECT "@iot.selfLink"(f) FROM sensorthings."FeaturesOfInterest" f WHERE id = %s',
+                (foi_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/FeaturesOfInterest({foi_id})"
+
+    def test_selflink_observation(self, schema):
+        """@iot.selfLink for Observation returns '/Observations(<id>)'."""
+        with schema.cursor() as cur:
+            ds_id, foi_id = self._setup_ds_foi(cur)
+            obs_id = self._insert_observation(cur, ds_id, foi_id, 3, resultString="x")
+            cur.execute(
+                'SELECT "@iot.selfLink"(o) FROM sensorthings."Observation" o WHERE id = %s',
+                (obs_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/Observations({obs_id})"
