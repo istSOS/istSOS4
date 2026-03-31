@@ -72,7 +72,7 @@ class TestSchema:
     Each test method rolls back its own data changes.
     """
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True, scope="function")
     def schema(self):
         _recreate_database()
 
@@ -98,9 +98,9 @@ class TestSchema:
             """,
             (name,),
         )
-        return cur.fetchone()[0]
+        return self._get_id(cur.fetchone())
     
-    def _get_id(row):
+    def _get_id(self, row):
         return row[0] if not isinstance(row, dict) else row["id"]
 
     def _insert_minimal_sensor(self, cur, name="test-sensor"):
@@ -113,7 +113,7 @@ class TestSchema:
             """,
             (name,),
         )
-        return cur.fetchone()[0]
+        return self._get_id(cur.fetchone())
 
     def _insert_minimal_observed_property(self, cur, name="test-op"):
         cur.execute(
@@ -125,7 +125,7 @@ class TestSchema:
             """,
             (name,),
         )
-        return cur.fetchone()[0]
+        return self._get_id(cur.fetchone())
 
     def _insert_minimal_datastream(self, cur, thing_id, sensor_id, op_id, name="test-ds"):
         cur.execute(
@@ -140,7 +140,7 @@ class TestSchema:
             """,
             (name, thing_id, sensor_id, op_id),
         )
-        return cur.fetchone()[0]
+        return self._get_id(cur.fetchone())
 
     def _insert_minimal_foi(self, cur, name="test-foi"):
         cur.execute(
@@ -153,7 +153,7 @@ class TestSchema:
             """,
             (name,),
         )
-        return cur.fetchone()[0]
+        return self._get_id(cur.fetchone())
 
     def _insert_observation(self, cur, ds_id, foi_id, result_type, **kwargs):
         """Insert one observation row; caller sets the correct result column."""
@@ -174,7 +174,7 @@ class TestSchema:
             """,
             (result_type, val, ds_id, foi_id),
         )
-        return cur.fetchone()[0]
+        return self._get_id(cur.fetchone())
 
     def _get_result(self, cur, obs_id):
         cur.execute(
