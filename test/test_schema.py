@@ -170,25 +170,59 @@ class TestSchema:
         )
         return self._get_id(cur.fetchone())
 
-    def _insert_observation(self, cur, ds_id, foi_id, result_type, **kwargs):
-        """Insert one observation row; caller sets the correct result column."""
-        col_map = {
-            0: ("resultNumber", kwargs.get("resultNumber")),
-            1: ("resultBoolean", kwargs.get("resultBoolean")),
-            2: ("resultJSON", psycopg2.extras.Json(kwargs.get("resultJSON")) if kwargs.get("resultJSON") is not None else None),
-            3: ("resultString", kwargs.get("resultString")),
-            99: ("resultNumber", None),
-        }
-        col, val = col_map[result_type]
-        cur.execute(
-            f"""
+    # Each result type gets its own SQL string - no dynamic column injection.
+    _INSERT_OBS_SQL = {
+        0: """
             INSERT INTO sensorthings."Observation"
-                ("resultType", "{col}", "datastream_id", "featuresofinterest_id")
+                ("resultType", "resultNumber", "datastream_id", "featuresofinterest_id")
             VALUES (%s, %s, %s, %s)
             RETURNING id
-            """,
-            (result_type, val, ds_id, foi_id),
-        )
+           """,
+        1: """
+            INSERT INTO sensorthings."Observation"
+                ("resultType", "resultBoolean", "datastream_id", "featuresofinterest_id")
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+           """,
+        2: """
+            INSERT INTO sensorthings."Observation"
+                ("resultType", "resultJSON", "datastream_id", "featuresofinterest_id")
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+           """,
+        3: """
+            INSERT INTO sensorthings."Observation"
+                ("resultType", "resultString", "datastream_id", "featuresofinterest_id")
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+           """,
+    }
+
+    def _insert_observation(self, cur, ds_id, foi_id, result_type, **kwargs):
+        """Insert one observation row using a static SQL string per result type."""
+        value_map = {
+            0: kwargs.get("resultNumber"),
+            1: kwargs.get("resultBoolean"),
+            2: psycopg2.extras.Json(kwargs["resultJSON"]) if kwargs.get("resultJSON") is not None else None,
+            3: kwargs.get("resultString"),
+        }
+
+        sql = self._INSERT_OBS_SQL.get(result_type)
+        if sql is None:
+            # Unknown result type: insert a NULL resultNumber row with that type
+            # so the ELSE branch of result() can be exercised.
+            cur.execute(
+                """
+                INSERT INTO sensorthings."Observation"
+                    ("resultType", "resultNumber", "datastream_id", "featuresofinterest_id")
+                VALUES (%s, NULL, %s, %s)
+                RETURNING id
+                """,
+                (result_type, ds_id, foi_id),
+            )
+        else:
+            cur.execute(sql, (result_type, value_map[result_type], ds_id, foi_id))
+
         return self._get_id(cur.fetchone())
 
     def _get_result(self, cur, obs_id):
@@ -203,13 +237,13 @@ class TestSchema:
         row = cur.fetchone()
         return row[0] if row else None
 
-    def _setup_ds_foi(self, cur):
+    def _setup_ds_foi(self, cur, suffix="obs"):
         """Common pre-requisites needed by Observation tests."""
-        thing_id = self._insert_minimal_thing(cur, "t-obs")
-        sensor_id = self._insert_minimal_sensor(cur, "s-obs")
-        op_id = self._insert_minimal_observed_property(cur, "op-obs")
-        ds_id = self._insert_minimal_datastream(cur, thing_id, sensor_id, op_id, "ds-obs")
-        foi_id = self._insert_minimal_foi(cur, "foi-obs")
+        thing_id = self._insert_minimal_thing(cur, f"t-{suffix}")
+        sensor_id = self._insert_minimal_sensor(cur, f"s-{suffix}")
+        op_id = self._insert_minimal_observed_property(cur, f"op-{suffix}")
+        ds_id = self._insert_minimal_datastream(cur, thing_id, sensor_id, op_id, f"ds-{suffix}")
+        foi_id = self._insert_minimal_foi(cur, f"foi-{suffix}")
         return ds_id, foi_id
 
     # -------------------------------------------------------------------------
@@ -225,7 +259,7 @@ class TestSchema:
         assert result == 42.5
 
     def test_result_type_0_null_value(self, schema):
-        """resultType 0 with NULL resultNumber -> to_jsonb(NULL) = 'null'::jsonb."""
+        """resultType 0 with NULL resultNumber -> returns SQL NULL (Python None)."""
         with schema.cursor() as cur:
             ds_id, foi_id = self._setup_ds_foi(cur)
             cur.execute(
@@ -241,21 +275,14 @@ class TestSchema:
         # to_jsonb(NULL::float8) returns NULL in jsonb context
         assert result is None
 
-    def test_result_type_1_boolean_true(self, schema):
-        """resultType 1 -> to_jsonb(resultBoolean) returns True."""
+    @pytest.mark.parametrize("value", [True, False])
+    def test_result_type_1_boolean(self, schema, value):
+        """resultType 1 -> to_jsonb(resultBoolean) round-trips correctly for both values."""
         with schema.cursor() as cur:
             ds_id, foi_id = self._setup_ds_foi(cur)
-            obs_id = self._insert_observation(cur, ds_id, foi_id, 1, resultBoolean=True)
+            obs_id = self._insert_observation(cur, ds_id, foi_id, 1, resultBoolean=value)
             result = self._get_result(cur, obs_id)
-        assert result is True
-
-    def test_result_type_1_boolean_false(self, schema):
-        """resultType 1 -> to_jsonb(resultBoolean) returns False."""
-        with schema.cursor() as cur:
-            ds_id, foi_id = self._setup_ds_foi(cur)
-            obs_id = self._insert_observation(cur, ds_id, foi_id, 1, resultBoolean=False)
-            result = self._get_result(cur, obs_id)
-        assert result is False
+        assert result is value
 
     def test_result_type_2_json(self, schema):
         """resultType 2 -> resultJSON is returned as-is (jsonb passthrough)."""
@@ -536,10 +563,7 @@ class TestSchema:
     def test_selflink_datastream(self, schema):
         """@iot.selfLink for Datastream returns '/Datastreams(<id>)'."""
         with schema.cursor() as cur:
-            thing_id = self._insert_minimal_thing(cur, "sl-ds-thing")
-            sensor_id = self._insert_minimal_sensor(cur, "sl-ds-sensor")
-            op_id = self._insert_minimal_observed_property(cur, "sl-ds-op")
-            ds_id = self._insert_minimal_datastream(cur, thing_id, sensor_id, op_id, "sl-ds")
+            ds_id, _ = self._setup_ds_foi(cur, suffix="sl-ds")
             cur.execute(
                 'SELECT "@iot.selfLink"(d) FROM sensorthings."Datastream" d WHERE id = %s',
                 (ds_id,),
@@ -574,36 +598,19 @@ class TestSchema:
     # 4. expand() nextLink pagination sentinel
     # -------------------------------------------------------------------------
 
-    def _insert_n_things(self, cur, n, prefix):
-        """Insert n Things and return their ids."""
-        ids = []
-        for i in range(n):
-            thing_id = self._insert_minimal_thing(cur, f"{prefix}-thing-{i}")
-            ids.append(thing_id)
-        return ids
-
     def test_expand_nextlink_present_when_overflow(self, schema):
         """
         When the number of matching rows exceeds limit_ - 1,
         expand() must return a non-null @iot.nextLink in the JSON.
 
-        We insert 3 Things and call expand with limit_=3 targeting one of them
-        directly. But expand's one_to_many branch filters WHERE d.fk_field = fk_id,
-        so we need fk_field to genuinely match multiple rows.
-
-        We use the Datastream -> Observation pattern via actual FK columns:
-        insert 1 Datastream and 3 Observations, then call expand on Observations
-        with datastream_id as fk_field and limit=3 (so limit-1=2, but 3 rows
-        exist -> overflow).
+        We insert 1 Datastream and 3 Observations, then call expand on
+        Observations with datastream_id as fk_field and limit=3
+        (so limit-1=2, but 3 rows exist -> overflow).
         """
         with schema.cursor() as cur:
-            thing_id = self._insert_minimal_thing(cur, "pg-thing")
-            sensor_id = self._insert_minimal_sensor(cur, "pg-sensor")
-            op_id = self._insert_minimal_observed_property(cur, "pg-op")
-            ds_id = self._insert_minimal_datastream(cur, thing_id, sensor_id, op_id, "pg-ds")
-            foi_id = self._insert_minimal_foi(cur, "pg-foi")
+            ds_id, foi_id = self._setup_ds_foi(cur, suffix="pg")
 
-            # insert 3 observations with explicitly distinct phenomenonTime values
+            # insert 3 observations with distinct phenomenonTime values
             # to avoid the unique_observation_phenomenontime_datastreamid constraint
             for i in range(3):
                 cur.execute(
@@ -647,11 +654,7 @@ class TestSchema:
         expand() must return null for @iot.nextLink.
         """
         with schema.cursor() as cur:
-            thing_id = self._insert_minimal_thing(cur, "pg2-thing")
-            sensor_id = self._insert_minimal_sensor(cur, "pg2-sensor")
-            op_id = self._insert_minimal_observed_property(cur, "pg2-op")
-            ds_id = self._insert_minimal_datastream(cur, thing_id, sensor_id, op_id, "pg2-ds")
-            foi_id = self._insert_minimal_foi(cur, "pg2-foi")
+            ds_id, foi_id = self._setup_ds_foi(cur, suffix="pg2")
 
             self._insert_observation(cur, ds_id, foi_id, 3, resultString="only-one")
 
