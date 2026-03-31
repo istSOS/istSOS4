@@ -317,6 +317,15 @@ class TestSchema:
             hl_id = cur.fetchone()[0]
 
             cur.execute(
+                """
+                INSERT INTO sensorthings."Location_HistoricalLocation"
+                    ("location_id", "historicallocation_id")
+                VALUES (%s, %s)
+                """,
+                (loc_id, hl_id),
+            )
+
+            cur.execute(
                 'DELETE FROM sensorthings."Location" WHERE id = %s',
                 (loc_id,),
             )
