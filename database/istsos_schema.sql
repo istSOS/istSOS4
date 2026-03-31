@@ -316,7 +316,7 @@ CREATE OR REPLACE FUNCTION sensorthings.delete_related_historical_locations() RE
 BEGIN
     -- Delete HistoricalLocations where the thing_id matches the deleted Location's thing_id
     DELETE FROM sensorthings."HistoricalLocation"
-    WHERE thing_id = (
+    WHERE thing_id IN (
         SELECT tl.thing_id
         FROM sensorthings."Thing_Location" tl
         WHERE tl.location_id = OLD.id
