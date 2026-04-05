@@ -174,3 +174,49 @@ class TestSchemaVersioning:
         # We just verify the lower bound is finite (a real timestamp).
         assert not stv.lower_inf, "Lower bound must be a real timestamp after INSERT"
         assert stv.lower is not None, "Lower bound must not be None after INSERT"
+
+    def test_update_archives_old_row_to_history(self, schema):
+        """
+        On UPDATE the previous row version must appear in the history table
+        with a closed systemTimeValidity (finite upper bound).
+        """
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "arch-thing")
+            cur.execute(
+                'UPDATE sensorthings."Thing" SET "description" = \'updated\' WHERE id = %s',
+                (thing_id,),
+            )
+            cur.execute(
+                'SELECT "systemTimeValidity" FROM sensorthings_history."Thing" WHERE id = %s',
+                (thing_id,),
+            )
+            rows = cur.fetchall()
+
+        assert len(rows) == 1, "Exactly one archived row should exist after one UPDATE"
+        stv = rows[0][0]
+        assert not stv.upper_inf, "Archived row must have a finite upper bound"
+
+    def test_update_live_row_gets_new_start(self, schema):
+        """
+        After UPDATE the live row's systemTimeValidity lower bound must be
+        strictly after the archived row's lower bound.
+        """
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "stv-upd")
+            cur.execute(
+                'SELECT lower("systemTimeValidity") FROM sensorthings."Thing" WHERE id = %s',
+                (thing_id,),
+            )
+            t_before = cur.fetchone()[0]
+
+            cur.execute(
+                'UPDATE sensorthings."Thing" SET "description" = \'v2\' WHERE id = %s',
+                (thing_id,),
+            )
+            cur.execute(
+                'SELECT lower("systemTimeValidity") FROM sensorthings."Thing" WHERE id = %s',
+                (thing_id,),
+            )
+            t_after = cur.fetchone()[0]
+
+        assert t_after >= t_before
