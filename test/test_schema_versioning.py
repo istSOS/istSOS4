@@ -244,3 +244,34 @@ class TestSchemaVersioning:
                     'UPDATE sensorthings."Thing" SET id = %s WHERE id = %s',
                     (thing_id + 9999, thing_id),
                 )
+    
+    def test_delete_archives_row_to_history(self, schema):
+        """
+        On DELETE the row must be copied to the history table with an
+        inclusive, finite upper bound on systemTimeValidity.
+        """
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "del-arch")
+            cur.execute('DELETE FROM sensorthings."Thing" WHERE id = %s', (thing_id,))
+
+            cur.execute(
+                'SELECT "systemTimeValidity" FROM sensorthings_history."Thing" WHERE id = %s',
+                (thing_id,),
+            )
+            rows = cur.fetchall()
+
+        assert len(rows) == 1, "One archived row must exist after DELETE"
+        stv = rows[0][0]
+        assert not stv.upper_inf, "Deleted row must have a finite upper bound"
+        assert stv.upper_inc, "Deleted row's range must be upper-inclusive ([])"
+
+    def test_delete_removes_live_row(self, schema):
+        """After DELETE the live table must no longer contain the row."""
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "del-live")
+            cur.execute('DELETE FROM sensorthings."Thing" WHERE id = %s', (thing_id,))
+            cur.execute(
+                'SELECT id FROM sensorthings."Thing" WHERE id = %s', (thing_id,)
+            )
+            row = cur.fetchone()
+        assert row is None
