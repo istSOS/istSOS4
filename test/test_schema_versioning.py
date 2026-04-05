@@ -723,3 +723,50 @@ class TestSchemaVersioning:
             assert upper == next_lower, (
                 f"History row {i} upper ({upper}) must equal row {i+1} lower ({next_lower})"
             )
+
+    def test_traveltime_observation_result_function(self, schema):
+        """
+        The result() overload on Observation_traveltime must dispatch
+        correctly for each resultType just like the base Observation function.
+        """
+        cases = [
+            (0, {"resultNumber": 3.14}, 3.14),
+            (1, {"resultBoolean": True}, True),
+            (3, {"resultString": "hi"}, "hi"),
+        ]
+        col_map = {0: "resultNumber", 1: "resultBoolean", 3: "resultString"}
+
+        with schema.cursor() as cur:
+            ds_id, foi_id, _ = self._setup_ds_foi(cur, suffix="tt-result")
+
+            for result_type, kwargs, expected in cases:
+                col = col_map[result_type]
+                value = list(kwargs.values())[0]
+                cur.execute(
+                    f"""
+                    INSERT INTO sensorthings."Observation"
+                        ("resultType", "{col}", "datastream_id",
+                         "featuresofinterest_id", "phenomenonTime")
+                    VALUES (%s, %s, %s, %s,
+                        tstzrange(now() + (%s || ' seconds')::interval,
+                                  now() + (%s || ' seconds')::interval, '[]'))
+                    RETURNING id
+                    """,
+                    (result_type, value, ds_id, foi_id, result_type * 10, result_type * 10),
+                )
+                obs_id = cur.fetchone()[0]
+
+                cur.execute(
+                    """
+                    SELECT result(o)
+                    FROM sensorthings."Observation_traveltime" o
+                    WHERE id = %s
+                    ORDER BY lower("systemTimeValidity") DESC
+                    LIMIT 1
+                    """,
+                    (obs_id,),
+                )
+                actual = cur.fetchone()[0]
+                assert actual == expected, (
+                    f"resultType {result_type}: expected {expected!r}, got {actual!r}"
+                )
