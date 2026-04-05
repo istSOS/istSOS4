@@ -692,3 +692,34 @@ class TestSchemaVersioning:
             link = cur.fetchone()[0]
 
         assert link == f"/Observations({obs_id})"
+
+    def test_multiple_updates_produce_ordered_history_chain(self, schema):
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "chain-thing")
+
+            for i in range(3):
+                cur.execute(
+                    'UPDATE sensorthings."Thing" SET "description" = %s WHERE id = %s',
+                    (f"v{i+2}", thing_id),
+                )
+
+            cur.execute(
+                """
+                SELECT lower("systemTimeValidity"), upper("systemTimeValidity")
+                FROM sensorthings_history."Thing"
+                WHERE id = %s
+                ORDER BY lower("systemTimeValidity")
+                """,
+                (thing_id,),
+            )
+            history_rows = cur.fetchall()
+
+        assert len(history_rows) == 3, "Three updates must produce three history rows"
+
+        # Verify contiguity: each upper bound == next lower bound
+        for i in range(len(history_rows) - 1):
+            _, upper = history_rows[i]
+            next_lower, _ = history_rows[i + 1]
+            assert upper == next_lower, (
+                f"History row {i} upper ({upper}) must equal row {i+1} lower ({next_lower})"
+            )
