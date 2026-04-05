@@ -548,3 +548,44 @@ class TestSchemaVersioning:
                 assert cur.fetchone() is not None, (
                     f"sensorthings.\"{table}\" must have a systemTimeValidity column"
                 )
+    
+    def test_history_exclusion_constraint_via_direct_insert(self, schema):
+        """
+        Two direct INSERTs into the history table for the same id with
+        overlapping ranges must violate the exclusion constraint.
+        """
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "excl2-thing")
+
+            # Fetch column list (excluding systemTimeValidity to override it)
+            cur.execute(
+                """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = 'sensorthings' AND table_name = 'Thing'
+                  AND column_name != 'systemTimeValidity'
+                ORDER BY ordinal_position
+                """
+            )
+            cols = [r[0] for r in cur.fetchall()]
+            col_list = ", ".join(f'"{c}"' for c in cols)
+
+            # First history INSERT — range [2020, 2021)
+            cur.execute(
+                f"""
+                INSERT INTO sensorthings_history."Thing" ({col_list}, "systemTimeValidity")
+                SELECT {col_list}, tstzrange('2020-01-01', '2021-01-01', '[)')
+                FROM sensorthings."Thing" WHERE id = %s
+                """,
+                (thing_id,),
+            )
+
+            # Second INSERT with overlapping range — must fail
+            with pytest.raises(psycopg2.errors.ExclusionViolation):
+                cur.execute(
+                    f"""
+                    INSERT INTO sensorthings_history."Thing" ({col_list}, "systemTimeValidity")
+                    SELECT {col_list}, tstzrange('2020-06-01', '2021-06-01', '[)')
+                    FROM sensorthings."Thing" WHERE id = %s
+                    """,
+                    (thing_id,),
+                )
