@@ -220,3 +220,14 @@ class TestSchemaVersioning:
             t_after = cur.fetchone()[0]
 
         assert t_after >= t_before
+
+    def test_insert_sets_upper_infinite(self, schema):
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "stv-upper")
+            cur.execute(
+                'SELECT "systemTimeValidity" FROM sensorthings."Thing" WHERE id = %s',
+                (thing_id,),
+            )
+            stv = cur.fetchone()[0]
+
+        assert stv.upper is not None
