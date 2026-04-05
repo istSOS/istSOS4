@@ -231,3 +231,16 @@ class TestSchemaVersioning:
             stv = cur.fetchone()[0]
 
         assert stv.upper is not None
+
+    def test_update_raises_on_id_change(self, schema):
+        """
+        Attempting to change the id column of a versioned row must raise an
+        exception from the istsos_mutate_history trigger.
+        """
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "id-change")
+            with pytest.raises(psycopg2.errors.RaiseException, match="ID must not be changed"):
+                cur.execute(
+                    'UPDATE sensorthings."Thing" SET id = %s WHERE id = %s',
+                    (thing_id + 9999, thing_id),
+                )
