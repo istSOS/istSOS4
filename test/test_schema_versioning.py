@@ -484,3 +484,42 @@ class TestSchemaVersioning:
             rows = cur.fetchall()
 
         assert len(rows) == 1
+
+    def test_history_table_update_raises(self, schema):
+        """
+        Any UPDATE on a history table must be rejected by the
+        istsos_prevent_table_update trigger.
+        """
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "prevent-upd")
+            cur.execute(
+                'UPDATE sensorthings."Thing" SET "description" = \'v2\' WHERE id = %s',
+                (thing_id,),
+            )
+            with pytest.raises(
+                psycopg2.errors.RaiseException,
+                match="Updates or Deletes on this table are not allowed",
+            ):
+                cur.execute(
+                    'UPDATE sensorthings_history."Thing" SET "description" = \'hack\' WHERE id = %s',
+                    (thing_id,),
+                )
+
+    def test_history_table_delete_raises(self, schema):
+        """
+        Any DELETE on a history table must be rejected.
+        """
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "prevent-del")
+            cur.execute(
+                'UPDATE sensorthings."Thing" SET "description" = \'v2\' WHERE id = %s',
+                (thing_id,),
+            )
+            with pytest.raises(
+                psycopg2.errors.RaiseException,
+                match="Updates or Deletes on this table are not allowed",
+            ):
+                cur.execute(
+                    'DELETE FROM sensorthings_history."Thing" WHERE id = %s',
+                    (thing_id,),
+                )
