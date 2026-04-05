@@ -630,3 +630,82 @@ class TestSchemaVersioning:
         assert len(rows) == 1, (
             "Deleted row must still be visible through the traveltime view via history"
         )
+    
+    def test_traveltime_selflink_thing(self, schema):
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "tt-sl-thing")
+            cur.execute(
+                'SELECT "@iot.selfLink"(t) FROM sensorthings."Thing_traveltime" t WHERE id = %s',
+                (thing_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/Things({thing_id})"
+
+    def test_traveltime_selflink_location(self, schema):
+        with schema.cursor() as cur:
+            loc_id = self._insert_minimal_location(cur, "tt-sl-loc")
+            cur.execute(
+                'SELECT "@iot.selfLink"(l) FROM sensorthings."Location_traveltime" l WHERE id = %s',
+                (loc_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/Locations({loc_id})"
+
+    def test_traveltime_selflink_sensor(self, schema):
+        with schema.cursor() as cur:
+            sensor_id = self._insert_minimal_sensor(cur, "tt-sl-sensor")
+            cur.execute(
+                'SELECT "@iot.selfLink"(s) FROM sensorthings."Sensor_traveltime" s WHERE id = %s',
+                (sensor_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/Sensors({sensor_id})"
+
+    def test_traveltime_selflink_observed_property(self, schema):
+        with schema.cursor() as cur:
+            op_id = self._insert_minimal_observed_property(cur, "tt-sl-op")
+            cur.execute(
+                'SELECT "@iot.selfLink"(op) FROM sensorthings."ObservedProperty_traveltime" op WHERE id = %s',
+                (op_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/ObservedProperties({op_id})"
+
+    def test_traveltime_selflink_datastream(self, schema):
+        with schema.cursor() as cur:
+            ds_id, _, _ = self._setup_ds_foi(cur, suffix="tt-sl-ds")
+            cur.execute(
+                'SELECT "@iot.selfLink"(d) FROM sensorthings."Datastream_traveltime" d WHERE id = %s',
+                (ds_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/Datastreams({ds_id})"
+
+    def test_traveltime_selflink_features_of_interest(self, schema):
+        with schema.cursor() as cur:
+            foi_id = self._insert_minimal_foi(cur, "tt-sl-foi")
+            cur.execute(
+                'SELECT "@iot.selfLink"(f) FROM sensorthings."FeaturesOfInterest_traveltime" f WHERE id = %s',
+                (foi_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/FeaturesOfInterest({foi_id})"
+
+    def test_traveltime_selflink_observation(self, schema):
+        with schema.cursor() as cur:
+            ds_id, foi_id, _ = self._setup_ds_foi(cur, suffix="tt-sl-obs")
+            cur.execute(
+                """
+                INSERT INTO sensorthings."Observation"
+                    ("resultType", "resultString", "datastream_id", "featuresofinterest_id")
+                VALUES (3, 'x', %s, %s) RETURNING id
+                """,
+                (ds_id, foi_id),
+            )
+            obs_id = cur.fetchone()[0]
+            cur.execute(
+                'SELECT "@iot.selfLink"(o) FROM sensorthings."Observation_traveltime" o WHERE id = %s',
+                (obs_id,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/Observations({obs_id})"
