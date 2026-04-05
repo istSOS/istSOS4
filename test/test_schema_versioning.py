@@ -143,7 +143,21 @@ class TestSchemaVersioning:
             (action,),
         )
         return self._get_id(cur.fetchone())
-
+    
+    def _insert_minimal_location(self, cur, name="v-loc"):
+        commit_id = self._insert_commit(cur)
+        cur.execute(
+            """
+            INSERT INTO sensorthings."Location"
+                ("name", "description", "encodingType", "location", "commit_id")
+            VALUES (%s, 'desc', 'application/geo+json',
+                    ST_SetSRID(ST_MakePoint(9.0, 46.0), 4326), %s)
+            RETURNING id
+            """,
+            (name, commit_id),
+        )
+        return self._get_id(cur.fetchone())
+    
     def _insert_minimal_thing(self, cur, name="v-thing"):
         commit_id = self._insert_commit(cur)
         cur.execute(
@@ -154,6 +168,70 @@ class TestSchemaVersioning:
             (name, commit_id),
         )
         return self._get_id(cur.fetchone())
+    
+    def _insert_minimal_sensor(self, cur, name="v-sensor"):
+        commit_id = self._insert_commit(cur)
+        cur.execute(
+            """
+            INSERT INTO sensorthings."Sensor"
+                ("name", "description", "encodingType", "metadata", "commit_id")
+            VALUES (%s, 'desc', 'application/pdf', 'http://meta', %s)
+            RETURNING id
+            """,
+            (name, commit_id),
+        )
+        return self._get_id(cur.fetchone())
+    
+    def _insert_minimal_observed_property(self, cur, name="v-op"):
+        commit_id = self._insert_commit(cur)
+        cur.execute(
+            """
+            INSERT INTO sensorthings."ObservedProperty"
+                ("name", "definition", "description", "commit_id")
+            VALUES (%s, 'http://def', 'desc', %s)
+            RETURNING id
+            """,
+            (name, commit_id),
+        )
+        return self._get_id(cur.fetchone())
+    
+    def _insert_minimal_datastream(self, cur, thing_id, sensor_id, op_id, name="v-ds"):
+        cur.execute(
+            """
+            INSERT INTO sensorthings."Datastream"
+                ("name", "description", "unitOfMeasurement",
+                 "observationType", "thing_id", "sensor_id", "observedproperty_id")
+            VALUES (%s, 'desc', '{"name":"C","symbol":"C","definition":"http://d"}'::jsonb,
+                    'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement',
+                    %s, %s, %s)
+            RETURNING id
+            """,
+            (name, thing_id, sensor_id, op_id),
+        )
+        return self._get_id(cur.fetchone())
+    
+    def _insert_minimal_foi(self, cur, name="v-foi"):
+        cur.execute(
+            """
+            INSERT INTO sensorthings."FeaturesOfInterest"
+                ("name", "description", "encodingType", "feature")
+            VALUES (%s, 'desc', 'application/geo+json',
+                    ST_SetSRID(ST_MakePoint(9.0, 46.0), 4326))
+            RETURNING id
+            """,
+            (name,),
+        )
+        return self._get_id(cur.fetchone())
+
+    def _setup_ds_foi(self, cur, suffix="v"):
+        thing_id = self._insert_minimal_thing(cur, f"t-{suffix}")
+        sensor_id = self._insert_minimal_sensor(cur, f"s-{suffix}")
+        op_id = self._insert_minimal_observed_property(cur, f"op-{suffix}")
+        ds_id = self._insert_minimal_datastream(cur, thing_id, sensor_id, op_id, f"ds-{suffix}")
+        foi_id = self._insert_minimal_foi(cur, f"foi-{suffix}")
+        return ds_id, foi_id, thing_id
+
+    # Tests start
     
     def test_insert_sets_system_time_validity_start(self, schema):
         """
@@ -292,3 +370,94 @@ class TestSchemaVersioning:
             count = cur.fetchone()[0]
 
         assert count == 1
+
+    def test_location_gen_foi_id_update_skips_history(self, schema):
+        """
+        When only gen_foi_id changes on a Location row the trigger must
+        return early (RETURN NEW without archiving), so the history table
+        must remain empty for that row.
+        """
+        with schema.cursor() as cur:
+            loc_id = self._insert_minimal_location(cur, "skip-foi-loc")
+            foi_id = self._insert_minimal_foi(cur, "skip-gen-foi")
+
+            cur.execute(
+                'UPDATE sensorthings."Location" SET "gen_foi_id" = %s WHERE id = %s',
+                (foi_id, loc_id),
+            )
+            cur.execute(
+                'SELECT id FROM sensorthings_history."Location" WHERE id = %s',
+                (loc_id,),
+            )
+            rows = cur.fetchall()
+
+        assert rows == [], (
+            "gen_foi_id-only update must NOT produce an archived row in the history table"
+        )
+    
+    def test_datastream_phenomenontime_update_skips_history(self, schema):
+        """
+        Updating only phenomenonTime on a Datastream must not archive a row.
+        """
+        with schema.cursor() as cur:
+            ds_id, _, _ = self._setup_ds_foi(cur, suffix="skip-pt")
+            cur.execute(
+                """
+                UPDATE sensorthings."Datastream"
+                SET "phenomenonTime" = tstzrange(now(), now() + interval '1 hour')
+                WHERE id = %s
+                """,
+                (ds_id,),
+            )
+            cur.execute(
+                'SELECT id FROM sensorthings_history."Datastream" WHERE id = %s',
+                (ds_id,),
+            )
+            rows = cur.fetchall()
+
+        assert rows == [], (
+            "phenomenonTime-only update must NOT produce an archived row"
+        )
+
+    def test_datastream_observedarea_update_skips_history(self, schema):
+        """
+        Updating only observedArea on a Datastream must not archive a row.
+        """
+        with schema.cursor() as cur:
+            ds_id, _, _ = self._setup_ds_foi(cur, suffix="skip-oa")
+            cur.execute(
+                """
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = ST_SetSRID(ST_MakePoint(10.0, 47.0), 4326)
+                WHERE id = %s
+                """,
+                (ds_id,),
+            )
+            cur.execute(
+                'SELECT id FROM sensorthings_history."Datastream" WHERE id = %s',
+                (ds_id,),
+            )
+            rows = cur.fetchall()
+
+        assert rows == [], (
+            "observedArea-only update must NOT produce an archived row"
+        )
+
+    def test_datastream_name_update_does_archive(self, schema):
+        """
+        Updating a 'normal' column (name) on a Datastream must archive the
+        old row — verifying the skip logic is column-specific.
+        """
+        with schema.cursor() as cur:
+            ds_id, _, _ = self._setup_ds_foi(cur, suffix="arch-ds")
+            cur.execute(
+                "UPDATE sensorthings.\"Datastream\" SET \"name\" = 'renamed' WHERE id = %s",
+                (ds_id,),
+            )
+            cur.execute(
+                'SELECT id FROM sensorthings_history."Datastream" WHERE id = %s',
+                (ds_id,),
+            )
+            rows = cur.fetchall()
+
+        assert len(rows) == 1, "Name update must produce exactly one archived row"
