@@ -461,3 +461,26 @@ class TestSchemaVersioning:
             rows = cur.fetchall()
 
         assert len(rows) == 1, "Name update must produce exactly one archived row"
+
+    @pytest.mark.xfail(reason="Datastream skip logic incorrectly ignores mixed updates")
+    def test_datastream_mixed_update_does_archive(self, schema):
+        with schema.cursor() as cur:
+            ds_id, _, _ = self._setup_ds_foi(cur, suffix="mixed")
+
+            cur.execute(
+                """
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = ST_SetSRID(ST_MakePoint(10.0, 47.0), 4326),
+                    "name" = 'changed'
+                WHERE id = %s
+                """,
+                (ds_id,),
+            )
+
+            cur.execute(
+                'SELECT id FROM sensorthings_history."Datastream" WHERE id = %s',
+                (ds_id,),
+            )
+            rows = cur.fetchall()
+
+        assert len(rows) == 1
