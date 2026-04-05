@@ -523,3 +523,28 @@ class TestSchemaVersioning:
                     'DELETE FROM sensorthings_history."Thing" WHERE id = %s',
                     (thing_id,),
                 )
+    
+    def test_versioned_tables_have_system_time_validity_column(self, schema):
+        """
+        Every table in the canonical versioning list must expose a
+        systemTimeValidity column after schema setup.
+        """
+        tables = [
+            "Location", "Thing", "HistoricalLocation", "ObservedProperty",
+            "Sensor", "Datastream", "FeaturesOfInterest", "Observation",
+        ]
+        with schema.cursor() as cur:
+            for table in tables:
+                cur.execute(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'sensorthings'
+                      AND table_name = %s
+                      AND column_name = 'systemTimeValidity'
+                    """,
+                    (table,),
+                )
+                assert cur.fetchone() is not None, (
+                    f"sensorthings.\"{table}\" must have a systemTimeValidity column"
+                )
