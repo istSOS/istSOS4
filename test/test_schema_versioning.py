@@ -589,3 +589,44 @@ class TestSchemaVersioning:
                     """,
                     (thing_id,),
                 )
+    
+    def test_traveltime_view_contains_live_row(self, schema):
+        """The _traveltime view must include the current live row."""
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "tt-live")
+            cur.execute(
+                'SELECT id FROM sensorthings."Thing_traveltime" WHERE id = %s',
+                (thing_id,),
+            )
+            assert cur.fetchone() is not None
+
+    def test_traveltime_view_contains_archived_row_after_update(self, schema):
+        """After an UPDATE the traveltime view must return both versions."""
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "tt-arch")
+            cur.execute(
+                'UPDATE sensorthings."Thing" SET "description" = \'v2\' WHERE id = %s',
+                (thing_id,),
+            )
+            cur.execute(
+                'SELECT id FROM sensorthings."Thing_traveltime" WHERE id = %s',
+                (thing_id,),
+            )
+            rows = cur.fetchall()
+        assert len(rows) == 2, (
+            "traveltime view must expose both the live row and the archived row"
+        )
+
+    def test_traveltime_view_contains_deleted_row(self, schema):
+        """After DELETE the traveltime view must still expose the deleted version."""
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "tt-del")
+            cur.execute('DELETE FROM sensorthings."Thing" WHERE id = %s', (thing_id,))
+            cur.execute(
+                'SELECT id FROM sensorthings."Thing_traveltime" WHERE id = %s',
+                (thing_id,),
+            )
+            rows = cur.fetchall()
+        assert len(rows) == 1, (
+            "Deleted row must still be visible through the traveltime view via history"
+        )
