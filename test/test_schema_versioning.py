@@ -275,3 +275,20 @@ class TestSchemaVersioning:
             )
             row = cur.fetchone()
         assert row is None
+
+    def test_update_creates_single_history_entry(self, schema):
+        with schema.cursor() as cur:
+            thing_id = self._insert_minimal_thing(cur, "single-hist")
+
+            cur.execute(
+                'UPDATE sensorthings."Thing" SET "description" = \'v2\' WHERE id = %s',
+                (thing_id,),
+            )
+
+            cur.execute(
+                'SELECT COUNT(*) FROM sensorthings_history."Thing" WHERE id = %s',
+                (thing_id,),
+            )
+            count = cur.fetchone()[0]
+
+        assert count == 1
