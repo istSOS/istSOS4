@@ -14,6 +14,7 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.db.redis_db import remove_cache
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Depends, Header, status
@@ -83,6 +84,7 @@ async def delete_sensor(
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
 
+        remove_cache("Sensors")
         return Response(status_code=status.HTTP_200_OK)
     except InsufficientPrivilegeError:
         return JSONResponse(

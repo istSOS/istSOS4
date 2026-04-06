@@ -14,6 +14,7 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.db.redis_db import remove_cache
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role, update_datastream_observedArea
 from asyncpg.exceptions import InsufficientPrivilegeError
@@ -160,6 +161,8 @@ async def update_observation(
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
 
+        remove_cache("Observations")
+        remove_cache("Datastreams")
         return Response(status_code=status.HTTP_200_OK)
     except InsufficientPrivilegeError:
         return JSONResponse(

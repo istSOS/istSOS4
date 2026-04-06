@@ -24,7 +24,7 @@ from app import (
     VERSION,
     VERSIONING,
 )
-from app.db.redis_db import redis
+from app.db.redis_db import set_cache
 from app.db.sqlalchemy_db import engine
 from app.models import *
 from app.sta2rest import sta2rest
@@ -936,7 +936,7 @@ class NodeVisitor(Visitor):
         }
 
         if REDIS:
-            redis.set(self.full_path, json.dumps(main_query))
+            set_cache(self.full_path, json.dumps(main_query))
 
         return main_query
 
