@@ -14,6 +14,7 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.db.redis_db import remove_cache
 from app.utils.utils import validate_payload_keys, validate_required_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
@@ -94,6 +95,7 @@ async def create_observed_property(
 
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
+        remove_cache("ObservedProperties")
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"location": header},
