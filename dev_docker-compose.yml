@@ -18,7 +18,7 @@ services:
         -c custom.epsg=${EPSG:-4326}
         -c custom.user=${ISTSOS_ADMIN:-admin}
         -c custom.password=${ISTSOS_ADMIN_PASSWORD:-admin}
-        -c log_statement="all"
+        -c log_statement="none"
         -c log_destination="stderr"
         -c log_duration="on"
     ports:
