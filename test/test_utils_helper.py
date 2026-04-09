@@ -34,12 +34,10 @@ sys.path.insert(0, API_DIR)
 from api.app.utils.utils import (
     safe_parse_datetime,
     get_result_type_and_column, 
-    extract_iot_id)
-
+    extract_iot_id
+)
 
 # Helper functions
-
-
 def assert_column_value(columns, values, column_name, expected_value):
     """Assert that a named column holds the expected value."""
     assert column_name in columns, (
@@ -52,8 +50,6 @@ def assert_column_value(columns, values, column_name, expected_value):
 
 
 # safe_parse_datetime
-
-
 class TestDatetimeParsing:
     """
     Tests for safe_parse_datetime(), which wraps dateutil.parser.parse
@@ -70,8 +66,6 @@ class TestDatetimeParsing:
 
 
 # extract_iot_id
-
-
 class TestIotIdExtraction:
     """
     Tests for extract_iot_id(), which pulls the '@iot.id' integer from
@@ -92,8 +86,6 @@ class TestIotIdExtraction:
 
 
 # get_result_type_and_column 
-
-
 class TestReturnStructure:
     """
     Verifies the shape of the return value regardless of input type.
