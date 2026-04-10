@@ -60,6 +60,7 @@ from app.v1.endpoints.read import location as read_location
 from app.v1.endpoints.read import network as read_network
 from app.v1.endpoints.read import observation as read_observation
 from app.v1.endpoints.read import observed_property as read_observed_property
+from app.v1.endpoints.read import permissions as read_permissions
 from app.v1.endpoints.read import policy as read_policy
 from app.v1.endpoints.read import read
 from app.v1.endpoints.read import sensor as read_sensor
@@ -93,6 +94,10 @@ if AUTHORIZATION:
         {
             "name": "Policies",
             "description": "Policies for the SensorThings API.",
+        },
+        {
+            "name": "Permissions",
+            "description": "Permission capabilities for the current authenticated user.",
         },
     ]
 else:
@@ -161,6 +166,7 @@ if AUTHORIZATION:
     v1.include_router(update_user.v1)
     v1.include_router(delete_user.v1)
     v1.include_router(read_policy.v1)
+    v1.include_router(read_permissions.v1)
     v1.include_router(create_policy.v1)
     v1.include_router(update_policy.v1)
     v1.include_router(delete_policy.v1)
