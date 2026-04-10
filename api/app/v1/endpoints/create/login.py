@@ -14,6 +14,7 @@
 
 from app import (
     LOGIN_BLOCK_SECONDS,
+    LOGIN_IP_MAX_ATTEMPTS,
     LOGIN_MAX_ATTEMPTS,
     LOGIN_RATE_LIMIT_ENABLED,
     LOGIN_WINDOW_SECONDS,
@@ -36,6 +37,7 @@ login_rate_limiter = LoginRateLimiter(
     max_attempts=LOGIN_MAX_ATTEMPTS,
     window_seconds=LOGIN_WINDOW_SECONDS,
     block_seconds=LOGIN_BLOCK_SECONDS,
+    ip_max_attempts=LOGIN_IP_MAX_ATTEMPTS,
 )
 
 
@@ -71,22 +73,10 @@ async def login(
     user_data = await authenticate_user(username, form_data.password)
     if not user_data:
         if LOGIN_RATE_LIMIT_ENABLED:
-            blocked_now, retry_after = login_rate_limiter.register_failure(
+            login_rate_limiter.register_failure(
                 username,
                 client_ip,
             )
-            if blocked_now:
-                emit_login_audit(
-                    username=username,
-                    client_ip=client_ip,
-                    status="throttled",
-                    detail="threshold-reached",
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Too many login attempts. Try again later.",
-                    headers={"Retry-After": str(retry_after)},
-                )
 
         emit_login_audit(
             username=username,

@@ -22,6 +22,7 @@ Login endpoint protection is enabled by default and can be tuned with:
 
 - `LOGIN_RATE_LIMIT_ENABLED` (default `1`)
 - `LOGIN_MAX_ATTEMPTS` (default `5`)
+- `LOGIN_IP_MAX_ATTEMPTS` (default `3 x LOGIN_MAX_ATTEMPTS`)
 - `LOGIN_WINDOW_SECONDS` (default `60`)
 - `LOGIN_BLOCK_SECONDS` (default `300`)
 
