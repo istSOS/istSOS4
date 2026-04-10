@@ -176,6 +176,21 @@ def _apply_policy_permissions(
         _set_permissions_from_command(permission, str(command))
 
 
+def _extract_identity(current_user):
+    if not isinstance(current_user, dict):
+        return None, None
+
+    username = current_user.get("username")
+    role = current_user.get("role")
+
+    if not isinstance(username, str) or not username:
+        return None, None
+    if not isinstance(role, str) or not role:
+        return None, None
+
+    return username, role
+
+
 @v1.api_route(
     "/Permissions",
     methods=["GET"],
@@ -190,9 +205,16 @@ async def get_permissions(
     pool=Depends(get_pool),
 ):
     try:
+        username, role = _extract_identity(current_user)
+        if username is None or role is None:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"message": "Could not validate credentials"},
+            )
+
         permissions = PermissionsPayload()
 
-        if current_user["role"] == "administrator":
+        if role == "administrator":
             _apply_admin_permissions(permissions)
         else:
             async with pool.acquire() as connection:
@@ -200,17 +222,17 @@ async def get_permissions(
                     SELECT tablename, cmd
                     FROM pg_policies
                     WHERE schemaname = 'sensorthings'
-                      AND ($1 = ANY (roles) OR 'public' = ANY (roles));
+                      AND ($1 = ANY (roles)
+                           OR $2 = ANY (roles)
+                           OR 'public' = ANY (roles));
                 """
-                policy_rows = await connection.fetch(
-                    query, current_user["username"]
-                )
+                policy_rows = await connection.fetch(query, username, role)
 
             _apply_policy_permissions(permissions, policy_rows)
 
         return PermissionsResponse(
-            username=current_user["username"],
-            role=current_user["role"],
+            username=username,
+            role=role,
             permissions=permissions,
         )
     except InsufficientPrivilegeError:

@@ -36,6 +36,9 @@ import app.v1.endpoints.read.permissions as permissions  # noqa: E402
 permissions = importlib.reload(permissions)
 
 
+_NO_OVERRIDE = object()
+
+
 class MockAcquire:
     def __init__(self, connection):
         self.connection = connection
@@ -61,7 +64,7 @@ class MockPool:
         return MockAcquire(self.connection)
 
 
-def _build_test_client(rows, current_user_override=None):
+def _build_test_client(rows, current_user_override=_NO_OVERRIDE):
     test_app = FastAPI()
     test_app.include_router(permissions.v1)
 
@@ -72,7 +75,7 @@ def _build_test_client(rows, current_user_override=None):
 
     test_app.dependency_overrides[permissions.get_pool] = override_get_pool
 
-    if current_user_override is not None:
+    if current_user_override is not _NO_OVERRIDE:
 
         async def override_current_user():
             return current_user_override
@@ -196,6 +199,42 @@ def test_permissions_endpoint_requires_auth_when_not_overridden():
     response = client.get("/Permissions")
 
     assert response.status_code == 401
+
+
+def test_malformed_current_user_returns_401():
+    client, _ = _build_test_client(rows=[], current_user_override={})
+
+    response = client.get("/Permissions")
+
+    assert response.status_code == 401
+    assert response.json() == {"message": "Could not validate credentials"}
+
+
+def test_role_membership_is_used_for_policy_lookup():
+    rows = [{"tablename": "Datastream", "cmd": "SELECT"}]
+
+    client, pool = _build_test_client(
+        rows=rows,
+        current_user_override={"username": "alice", "role": "editor"},
+    )
+
+    response = client.get("/Permissions")
+    assert response.status_code == 200
+
+    pool.connection.fetch.assert_awaited_once()
+    await_args = pool.connection.fetch.await_args
+    assert await_args is not None
+    fetch_args = await_args.args
+    assert fetch_args[1] == "alice"
+    assert fetch_args[2] == "editor"
+
+    perms = response.json()["permissions"]
+    assert perms["datastreams"] == {
+        "read": True,
+        "create": False,
+        "update": False,
+        "delete": False,
+    }
 
 
 def test_response_schema_forbids_extra_fields():
