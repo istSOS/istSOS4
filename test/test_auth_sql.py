@@ -664,3 +664,69 @@ class TestAuth:
                 assert cur.fetchone() is not None, (
                     f"anonymous_{table.lower()} policy missing"
                 )
+
+    """
+    8. Policy generation functions
+    """
+    
+    @pytest.mark.xfail(
+        reason="Policy functions rely on unsafe current_setting('custom.network') access",
+        strict=True,
+    )
+    @pytest.mark.parametrize(
+        "fn_name, pname, expected_count",
+        [
+            ("viewer_policy", "test-viewer", len(RLS_TABLES)),
+            ("editor_policy", "test-editor", len(RLS_TABLES)),
+            ("sensor_policy", "test-sensor-pol", 12),
+            ("obs_manager_policy", "test-obsmgr-pol", 11),
+        ],
+    )
+    def test_policy_creates_expected_number_of_policies(self, schema, fn_name, pname, expected_count):
+        """
+        ============================================================
+        POLICY GENERATION CONTRACT TEST
+
+        This test validates that each policy helper function creates
+        the correct number of policies in pg_policies.
+
+        Breakdown:
+        - viewer_policy:
+            → 1 SELECT policy per RLS table
+
+        - editor_policy:
+            → 1 ALL policy per RLS table
+
+        - sensor_policy:
+            → SELECT on all RLS tables
+            → + INSERT (Observation, FeaturesOfInterest)
+            → + UPDATE (Datastream, Location)
+            → = 12 total
+
+        - obs_manager_policy:
+            → SELECT on all non-Observation tables
+            → + ALL on Observation
+            → + INSERT FOI
+            → + UPDATE (Datastream, Location)
+            → = 11 total
+
+        NOTE:
+        We validate via policy count using a prefix (policyname LIKE pname%).
+        ============================================================
+        """
+        with schema.cursor() as cur:
+            cur.execute(
+                f"SELECT sensorthings.{fn_name}(%s::text[], %s)",
+                (["guest"], pname),
+            )
+            cur.execute(
+                """
+                SELECT count(*) FROM pg_policies
+                WHERE schemaname = 'sensorthings'
+                AND policyname LIKE %s
+                """,
+                (f"{pname}%",),
+            )
+            count = cur.fetchone()[0]
+
+        assert count == expected_count
