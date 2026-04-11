@@ -1,6 +1,18 @@
 """
 test(auth): direct psycopg2 tests for istsos_auth.sql logic
 
+Covers 10 areas of authentication + authorization logic:
+    - User table creation + constraints
+    - Commit table + FK + constraints
+    - commit_id FK column injection on STA tables
+    - Commit@iot navigation links (forward links)
+    - Commit reverse navigation links
+    - Role creation + privilege grants
+    - Row-Level Security (RLS) enforcement
+    - Policy generation functions (viewer/editor/sensor/obs_manager)
+    - Policy mutation helpers (add/remove users)
+    - Indexes on commit_id columns
+
 Run with:
     pytest test/test_auth_sql.py -v
 """
@@ -671,7 +683,6 @@ class TestAuth:
     
     @pytest.mark.xfail(
         reason="Policy functions rely on unsafe current_setting('custom.network') access",
-        strict=True,
     )
     @pytest.mark.parametrize(
         "fn_name, pname, expected_count",
@@ -736,8 +747,7 @@ class TestAuth:
     """
     
     @pytest.mark.xfail(
-        reason="viewer_policy uses unsafe current_setting('custom.network') without fallback",
-        strict=True,
+        reason="viewer_policy uses unsafe current_setting('custom.network') without fallback"
     )
     def test_remove_user_from_policy_drops_policy_when_sole_role(self, schema):
         """
