@@ -681,9 +681,6 @@ class TestAuth:
     8. Policy generation functions
     """
     
-    @pytest.mark.xfail(
-        reason="Policy functions rely on unsafe current_setting('custom.network') access",
-    )
     @pytest.mark.parametrize(
         "fn_name, pname, expected_count",
         [
@@ -746,9 +743,6 @@ class TestAuth:
     9. remove_user_from_policy and add_users_to_policy
     """
     
-    @pytest.mark.xfail(
-        reason="viewer_policy uses unsafe current_setting('custom.network') without fallback"
-    )
     def test_remove_user_from_policy_drops_policy_when_sole_role(self, schema):
         """
         remove_user_from_policy must DROP a policy entirely when the removed
