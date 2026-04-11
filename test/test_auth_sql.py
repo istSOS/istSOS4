@@ -586,3 +586,27 @@ class TestAuth:
         with schema.cursor() as cur:
             cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,))
             assert cur.fetchone() is not None
+    
+    @pytest.mark.parametrize(
+        "role, table, privilege, expected",
+        [
+            ("guest",  'sensorthings."User"',        "SELECT", False),
+            ("guest",  'sensorthings."Thing"',       "SELECT", True),
+
+            ("user",   'sensorthings."User"',        "INSERT", False),
+            ("user",   'sensorthings."Commit"',      "UPDATE", False),
+
+            ("sensor", 'sensorthings."User"',        "SELECT", False),
+            ("sensor", 'sensorthings."Observation"', "INSERT", True),
+            ("sensor", 'sensorthings."Commit"',      "INSERT", True),
+        ],
+    )
+    def test_role_table_privileges(self, schema, role, table, privilege, expected):
+        """Validate role-based privileges across tables."""
+        with schema.cursor() as cur:
+            cur.execute(
+                "SELECT has_table_privilege(%s, %s, %s)",
+                (role, table, privilege),
+            )
+            assert cur.fetchone()[0] is expected
+
