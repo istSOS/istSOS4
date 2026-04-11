@@ -28,12 +28,23 @@ COMMIT_ID_TABLES = [
     "Observation",
 ]
 
+# Tables that must have RLS enabled
+RLS_TABLES = [
+    "Location",
+    "Thing",
+    "HistoricalLocation",
+    "ObservedProperty",
+    "Sensor",
+    "Datastream",
+    "FeaturesOfInterest",
+    "Observation",
+]
+
 def _get_raw_conn():
     """Open a connection with autocommit so DDL runs freely."""
     conn = psycopg2.connect(DSN)
     conn.autocommit = True
     return conn
-
 
 def _recreate_database():
     conn = psycopg2.connect(ADMIN_DSN)
@@ -90,7 +101,6 @@ def _recreate_database():
 
     conn.close()
 
-
 def _load_schema(conn):
     sql = SCHEMA_PATH.read_text()
     with conn.cursor() as cur:
@@ -101,11 +111,10 @@ def _load_schema(conn):
         cur.execute("SET custom.password = 'testpassword'")
         cur.execute(sql)
 
-
 def _load_auth(conn):
     sql = AUTH_PATH.read_text()
     with conn.cursor() as cur:
-        cur.execute('SET "custom.authorization" = \'true\'')
+        cur.execute("SELECT set_config('custom.authorization', 'true', false)")
         cur.execute("SET custom.network = 'false'")
         cur.execute('SET "custom.user" = \'testuser\'')
         cur.execute(sql)
@@ -610,3 +619,48 @@ class TestAuth:
             )
             assert cur.fetchone()[0] is expected
 
+    """
+    7. Row-level security
+    """
+
+    def test_rls_enabled_on_all_core_tables(self, schema):
+        """RLS must be enabled on every core STA table after auth loads."""
+        with schema.cursor() as cur:
+            for table in RLS_TABLES:
+                cur.execute(
+                    """
+                    SELECT relrowsecurity
+                    FROM pg_class c
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    WHERE n.nspname = 'sensorthings' AND c.relname = %s
+                    """,
+                    (table,),
+                )
+                row = cur.fetchone()
+                assert row is not None and row[0] is True, (
+                    f"RLS not enabled on {table}"
+                )
+
+    def test_anonymous_guest_policy_exists_for_all_core_tables(self, schema):
+        """
+        anonymous_<table> SELECT policy for 'guest' must exist on every core table.
+
+        NOTE (IMPORTANT):
+        PostgreSQL lowercases the identifiers when stored in pg_policies. So even if
+        policies are created as 'anonymous_Location' in the istsos_auth.sql file,
+        they appear as 'anonymous_location' in pg_policies and the tests take that into account.
+        """
+        with schema.cursor() as cur:
+            for table in RLS_TABLES:
+                cur.execute(
+                    """
+                    SELECT 1 FROM pg_policies
+                    WHERE schemaname = 'sensorthings'
+                    AND tablename = %s
+                    AND policyname = %s
+                    """,
+                    (table, f"anonymous_{table.lower()}"),
+                )
+                assert cur.fetchone() is not None, (
+                    f"anonymous_{table.lower()} policy missing"
+                )
