@@ -143,6 +143,18 @@ class TestAuth:
         )
         return self._get_id(cur.fetchone())
 
+    def _insert_commit(self, cur, user_id, action="CREATE"):
+        cur.execute(
+            """
+            INSERT INTO sensorthings."Commit"
+                (author, message, "actionType", user_id)
+            VALUES ('author', 'test commit', %s, %s)
+            RETURNING id
+            """,
+            (action, user_id),
+        )
+        return self._get_id(cur.fetchone())
+    
     """
     1. User table
     """
@@ -197,3 +209,90 @@ class TestAuth:
             )
             link = cur.fetchone()[0]
         assert link == f"/Users({uid})"
+
+
+    """
+    2. Commit table
+    """
+
+    def test_commit_table_exists(self, schema):
+        """sensorthings.Commit table must be created by the auth script."""
+        with schema.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'sensorthings' AND table_name = 'Commit'
+                """
+            )
+            row = cur.fetchone()
+        assert row is not None
+
+    def test_commit_has_required_columns(self, schema):
+        """Commit table must expose id, author, message, date, actionType, user_id."""
+        with schema.cursor() as cur:
+            cur.execute(
+                """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = 'sensorthings' AND table_name = 'Commit'
+                """
+            )
+            cols = {r[0] for r in cur.fetchall()}
+        for expected in ("id", "author", "message", "date", "actionType", "user_id"):
+            assert expected in cols, f"Commit table missing column: {expected}"
+
+    @pytest.mark.parametrize("action", ["CREATE", "UPDATE", "DELETE"])
+    def test_commit_action_type_accepts_valid_values(self, schema, action):
+        """All three valid actionType values must be accepted without error."""
+        with schema.cursor() as cur:
+            uid = self._insert_user(cur, username=f"u-action-{action}")
+            cid = self._insert_commit(cur, uid, action=action)
+        assert isinstance(cid, int)
+
+    def test_commit_action_type_rejects_invalid(self, schema):
+        """actionType outside CREATE/UPDATE/DELETE must raise CheckViolation."""
+        with schema.cursor() as cur:
+            uid = self._insert_user(cur, username="u-bad-action")
+            with pytest.raises(psycopg2.errors.CheckViolation):
+                cur.execute(
+                    """
+                    INSERT INTO sensorthings."Commit"
+                        (author, message, "actionType", user_id)
+                    VALUES ('a', 'msg', 'PATCH', %s)
+                    """,
+                    (uid,),
+                )
+
+    def test_commit_selflink_format(self, schema):
+        with schema.cursor() as cur:
+            uid = self._insert_user(cur, username="sl-commit-user")
+            cid = self._insert_commit(cur, uid)
+            cur.execute(
+                'SELECT "@iot.selfLink"(c) FROM sensorthings."Commit" c WHERE id = %s',
+                (cid,),
+            )
+            link = cur.fetchone()[0]
+        assert link == f"/Commits({cid})"
+
+    def test_commit_user_id_fk_enforced(self, schema):
+        """Inserting a Commit with a non-existent user_id must raise ForeignKeyViolation."""
+        with schema.cursor() as cur:
+            with pytest.raises(psycopg2.errors.ForeignKeyViolation):
+                cur.execute(
+                    """
+                    INSERT INTO sensorthings."Commit"
+                        (author, message, "actionType", user_id)
+                    VALUES ('a', 'msg', 'CREATE', 999999)
+                    """
+                )
+
+    def test_deleting_user_cascades_to_commit(self, schema):
+        """Deleting a User must cascade-delete all their Commits."""
+        with schema.cursor() as cur:
+            uid = self._insert_user(cur, username="u-cascade")
+            cid = self._insert_commit(cur, uid)
+            cur.execute('DELETE FROM sensorthings."User" WHERE id = %s', (uid,))
+            cur.execute(
+                'SELECT id FROM sensorthings."Commit" WHERE id = %s', (cid,)
+            )
+            row = cur.fetchone()
+        assert row is None, "Commit must be deleted when its User is deleted"
