@@ -460,9 +460,9 @@ class TestAuth:
                     """
                 )
 
-    # -------------------------------------------------------------------------
-    # 4. Commit@iot.navigationLink on each STA entity
-    # -------------------------------------------------------------------------
+    """
+    4. Commit@iot.navigationLink on each STA entity
+    """
 
     @pytest.mark.parametrize(
         "table, alias, insert_fn, path",
@@ -525,3 +525,53 @@ class TestAuth:
             link = cur.fetchone()[0]
 
         assert link is None
+    
+    """
+    5. Reverse nav functions on Commit
+    """
+
+    @pytest.mark.parametrize(
+        "entity, insert_fn, nav_fn, expected_path, should_exist",
+        [
+            ("Thing", "_insert_minimal_thing", "Things@iot.navigationLink", "Things", True),
+            ("Thing", None, "Things@iot.navigationLink", "Things", False),
+
+            ("Location", "_insert_minimal_location", "Locations@iot.navigationLink", "Locations", True),
+
+            ("Sensor", "_insert_minimal_sensor", "Sensors@iot.navigationLink", "Sensors", True),
+
+            ("ObservedProperty", "_insert_minimal_observed_property",
+            "ObservedProperties@iot.navigationLink", "ObservedProperties", True),
+
+            ("Datastream", None, "Datastreams@iot.navigationLink", "Datastreams", False),
+
+            ("Observation", None, "Observations@iot.navigationLink", "Observations", False),
+        ],
+    )
+    def test_commit_reverse_navigation_links(
+        self, schema, entity, insert_fn, nav_fn, expected_path, should_exist
+    ):
+        """
+        Reverse navigation links from Commit should:
+        - Return correct path when entity references the commit
+        - Return NULL when no entity references the commit
+        """
+        with schema.cursor() as cur:
+            uid = self._insert_user(cur, username=f"u-rev-{entity}")
+            cid = self._insert_commit(cur, uid)
+
+            # insert_fn: helper to insert entity linked to this commit (cur, commit_id, name)
+            if insert_fn:
+                fn = getattr(self, insert_fn)
+                fn(cur, cid, name=f"rev-{entity.lower()}")
+
+            cur.execute(
+                f'SELECT "{nav_fn}"(c) FROM sensorthings."Commit" c WHERE id = %s',
+                (cid,),
+            )
+            link = cur.fetchone()[0]
+
+        if should_exist:
+            assert link == f"/Commits({cid})/{expected_path}"
+        else:
+            assert link is None
