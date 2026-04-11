@@ -16,6 +16,18 @@ DSN = "postgresql://postgres:15889@localhost:5432/istsos_test_auth"
 ADMIN_DSN = "postgresql://postgres:15889@localhost:5432/postgres"
 TEST_DB = "istsos_test_auth"
 
+# STA tables that auth adds a commit_id column to
+COMMIT_ID_TABLES = [
+    "Location",
+    "Thing",
+    "HistoricalLocation",
+    "ObservedProperty",
+    "Sensor",
+    "Datastream",
+    "FeaturesOfInterest",
+    "Observation",
+]
+
 def _get_raw_conn():
     """Open a connection with autocommit so DDL runs freely."""
     conn = psycopg2.connect(DSN)
@@ -263,6 +275,7 @@ class TestAuth:
                 )
 
     def test_commit_selflink_format(self, schema):
+        """@iot.selfLink for Commit must return '/Commits(<id>)'."""
         with schema.cursor() as cur:
             uid = self._insert_user(cur, username="sl-commit-user")
             cid = self._insert_commit(cur, uid)
@@ -296,3 +309,73 @@ class TestAuth:
             )
             row = cur.fetchone()
         assert row is None, "Commit must be deleted when its User is deleted"
+
+
+    """
+    3. commit_id FK columns on all STA entity tables
+    """
+
+    def test_commit_id_column_present_on_all_sta_tables(self, schema):
+        """commit_id column must exist on every STA entity table."""
+        with schema.cursor() as cur:
+            for table in COMMIT_ID_TABLES:
+                cur.execute(
+                    """
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'sensorthings'
+                      AND table_name = %s AND column_name = 'commit_id'
+                    """,
+                    (table,),
+                )
+                assert cur.fetchone() is not None, (
+                    f"commit_id column missing on {table}"
+                )
+
+    def test_thing_commit_id_is_not_nullable(self, schema):
+        """Thing.commit_id is declared NOT NULL in the auth schema."""
+        with schema.cursor() as cur:
+            cur.execute(
+                """
+                SELECT is_nullable FROM information_schema.columns
+                WHERE table_schema = 'sensorthings'
+                  AND table_name = 'Thing' AND column_name = 'commit_id'
+                """
+            )
+            assert cur.fetchone()[0] == "NO"
+
+    def test_datastream_commit_id_is_nullable(self, schema):
+        """Datastream.commit_id has no NOT NULL constraint in the auth schema."""
+        with schema.cursor() as cur:
+            cur.execute(
+                """
+                SELECT is_nullable FROM information_schema.columns
+                WHERE table_schema = 'sensorthings'
+                  AND table_name = 'Datastream' AND column_name = 'commit_id'
+                """
+            )
+            assert cur.fetchone()[0] == "YES"
+
+    def test_observation_commit_id_is_nullable(self, schema):
+        """Observation.commit_id has no NOT NULL constraint in the auth schema."""
+        with schema.cursor() as cur:
+            cur.execute(
+                """
+                SELECT is_nullable FROM information_schema.columns
+                WHERE table_schema = 'sensorthings'
+                  AND table_name = 'Observation' AND column_name = 'commit_id'
+                """
+            )
+            assert cur.fetchone()[0] == "YES"
+
+    def test_commit_id_fk_rejects_orphan_on_thing(self, schema):
+        """Inserting a Thing with a non-existent commit_id must raise ForeignKeyViolation."""
+        with schema.cursor() as cur:
+            with pytest.raises(psycopg2.errors.ForeignKeyViolation):
+                cur.execute(
+                    """
+                    INSERT INTO sensorthings."Thing"
+                        (name, description, commit_id)
+                    VALUES ('orphan', 'desc', 999999)
+                    """
+                )
+    
