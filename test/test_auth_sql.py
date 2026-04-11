@@ -331,41 +331,29 @@ class TestAuth:
                     f"commit_id column missing on {table}"
                 )
 
-    def test_thing_commit_id_is_not_nullable(self, schema):
-        """Thing.commit_id is declared NOT NULL in the auth schema."""
+    @pytest.mark.parametrize(
+        "table, expected_nullable",
+        [
+            ("Thing", "NO"),
+            ("Location", "NO"),
+            ("Sensor", "NO"),
+            ("ObservedProperty", "NO"),
+            ("Datastream", "YES"),
+            ("Observation", "YES"),
+            ("FeaturesOfInterest", "YES"),
+        ],
+    )
+    def test_commit_id_nullability(self, schema, table, expected_nullable):
         with schema.cursor() as cur:
             cur.execute(
                 """
                 SELECT is_nullable FROM information_schema.columns
                 WHERE table_schema = 'sensorthings'
-                  AND table_name = 'Thing' AND column_name = 'commit_id'
-                """
+                AND table_name = %s AND column_name = 'commit_id'
+                """,
+                (table,),
             )
-            assert cur.fetchone()[0] == "NO"
-
-    def test_datastream_commit_id_is_nullable(self, schema):
-        """Datastream.commit_id has no NOT NULL constraint in the auth schema."""
-        with schema.cursor() as cur:
-            cur.execute(
-                """
-                SELECT is_nullable FROM information_schema.columns
-                WHERE table_schema = 'sensorthings'
-                  AND table_name = 'Datastream' AND column_name = 'commit_id'
-                """
-            )
-            assert cur.fetchone()[0] == "YES"
-
-    def test_observation_commit_id_is_nullable(self, schema):
-        """Observation.commit_id has no NOT NULL constraint in the auth schema."""
-        with schema.cursor() as cur:
-            cur.execute(
-                """
-                SELECT is_nullable FROM information_schema.columns
-                WHERE table_schema = 'sensorthings'
-                  AND table_name = 'Observation' AND column_name = 'commit_id'
-                """
-            )
-            assert cur.fetchone()[0] == "YES"
+            assert cur.fetchone()[0] == expected_nullable
 
     def test_commit_id_fk_rejects_orphan_on_thing(self, schema):
         """Inserting a Thing with a non-existent commit_id must raise ForeignKeyViolation."""
