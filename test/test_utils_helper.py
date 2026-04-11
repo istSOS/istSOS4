@@ -64,6 +64,9 @@ class TestDatetimeParsing:
         assert safe_parse_datetime("0000-00-00") is None
         assert safe_parse_datetime("N/A") is None
 
+    def test_safe_parse_datetime_none(self):
+        assert safe_parse_datetime(None) is None
+
 
 # extract_iot_id
 class TestIotIdExtraction:
@@ -83,6 +86,14 @@ class TestIotIdExtraction:
     def test_extract_iot_id_missing_key(self):
         with pytest.raises(ValueError, match="Missing '@iot.id'"):
             extract_iot_id({})
+
+    def test_extract_iot_id_non_integer(self):
+        with pytest.raises(ValueError, match="Expected int"):
+            extract_iot_id({"@iot.id": "42"})
+    
+    def test_extract_iot_id_none_value(self):
+        with pytest.raises(ValueError, match="Expected int"):
+            extract_iot_id({"@iot.id": None})
 
 
 # get_result_type_and_column 
