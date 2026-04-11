@@ -730,3 +730,45 @@ class TestAuth:
             count = cur.fetchone()[0]
 
         assert count == expected_count
+
+    """
+    9. remove_user_from_policy and add_users_to_policy
+    """
+    
+    @pytest.mark.xfail(
+        reason="viewer_policy uses unsafe current_setting('custom.network') without fallback",
+        strict=True,
+    )
+    def test_remove_user_from_policy_drops_policy_when_sole_role(self, schema):
+        """
+        remove_user_from_policy must DROP a policy entirely when the removed
+        role was the only member, leaving no dangling empty policy.
+        """
+        pname = "test-remove-pol"
+        with schema.cursor() as cur:
+            cur.execute(
+                "SELECT sensorthings.viewer_policy(%s::text[], %s)",
+                (["guest"], pname),
+            )
+            cur.execute(
+                "SELECT sensorthings.remove_user_from_policy('guest')"
+            )
+            cur.execute(
+                """
+                SELECT count(*) FROM pg_policies
+                WHERE schemaname = 'sensorthings'
+                  AND policyname LIKE %s
+                """,
+                (f"{pname}%",),
+            )
+            count = cur.fetchone()[0]
+        assert count == 0, "All policies must be dropped when the last role is removed"
+
+    def test_add_users_to_policy_raises_for_missing_policy(self, schema):
+        """add_users_to_policy must raise an error (ERRCODE 42704) for a non-existent policy name."""
+        with schema.cursor() as cur:
+            with pytest.raises(psycopg2.errors.UndefinedObject):
+                cur.execute(
+                    "SELECT sensorthings.add_users_to_policy(%s::text[], %s)",
+                    (["guest"], "nonexistent_policy_xyz"),
+                )
