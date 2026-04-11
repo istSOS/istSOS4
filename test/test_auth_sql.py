@@ -575,3 +575,14 @@ class TestAuth:
             assert link == f"/Commits({cid})/{expected_path}"
         else:
             assert link is None
+
+    """
+    6. Role existence and privilege grants
+    """
+
+    @pytest.mark.parametrize("role", ["user", "guest", "sensor"])
+    def test_roles_exist(self, schema, role):
+        """All required roles must be created by the auth script."""
+        with schema.cursor() as cur:
+            cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,))
+            assert cur.fetchone() is not None
