@@ -772,3 +772,32 @@ class TestAuth:
                     "SELECT sensorthings.add_users_to_policy(%s::text[], %s)",
                     (["guest"], "nonexistent_policy_xyz"),
                 )
+
+    """
+    10. Btree indexes on commit_id
+    """
+
+    def test_commit_id_indexes_exist_for_all_sta_tables(self, schema):
+        """Btree index on commit_id must exist for every STA entity table."""
+        expected = {
+            "Location": "idx_location_commit_id",
+            "Thing": "idx_thing_commit_id",
+            "HistoricalLocation": "idx_historicallocation_commit_id",
+            "ObservedProperty": "idx_observedproperty_commit_id",
+            "Sensor": "idx_sensor_commit_id",
+            "Datastream": "idx_datastream_commit_id",
+            "FeaturesOfInterest": "idx_featuresofinterest_commit_id",
+            "Observation": "idx_observation_commit_id",
+        }
+        with schema.cursor() as cur:
+            for table, idx in expected.items():
+                cur.execute(
+                    """
+                    SELECT 1 FROM pg_indexes
+                    WHERE schemaname = 'sensorthings' AND indexname = %s
+                    """,
+                    (idx,),
+                )
+                assert cur.fetchone() is not None, (
+                    f"Index {idx} missing for {table}"
+                )
