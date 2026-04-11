@@ -167,6 +167,99 @@ class TestAuth:
         )
         return self._get_id(cur.fetchone())
     
+    def _insert_minimal_location(self, cur, commit_id, name="test-loc"):
+        cur.execute(
+            """
+            INSERT INTO sensorthings."Location"
+                (name, description, "encodingType", location, commit_id)
+            VALUES (%s, 'desc', 'application/geo+json',
+                    ST_SetSRID(ST_MakePoint(9.0, 46.0), 4326), %s)
+            RETURNING id
+            """,
+            (name, commit_id),
+        )
+        return self._get_id(cur.fetchone())
+    
+    def _insert_minimal_thing(self, cur, commit_id, name="test-thing"):
+        cur.execute(
+            """
+            INSERT INTO sensorthings."Thing"
+                (name, description, commit_id)
+            VALUES (%s, 'desc', %s)
+            RETURNING id
+            """,
+            (name, commit_id),
+        )
+        return self._get_id(cur.fetchone())
+
+    def _insert_minimal_sensor(self, cur, commit_id, name="test-sensor"):
+        cur.execute(
+            """
+            INSERT INTO sensorthings."Sensor"
+                (name, description, "encodingType", metadata, commit_id)
+            VALUES (%s, 'desc', 'application/pdf', 'http://meta', %s)
+            RETURNING id
+            """,
+            (name, commit_id),
+        )
+        return self._get_id(cur.fetchone())
+
+    def _insert_minimal_observed_property(self, cur, commit_id, name="test-op"):
+        cur.execute(
+            """
+            INSERT INTO sensorthings."ObservedProperty"
+                (name, definition, description, commit_id)
+            VALUES (%s, 'http://def', 'desc', %s)
+            RETURNING id
+            """,
+            (name, commit_id),
+        )
+        return self._get_id(cur.fetchone())
+
+    def _insert_minimal_datastream(self, cur, thing_id, sensor_id, op_id,
+                                   commit_id=None, name="test-ds"):
+        cur.execute(
+            """
+            INSERT INTO sensorthings."Datastream"
+                (name, description, "unitOfMeasurement",
+                 "observationType", thing_id, sensor_id,
+                 "observedproperty_id", commit_id)
+            VALUES (%s, 'desc',
+                    '{"name":"C","symbol":"C","definition":"http://d"}'::jsonb,
+                    'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement',
+                    %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (name, thing_id, sensor_id, op_id, commit_id),
+        )
+        return self._get_id(cur.fetchone())
+
+    def _insert_minimal_foi(self, cur, commit_id=None, name="test-foi"):
+        cur.execute(
+            """
+            INSERT INTO sensorthings."FeaturesOfInterest"
+                (name, description, "encodingType", feature, commit_id)
+            VALUES (%s, 'desc', 'application/geo+json',
+                    ST_SetSRID(ST_MakePoint(9.0, 46.0), 4326), %s)
+            RETURNING id
+            """,
+            (name, commit_id),
+        )
+        return self._get_id(cur.fetchone())
+
+    def _setup_entities(self, cur, suffix="auth"):
+        """Insert a User + Commit + full STA entity chain. Returns (uid, cid, thing_id, sensor_id, op_id, ds_id, foi_id)."""
+        uid = self._insert_user(cur, username=f"u-{suffix}")
+        cid = self._insert_commit(cur, uid)
+        thing_id = self._insert_minimal_thing(cur, cid, name=f"t-{suffix}")
+        sensor_id = self._insert_minimal_sensor(cur, cid, name=f"s-{suffix}")
+        op_id = self._insert_minimal_observed_property(cur, cid, name=f"op-{suffix}")
+        ds_id = self._insert_minimal_datastream(
+            cur, thing_id, sensor_id, op_id, commit_id=cid, name=f"ds-{suffix}"
+        )
+        foi_id = self._insert_minimal_foi(cur, commit_id=cid, name=f"foi-{suffix}")
+        return uid, cid, thing_id, sensor_id, op_id, ds_id, foi_id
+    
     """
     1. User table
     """
@@ -366,4 +459,69 @@ class TestAuth:
                     VALUES ('orphan', 'desc', 999999)
                     """
                 )
+
+    # -------------------------------------------------------------------------
+    # 4. Commit@iot.navigationLink on each STA entity
+    # -------------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "table, alias, insert_fn, path",
+        [
+            ("Location", "l", "_insert_minimal_location", "Locations"),
+            ("Thing", "t", "_insert_minimal_thing", "Things"),
+            ("Sensor", "s", "_insert_minimal_sensor", "Sensors"),
+            ("ObservedProperty", "op", "_insert_minimal_observed_property", "ObservedProperties"),
+            ("FeaturesOfInterest", "f", "_insert_minimal_foi", "FeaturesOfInterest"),
+        ],
+    )
+    def test_commit_nav_link(self, schema, table, alias, insert_fn, path):
+        with schema.cursor() as cur:
+            uid = self._insert_user(cur, username=f"u-{table}-nav")
+            cid = self._insert_commit(cur, uid)
+
+            fn = getattr(self, insert_fn)
+
+            # FOI needs commit_id explicitly
+            if table == "FeaturesOfInterest":
+                entity_id = fn(cur, commit_id=cid, name=f"nav-{table}")
+            else:
+                entity_id = fn(cur, cid, name=f"nav-{table}")
+
+            cur.execute(
+                f'SELECT "Commit@iot.navigationLink"({alias}) '
+                f'FROM sensorthings."{table}" {alias} WHERE id = %s',
+                (entity_id,),
+            )
+            link = cur.fetchone()[0]
+
+        assert link == f"/{path}({entity_id})/Commit({cid})"
     
+    def test_datastream_commit_nav_link(self, schema):
+        with schema.cursor() as cur:
+            _, cid, _, _, _, ds_id, _ = self._setup_entities(cur, suffix="ds-nav")
+
+            cur.execute(
+                'SELECT "Commit@iot.navigationLink"(ds) '
+                'FROM sensorthings."Datastream" ds WHERE id = %s',
+                (ds_id,),
+            )
+            link = cur.fetchone()[0]
+
+        assert link == f"/Datastreams({ds_id})/Commit({cid})"
+    
+    def test_datastream_commit_nav_link_null_when_commit_id_null(self, schema):
+        with schema.cursor() as cur:
+            _, _, tid, sid, op_id, _, _ = self._setup_entities(cur, suffix="ds-null-nav")
+
+            ds_id = self._insert_minimal_datastream(
+                cur, tid, sid, op_id, commit_id=None, name="ds-no-commit"
+            )
+
+            cur.execute(
+                'SELECT "Commit@iot.navigationLink"(ds) '
+                'FROM sensorthings."Datastream" ds WHERE id = %s',
+                (ds_id,),
+            )
+            link = cur.fetchone()[0]
+
+        assert link is None
