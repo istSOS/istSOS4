@@ -13,16 +13,25 @@
 # limitations under the License.
 
 import json
+import re
 
-from app import ST_AGGREGATE
+from app import EPSG, ST_AGGREGATE
+from app.utils.utils import pg_quote_ident
+
+_PG_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _validate_role_identifier(username: str) -> str:
+    if not isinstance(username, str) or not _PG_IDENTIFIER_RE.match(username):
+        raise ValueError("Invalid role identifier")
+    return username
 
 
 async def set_role(connection, current_user):
     async with connection.transaction():
-        query = 'SET ROLE "{username}";'
-        await connection.execute(
-            query.format(username=current_user["username"])
-        )
+        username = _validate_role_identifier(current_user["username"])
+        query = f"SET ROLE {pg_quote_ident(username)};"
+        await connection.execute(query)
 
 
 async def insert_commit(connection, payload, action):
@@ -83,7 +92,7 @@ async def update_datastream_observedArea(conn, datastream_id, feature_id=None):
                     WHERE id = $1;
                 """
             else:
-                query = f"""
+                query = """
                     WITH distinct_features AS (
                         SELECT DISTINCT ON (foi.id) foi.feature
                         FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
@@ -115,7 +124,7 @@ async def update_datastream_observedArea(conn, datastream_id, feature_id=None):
                     WHERE id = $1;
                 """
             else:
-                query = f"""
+                query = """
                     WITH distinct_features AS (
                         SELECT DISTINCT ON (foi.id) foi.feature
                         FROM sensorthings."Observation" o, sensorthings."FeaturesOfInterest" foi
