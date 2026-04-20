@@ -14,7 +14,7 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import validate_payload_keys
+from app.utils.utils import validate_payload_keys, require_json_content_type
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UniqueViolationError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
@@ -71,11 +71,7 @@ async def create_observation(
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
-        if (
-            not "content-type" in request.headers
-            or request.headers["content-type"] != "application/json"
-        ):
-            raise Exception("Only content-type application/json is supported.")
+        require_json_content_type(request)
 
         validate_payload_keys(payload, ALLOWED_KEYS)
 
@@ -154,11 +150,7 @@ async def create_observation_for_datastream(
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
-        if (
-            not "content-type" in request.headers
-            or request.headers["content-type"] != "application/json"
-        ):
-            raise Exception("Only content-type application/json is supported.")
+        require_json_content_type(request)
 
         if not datastream_id:
             raise Exception("Datastream ID not provided")
@@ -235,11 +227,7 @@ async def create_observation_for_feature_of_interest(
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
-        if (
-            not "content-type" in request.headers
-            or request.headers["content-type"] != "application/json"
-        ):
-            raise Exception("Only content-type application/json is supported.")
+        require_json_content_type(request)
 
         if not feature_of_interest_id:
             raise Exception("FeatureOfInterest ID not provided")
