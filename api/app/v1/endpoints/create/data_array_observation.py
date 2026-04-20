@@ -31,6 +31,7 @@ from app.utils.utils import (
     handle_datetime_fields,
     handle_result_field,
 )
+from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
