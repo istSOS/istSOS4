@@ -19,6 +19,7 @@ from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.utils.utils import pg_quote_ident, pg_quote_literal, validate_username
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
 from app.v1.endpoints.functions import insert_commit, set_role
 from asyncpg.exceptions import (
     InsufficientPrivilegeError,
@@ -39,14 +40,6 @@ PAYLOAD_EXAMPLE = {
     "uri": "https://orcid.org/0000-0004-3456-7890",
     "role": "viewer",  # viewer, editor, obs_manager, sensor, custom
 }
-
-ROLES = {
-    "viewer": "user",
-    "editor": "user",
-    "obs_manager": "sensor",
-    "sensor": "sensor",
-}
-
 
 @v1.api_route(
     "/Users",
@@ -98,6 +91,14 @@ async def create_user(
                         },
                     )
 
+                try:
+                    payload["role"] = validate_rbac_role(payload["role"])
+                except ValueError as e:
+                    return JSONResponse(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        content={"message": str(e)},
+                    )
+
                 if current_user is not None:
                     if current_user["role"] != "administrator":
                         raise InsufficientPrivilegeError
@@ -143,14 +144,13 @@ async def create_user(
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
 
-                if payload["role"] in ROLES:
-                    payload["role"] = ROLES[payload["role"]]
+                db_role = get_db_role_for_rbac(payload["role"])
 
                 await connection.execute(
                     "CREATE USER {} WITH ENCRYPTED PASSWORD {} IN ROLE {};".format(
                         pg_quote_ident(user["username"]),
                         pg_quote_literal(password),
-                        pg_quote_ident(payload["role"]),
+                        pg_quote_ident(db_role),
                     )
                 )
 
