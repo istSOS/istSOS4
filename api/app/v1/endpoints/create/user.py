@@ -126,11 +126,13 @@ async def create_user(
                     query = """
                         UPDATE sensorthings."User"
                         SET uri = $1 || $2 || $3 ||  '/Users(' || sensorthings."User".id || ')'
-                        WHERE sensorthings."User".id = $4;
+                        WHERE sensorthings."User".id = $4
+                        RETURNING uri;
                     """
-                    await connection.execute(
+                    generated_uri = await connection.fetchval(
                         query, HOSTNAME, SUBPATH, VERSION, user["id"]
                     )
+                    user = {**user, "uri": generated_uri}
 
                 if payload["role"] == "sensor":
                     commit = {
