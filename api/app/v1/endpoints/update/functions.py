@@ -122,8 +122,8 @@ async def update_location_entity(
                     SET thing_id = $1
                     WHERE location_id = $2;
                 """,
-                location_id,
                 thing_id,
+                location_id,
             )
             if check is None:
                 await connection.execute(
