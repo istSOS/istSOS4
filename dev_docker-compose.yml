@@ -3,6 +3,7 @@ services:
     build:
       context: ./database
       dockerfile: Dockerfile
+    restart: always
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -34,6 +35,7 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
+    restart: always
     environment:
       HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
@@ -59,6 +61,7 @@ services:
       ALGORITHM: ${ALGORITHM}
       ANONYMOUS_VIEWER: ${ANONYMOUS_VIEWER}
       NETWORK: ${NETWORK}
+      ST_AGGREGATE: ${ST_AGGREGATE}
     command: uvicorn --reload --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - ${EXTERNAL_PORT}:5000
@@ -96,6 +99,7 @@ services:
       EPSG: ${EPSG}
       AUTHORIZATION: ${AUTHORIZATION}
       NETWORK: ${NETWORK}
+      ST_AGGREGATE: ${ST_AGGREGATE}
     command: python3 generator.py
     volumes:
       - ./dummy_data:/dummy_data
@@ -108,10 +112,12 @@ services:
     build:
       context: ./docs/mkdocs
       dockerfile: dockerfile
+    restart: always
     ports:
       - 8019:8000
     volumes:
       - ./docs/mkdocs:/docs
+
 # You might need to run `sudo chown -R $USER schemaspy/` to fix permissions
 # schemaspy:
 #   image: schemaspy/schemaspy:6.2.4

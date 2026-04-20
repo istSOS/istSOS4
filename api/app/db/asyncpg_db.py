@@ -25,9 +25,7 @@ from app import (
 )
 
 pgpool: asyncpg.Pool | None = None
-
-if POSTGRES_PORT_WRITE:
-    pgpoolw: asyncpg.Pool | None = None
+pgpoolw: asyncpg.Pool | None = None
 
 
 async def get_pool():
@@ -48,6 +46,13 @@ async def get_pool():
 
 async def get_pool_w():
     global pgpoolw
+
+    if not POSTGRES_PORT_WRITE:
+        raise ValueError(
+            "POSTGRES_PORT_WRITE is not configured. "
+            "Set the POSTGRES_PORT_WRITE environment variable to use a separate write database."
+        )
+
     if not pgpoolw:
         dsn = f"postgresql://{ISTSOS_ADMIN}:{ISTSOS_ADMIN_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT_WRITE}/{POSTGRES_DB}"
 
