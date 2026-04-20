@@ -78,7 +78,7 @@ if AUTHORIZATION:
 )
 async def create_datastream(
     request: Request,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -154,7 +154,7 @@ PAYLOAD_EXAMPLE_THING = {
 async def create_datastream_for_thing(
     request: Request,
     thing_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE_THING),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE_THING}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -235,7 +235,7 @@ PAYLOAD_EXAMPLE_SENSOR = {
 async def create_datastream_for_sensor(
     request: Request,
     sensor_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE_SENSOR),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE_SENSOR}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -319,7 +319,7 @@ PAYLOAD_EXAMPLE_OBSERVED_PROPERTY = {
 async def create_datastream_for_observed_property(
     request: Request,
     observed_property_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE_OBSERVED_PROPERTY),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE_OBSERVED_PROPERTY}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),

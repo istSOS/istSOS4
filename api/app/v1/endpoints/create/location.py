@@ -64,7 +64,7 @@ REQUIRED_KEYS = ["name", "encodingType", "location"]
 )
 async def create_location(
     request: Request,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -127,7 +127,7 @@ async def create_location(
 async def create_location_for_thing(
     request: Request,
     thing_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
