@@ -17,7 +17,7 @@ import re
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.utils.utils import validate_payload_keys
+from app.utils.utils import pg_quote_ident, validate_payload_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Body, Depends, Query, status
@@ -32,14 +32,7 @@ ALLOWED_KEYS = [
     "policy",
 ]
 
-
 _UNSAFE_POLICY_TOKENS_RE = re.compile(r";|--|/\*|\*/|\x00")
-
-
-def _quote_identifier(value: str) -> str:
-    if not isinstance(value, str) or value.strip() == "":
-        raise ValueError("Invalid SQL identifier")
-    return '"' + value.replace('"', '""') + '"'
 
 
 def _validate_policy_expression(value: str) -> str:
@@ -105,41 +98,20 @@ async def update_policy(
                         tablename, cmd = row["tablename"], row["cmd"]
 
                     if payload.get("policy") is not None:
-                        safe_policy = _quote_identifier(policy)
-                        safe_table = _quote_identifier(tablename)
                         policy_expression = _validate_policy_expression(
                             payload["policy"]
                         )
+                        policy_ident = pg_quote_ident(policy)
+                        table_ident = pg_quote_ident(tablename)
+                        cmd_upper = (cmd or "").upper()
 
                         policy_sql = {
-                            "SELECT": "ALTER POLICY {} ON sensorthings.{} USING ({});".format(
-                                safe_policy,
-                                safe_table,
-                                policy_expression,
-                            ),
-                            "INSERT": "ALTER POLICY {} ON sensorthings.{} WITH CHECK ({});".format(
-                                safe_policy,
-                                safe_table,
-                                policy_expression,
-                            ),
-                            "UPDATE": "ALTER POLICY {} ON sensorthings.{} USING ({}) WITH CHECK ({});".format(
-                                safe_policy,
-                                safe_table,
-                                policy_expression,
-                                policy_expression,
-                            ),
-                            "DELETE": "ALTER POLICY {} ON sensorthings.{} USING ({});".format(
-                                safe_policy,
-                                safe_table,
-                                policy_expression,
-                            ),
-                            "ALL": "ALTER POLICY {} ON sensorthings.{} USING ({}) WITH CHECK ({});".format(
-                                safe_policy,
-                                safe_table,
-                                policy_expression,
-                                policy_expression,
-                            ),
-                        }.get(cmd)
+                            "SELECT": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({policy_expression});",
+                            "INSERT": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} WITH CHECK ({policy_expression});",
+                            "UPDATE": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({policy_expression}) WITH CHECK ({policy_expression});",
+                            "DELETE": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({policy_expression});",
+                            "ALL": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({policy_expression}) WITH CHECK ({policy_expression});",
+                        }.get(cmd_upper)
 
                         if policy_sql is None:
                             raise ValueError(
@@ -153,7 +125,7 @@ async def update_policy(
 
         return Response(status_code=status.HTTP_200_OK)
 
-    except UndefinedObjectError as e:
+    except UndefinedObjectError:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={"message": "Policy not found"},
