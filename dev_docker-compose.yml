@@ -99,6 +99,7 @@ services:
       EPSG: ${EPSG}
       AUTHORIZATION: ${AUTHORIZATION}
       NETWORK: ${NETWORK}
+      ST_AGGREGATE: ${ST_AGGREGATE}
     command: python3 generator.py
     volumes:
       - ./dummy_data:/dummy_data

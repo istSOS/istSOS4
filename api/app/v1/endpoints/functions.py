@@ -13,14 +13,26 @@
 # limitations under the License.
 
 import json
+import re
 from app import EPSG, ST_AGGREGATE
+
+from app import ST_AGGREGATE
+from app.utils.utils import pg_quote_ident
+
+_PG_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _validate_role_identifier(username: str) -> str:
+    if not isinstance(username, str) or not _PG_IDENTIFIER_RE.match(username):
+        raise ValueError("Invalid role identifier")
+    return username
+
 
 async def set_role(connection, current_user):
     async with connection.transaction():
-        query = 'SET ROLE "{username}";'
-        await connection.execute(
-            query.format(username=current_user["username"])
-        )
+        username = _validate_role_identifier(current_user["username"])
+        query = f"SET ROLE {pg_quote_ident(username)};"
+        await connection.execute(query)
 
 
 async def insert_commit(connection, payload, action):
@@ -88,14 +100,14 @@ async def update_datastream_observedArea(conn, datastream_id, feature_id=None):
                         WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1
                     ),
                     aggregated_geometry AS (
-                        SELECT Set_SRID(ST_Extent(ST_Collect(feature)), {EPSG}) AS agg_geom
+                        SELECT ST_Envelope(ST_Collect(feature)) AS agg_geom
                         FROM distinct_features
                     )
                     UPDATE sensorthings."Datastream"
                     SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
                     WHERE id = $1;
                 """
-            await conn.execute(query, datastream_id) 
+            await conn.execute(query, datastream_id)
         else:
             if ST_AGGREGATE == "CONVEX_HULL":
                 query = """
@@ -120,11 +132,11 @@ async def update_datastream_observedArea(conn, datastream_id, feature_id=None):
                         WHERE o.featuresofinterest_id = foi.id AND o.datastream_id = $1 AND foi.id != $2
                     ),
                     aggregated_geometry AS (
-                        SELECT Set_SRID(ST_Extent( ST_Collect(feature)), {EPSG}) AS agg_geom
+                        SELECT ST_Envelope(ST_Collect(feature)) AS agg_geom
                         FROM distinct_features
                     )
                     UPDATE sensorthings."Datastream"
                     SET "observedArea" = (SELECT agg_geom FROM aggregated_geometry)
-                    WHERE id = $1;)
+                    WHERE id = $1;
                 """
             await conn.execute(query, datastream_id, feature_id)
