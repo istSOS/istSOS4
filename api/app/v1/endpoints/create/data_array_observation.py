@@ -24,12 +24,14 @@ from app import (
     VERSIONING,
 )
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.v1.endpoints.functions import set_role
 from app.utils.utils import (
     check_iot_id_in_payload,
     check_missing_properties,
     handle_datetime_fields,
     handle_result_field,
 )
+from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
@@ -110,10 +112,7 @@ async def data_array_observation(
         async with pool.acquire() as conn:
             async with conn.transaction():
                 if current_user is not None:
-                    query = 'SET ROLE "{username}";'
-                    await conn.execute(
-                        query.format(username=current_user["username"])
-                    )
+                    await set_role(conn, current_user)
 
                 try:
                     commit_id = await set_commit(
@@ -121,9 +120,9 @@ async def data_array_observation(
                     )
                 except InsufficientPrivilegeError:
                     return JSONResponse(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        status_code=status.HTTP_403_FORBIDDEN,
                         content={
-                            "code": 401,
+                            "code": 403,
                             "type": "error",
                             "message": "Insufficient privileges.",
                         },
@@ -196,9 +195,9 @@ async def data_array_observation(
                             response_urls.append(observation_selfLink)
                         except InsufficientPrivilegeError:
                             return JSONResponse(
-                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                status_code=status.HTTP_403_FORBIDDEN,
                                 content={
-                                    "code": 401,
+                                    "code": 403,
                                     "type": "error",
                                     "message": "Insufficient privileges.",
                                 },
@@ -214,9 +213,9 @@ async def data_array_observation(
 
     except InsufficientPrivilegeError:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={
-                "code": 401,
+                "code": 403,
                 "type": "error",
                 "message": "Insufficient privileges.",
             },
