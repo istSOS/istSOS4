@@ -5,6 +5,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock
 
+import pytest
+
+pytestmark = pytest.mark.asyncio(loop_scope="function")
+
 # Ensure api/ is on sys.path so 'app' resolves to api/app
 API_DIR = str(Path(__file__).resolve().parents[1])
 if API_DIR not in sys.path:
@@ -30,10 +34,20 @@ class DummyConnection:
         yield
 
 
-def test_set_role_escapes_identifier_quotes():
+def test_set_role_quotes_valid_identifier():
     conn = DummyConnection()
-    current_user = {"username": 'bad"name'}
+    current_user = {"username": "test_user"}
 
     asyncio.run(set_role(conn, current_user))
 
-    conn.execute.assert_awaited_once_with('SET ROLE "bad""name";')
+    conn.execute.assert_awaited_once_with('SET ROLE "test_user";')
+
+
+def test_set_role_rejects_invalid_identifier():
+    conn = DummyConnection()
+    current_user = {"username": 'bad"name'}
+
+    with pytest.raises(ValueError, match="Invalid role identifier"):
+        asyncio.run(set_role(conn, current_user))
+
+    conn.execute.assert_not_awaited()
