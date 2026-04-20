@@ -16,6 +16,7 @@ import json
 import logging
 
 from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
+from app.utils.utils import pg_quote_ident, pg_quote_literal, validate_username
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.v1.endpoints.functions import insert_commit, set_role
@@ -87,6 +88,16 @@ async def create_user(
                         },
                     )
 
+                if not validate_username(payload["username"]):
+                    return JSONResponse(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        content={
+                            "code": 400,
+                            "type": "error",
+                            "message": "Invalid username: only letters, digits and underscores allowed (3\u201363 characters).",
+                        },
+                    )
+
                 if current_user is not None:
                     if current_user["role"] != "administrator":
                         raise InsufficientPrivilegeError
@@ -135,26 +146,18 @@ async def create_user(
                 if payload["role"] in ROLES:
                     payload["role"] = ROLES[payload["role"]]
 
-                query = """
-                    CREATE USER "{username}"
-                    WITH ENCRYPTED PASSWORD '{password}'
-                    IN ROLE "{role}";
-                """
                 await connection.execute(
-                    query.format(
-                        username=user["username"],
-                        password=password,
-                        role=payload["role"],
+                    "CREATE USER {} WITH ENCRYPTED PASSWORD {} IN ROLE {};".format(
+                        pg_quote_ident(user["username"]),
+                        pg_quote_literal(password),
+                        pg_quote_ident(payload["role"]),
                     )
                 )
 
-                query = """
-                    GRANT "{user}" TO "{role}";
-                """
                 await connection.execute(
-                    query.format(
-                        user=payload["username"],
-                        role=current_user["username"],
+                    "GRANT {} TO {};".format(
+                        pg_quote_ident(payload["username"]),
+                        pg_quote_ident(current_user["username"]),
                     )
                 )
 

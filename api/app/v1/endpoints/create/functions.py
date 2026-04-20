@@ -15,7 +15,15 @@
 import json
 from datetime import datetime
 
-from app import AUTHORIZATION, HOSTNAME, NETWORK, SUBPATH, ST_AGGREGATE, VERSION, VERSIONING
+from app import (
+    AUTHORIZATION,
+    HOSTNAME,
+    NETWORK,
+    ST_AGGREGATE,
+    SUBPATH,
+    VERSION,
+    VERSIONING,
+)
 from app.utils.utils import (
     check_iot_id_in_payload,
     check_missing_properties,
@@ -694,7 +702,7 @@ async def update_datastream_observedArea(conn, datastream_id, foi_id):
         else:
             update_query = f"""
                 UPDATE sensorthings."Datastream"
-                SET "observedArea" = Set_SRID(ST_Extent(
+                SET "observedArea" = ST_Envelope(
                     ST_Collect(
                         "observedArea",
                         (
@@ -702,7 +710,7 @@ async def update_datastream_observedArea(conn, datastream_id, foi_id):
                             FROM sensorthings."FeaturesOfInterest"
                             WHERE id = $1
                         )
-                    ), {EPSG})
+                    )
                 )
                 WHERE id = $2;
             """
