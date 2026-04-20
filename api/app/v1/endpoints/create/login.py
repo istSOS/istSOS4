@@ -139,6 +139,7 @@ async def logout(authorization: str | None = Header(default=None)):
         )
 
     if REDIS:
+        expire = payload.get("exp")
         redis.set(token, "logged_out", ex=_ttl_from_exp(expire))
 
     return JSONResponse(
