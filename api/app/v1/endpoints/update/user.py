@@ -145,7 +145,7 @@ async def update_user(
     except UndefinedObjectError as e:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
-            content={"message": "Policy not found"},
+            content={"message": "User not found"},
         )
     except InsufficientPrivilegeError as e:
         return JSONResponse(
