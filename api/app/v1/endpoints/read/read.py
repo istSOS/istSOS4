@@ -13,9 +13,11 @@
 # limitations under the License.
 
 import json
+import logging
 import traceback
 from datetime import datetime, timezone
 
+import asyncpg
 import ujson
 from app import (
     ANONYMOUS_VIEWER,
@@ -36,12 +38,13 @@ from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
 from app.utils.utils import build_nextLink
 from app.v1.endpoints.functions import set_role
-from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .query_parameters import CommonQueryParams, get_common_query_params
 
 v1 = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 user = Header(default=None, include_in_schema=False)
@@ -151,7 +154,7 @@ async def catch_all_get(
                 media_type="application/json",
                 status_code=status.HTTP_200_OK,
             )
-        except Exception as e:
+        except StopAsyncIteration:
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content={
@@ -160,12 +163,42 @@ async def catch_all_get(
                     "message": "Not Found",
                 },
             )
+        except Exception:
+            logger.exception("Unexpected streaming error in catch_all_get")
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={
+                    "code": 500,
+                    "type": "error",
+                    "message": "Internal server error",
+                },
+            )
 
-    except Exception as e:
+    except HTTPException:
+        raise
+    except (
+        asyncpg.PostgresConnectionError,
+        asyncpg.TooManyConnectionsError,
+    ):
+        logger.exception("Database unavailable in catch_all_get")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "code": 503,
+                "type": "error",
+                "message": "Database temporarily unavailable",
+            },
+        )
+    except Exception:
+        logger.exception("Unexpected error in catch_all_get")
         traceback.print_exc()
         return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "code": 500,
+                "type": "error",
+                "message": "Internal server error",
+            },
         )
 
 
