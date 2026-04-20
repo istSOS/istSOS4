@@ -15,11 +15,10 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.utils.utils import extract_iot_id
+from app.utils.utils import extract_iot_id, safe_parse_datetime
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
-from dateutil import parser
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
@@ -80,7 +79,7 @@ PAYLOAD_EXAMPLE = [
     status_code=status.HTTP_201_CREATED,
 )
 async def bulk_observations(
-    payload: list = Body(example=PAYLOAD_EXAMPLE),
+    payload: list = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     commit_message=message,
     current_user=user,
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -97,9 +96,9 @@ async def bulk_observations(
                     )
                 except InsufficientPrivilegeError:
                     return JSONResponse(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        status_code=status.HTTP_403_FORBIDDEN,
                         content={
-                            "code": 401,
+                            "code": 403,
                             "type": "error",
                             "message": "Insufficient privileges.",
                         },
@@ -156,9 +155,9 @@ async def bulk_observations(
                         )
                     except InsufficientPrivilegeError:
                         return JSONResponse(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            status_code=status.HTTP_403_FORBIDDEN,
                             content={
-                                "code": 401,
+                                "code": 403,
                                 "type": "error",
                                 "message": "Insufficient privileges.",
                             },
@@ -232,7 +231,7 @@ async def insertBulkObservation(
         ph_interval = None
         for obs in payload:
             if result_time_idx > -1:
-                obs[result_time_idx] = parser.parse(obs[result_time_idx])
+                obs[result_time_idx] = safe_parse_datetime(obs[result_time_idx])
             if "/" in obs[ph_idx]:
                 ph_time = obs[ph_idx].split("/")
                 obs[ph_idx] = Range(
@@ -253,7 +252,7 @@ async def insertBulkObservation(
                     upper_inc=True,
                 )
             else:
-                if parser.parse(ph_interval.lower) > parser.parse(
+                if safe_parse_datetime(ph_interval.lower) > safe_parse_datetime(
                     obs[ph_idx].lower
                 ):
                     ph_interval = Range(
@@ -261,7 +260,7 @@ async def insertBulkObservation(
                         ph_interval.upper,
                         upper_inc=True,
                     )
-                if parser.parse(ph_interval.upper) < parser.parse(
+                if safe_parse_datetime(ph_interval.upper) < safe_parse_datetime(
                     obs[ph_idx].upper
                 ):
                     ph_interval = Range(
@@ -270,8 +269,8 @@ async def insertBulkObservation(
                         upper_inc=True,
                     )
             obs[ph_idx] = Range(
-                parser.parse(obs[ph_idx].lower),
-                parser.parse(obs[ph_idx].upper),
+                safe_parse_datetime(obs[ph_idx].lower),
+                safe_parse_datetime(obs[ph_idx].upper),
                 upper_inc=True,
             )
 
@@ -282,8 +281,8 @@ async def insertBulkObservation(
 
             data.append(obs + default_obs)
         ph_interval = Range(
-            parser.parse(ph_interval.lower),
-            parser.parse(ph_interval.upper),
+            safe_parse_datetime(ph_interval.lower),
+            safe_parse_datetime(ph_interval.upper),
             upper_inc=True,
         )
 

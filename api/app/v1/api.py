@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import AUTHORIZATION, NETWORK
+from app import AUTHORIZATION, NETWORK, VERSIONING
 from app.v1.endpoints.create import bulk_observation, data_array_observation
 from app.v1.endpoints.create import datastream as create_datastream
 from app.v1.endpoints.create import (
@@ -49,6 +49,7 @@ from app.v1.endpoints.delete import policy as delete_policy
 from app.v1.endpoints.delete import sensor as delete_sensor
 from app.v1.endpoints.delete import thing as delete_thing
 from app.v1.endpoints.delete import user as delete_user
+from app.v1.endpoints.read import commit as read_commit
 from app.v1.endpoints.read import datastream as read_datastream
 from app.v1.endpoints.read import (
     feature_of_interest as read_feature_of_interest,
@@ -97,6 +98,14 @@ if AUTHORIZATION:
     ]
 else:
     tags_metadata = []
+
+if VERSIONING:
+    tags_metadata += [
+        {
+            "name": "Commits",
+            "description": "Commit history and data lineage for versioned entities.",
+        },
+    ]
 
 if NETWORK:
     tags_metadata += [
@@ -165,6 +174,9 @@ if AUTHORIZATION:
     v1.include_router(update_policy.v1)
     v1.include_router(delete_policy.v1)
 
+
+if VERSIONING:
+    v1.include_router(read_commit.v1)
 
 if NETWORK:
     v1.include_router(read_network.v1)
