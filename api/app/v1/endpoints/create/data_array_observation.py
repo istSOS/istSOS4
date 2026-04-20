@@ -26,10 +26,10 @@ from app import (
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.v1.endpoints.functions import set_role
 from app.utils.utils import (
-    check_iot_id_in_payload,
     check_missing_properties,
     handle_datetime_fields,
     handle_result_field,
+    extract_iot_id
 )
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
@@ -129,9 +129,7 @@ async def data_array_observation(
                     )
 
                 for observation_set in payload:
-                    datastream_id = observation_set.get("Datastream", {}).get(
-                        "@iot.id"
-                    )
+                    datastream_id = extract_iot_id(observation_set.get("Datastream", {}))
                     components = observation_set.get("components", [])
                     data_array = observation_set.get("dataArray", [])
 
@@ -268,12 +266,7 @@ async def insertDataArrayObservation(
 
             if "FeatureOfInterest" in obs:
                 if "@iot.id" in obs["FeatureOfInterest"]:
-                    features_of_interest_id = obs["FeatureOfInterest"][
-                        "@iot.id"
-                    ]
-                    check_iot_id_in_payload(
-                        obs["FeatureOfInterest"], "FeatureOfInterest"
-                    )
+                    features_of_interest_id = extract_iot_id(obs["FeatureOfInterest"])
                     select_query = f"""
                         SELECT last_foi_id
                         FROM sensorthings."Datastream"
