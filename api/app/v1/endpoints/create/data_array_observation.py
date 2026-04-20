@@ -29,6 +29,7 @@ from app.utils.utils import (
     check_missing_properties,
     handle_datetime_fields,
     handle_result_field,
+    build_self_link
     extract_iot_id
 )
 from app.v1.endpoints.functions import set_role
@@ -358,8 +359,6 @@ async def insertDataArrayObservation(
         )
 
         observation_id = result[0]["id"]
-        observation_selfLink = (
-            f"{HOSTNAME}{SUBPATH}{VERSION}/Observations({observation_id})"
-        )
+        observation_selfLink = build_self_link("Observation", observation_id)
 
         return observation_id, observation_selfLink
