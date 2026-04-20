@@ -23,7 +23,6 @@ from app.settings import serverSettings, tables
 from app.v1 import api
 from fastapi import FastAPI
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +32,7 @@ async def initialize_pool():
 
     while True:
         try:
-            await get_pool()  # Ensure get_pool() is awaited
+            await get_pool()
             if POSTGRES_PORT_WRITE:
                 await get_pool_w()
             break
@@ -50,7 +49,7 @@ async def initialize_pool():
             )
             if retries >= max_retries:
                 raise
-            await asyncio.sleep(1)  # Use asyncio.sleep for asynchronous sleep
+            await asyncio.sleep(1)
         except ValueError:
             logger.exception("Invalid database configuration during startup")
             raise
@@ -75,14 +74,12 @@ app = FastAPI(
 
 
 def __handle_root():
-    # Handle the root path
     value = []
-    # append the domain to the path for each table
     for table in tables:
         value.append(
             {
                 "name": table,
-                "url": f"{HOSTNAME}{SUBPATH}{VERSION}" + "/" + table,
+                "url": f"{HOSTNAME}{SUBPATH}{VERSION}/{table}",
             }
         )
 
@@ -91,6 +88,7 @@ def __handle_root():
         "serverSettings": serverSettings,
     }
     return response
+
 
 @app.get(f"{SUBPATH}{VERSION}", tags=["Read root"])
 async def read_root():
