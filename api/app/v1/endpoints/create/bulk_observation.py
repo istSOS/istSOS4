@@ -394,7 +394,7 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
     """
 
     async with conn.transaction():
-        query_location_from_thing_datastream = f"""
+        query_location_from_thing_datastream = """
             SELECT
                 l.id,
                 l.name,
@@ -412,10 +412,10 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
             JOIN
                 sensorthings."Location" l ON l.ID = tl.location_id
             WHERE
-                d.id = {datastream_id}
+                d.id = $1
         """
 
-        result = await conn.fetch(query_location_from_thing_datastream)
+        result = await conn.fetch(query_location_from_thing_datastream, datastream_id)
 
         if result:
             (
