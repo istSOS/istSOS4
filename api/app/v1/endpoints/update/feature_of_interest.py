@@ -70,7 +70,7 @@ ALLOWED_KEYS = [
 )
 async def update_feature_of_interest(
     feature_of_interest_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
