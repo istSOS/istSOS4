@@ -14,6 +14,7 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.utils.utils import pg_quote_ident
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Depends, Header, Query, status
@@ -61,8 +62,9 @@ async def delete_policy(
                 if tablename is None:
                     raise UndefinedObjectError()
 
-                query = 'DROP POLICY {} ON sensorthings."{}";'.format(
-                    policy, tablename
+                query = (
+                    f"DROP POLICY {pg_quote_ident(policy)} "
+                    f"ON sensorthings.{pg_quote_ident(tablename)};"
                 )
                 await connection.execute(query)
 
