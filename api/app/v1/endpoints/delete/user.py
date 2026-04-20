@@ -61,6 +61,12 @@ async def delete_user(
                     if current_user["role"] != "administrator":
                         raise InsufficientPrivilegeError
 
+                    if user == current_user["username"]:
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={"message": "Cannot delete your own user account"},
+                        )
+
                     await set_role(connection, current_user)
 
                 query = """
@@ -94,11 +100,11 @@ async def delete_user(
         )
     except InsufficientPrivilegeError as e:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={"message": "Insufficient privileges"},
         )
     except Exception as e:
-        return Response(
+        return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"message": str(e)},
         )

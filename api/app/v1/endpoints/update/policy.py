@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
@@ -29,6 +31,29 @@ ALLOWED_KEYS = [
     "users",
     "policy",
 ]
+
+
+_UNSAFE_POLICY_TOKENS_RE = re.compile(r";|--|/\*|\*/|\x00")
+
+
+def _quote_identifier(value: str) -> str:
+    if not isinstance(value, str) or value.strip() == "":
+        raise ValueError("Invalid SQL identifier")
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _validate_policy_expression(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("Policy expression must be a string")
+
+    expression = value.strip()
+    if expression == "":
+        raise ValueError("Policy expression must not be empty")
+
+    if _UNSAFE_POLICY_TOKENS_RE.search(expression):
+        raise ValueError("Unsafe policy expression")
+
+    return expression
 
 
 @v1.api_route(
@@ -49,62 +74,82 @@ async def update_policy(
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
-
         async with pgpool.acquire() as connection:
             async with connection.transaction():
+                role_switched = False
                 if current_user is not None:
                     if current_user["role"] != "administrator":
                         raise InsufficientPrivilegeError
+                    await set_role(connection, current_user)
+                    role_switched = True
 
-                validate_payload_keys(payload, ALLOWED_KEYS)
+                try:
+                    validate_payload_keys(payload, ALLOWED_KEYS)
 
-                if payload.get("users") is not None:
-                    query = """
-                        SELECT sensorthings.add_users_to_policy($1, $2);
-                    """
-                    tablename, cmd = await connection.fetchval(
-                        query, payload["users"], policy
-                    )
-                else:
-                    query = """
-                        SELECT tablename, cmd FROM pg_policies
-                        WHERE policyname = $1;
-                    """
-                    row = await connection.fetchrow(query, policy)
-                    if row is None:
-                        raise Exception(f"Policy '{policy}' not found.")
+                    if payload.get("users") is not None:
+                        query = """
+                            SELECT sensorthings.add_users_to_policy($1, $2);
+                        """
+                        tablename, cmd = await connection.fetchval(
+                            query, payload["users"], policy
+                        )
+                    else:
+                        query = """
+                            SELECT tablename, cmd FROM pg_policies
+                            WHERE policyname = $1;
+                        """
+                        row = await connection.fetchrow(query, policy)
+                        if row is None:
+                            raise Exception(f"Policy '{policy}' not found.")
 
-                    tablename, cmd = row["tablename"], row["cmd"]
+                        tablename, cmd = row["tablename"], row["cmd"]
 
-                if payload.get("policy") is not None:
-                    policy_sql = {
-                        "SELECT": 'ALTER POLICY {} ON sensorthings."{}" USING ({});'.format(
-                            policy, tablename, payload["policy"]
-                        ),
-                        "INSERT": 'ALTER POLICY {} ON sensorthings."{}" WITH CHECK ({});'.format(
-                            policy, tablename, payload["policy"]
-                        ),
-                        "UPDATE": 'ALTER POLICY {} ON sensorthings."{}" USING ({}) WITH CHECK ({});'.format(
-                            policy,
-                            tablename,
-                            payload["policy"],
-                            payload["policy"],
-                        ),
-                        "DELETE": 'ALTER POLICY {} ON sensorthings."{}" USING ({});'.format(
-                            policy, tablename, payload["policy"]
-                        ),
-                        "ALL": 'ALTER POLICY {} ON sensorthings."{}" USING ({}) WITH CHECK ({});'.format(
-                            policy,
-                            tablename,
-                            payload["policy"],
-                            payload["policy"],
-                        ),
-                    }.get(cmd)
+                    if payload.get("policy") is not None:
+                        safe_policy = _quote_identifier(policy)
+                        safe_table = _quote_identifier(tablename)
+                        policy_expression = _validate_policy_expression(
+                            payload["policy"]
+                        )
 
-                    await connection.execute(policy_sql)
+                        policy_sql = {
+                            "SELECT": "ALTER POLICY {} ON sensorthings.{} USING ({});".format(
+                                safe_policy,
+                                safe_table,
+                                policy_expression,
+                            ),
+                            "INSERT": "ALTER POLICY {} ON sensorthings.{} WITH CHECK ({});".format(
+                                safe_policy,
+                                safe_table,
+                                policy_expression,
+                            ),
+                            "UPDATE": "ALTER POLICY {} ON sensorthings.{} USING ({}) WITH CHECK ({});".format(
+                                safe_policy,
+                                safe_table,
+                                policy_expression,
+                                policy_expression,
+                            ),
+                            "DELETE": "ALTER POLICY {} ON sensorthings.{} USING ({});".format(
+                                safe_policy,
+                                safe_table,
+                                policy_expression,
+                            ),
+                            "ALL": "ALTER POLICY {} ON sensorthings.{} USING ({}) WITH CHECK ({});".format(
+                                safe_policy,
+                                safe_table,
+                                policy_expression,
+                                policy_expression,
+                            ),
+                        }.get(cmd)
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
+                        if policy_sql is None:
+                            raise ValueError(
+                                f"Unsupported policy command: {cmd}"
+                            )
+
+                        await connection.execute(policy_sql)
+                finally:
+                    if role_switched:
+                        await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
 

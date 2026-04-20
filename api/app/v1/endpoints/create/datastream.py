@@ -115,9 +115,9 @@ async def create_datastream(
         )
     except InsufficientPrivilegeError:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={
-                "code": 401,
+                "code": 403,
                 "type": "error",
                 "message": "Insufficient privileges.",
             },
@@ -200,9 +200,9 @@ async def create_datastream_for_thing(
         )
     except InsufficientPrivilegeError:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={
-                "code": 401,
+                "code": 403,
                 "type": "error",
                 "message": "Insufficient privileges.",
             },
@@ -288,9 +288,9 @@ async def create_datastream_for_sensor(
         )
     except InsufficientPrivilegeError:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={
-                "code": 401,
+                "code": 403,
                 "type": "error",
                 "message": "Insufficient privileges.",
             },
@@ -376,9 +376,9 @@ async def create_datastream_for_observed_property(
         )
     except InsufficientPrivilegeError:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={
-                "code": 401,
+                "code": 403,
                 "type": "error",
                 "message": "Insufficient privileges.",
             },
