@@ -96,6 +96,13 @@ async def refresh_token(authorization: str | None = Header(default=None)):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if REDIS and redis.get(token) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     try:
         payload = decode_token(token)
     except Exception:
