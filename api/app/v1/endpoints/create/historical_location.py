@@ -133,7 +133,7 @@ async def create_historical_location_for_thing(
         if not thing_id:
             raise Exception("Thing ID is required.")
 
-        payload["Thing"] = {"@id": f"Things({thing_id})"}
+        payload["Thing"] = {"@iot.id": thing_id}
 
         validate_payload_keys(payload, ALLOWED_KEYS)
 
