@@ -828,7 +828,7 @@ class NodeVisitor(Visitor):
 
         main_query = main_query.limit(top_value).offset(skip_value)
         columns_to_select = []
-        for column in main_query.columns:
+        for column in main_query.selected_columns:
             if column.name not in labels:
                 columns_to_select.append(column)
             else:
@@ -850,7 +850,7 @@ class NodeVisitor(Visitor):
         if columns_to_select is not None:
             main_query = (
                 select(*columns_to_select)
-                .select_from(main_query)
+                .select_from(main_query.subquery())
                 .alias("main_query")
             )
         else:
@@ -913,9 +913,10 @@ class NodeVisitor(Visitor):
                 value = select_query[0].name
             else:
                 value = select_query[0].right
+            main_query_subquery = main_query.subquery()
             main_query = select(
-                main_query.c.json.op("->")(text(f"'{value}'"))
-            ).select_from(main_query)
+                main_query_subquery.c.json.op("->")(text(f"'{value}'"))
+            ).select_from(main_query_subquery)
 
         main_query_str = str(
             main_query.compile(

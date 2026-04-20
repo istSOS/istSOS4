@@ -13,14 +13,25 @@
 # limitations under the License.
 
 import json
+import re
+from app import EPSG, ST_AGGREGATE
 
 from app import ST_AGGREGATE
 from app.utils.utils import pg_quote_ident
 
+_PG_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _validate_role_identifier(username: str) -> str:
+    if not isinstance(username, str) or not _PG_IDENTIFIER_RE.match(username):
+        raise ValueError("Invalid role identifier")
+    return username
+
 
 async def set_role(connection, current_user):
     async with connection.transaction():
-        query = f"SET ROLE {pg_quote_ident(current_user['username'])};"
+        username = _validate_role_identifier(current_user["username"])
+        query = f"SET ROLE {pg_quote_ident(username)};"
         await connection.execute(query)
 
 
