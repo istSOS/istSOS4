@@ -15,6 +15,7 @@
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.utils.utils import pg_quote_ident
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import DuplicateObjectError, InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, status
@@ -55,7 +56,7 @@ PAYLOAD_EXAMPLE = {
     status_code=status.HTTP_201_CREATED,
 )
 async def create_policy(
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
@@ -65,6 +66,7 @@ async def create_policy(
 
         async with pgpool.acquire() as connection:
             async with connection.transaction():
+                role_switched = False
                 if (
                     "users" not in payload
                     or "name" not in payload
@@ -81,63 +83,71 @@ async def create_policy(
                     if current_user["role"] != "administrator":
                         raise InsufficientPrivilegeError
 
-                permission_type = payload["permissions"].get("type")
+                    await set_role(connection, current_user)
+                    role_switched = True
 
-                for user in payload["users"]:
-                    query = f"""
-                        SELECT COUNT(*)
-                        FROM pg_policies
-                        WHERE $1 = ANY (roles)
-                    """
-                    result = await connection.fetchval(query, user)
-                    if result > 0:
-                        raise Exception(f"User {user} has already a policy.")
+                try:
+                    permission_type = payload["permissions"].get("type")
 
-                    query = f"""
-                        SELECT role
-                        FROM sensorthings."User"
-                        WHERE username = $1
-                    """
-                    result = await connection.fetchval(query, user)
-                    if (
-                        permission_type != "custom"
-                        and result != permission_type
-                    ):
-                        raise Exception(
-                            f"User {user} has a different role than the policy type."
+                    for user in payload["users"]:
+                        query = """
+                            SELECT COUNT(*)
+                            FROM pg_policies
+                            WHERE $1 = ANY (roles)
+                        """
+                        result = await connection.fetchval(query, user)
+                        if result > 0:
+                            raise Exception(f"User {user} has already a policy.")
+
+                        query = """
+                            SELECT role
+                            FROM sensorthings."User"
+                            WHERE username = $1
+                        """
+                        result = await connection.fetchval(query, user)
+                        if (
+                            permission_type != "custom"
+                            and result != permission_type
+                        ):
+                            raise Exception(
+                                f"User {user} has a different role than the policy type."
+                            )
+
+                    if permission_type == "custom":
+                        await create_policies(
+                            connection,
+                            payload["users"],
+                            payload["permissions"]["policy"],
+                            payload["name"],
                         )
+                    elif permission_type == "viewer":
+                        await connection.execute(
+                            "SELECT sensorthings.viewer_policy($1, $2);",
+                            payload["users"],
+                            payload["name"],
+                        )
+                    elif permission_type == "editor":
+                        await connection.execute(
+                            "SELECT sensorthings.editor_policy($1, $2);",
+                            payload["users"],
+                            payload["name"],
+                        )
+                    elif permission_type == "obs_manager":
+                        await connection.execute(
+                            "SELECT sensorthings.obs_manager_policy($1, $2);",
+                            payload["users"],
+                            payload["name"],
+                        )
+                    elif permission_type == "sensor":
+                        await connection.execute(
+                            "SELECT sensorthings.sensor_policy($1, $2);",
+                            payload["users"],
+                            payload["name"],
+                        )
+                finally:
+                    if role_switched:
+                        await connection.execute("RESET ROLE;")
 
-                if permission_type == "custom":
-                    await create_policies(
-                        connection,
-                        payload["users"],
-                        payload["permissions"]["policy"],
-                        payload["name"],
-                    )
-                elif permission_type == "viewer":
-                    await connection.execute(
-                        f"SELECT sensorthings.viewer_policy($1, $2);",
-                        payload["users"],
-                        payload["name"],
-                    )
-                elif permission_type == "editor":
-                    await connection.execute(
-                        f"SELECT sensorthings.editor_policy($1, $2);",
-                        payload["users"],
-                        payload["name"],
-                    )
-                elif permission_type == "obs_manager":
-                    await connection.execute(
-                        f"SELECT sensorthings.obs_manager_policy($1, $2);",
-                        payload["users"],
-                        payload["name"],
-                    )
-                elif permission_type == "sensor":
-                    await connection.execute(
-                        f"SELECT sensorthings.sensor_policy($1, $2);",
-                        payload["users"],
-                        payload["name"],
-                    )
         return Response(status_code=status.HTTP_201_CREATED)
 
     except DuplicateObjectError:
@@ -147,7 +157,7 @@ async def create_policy(
         )
     except InsufficientPrivilegeError:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={"message": "Insufficient privileges."},
         )
     except Exception as e:
@@ -168,35 +178,69 @@ async def create_policies(connection, users, policies, name):
         "observation": "Observation",
         "featuresofinterest": "FeaturesOfInterest",
     }
-    users = ", ".join(users)
-    for table, operations in policies.items():
-        table = table_mapping.get(table)
+
+    if not users:
+        raise Exception("At least one user is required to create a policy.")
+
+    users_sql = ", ".join(pg_quote_ident(user) for user in users)
+
+    for table_key, operations in policies.items():
+        table = table_mapping.get(table_key)
+        if table is None:
+            raise Exception(f"Unsupported table '{table_key}' in policy.")
+
+        if not isinstance(operations, dict) or not operations:
+            raise Exception(
+                f"Invalid operations for table '{table_key}'."
+            )
 
         for operation, condition in operations.items():
-            if operation in ["select", "delete"]:
+            operation_lc = operation.lower()
+            if operation_lc not in [
+                "select",
+                "insert",
+                "update",
+                "delete",
+                "all",
+            ]:
+                raise Exception(
+                    f"Unsupported operation '{operation}' for table '{table_key}'."
+                )
+
+            if not isinstance(condition, str) or not condition.strip():
+                raise Exception(
+                    f"Invalid condition for '{table_key}.{operation}'."
+                )
+
+            policy_name = pg_quote_ident(
+                f"{name}_{table.lower()}_{operation_lc}"
+            )
+            table_name = pg_quote_ident(table)
+            operation_sql = operation_lc.upper()
+
+            if operation_lc in ["select", "delete"]:
                 query = f"""
-                    CREATE POLICY "{name}_{table.lower()}_{operation}"
-                    ON sensorthings."{table}"
-                    FOR {operation}
-                    TO "{users}"
+                    CREATE POLICY {policy_name}
+                    ON sensorthings.{table_name}
+                    FOR {operation_sql}
+                    TO {users_sql}
                     USING ({condition});
                 """
+            elif operation_lc == "insert":
+                query = f"""
+                    CREATE POLICY {policy_name}
+                    ON sensorthings.{table_name}
+                    FOR {operation_sql}
+                    TO {users_sql}
+                    WITH CHECK ({condition});
+                """
             else:
-                if operation == "insert":
-                    query = f"""
-                        CREATE POLICY "{name}_{table.lower()}_{operation}"
-                        ON sensorthings."{table}"
-                        FOR {operation}
-                        TO "{users}"
-                        WITH CHECK ({condition});
-                    """
-                else:
-                    query = f"""
-                        CREATE POLICY "{name}_{table.lower()}_{operation}"
-                        ON sensorthings."{table}"
-                        FOR {operation}
-                        TO "{users}"
-                        USING ({condition})
-                        WITH CHECK ({condition});
-                    """
+                query = f"""
+                    CREATE POLICY {policy_name}
+                    ON sensorthings.{table_name}
+                    FOR {operation_sql}
+                    TO {users_sql}
+                    USING ({condition})
+                    WITH CHECK ({condition});
+                """
             await connection.execute(query)
