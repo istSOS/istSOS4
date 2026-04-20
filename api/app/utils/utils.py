@@ -329,10 +329,7 @@ def check_iot_id_in_payload(payload, entity):
         raise ValueError(
             "Invalid payload format: When providing '@iot.id', no other properties should be included."
         )
-    if not isinstance(payload["@iot.id"], int):
-        raise ValueError(
-            f"Expected `{entity} (@iot.id)` to be an `int`, got {type(payload['@iot.id']).__name__}"
-        )
+    extract_iot_id(payload)
 
 
 def check_missing_properties(payload, required_properties):
