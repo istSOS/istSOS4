@@ -24,6 +24,7 @@ from app import (
     VERSIONING,
 )
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.v1.endpoints.functions import set_role
 from app.utils.utils import (
     check_iot_id_in_payload,
     check_missing_properties,
@@ -119,9 +120,9 @@ async def data_array_observation(
                     )
                 except InsufficientPrivilegeError:
                     return JSONResponse(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        status_code=status.HTTP_403_FORBIDDEN,
                         content={
-                            "code": 401,
+                            "code": 403,
                             "type": "error",
                             "message": "Insufficient privileges.",
                         },
@@ -194,9 +195,9 @@ async def data_array_observation(
                             response_urls.append(observation_selfLink)
                         except InsufficientPrivilegeError:
                             return JSONResponse(
-                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                status_code=status.HTTP_403_FORBIDDEN,
                                 content={
-                                    "code": 401,
+                                    "code": 403,
                                     "type": "error",
                                     "message": "Insufficient privileges.",
                                 },
@@ -212,9 +213,9 @@ async def data_array_observation(
 
     except InsufficientPrivilegeError:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={
-                "code": 401,
+                "code": 403,
                 "type": "error",
                 "message": "Insufficient privileges.",
             },
