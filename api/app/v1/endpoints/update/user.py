@@ -17,6 +17,8 @@ import json
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
+from app.utils.utils import pg_quote_ident
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
@@ -26,6 +28,7 @@ from fastapi.responses import JSONResponse, Response
 v1 = APIRouter()
 
 PAYLOAD_EXAMPLE = {
+    "role": "editor",
     "contact": {
         "email": "example@mail.com",
         "name": "example",
@@ -34,6 +37,7 @@ PAYLOAD_EXAMPLE = {
 }
 
 ALLOWED_KEYS = [
+    "role",
     "contact",
     "uri",
 ]
@@ -52,7 +56,7 @@ async def update_user(
         alias="user",
         description="The the user to update",
     ),
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
@@ -69,10 +73,10 @@ async def update_user(
                     await set_role(connection, current_user)
 
                 query = """
-                    SELECT username FROM sensorthings."User"
+                    SELECT username, role FROM sensorthings."User"
                     WHERE username = $1;
                 """
-                result = await connection.fetch(query, user)
+                result = await connection.fetchrow(query, user)
 
                 if not result:
                     return JSONResponse(
@@ -86,6 +90,16 @@ async def update_user(
                     return Response(status_code=status.HTTP_200_OK)
 
                 validate_payload_keys(payload, ALLOWED_KEYS)
+
+                previous_role = result["role"]
+                if "role" in payload:
+                    try:
+                        payload["role"] = validate_rbac_role(payload["role"])
+                    except ValueError as e:
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={"message": str(e)},
+                        )
 
                 payload = {
                     key: (
@@ -105,6 +119,24 @@ async def update_user(
                 """
                 await connection.execute(query, user, *payload.values())
 
+                if "role" in payload and payload["role"] != previous_role:
+                    previous_db_role = get_db_role_for_rbac(previous_role)
+                    new_db_role = get_db_role_for_rbac(payload["role"])
+
+                    if previous_db_role != new_db_role:
+                        await connection.execute(
+                            "REVOKE {} FROM {};".format(
+                                pg_quote_ident(previous_db_role),
+                                pg_quote_ident(user),
+                            )
+                        )
+                        await connection.execute(
+                            "GRANT {} TO {};".format(
+                                pg_quote_ident(new_db_role),
+                                pg_quote_ident(user),
+                            )
+                        )
+
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
 
@@ -113,7 +145,7 @@ async def update_user(
     except UndefinedObjectError as e:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
-            content={"message": "Policy not found"},
+            content={"message": "User not found"},
         )
     except InsufficientPrivilegeError as e:
         return JSONResponse(
