@@ -17,8 +17,11 @@ import re
 from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
 from app import EPSG, HOSTNAME, TOP_VALUE
+from asyncpg.exceptions import UniqueViolationError
 from asyncpg.types import Range
 from dateutil import parser
+from fastapi import status
+from fastapi.responses import JSONResponse
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,63}$")
 
@@ -267,6 +270,29 @@ def validate_required_keys(payload, required_keys):
     missing = [key for key in required_keys if key not in payload]
     if missing:
         raise Exception(f"Missing required fields: {', '.join(missing)}")
+
+
+def handle_duplicate_error(e=None):
+    message = "Entity already exists."
+    
+    if e and hasattr(e, "detail") and e.detail:
+        # Example detail: "Key (name)=(duplicate test) already exists."
+        # We can extract the column name and the value from here
+        import re
+        match = re.search(r"Key \((.*?)\)=\((.*?)\) already exists", e.detail)
+        if match:
+            column = match.group(1)
+            value = match.group(2)
+            message = f"An entity with {column} '{value}' already exists."
+
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            "code": 409,
+            "type": "error",
+            "message": message,
+        },
+    )
 
 
 def validate_epsg(key):

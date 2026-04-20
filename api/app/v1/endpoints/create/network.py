@@ -13,9 +13,13 @@
 # limitations under the License.
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import validate_payload_keys, validate_required_keys
+from app.utils.utils import (
+    handle_duplicate_error,
+    validate_payload_keys,
+    validate_required_keys,
+)
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
+from asyncpg.exceptions import InsufficientPrivilegeError, UniqueViolationError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
 
@@ -90,6 +94,8 @@ async def create_network(
             status_code=status.HTTP_201_CREATED,
             headers={"location": header},
         )
+    except UniqueViolationError as e:
+        return handle_duplicate_error(e)
     except InsufficientPrivilegeError as e:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
