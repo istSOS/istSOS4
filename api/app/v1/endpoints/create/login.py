@@ -27,6 +27,17 @@ from fastapi.security import OAuth2PasswordRequestForm
 v1 = APIRouter()
 
 
+def _extract_bearer_token(authorization: str | None) -> str:
+    prefix = "Bearer "
+    if not authorization or not authorization.lower().startswith(prefix.lower()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid authorization header format",
+        )
+
+    return authorization[len(prefix) :].strip()
+
+
 @v1.api_route(
     "/Login",
     methods=["POST"],
@@ -64,13 +75,7 @@ async def login(
     include_in_schema=False,
 )
 async def refresh_token(authorization=Header()):
-    prefix = "Bearer "
-    if not authorization.lower().startswith(prefix.lower()):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid authorization header format",
-        )
-    token = authorization[len(prefix) :].strip()
+    token = _extract_bearer_token(authorization)
 
     if redis.get(token) is not None:
         raise HTTPException(
@@ -112,13 +117,7 @@ async def refresh_token(authorization=Header()):
     include_in_schema=False,
 )
 async def logout(authorization=Header()):
-    prefix = "Bearer "
-    if not authorization.lower().startswith(prefix.lower()):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid authorization header format",
-        )
-    token = authorization[len(prefix) :].strip()
+    token = _extract_bearer_token(authorization)
 
     try:
         payload = decode_token(token)
