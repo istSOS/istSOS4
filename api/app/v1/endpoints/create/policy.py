@@ -12,16 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.utils.utils import pg_quote_ident
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import DuplicateObjectError, InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, status
 from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
+
+_UNSAFE_POLICY_TOKENS_RE = re.compile(r";|--|/\*|\*/|\x00")
+_VALID_OPERATION_KEYS = {"select", "insert", "update", "delete"}
 
 PAYLOAD_EXAMPLE = {
     "users": ["cp1"],
@@ -168,6 +172,21 @@ async def create_policy(
 
 
 async def create_policies(connection, users, policies, name):
+    def quote_identifier(value: str) -> str:
+        if not isinstance(value, str) or value.strip() == "":
+            raise ValueError("Invalid SQL identifier")
+        return '"' + value.replace('"', '""') + '"'
+
+    def validate_policy_expression(value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("Policy condition must be a string")
+        expression = value.strip()
+        if expression == "":
+            raise ValueError("Policy condition must not be empty")
+        if _UNSAFE_POLICY_TOKENS_RE.search(expression):
+            raise ValueError("Unsafe policy condition")
+        return expression
+
     table_mapping = {
         "location": "Location",
         "thing": "Thing",
@@ -179,68 +198,58 @@ async def create_policies(connection, users, policies, name):
         "featuresofinterest": "FeaturesOfInterest",
     }
 
-    if not users:
-        raise Exception("At least one user is required to create a policy.")
+    if not isinstance(users, list) or len(users) == 0:
+        raise ValueError("Users list must not be empty")
 
-    users_sql = ", ".join(pg_quote_ident(user) for user in users)
+    if not isinstance(policies, dict) or len(policies) == 0:
+        raise ValueError("Policies must not be empty")
+
+    quoted_users = ", ".join(quote_identifier(user) for user in users)
 
     for table_key, operations in policies.items():
         table = table_mapping.get(table_key)
         if table is None:
-            raise Exception(f"Unsupported table '{table_key}' in policy.")
+            raise ValueError(f"Unsupported table key: {table_key}")
 
-        if not isinstance(operations, dict) or not operations:
-            raise Exception(
-                f"Invalid operations for table '{table_key}'."
-            )
+        if not isinstance(operations, dict) or len(operations) == 0:
+            raise ValueError(f"No operations provided for table: {table_key}")
+
+        safe_table = quote_identifier(table)
 
         for operation, condition in operations.items():
             operation_lc = operation.lower()
-            if operation_lc not in [
-                "select",
-                "insert",
-                "update",
-                "delete",
-                "all",
-            ]:
-                raise Exception(
-                    f"Unsupported operation '{operation}' for table '{table_key}'."
-                )
+            if operation_lc not in _VALID_OPERATION_KEYS:
+                raise ValueError(f"Unsupported operation: {operation}")
 
-            if not isinstance(condition, str) or not condition.strip():
-                raise Exception(
-                    f"Invalid condition for '{table_key}.{operation}'."
-                )
-
-            policy_name = pg_quote_ident(
+            safe_name = quote_identifier(
                 f"{name}_{table.lower()}_{operation_lc}"
             )
-            table_name = pg_quote_ident(table)
-            operation_sql = operation_lc.upper()
+            safe_condition = validate_policy_expression(condition)
 
-            if operation_lc in ["select", "delete"]:
+            if operation_lc in {"select", "delete"}:
                 query = f"""
-                    CREATE POLICY {policy_name}
-                    ON sensorthings.{table_name}
-                    FOR {operation_sql}
-                    TO {users_sql}
-                    USING ({condition});
+                    CREATE POLICY {safe_name}
+                    ON sensorthings.{safe_table}
+                    FOR {operation_lc.upper()}
+                    TO {quoted_users}
+                    USING ({safe_condition});
                 """
             elif operation_lc == "insert":
                 query = f"""
-                    CREATE POLICY {policy_name}
-                    ON sensorthings.{table_name}
-                    FOR {operation_sql}
-                    TO {users_sql}
-                    WITH CHECK ({condition});
+                    CREATE POLICY {safe_name}
+                    ON sensorthings.{safe_table}
+                    FOR INSERT
+                    TO {quoted_users}
+                    WITH CHECK ({safe_condition});
                 """
             else:
                 query = f"""
-                    CREATE POLICY {policy_name}
-                    ON sensorthings.{table_name}
-                    FOR {operation_sql}
-                    TO {users_sql}
-                    USING ({condition})
-                    WITH CHECK ({condition});
+                    CREATE POLICY {safe_name}
+                    ON sensorthings.{safe_table}
+                    FOR {operation_lc.upper()}
+                    TO {quoted_users}
+                    USING ({safe_condition})
+                    WITH CHECK ({safe_condition});
                 """
+
             await connection.execute(query)
