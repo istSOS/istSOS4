@@ -36,6 +36,25 @@ ENTITY_URL_NAMES = {
 }
 
 
+def require_json_content_type(request):
+    """
+    Ensure the request content type is JSON, allowing standard parameters
+    like ``charset=utf-8``.
+
+    Args:
+        request (Request): Incoming FastAPI request.
+
+    Raises:
+        Exception: If the request does not declare a JSON content type.
+    """
+
+    content_type = request.headers.get("content-type", "")
+    media_type = content_type.split(";", 1)[0].strip().lower()
+
+    if media_type != "application/json":
+        raise Exception("Only content-type application/json is supported.")
+
+
 def safe_parse_datetime(value):
     """
     Safely parse a datetime string using dateutil.parser.
@@ -348,10 +367,7 @@ def check_iot_id_in_payload(payload, entity):
         raise ValueError(
             "Invalid payload format: When providing '@iot.id', no other properties should be included."
         )
-    if not isinstance(payload["@iot.id"], int):
-        raise ValueError(
-            f"Expected `{entity} (@iot.id)` to be an `int`, got {type(payload['@iot.id']).__name__}"
-        )
+    extract_iot_id(payload)
 
 
 def check_missing_properties(payload, required_properties):

@@ -22,8 +22,8 @@ from app import (
     VERSIONING,
 )
 from app.utils.utils import (
-    check_iot_id_in_payload,
     check_missing_properties,
+    extract_iot_id,
     handle_datetime_fields,
     handle_result_field,
     validate_epsg,
@@ -78,7 +78,7 @@ async def create_entity(connection, entity_name, payload):
         values_placeholders = ", ".join(
             (
                 f"${i+1}"
-                if key != "location" or key != "feature"
+                if key != "location" and key != "feature"
                 else f"ST_GeomFromGeoJSON(${i+1})"
             )
             for i in range(len(payload))
@@ -106,14 +106,10 @@ async def insert_location_entity(connection, payload, commit_id):
             validate_epsg(payload["location"])
 
         for thing in payload.get("Things", []):
-            thing_id = thing.get("@iot.id")
-            if thing_id is not None:
-                new_thing = False
-                check_iot_id_in_payload(thing, "Thing")
-            else:
-                thing_id, _ = await insert_thing_entity(
-                    connection, thing, commit_id
-                )
+            try:
+                thing_id = extract_iot_id(thing)
+            except ValueError:
+                thing_id, _ = await insert_thing_entity(connection, thing, commit_id)
                 new_thing = True
 
             things.append((thing_id, new_thing))
@@ -145,13 +141,10 @@ async def insert_thing_entity(connection, payload, commit_id):
         locations_ids = []
 
         for location in payload.get("Locations", []):
-            location_id = location.get("@iot.id")
-            if location_id is None:
-                location_id, _ = await insert_location_entity(
-                    connection, location, commit_id
-                )
-            else:
-                check_iot_id_in_payload(location, "Location")
+            try:
+                location_id = extract_iot_id(location)
+            except ValueError:
+                location_id, _ = await insert_location_entity(connection, location, commit_id)
 
             locations_ids.append(location_id)
 
@@ -194,24 +187,20 @@ async def insert_historical_location_entity(connection, payload, commit_id):
         location_ids = []
 
         for location in payload.get("Locations", []):
-            location_id = location.get("@iot.id")
-            if location_id is None:
-                location_id, _ = await insert_location_entity(
-                    connection, location, commit_id
-                )
-            else:
-                check_iot_id_in_payload(location, "Location")
+            try:
+                location_id = extract_iot_id(location)
+            except ValueError:
+                location_id, _ = await insert_location_entity(connection, location, commit_id)
 
             location_ids.append(location_id)
 
         payload.pop("Locations", None)
 
         if "Thing" in payload:
-            thing_id = payload["Thing"].get("@iot.id")
-            if thing_id is None:
-                thing_id, _ = await insert_thing_entity(
-                    connection, payload["Thing"], commit_id
-                )
+            try:
+                thing_id = extract_iot_id(payload["Thing"])
+            except ValueError:
+                thing_id, _ = await insert_thing_entity(connection, payload["Thing"], commit_id)
                 new_thing = True
             payload["thing_id"] = thing_id
             payload.pop("Thing", None)
@@ -296,7 +285,7 @@ async def insert_datastream_entity(
 ):
     async with connection.transaction():
         if "@iot.id" in payload:
-            check_iot_id_in_payload(payload, "Datastream")
+            iot_id = extract_iot_id(payload)
 
             if thing_id is not None:
                 payload["Thing"] = {"@iot.id": thing_id}
@@ -307,7 +296,7 @@ async def insert_datastream_entity(
             if network_id is not None:
                 payload["Network"] = {"@iot.id": network_id}
 
-            iot_id = payload.pop("@iot.id")
+            payload.pop("@iot.id")
             await update_datastream_entity(connection, iot_id, payload)
 
             return (
@@ -427,7 +416,7 @@ async def insert_observation_entity(
 ):
     async with connection.transaction():
         if "@iot.id" in payload:
-            check_iot_id_in_payload(payload, "Observation")
+            iot_id = extract_iot_id(payload)
 
             if datastream_id is not None:
                 payload["Datastream"] = {"@iot.id": datastream_id}
@@ -437,7 +426,7 @@ async def insert_observation_entity(
                     "@iot.id": features_of_interest_id
                 }
 
-            iot_id = payload.pop("@iot.id")
+            payload.pop("@iot.id")
             await update_observation_entity(connection, iot_id, payload)
 
             return (
@@ -456,12 +445,8 @@ async def insert_observation_entity(
 
         if "FeatureOfInterest" in payload:
             if "@iot.id" in payload["FeatureOfInterest"]:
-                features_of_interest_id = payload["FeatureOfInterest"][
-                    "@iot.id"
-                ]
-                check_iot_id_in_payload(
-                    payload["FeatureOfInterest"], "FeatureOfInterest"
-                )
+                features_of_interest_id = extract_iot_id(payload["FeatureOfInterest"])
+
                 select_query = f"""
                         SELECT last_foi_id
                         FROM sensorthings."Datastream"
@@ -786,8 +771,7 @@ async def handle_associations(
         payload[f"{key.lower()}_id"] = entity_id
     elif key in payload:
         if "@iot.id" in payload[key]:
-            check_iot_id_in_payload(payload[key], key)
-            payload[f"{key.lower()}_id"] = payload[key]["@iot.id"]
+            payload[f"{key.lower()}_id"] = extract_iot_id(payload[key])
         else:
             async with conn.transaction():
                 entity_id, _ = await insert_func(

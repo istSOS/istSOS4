@@ -24,13 +24,15 @@ from app import (
     VERSIONING,
 )
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.v1.endpoints.functions import set_role
 from app.utils.utils import (
-    check_iot_id_in_payload,
     check_missing_properties,
     handle_datetime_fields,
     handle_result_field,
     build_self_link
+    extract_iot_id
 )
+from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
@@ -100,7 +102,7 @@ PAYLOAD_EXAMPLE = [
     status_code=status.HTTP_201_CREATED,
 )
 async def data_array_observation(
-    payload: list = Body(example=PAYLOAD_EXAMPLE),
+    payload: list = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -111,10 +113,7 @@ async def data_array_observation(
         async with pool.acquire() as conn:
             async with conn.transaction():
                 if current_user is not None:
-                    query = 'SET ROLE "{username}";'
-                    await conn.execute(
-                        query.format(username=current_user["username"])
-                    )
+                    await set_role(conn, current_user)
 
                 try:
                     commit_id = await set_commit(
@@ -122,18 +121,16 @@ async def data_array_observation(
                     )
                 except InsufficientPrivilegeError:
                     return JSONResponse(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        status_code=status.HTTP_403_FORBIDDEN,
                         content={
-                            "code": 401,
+                            "code": 403,
                             "type": "error",
                             "message": "Insufficient privileges.",
                         },
                     )
 
                 for observation_set in payload:
-                    datastream_id = observation_set.get("Datastream", {}).get(
-                        "@iot.id"
-                    )
+                    datastream_id = extract_iot_id(observation_set.get("Datastream", {}))
                     components = observation_set.get("components", [])
                     data_array = observation_set.get("dataArray", [])
 
@@ -197,9 +194,9 @@ async def data_array_observation(
                             response_urls.append(observation_selfLink)
                         except InsufficientPrivilegeError:
                             return JSONResponse(
-                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                status_code=status.HTTP_403_FORBIDDEN,
                                 content={
-                                    "code": 401,
+                                    "code": 403,
                                     "type": "error",
                                     "message": "Insufficient privileges.",
                                 },
@@ -215,9 +212,9 @@ async def data_array_observation(
 
     except InsufficientPrivilegeError:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={
-                "code": 401,
+                "code": 403,
                 "type": "error",
                 "message": "Insufficient privileges.",
             },
@@ -270,12 +267,7 @@ async def insertDataArrayObservation(
 
             if "FeatureOfInterest" in obs:
                 if "@iot.id" in obs["FeatureOfInterest"]:
-                    features_of_interest_id = obs["FeatureOfInterest"][
-                        "@iot.id"
-                    ]
-                    check_iot_id_in_payload(
-                        obs["FeatureOfInterest"], "FeatureOfInterest"
-                    )
+                    features_of_interest_id = extract_iot_id(obs["FeatureOfInterest"])
                     select_query = f"""
                         SELECT last_foi_id
                         FROM sensorthings."Datastream"
