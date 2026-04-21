@@ -13,7 +13,9 @@
 # limitations under the License.
 
 import json
+import logging
 
+import asyncpg
 from app import ANONYMOUS_VIEWER, AUTHORIZATION, REDIS
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
@@ -23,6 +25,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from .query_parameters import CommonQueryParams, get_common_query_params
 from .read import asyncpg_stream_results, wrapped_result_generator
+
+logger = logging.getLogger(__name__)
 
 v1 = APIRouter()
 
@@ -96,13 +100,36 @@ async def get_historical_locations(
                 media_type="application/json",
                 status_code=status.HTTP_200_OK,
             )
-        except Exception as e:
+        except StopAsyncIteration:
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content={
                     "code": 404,
                     "type": "error",
                     "message": "Not Found",
+                },
+            )
+        except (
+            asyncpg.PostgresConnectionError,
+            asyncpg.TooManyConnectionsError,
+        ):
+            logger.exception("Database unavailable in get_historical_locations")
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={
+                    "code": 503,
+                    "type": "error",
+                    "message": "Database temporarily unavailable",
+                },
+            )
+        except Exception:
+            logger.exception("Unexpected streaming error in get_historical_locations")
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={
+                    "code": 500,
+                    "type": "error",
+                    "message": "Internal server error",
                 },
             )
     except Exception as e:
