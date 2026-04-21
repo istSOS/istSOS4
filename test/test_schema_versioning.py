@@ -483,12 +483,6 @@ class TestSchemaVersioning:
 
         assert len(rows) == 1
 
-    @pytest.mark.xfail(reason=(
-        "Bug in istsos_mutate_history: the Datastream skip condition uses OR, so any "
-        "update that touches observedArea or phenomenonTime bypasses archiving entirely, "
-        "even when other meaningful columns also changed. The condition should only skip "
-        "when the update is exclusively to those auto-managed columns."
-    ))
     def test_datastream_mixed_update_does_archive(self, schema):
         """
         Updating observedArea together with a regular column (name) must still
