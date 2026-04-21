@@ -58,7 +58,7 @@ Always use a virtual environment. Skipping this is the single most common cause 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements-test.txt
+pip install -r api/requirements.txt -r requirements-test.txt
 ```
 
 **Windows (Command Prompt):**
@@ -66,7 +66,7 @@ pip install -r requirements-test.txt
 ```cmd
 python -m venv .venv
 .venv\Scripts\activate.bat
-pip install -r requirements-test.txt
+pip install -r api/requirements.txt -r requirements-test.txt
 ```
 
 **Windows (PowerShell):**
@@ -74,7 +74,7 @@ pip install -r requirements-test.txt
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -r requirements-test.txt
+pip install -r api/requirements.txt -r requirements-test.txt
 ```
 
 > If PowerShell blocks the activation script with an execution policy error, run:
@@ -359,12 +359,12 @@ If you install dependencies globally and then create a venv later, the venv won'
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r api/requirements.txt -r requirements-test.txt
 ```
 
 ### Installing dependencies outside the venv
 
-Running `pip install` without activating the venv installs to your system Python. The next time you activate the venv, the packages won't be there. If this happens, activate the venv and re-run `pip install -r requirements.txt`.
+Running `pip install` without activating the venv installs to your system Python. The next time you activate the venv, the packages won't be there. If this happens, activate the venv and re-run `pip install -r api/requirements.txt -r requirements-test.txt`.
 
 ### Forgetting `asyncio_mode = auto` means you don't need `@pytest.mark.asyncio`
 
