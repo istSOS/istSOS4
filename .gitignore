@@ -6,4 +6,6 @@ __pycache__/
 *.pkl
 docs/mkdocs/site
 database/schemaspy
+.venv/
 venv/
+env/
