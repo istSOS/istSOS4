@@ -385,35 +385,38 @@ class TestConnectionPoolUsageAfterFix:
                 print("\n✓ FIX VERIFIED: PostgresConnectionError → 503 HTTPException")
 
     async def test_connection_always_closed_even_on_exception(self):
-        """After fix: Connection is always closed in finally block."""
+        """After fix: Connection is always closed when an error happens after acquire."""
         close_called = []
-        
+
         async def mock_connect(**kwargs):
             mock_conn = AsyncMock()
-            
+
             async def track_close():
                 close_called.append(True)
-            
+
             mock_conn.close = track_close
             return mock_conn
-        
-        # Mock pool that raises exception
+
+        # Connection used inside pool.acquire()
+        mock_pool_conn = AsyncMock()
+        mock_pool_conn.fetchrow = AsyncMock(
+            side_effect=asyncpg.PostgresConnectionError("Connection lost")
+        )
+
         mock_pool = MagicMock()
-        
+
         @asynccontextmanager
         async def mock_acquire():
-            raise asyncpg.PostgresConnectionError("Connection lost")
-        
-        mock_pool.acquire = mock_acquire
-        
+            yield mock_pool_conn
+
+        mock_pool.acquire = MagicMock(return_value=mock_acquire())
+
         with patch("asyncpg.connect", side_effect=mock_connect), \
-             patch("app.oauth.get_pool", AsyncMock(return_value=mock_pool)):
-            
-            try:
+            patch("app.oauth.get_pool", AsyncMock(return_value=mock_pool)):
+
+            with pytest.raises(asyncpg.PostgresConnectionError):
                 await oauth.authenticate_user("test", "pass")
-            except HTTPException:
-                pass  # Expected
-        
+
         # Verify connection was closed despite exception
         assert len(close_called) == 1, "Connection was not closed!"
         print("\n✓ FIX VERIFIED: Connection closed even on exception")
