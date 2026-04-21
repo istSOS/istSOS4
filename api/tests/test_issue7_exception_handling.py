@@ -28,7 +28,7 @@ from app.v1.endpoints.read import read as read_ep
 
 
 class TestIssue7ExceptionHandling:
-    async def test_create_user_unexpected_error_returns_500_without_details(self):
+    async def test_create_user_unexpected_error_returns_400_without_details(self):
         pool = MagicMock()
         tx = MagicMock()
         tx.__aenter__ = AsyncMock(return_value=None)
@@ -52,7 +52,7 @@ class TestIssue7ExceptionHandling:
                 pgpool=pool,
             )
 
-        assert response.status_code == 500
+        assert response.status_code == 400
         assert "details leaked" not in response.body.decode()
 
     async def test_catch_all_get_stream_error_returns_500(self):

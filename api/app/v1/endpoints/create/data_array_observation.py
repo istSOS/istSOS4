@@ -29,8 +29,8 @@ from app.utils.utils import (
     check_missing_properties,
     handle_datetime_fields,
     handle_result_field,
-    build_self_link
-    extract_iot_id
+    build_self_link,
+    extract_iot_id,
 )
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
