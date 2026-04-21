@@ -14,7 +14,8 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import require_json_content_type, validate_payload_keys
+from app.rbac_roles import check_create_permission
+from app.utils.utils import validate_payload_keys, require_json_content_type
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
@@ -85,6 +86,18 @@ async def create_datastream(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
+    if current_user is not None:
+        user_role = current_user.get("role", "")
+        if not check_create_permission(user_role):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "code": 403,
+                    "type": "error",
+                    "message": "Insufficient privileges.",
+                },
+            )
+
     try:
         require_json_content_type(request)
 
@@ -163,6 +176,18 @@ async def create_datastream_for_thing(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
+    if current_user is not None:
+        user_role = current_user.get("role", "")
+        if not check_create_permission(user_role):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "code": 403,
+                    "type": "error",
+                    "message": "Insufficient privileges.",
+                },
+            )
+
     try:
         require_json_content_type(request)
 
@@ -246,6 +271,18 @@ async def create_datastream_for_sensor(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
+    if current_user is not None:
+        user_role = current_user.get("role", "")
+        if not check_create_permission(user_role):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "code": 403,
+                    "type": "error",
+                    "message": "Insufficient privileges.",
+                },
+            )
+
     try:
         require_json_content_type(request)
 
@@ -332,12 +369,24 @@ async def create_datastream_for_observed_property(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
+    if current_user is not None:
+        user_role = current_user.get("role", "")
+        if not check_create_permission(user_role):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "code": 403,
+                    "type": "error",
+                    "message": "Insufficient privileges.",
+                },
+            )
+
     try:
         require_json_content_type(request)
 
         if not observed_property_id:
             raise Exception("Observed Property ID is required.")
-
+ 
         payload["ObservedProperty"] = {"@iot.id": observed_property_id}
 
         validate_payload_keys(payload, ALLOWED_KEYS)
