@@ -32,25 +32,57 @@ def _get_raw_conn():
     return conn
 
 def _recreate_database():
-    conn = psycopg2.connect(ADMIN_DSN)
-    conn.autocommit = True
-
-    with conn.cursor() as cur:
+    # Terminate active connections and drop the target database first.
+    admin_conn = psycopg2.connect(ADMIN_DSN)
+    admin_conn.autocommit = True
+    with admin_conn.cursor() as cur:
         cur.execute(f"""
             SELECT pg_terminate_backend(pid)
             FROM pg_stat_activity
             WHERE datname = '{TEST_DB}' AND pid <> pg_backend_pid();
         """)
-
         cur.execute(f"DROP DATABASE IF EXISTS {TEST_DB}")
-        cur.execute(f"CREATE DATABASE {TEST_DB}")
+    admin_conn.close()
 
-        # roles are cluster-level and survive DROP DATABASE
-        # drop them here so the schema's CREATE ROLE always succeeds
+    # Roles are cluster-level and survive DROP DATABASE, so we must
+    # revoke all objects they own in every surviving database before
+    # DROP ROLE can succeed. Without this step, DROP ROLE raises
+    # DependentObjectsStillExist when test_auth_sql runs first and
+    # leaves the administrator role owning objects in istsos_test_auth.
+    discover_conn = psycopg2.connect(ADMIN_DSN)
+    discover_conn.autocommit = True
+    with discover_conn.cursor() as cur:
+        cur.execute("""
+            SELECT datname FROM pg_database
+            WHERE datistemplate = false AND datname NOT IN ('postgres')
+        """)
+        other_dbs = [r[0] for r in cur.fetchall()]
+    discover_conn.close()
+
+    for db in other_dbs:
+        try:
+            db_conn = psycopg2.connect(f"postgresql://postgres:15889@localhost:5432/{db}")
+            db_conn.autocommit = True
+            with db_conn.cursor() as cur:
+                for role in ("administrator", "testuser"):
+                    cur.execute(f"""
+                        DO $$ BEGIN
+                            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{role}') THEN
+                                DROP OWNED BY "{role}" CASCADE;
+                            END IF;
+                        END $$;
+                    """)
+            db_conn.close()
+        except Exception:
+            pass  # DB may have been dropped mid-iteration
+
+    admin_conn = psycopg2.connect(ADMIN_DSN)
+    admin_conn.autocommit = True
+    with admin_conn.cursor() as cur:
         cur.execute("DROP ROLE IF EXISTS administrator")
         cur.execute("DROP ROLE IF EXISTS testuser")
-
-    conn.close()
+        cur.execute(f"CREATE DATABASE {TEST_DB}")
+    admin_conn.close()
 
 
 def _load_schema(conn):
