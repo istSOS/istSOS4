@@ -337,7 +337,7 @@ class TestCreateEntityGeometryBranchBug:
         conn, captured = self.make_conn_with_query_capture()
         payload = {"feature": '{"type": "Point", "coordinates": [1, 1]}'}
 
-        await create_entity(conn, "FeaturesOfInterest", payload)
+        await create_entity(conn, "FeatureOfInterest", payload)
 
         assert "ST_GeomFromGeoJSON" in captured.get("query", "")
 
