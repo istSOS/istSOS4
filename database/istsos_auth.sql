@@ -352,7 +352,7 @@ BEGIN
         ALTER TABLE sensorthings."Commit"
         ADD COLUMN "user_id" BIGINT NOT NULL REFERENCES sensorthings."User"(id) ON DELETE CASCADE;
 
-        IF current_setting('custom.network')::boolean THEN
+        IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
             -- Alter the Network table to add the commit_id column
             ALTER TABLE sensorthings."Network" 
             ADD COLUMN "commit_id" BIGINT NOT NULL 
@@ -408,7 +408,7 @@ BEGIN
         GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO "user";
         REVOKE INSERT, UPDATE, DELETE ON sensorthings."User" FROM "user";
         REVOKE UPDATE, DELETE ON sensorthings."Commit" FROM "user";
-        IF current_setting('custom.network')::boolean THEN
+        IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
             REVOKE INSERT, UPDATE, DELETE ON sensorthings."Network" FROM "user";
         END IF;
         GRANT "user" TO "administrator" WITH ADMIN OPTION;
@@ -445,7 +445,7 @@ BEGIN
         ALTER TABLE sensorthings."Datastream" ENABLE ROW LEVEL SECURITY;
         ALTER TABLE sensorthings."FeaturesOfInterest" ENABLE ROW LEVEL SECURITY;
         ALTER TABLE sensorthings."Observation" ENABLE ROW LEVEL SECURITY;
-        IF current_setting('custom.network')::boolean THEN
+        IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
             ALTER TABLE sensorthings."Network" ENABLE ROW LEVEL SECURITY;
         END IF;
 
@@ -465,7 +465,7 @@ BEGIN
                 'FeaturesOfInterest', 
                 'Observation'
             ];
-            IF current_setting('custom.network')::boolean THEN
+            IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
                 tables := tables || ARRAY['Network'];
             END IF;
 
@@ -497,19 +497,19 @@ BEGIN
                 'FeaturesOfInterest', 
                 'Observation'
             ];
-            IF current_setting('custom.network')::boolean THEN
+            IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
                 tables := tables || ARRAY['Network'];
             END IF;
 
             FOR tablename IN SELECT unnest(tables)
             LOOP
                 EXECUTE format(
-                    'CREATE POLICY %s_viewer_%s
+                    'CREATE POLICY %I
                     ON sensorthings.%I
                     FOR SELECT
                     TO %s
                     USING (TRUE);',
-                    policyname_, tablename, tablename, user_list_
+                    policyname_ || '_viewer_' || tablename, tablename, user_list_
                 );
             END LOOP;
         END;
@@ -533,24 +533,24 @@ BEGIN
                 'FeaturesOfInterest', 
                 'Observation'
             ];
-            IF current_setting('custom.network')::boolean THEN
+            IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
                 tables := tables || ARRAY['Network'];
             END IF;
 
             FOR tablename IN SELECT unnest(tables)
             LOOP
                 EXECUTE format(
-                    'CREATE POLICY %s_editor_%s
+                    'CREATE POLICY %I
                     ON sensorthings.%I
                     FOR ALL
                     TO %s
                     USING (TRUE);',
-                    policyname_, tablename, tablename, user_list_
+                    policyname_ || '_editor_' || tablename, tablename, user_list_
                 );
             END LOOP;
         END;
         $$ LANGUAGE plpgsql;
-
+            
         CREATE OR REPLACE FUNCTION sensorthings.sensor_policy(users_ text[], policyname_ text)
         RETURNS void AS $$
         DECLARE
@@ -569,58 +569,58 @@ BEGIN
                 'FeaturesOfInterest', 
                 'Observation'
             ];
-            IF current_setting('custom.network')::boolean THEN
+            IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
                 tables := tables || ARRAY['Network'];
             END IF;
 
             FOR tablename IN SELECT unnest(tables)
             LOOP
                 EXECUTE format(
-                    'CREATE POLICY %s_sensor_%s_select
+                    'CREATE POLICY %I
                     ON sensorthings.%I
                     FOR SELECT
                     TO %s
                     USING (TRUE);',
-                    policyname_, tablename, tablename, user_list_
+                    policyname_ || '_sensor_' || tablename || '_select', tablename, user_list_
                 );
             END LOOP;
 
             EXECUTE format(
-                'CREATE POLICY %s_sensor_observation_insert
+                'CREATE POLICY %I
                 ON sensorthings."Observation"
                 FOR INSERT
                 TO %s
                 WITH CHECK (TRUE);',
-                policyname_, user_list_
+                policyname_ || '_sensor_observation_insert', user_list_
             );
 
             EXECUTE format(
-                'CREATE POLICY %s_sensor_featuresofinterest_insert
+                'CREATE POLICY %I
                 ON sensorthings."FeaturesOfInterest"
                 FOR INSERT
                 TO %s
                 WITH CHECK (TRUE);',
-                policyname_, user_list_
+                policyname_ || '_sensor_foi_insert', user_list_
             );
 
             EXECUTE format(
-                'CREATE POLICY %s_sensor_datastream_update
+                'CREATE POLICY %I
                 ON sensorthings."Datastream"
                 FOR UPDATE
                 TO %s
                 USING (TRUE)
                 WITH CHECK (TRUE);',
-                policyname_, user_list_
+                policyname_ || '_sensor_datastream_update', user_list_
             );
 
             EXECUTE format(
-                'CREATE POLICY %s_sensor_location_update
+                'CREATE POLICY %I
                 ON sensorthings."Location"
                 FOR UPDATE
                 TO %s
                 USING (TRUE)
                 WITH CHECK (TRUE);',
-                policyname_, user_list_
+                policyname_ || '_sensor_location_update', user_list_
             );
         END;
         $$ LANGUAGE plpgsql;
@@ -642,58 +642,58 @@ BEGIN
                 'Datastream', 
                 'FeaturesOfInterest'
             ];
-            IF current_setting('custom.network')::boolean THEN
+            IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
                 tables := tables || ARRAY['Network'];
             END IF;
 
             FOR tablename IN SELECT unnest(tables)
             LOOP
                 EXECUTE format(
-                    'CREATE POLICY %s_obs_manager_%s_select
+                    'CREATE POLICY %I
                     ON sensorthings.%I
                     FOR SELECT
                     TO %s
                     USING (TRUE);',
-                    policyname_, tablename, tablename, user_list_
+                    policyname_ || '_obs_manager_' || tablename || '_select', tablename, user_list_
                 );
             END LOOP;
 
             EXECUTE format(
-                'CREATE POLICY %s_obs_manager_observation_all
+                'CREATE POLICY %I
                 ON sensorthings."Observation"
                 FOR ALL
                 TO %s
                 USING (TRUE);',
-                policyname_, user_list_
+                policyname_ || '_obs_manager_obs_all', user_list_
             );
 
             EXECUTE format(
-                'CREATE POLICY %s_obs_manager_featuresffointerest_insert
+                'CREATE POLICY %I
                 ON sensorthings."FeaturesOfInterest"
                 FOR INSERT
                 TO %s
                 WITH CHECK (TRUE);',
-                policyname_, user_list_
+                policyname_ || '_obs_manager_foi_insert', user_list_
             );
 
             EXECUTE format(
-                'CREATE POLICY %s_obs_manager_datastream_update
+                'CREATE POLICY %I
                 ON sensorthings."Datastream"
                 FOR UPDATE
                 TO %s
                 USING (TRUE)
                 WITH CHECK (TRUE);',
-                policyname_, user_list_
+                policyname_ || '_obs_manager_datastream_update', user_list_
             );
 
             EXECUTE format(
-                'CREATE POLICY %s_obs_manager_location_update
+                'CREATE POLICY %I
                 ON sensorthings."Location"
                 FOR UPDATE
                 TO %s
                 USING (TRUE)
                 WITH CHECK (TRUE);',
-                policyname_, user_list_
+                policyname_ || '_obs_manager_location_update', user_list_
             );
         END;
         $$ LANGUAGE plpgsql;

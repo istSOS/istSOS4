@@ -13,17 +13,26 @@
 # limitations under the License.
 
 import json
+import logging
 
 from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.utils.utils import pg_quote_ident, pg_quote_literal, validate_username
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
 from app.v1.endpoints.functions import insert_commit, set_role
-from asyncpg.exceptions import InsufficientPrivilegeError, UniqueViolationError
+from asyncpg.exceptions import (
+    InsufficientPrivilegeError,
+    PostgresConnectionError,
+    QueryCanceledError,
+    TooManyConnectionsError,
+    UniqueViolationError,
+)
 from fastapi import APIRouter, Body, Depends, status
 from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
+logger = logging.getLogger(__name__)
 
 PAYLOAD_EXAMPLE = {
     "username": "cp1",
@@ -31,14 +40,6 @@ PAYLOAD_EXAMPLE = {
     "uri": "https://orcid.org/0000-0004-3456-7890",
     "role": "viewer",  # viewer, editor, obs_manager, sensor, custom
 }
-
-ROLES = {
-    "viewer": "user",
-    "editor": "user",
-    "obs_manager": "sensor",
-    "sensor": "sensor",
-}
-
 
 @v1.api_route(
     "/Users",
@@ -49,7 +50,7 @@ ROLES = {
     status_code=status.HTTP_201_CREATED,
 )
 async def create_user(
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
@@ -90,6 +91,14 @@ async def create_user(
                         },
                     )
 
+                try:
+                    payload["role"] = validate_rbac_role(payload["role"])
+                except ValueError as e:
+                    return JSONResponse(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        content={"message": str(e)},
+                    )
+
                 if current_user is not None:
                     if current_user["role"] != "administrator":
                         raise InsufficientPrivilegeError
@@ -117,11 +126,13 @@ async def create_user(
                     query = """
                         UPDATE sensorthings."User"
                         SET uri = $1 || $2 || $3 ||  '/Users(' || sensorthings."User".id || ')'
-                        WHERE sensorthings."User".id = $4;
+                        WHERE sensorthings."User".id = $4
+                        RETURNING uri;
                     """
-                    await connection.execute(
+                    generated_uri = await connection.fetchval(
                         query, HOSTNAME, SUBPATH, VERSION, user["id"]
                     )
+                    user = {**user, "uri": generated_uri}
 
                 if payload["role"] == "sensor":
                     commit = {
@@ -135,14 +146,13 @@ async def create_user(
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
 
-                if payload["role"] in ROLES:
-                    payload["role"] = ROLES[payload["role"]]
+                db_role = get_db_role_for_rbac(payload["role"])
 
                 await connection.execute(
                     "CREATE USER {} WITH ENCRYPTED PASSWORD {} IN ROLE {};".format(
                         pg_quote_ident(user["username"]),
                         pg_quote_literal(password),
-                        pg_quote_ident(payload["role"]),
+                        pg_quote_ident(db_role),
                     )
                 )
 
@@ -162,11 +172,24 @@ async def create_user(
         )
     except InsufficientPrivilegeError:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={"message": "Insufficient privileges."},
         )
-    except Exception as e:
+    except (PostgresConnectionError, TooManyConnectionsError):
+        logger.exception("Database temporarily unavailable during user creation")
         return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"message": str(e)},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"message": "Database temporarily unavailable."},
+        )
+    except QueryCanceledError:
+        logger.exception("Database timeout during user creation")
+        return JSONResponse(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            content={"message": "Database request timed out."},
+        )
+    except Exception:
+        logger.exception("Unexpected error during user creation")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": "Internal server error."},
         )
