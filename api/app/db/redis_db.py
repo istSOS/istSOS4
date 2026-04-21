@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import redis
+import redis.asyncio as aioredis
 
-redis = redis.Redis(host="redis")
+redis = aioredis.Redis(host="redis")
 
 
-def remove_cache(path):
+async def remove_cache(path):
     """
     Remove the cache for the specified path.
 
@@ -29,13 +29,12 @@ def remove_cache(path):
     """
     # Pattern da cercare nelle chiavi (ad esempio 'testop')
     pattern = "*{}*".format(path)
-
     # Itera su tutte le chiavi che corrispondono al pattern
+
     cursor = 0
     while True:
-        cursor, keys = redis.scan(cursor=cursor, match=pattern)
+        cursor, keys = await redis.scan(cursor=cursor, match=pattern)
         if keys:
-            # Cancella le chiavi trovate
-            redis.delete(*keys)
+            await redis.delete(*keys)
         if cursor == 0:
             break
