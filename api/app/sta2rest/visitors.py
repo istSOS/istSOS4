@@ -418,8 +418,9 @@ class NodeVisitor(Visitor):
                     for relationship in join_relationships:
                         sub_query = sub_query.join(relationship)
 
+            sub_query_from = sub_query.subquery()
             columns_to_select = []
-            for column in sub_query.columns:
+            for column in sub_query_from.c:
                 if column.name not in labels:
                     columns_to_select.append(column)
                 else:
@@ -439,7 +440,7 @@ class NodeVisitor(Visitor):
                         )
 
             if columns_to_select is not None:
-                sub_query = select(*columns_to_select).select_from(sub_query)
+                sub_query = select(*columns_to_select).select_from(sub_query_from)
 
             expand_queries.append(
                 [
@@ -799,7 +800,7 @@ class NodeVisitor(Visitor):
                 limited_count_query_str = str(
                     select(func.count())
                     .select_from(
-                        query_estimate_count.limit(COUNT_ESTIMATE_THRESHOLD)
+                        query_estimate_count.limit(COUNT_ESTIMATE_THRESHOLD).subquery()
                     )
                     .compile(
                         dialect=engine.dialect,
@@ -827,8 +828,9 @@ class NodeVisitor(Visitor):
                 top_value -= 1
 
         main_query = main_query.limit(top_value).offset(skip_value)
+        main_query_subquery = main_query.subquery("main_query_source")
         columns_to_select = []
-        for column in main_query.columns:
+        for column in main_query_subquery.c:
             if column.name not in labels:
                 columns_to_select.append(column)
             else:
@@ -850,11 +852,11 @@ class NodeVisitor(Visitor):
         if columns_to_select is not None:
             main_query = (
                 select(*columns_to_select)
-                .select_from(main_query)
+                .select_from(main_query_subquery)
                 .alias("main_query")
             )
         else:
-            main_query = main_query.alias("main_query")
+            main_query = main_query_subquery.alias("main_query")
 
         if result_format == "DataArray":
             if not node.expand:
@@ -913,9 +915,10 @@ class NodeVisitor(Visitor):
                 value = select_query[0].name
             else:
                 value = select_query[0].right
+            main_query_json = main_query.subquery("main_query_json")
             main_query = select(
-                main_query.c.json.op("->")(text(f"'{value}'"))
-            ).select_from(main_query)
+                main_query_json.c.json.op("->")(text(f"'{value}'"))
+            ).select_from(main_query_json)
 
         main_query_str = str(
             main_query.compile(
