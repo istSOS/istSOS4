@@ -30,7 +30,7 @@ from app.utils.utils import (
     handle_datetime_fields,
     handle_result_field,
     build_self_link,
-    extract_iot_id
+    extract_iot_id,
 )
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
