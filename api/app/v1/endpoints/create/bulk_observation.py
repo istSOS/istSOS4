@@ -404,7 +404,7 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
                 l.name,
                 l.description,
                 l."encodingType",
-                l.location,
+                ST_AsGeoJSON(l.location) AS location,
                 l.properties,
                 l.gen_foi_id
             FROM
@@ -450,7 +450,7 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
                     conn, "FeaturesOfInterest", foi_payload
                 )
 
-                update_query = f"""
+                update_query = """
                     UPDATE sensorthings."Location" 
                     SET "gen_foi_id" = $1::bigint
                     WHERE id = $2::bigint;
