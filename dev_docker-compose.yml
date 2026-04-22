@@ -36,6 +36,9 @@ services:
       context: ./api
       dockerfile: Dockerfile
     restart: always
+    depends_on:
+      database:
+        condition: service_healthy
     environment:
       HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
