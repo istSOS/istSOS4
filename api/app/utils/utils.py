@@ -16,7 +16,7 @@ import json
 import re
 from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
-from app import EPSG, HOSTNAME, TOP_VALUE, SUBPATH, VERSION
+from app import EPSG, HOSTNAME, SUBPATH, TOP_VALUE, VERSION
 from asyncpg.types import Range
 from dateutil import parser
 
@@ -30,7 +30,7 @@ ENTITY_URL_NAMES = {
     "Datastream": "Datastreams",
     "Observation": "Observations",
     "ObservedProperty": "ObservedProperties",
-    "FeatureOfInterest": "FeaturesOfInterest",
+    "FeaturesOfInterest": "FeaturesOfInterest",
     "HistoricalLocation": "HistoricalLocations",
     "Network": "Networks",
 }
@@ -93,10 +93,12 @@ def extract_iot_id(data):
         raise ValueError(
             f"Expected dict for association, got {type(data).__name__}"
         )
+
     if "@iot.id" not in data:
         raise ValueError("Missing '@iot.id' in association payload")
 
     iot_id = data["@iot.id"]
+
     if not isinstance(iot_id, int):
         raise ValueError(
             f"Expected int for '@iot.id', got {type(iot_id).__name__}"
@@ -270,7 +272,7 @@ def build_self_link(entity_name, entity_id):
             f"Unknown entity name '{entity_name}'. "
             f"Expected one of: {', '.join(ENTITY_URL_NAMES.keys())}"
         )
-    
+
     return f"{HOSTNAME}{SUBPATH}{VERSION}/{url_name}({entity_id})"
 
 
@@ -367,7 +369,10 @@ def check_iot_id_in_payload(payload, entity):
         raise ValueError(
             "Invalid payload format: When providing '@iot.id', no other properties should be included."
         )
-    extract_iot_id(payload)
+    if not isinstance(payload["@iot.id"], int):
+        raise ValueError(
+            f"Expected `{entity} (@iot.id)` to be an `int`, got {type(payload['@iot.id']).__name__}"
+        )
 
 
 def check_missing_properties(payload, required_properties):

@@ -15,7 +15,7 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.utils.utils import extract_iot_id, safe_parse_datetime
+from app.utils.utils import safe_parse_datetime
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
@@ -79,7 +79,7 @@ PAYLOAD_EXAMPLE = [
     status_code=status.HTTP_201_CREATED,
 )
 async def bulk_observations(
-    payload: list = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
+    payload: list = Body(example=PAYLOAD_EXAMPLE),
     commit_message=message,
     current_user=user,
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -105,7 +105,9 @@ async def bulk_observations(
                     )
 
                 for observation_set in payload:
-                    datastream_id = extract_iot_id(observation_set.get("Datastream", {}))
+                    datastream_id = observation_set.get("Datastream", {}).get(
+                        "@iot.id"
+                    )
                     components = observation_set.get("components", [])
                     data_array = observation_set.get("dataArray", [])
 
@@ -231,7 +233,9 @@ async def insertBulkObservation(
         ph_interval = None
         for obs in payload:
             if result_time_idx > -1:
-                obs[result_time_idx] = safe_parse_datetime(obs[result_time_idx])
+                obs[result_time_idx] = safe_parse_datetime(
+                    obs[result_time_idx]
+                )
             if "/" in obs[ph_idx]:
                 ph_time = obs[ph_idx].split("/")
                 obs[ph_idx] = Range(
@@ -252,17 +256,17 @@ async def insertBulkObservation(
                     upper_inc=True,
                 )
             else:
-                if safe_parse_datetime(ph_interval.lower) > safe_parse_datetime(
-                    obs[ph_idx].lower
-                ):
+                if safe_parse_datetime(
+                    ph_interval.lower
+                ) > safe_parse_datetime(obs[ph_idx].lower):
                     ph_interval = Range(
                         obs[ph_idx].lower,
                         ph_interval.upper,
                         upper_inc=True,
                     )
-                if safe_parse_datetime(ph_interval.upper) < safe_parse_datetime(
-                    obs[ph_idx].upper
-                ):
+                if safe_parse_datetime(
+                    ph_interval.upper
+                ) < safe_parse_datetime(obs[ph_idx].upper):
                     ph_interval = Range(
                         ph_interval.lower,
                         obs[ph_idx].upper,
@@ -415,7 +419,9 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
                 d.id = $1
         """
 
-        result = await conn.fetch(query_location_from_thing_datastream, datastream_id)
+        result = await conn.fetch(
+            query_location_from_thing_datastream, datastream_id
+        )
 
         if result:
             (
