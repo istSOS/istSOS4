@@ -395,6 +395,7 @@ async def update_network_entity(connection, network_id, payload):
     if payload:
         await update_entity(connection, "Network", network_id, payload)
 
+
 async def handle_nested_entities(
     connection, payload, entity_id, key, field, update_table
 ):
@@ -412,11 +413,13 @@ async def handle_nested_entities(
                 related_id = item["@iot.id"]
 
                 # Check the type here first and return a Bad Request here
-                if not isinstance(related_id, int) or isinstance(related_id, bool):
+                if not isinstance(related_id, int) or isinstance(
+                    related_id, bool
+                ):
                     raise Exception(
                         f"'@iot.id' must be an integer, got {type(related_id).__name__}"
                     )
-                
+
                 # Parameterized Query
                 await connection.execute(
                     f'UPDATE sensorthings."{update_table}" SET "{field}" = $1 WHERE id = $2;',
