@@ -16,10 +16,10 @@ import json
 import logging
 
 from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
-from app.utils.utils import pg_quote_ident, pg_quote_literal, validate_username
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
+from app.utils.utils import pg_quote_ident, pg_quote_literal, validate_username
 from app.v1.endpoints.functions import insert_commit, set_role
 from asyncpg.exceptions import (
     InsufficientPrivilegeError,
@@ -41,6 +41,7 @@ PAYLOAD_EXAMPLE = {
     "role": "viewer",  # viewer, editor, obs_manager, sensor, custom
 }
 
+
 @v1.api_route(
     "/Users",
     methods=["POST"],
@@ -50,7 +51,7 @@ PAYLOAD_EXAMPLE = {
     status_code=status.HTTP_201_CREATED,
 )
 async def create_user(
-    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
@@ -176,7 +177,9 @@ async def create_user(
             content={"message": "Insufficient privileges."},
         )
     except (PostgresConnectionError, TooManyConnectionsError):
-        logger.exception("Database temporarily unavailable during user creation")
+        logger.exception(
+            "Database temporarily unavailable during user creation"
+        )
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={"message": "Database temporarily unavailable."},

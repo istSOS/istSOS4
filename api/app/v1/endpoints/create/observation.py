@@ -14,7 +14,7 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import validate_payload_keys, require_json_content_type
+from app.utils.utils import require_json_content_type, validate_payload_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UniqueViolationError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
@@ -65,7 +65,7 @@ ALLOWED_KEYS = [
 )
 async def create_observation(
     request: Request,
-    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -144,7 +144,7 @@ PAYLOAD_EXAMPLE_DATASTREAM = {
 async def create_observation_for_datastream(
     request: Request,
     datastream_id: int,
-    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE_DATASTREAM}}),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE_DATASTREAM),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -221,7 +221,7 @@ async def create_observation_for_datastream(
 async def create_observation_for_feature_of_interest(
     request: Request,
     feature_of_interest_id: int,
-    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
