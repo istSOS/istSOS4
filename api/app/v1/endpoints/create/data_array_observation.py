@@ -15,22 +15,14 @@
 import json
 from datetime import datetime
 
-from app import (
-    AUTHORIZATION,
-    HOSTNAME,
-    POSTGRES_PORT_WRITE,
-    SUBPATH,
-    VERSION,
-    VERSIONING,
-)
+from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.v1.endpoints.functions import set_role
 from app.utils.utils import (
+    build_self_link,
+    check_iot_id_in_payload,
     check_missing_properties,
     handle_datetime_fields,
     handle_result_field,
-    build_self_link
-    extract_iot_id
 )
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
@@ -102,7 +94,7 @@ PAYLOAD_EXAMPLE = [
     status_code=status.HTTP_201_CREATED,
 )
 async def data_array_observation(
-    payload: list = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
+    payload: list = Body(example=PAYLOAD_EXAMPLE),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -130,7 +122,9 @@ async def data_array_observation(
                     )
 
                 for observation_set in payload:
-                    datastream_id = extract_iot_id(observation_set.get("Datastream", {}))
+                    datastream_id = observation_set.get("Datastream", {}).get(
+                        "@iot.id"
+                    )
                     components = observation_set.get("components", [])
                     data_array = observation_set.get("dataArray", [])
 
@@ -267,7 +261,12 @@ async def insertDataArrayObservation(
 
             if "FeatureOfInterest" in obs:
                 if "@iot.id" in obs["FeatureOfInterest"]:
-                    features_of_interest_id = extract_iot_id(obs["FeatureOfInterest"])
+                    features_of_interest_id = obs["FeatureOfInterest"][
+                        "@iot.id"
+                    ]
+                    check_iot_id_in_payload(
+                        obs["FeatureOfInterest"], "FeatureOfInterest"
+                    )
                     select_query = f"""
                         SELECT last_foi_id
                         FROM sensorthings."Datastream"
