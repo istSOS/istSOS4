@@ -40,7 +40,7 @@ BEGIN
 
         -- If the table is 'Datastream' and the column 'phenomenonTime' or columns 'observedArea' exist  and are updated
         IF TG_TABLE_NAME = 'Datastream' THEN
-            IF (
+             IF (
                 (NEW."phenomenonTime" IS DISTINCT FROM OLD."phenomenonTime" OR NEW."observedArea" IS DISTINCT FROM OLD."observedArea")
                 AND NEW."name" IS NOT DISTINCT FROM OLD."name"
                 AND NEW."description" IS NOT DISTINCT FROM OLD."description"
@@ -673,6 +673,13 @@ BEGIN
             GRANT USAGE ON SCHEMA sensorthings_history TO "sensor";
             GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings_history TO "sensor";
             GRANT INSERT ON TABLE sensorthings_history."Datastream" TO "sensor";
+            
+            -- Override grants for the qc
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO "qc";
+            REVOKE SELECT ON sensorthings."User" FROM "qc";
+            GRANT USAGE ON SCHEMA sensorthings_history TO "qc";
+            GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings_history TO "qc";
+            GRANT INSERT ON TABLE sensorthings_history."Observation" TO "qc";
             
             -- Alter the traveltime views to use the security invoker
             ALTER VIEW sensorthings."Location_traveltime" SET (security_invoker = on);

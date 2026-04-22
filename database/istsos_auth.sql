@@ -434,6 +434,15 @@ BEGIN
         REVOKE SELECT ON sensorthings."User" FROM "sensor";
         GRANT "sensor" TO "administrator" WITH ADMIN OPTION;
 
+        -- Create roles for qc
+        CREATE ROLE "qc";
+        GRANT USAGE ON SCHEMA sensorthings TO "qc";
+        GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO "qc";
+        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO "qc";
+        GRANT UPDATE ON TABLE sensorthings."Observation" TO "qc";
+        GRANT INSERT ON TABLE sensorthings."Commit" TO "qc";
+        GRANT "qc" TO "administrator" WITH ADMIN OPTION;
+
         SET ROLE "administrator";
         
         -- Enable row level security
@@ -536,7 +545,7 @@ BEGIN
             IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
                 tables := tables || ARRAY['Network'];
             END IF;
-
+            
             FOR tablename IN SELECT unnest(tables)
             LOOP
                 EXECUTE format(
@@ -550,7 +559,7 @@ BEGIN
             END LOOP;
         END;
         $$ LANGUAGE plpgsql;
-            
+
         CREATE OR REPLACE FUNCTION sensorthings.sensor_policy(users_ text[], policyname_ text)
         RETURNS void AS $$
         DECLARE
@@ -573,7 +582,7 @@ BEGIN
                 tables := tables || ARRAY['Network'];
             END IF;
 
-            FOR tablename IN SELECT unnest(tables)
+FOR tablename IN SELECT unnest(tables)
             LOOP
                 EXECUTE format(
                     'CREATE POLICY %I
@@ -625,6 +634,35 @@ BEGIN
         END;
         $$ LANGUAGE plpgsql;
 
+        CREATE OR REPLACE FUNCTION sensorthings.qc_policy(users_ text[], policyname_ text)
+        RETURNS void AS $$
+        DECLARE
+            tablename text;
+            user_list_ text;
+        BEGIN
+            user_list_ := array_to_string(users_, ', ');
+
+            EXECUTE format(
+                'CREATE POLICY %I
+                ON sensorthings."Observation"
+                FOR SELECT
+                TO %s
+                USING (TRUE);',
+                policyname_ || '_qc_observation_select', user_list_
+            );
+
+            EXECUTE format(
+                'CREATE POLICY %I
+                ON sensorthings."Observation"
+                FOR UPDATE
+                TO %s
+                USING (TRUE)
+                WITH CHECK (TRUE);',
+                policyname_ || '_qc_observation_update', user_list_
+            );
+        END;
+        $$ LANGUAGE plpgsql;
+
         CREATE OR REPLACE FUNCTION sensorthings.obs_manager_policy(users_ text[], policyname_ text)
         RETURNS void AS $$
         DECLARE
@@ -642,7 +680,7 @@ BEGIN
                 'Datastream', 
                 'FeaturesOfInterest'
             ];
-            IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
+ IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
                 tables := tables || ARRAY['Network'];
             END IF;
 
