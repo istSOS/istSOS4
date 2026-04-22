@@ -62,7 +62,7 @@ async def update_policy(
         alias="policy",
         description="The name of the policy to update",
     ),
-    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
