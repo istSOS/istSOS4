@@ -60,7 +60,7 @@ async def get_user_from_db(username: str):
 async def get_auth_connection(username: str, password: str):
     """
     Context manager for authentication connections.
-    
+
     Ensures connection is properly closed even on errors.
     Includes timeout protection and comprehensive error handling.
     """
@@ -83,25 +83,25 @@ async def get_auth_connection(username: str, password: str):
         logger.error("Database connection limit reached during authentication")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service temporarily unavailable - too many connections"
+            detail="Authentication service temporarily unavailable - too many connections",
         )
     except (asyncpg.PostgresConnectionError, asyncpg.PostgresIOError) as e:
         logger.error(f"Database connection error during authentication: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service temporarily unavailable"
+            detail="Authentication service temporarily unavailable",
         )
     except asyncpg.PostgresError as e:
         logger.error(f"Database error during authentication: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service error"
+            detail="Authentication service error",
         )
     except Exception as e:
         logger.error(f"Unexpected error during authentication: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service temporarily unavailable"
+            detail="Authentication service temporarily unavailable",
         )
     finally:
         if connection is not None:
@@ -114,7 +114,7 @@ async def get_auth_connection(username: str, password: str):
 async def authenticate_user(username: str, password: str):
     """
     Authenticate user using PostgreSQL's built-in authentication.
-    
+
     Uses a context manager to ensure connections are properly closed
     and includes comprehensive error handling.
     """
@@ -123,7 +123,7 @@ async def authenticate_user(username: str, password: str):
         if auth_conn is None:
             # Invalid credentials
             return None
-    
+
     # Step 2: Get user role from User table (using connection pool)
     pool = await get_pool()
     try:
@@ -142,7 +142,9 @@ async def authenticate_user(username: str, password: str):
 
             return {"sub": username, "role": row["role"]}
     except TypeError as e:
-        logger.error(f"Unexpected pool acquire error during authentication: {e}")
+        logger.error(
+            f"Unexpected pool acquire error during authentication: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication service temporarily unavailable",

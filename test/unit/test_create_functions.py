@@ -7,10 +7,11 @@ No live database needed for any of these tests.
 Author: Vishmayraj
 """
 
-import sys
 import os
-import pytest
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 API_DIR = os.path.join(PROJECT_ROOT, "api")
@@ -19,9 +20,9 @@ sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, API_DIR)
 
 from app.v1.endpoints.create.functions import (
-    set_commit,
-    handle_associations,
     create_entity,
+    handle_associations,
+    set_commit,
 )
 
 MODULE = "app.v1.endpoints.create.functions"
@@ -37,30 +38,34 @@ def make_connection(fetchval_return=None):
 
 # set_commit tests cover all branching logic before the DB call.
 
+
 class TestSetCommitDisabled:
     """Both VERSIONING and AUTHORIZATION are False, return None immediately, no DB touched."""
 
     @pytest.mark.asyncio
     async def test_returns_none_when_both_flags_off(self):
         conn = make_connection()
-        with patch(f"{MODULE}.VERSIONING", False), \
-             patch(f"{MODULE}.AUTHORIZATION", False):
+        with patch(f"{MODULE}.VERSIONING", False), patch(
+            f"{MODULE}.AUTHORIZATION", False
+        ):
             result = await set_commit(conn, "some message", None)
         assert result is None
 
     @pytest.mark.asyncio
     async def test_does_not_call_execute_when_disabled(self):
         conn = make_connection()
-        with patch(f"{MODULE}.VERSIONING", False), \
-             patch(f"{MODULE}.AUTHORIZATION", False):
+        with patch(f"{MODULE}.VERSIONING", False), patch(
+            f"{MODULE}.AUTHORIZATION", False
+        ):
             await set_commit(conn, "msg", {"role": "admin", "id": 1})
         conn.execute.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_does_not_call_fetchval_when_disabled(self):
         conn = make_connection()
-        with patch(f"{MODULE}.VERSIONING", False), \
-             patch(f"{MODULE}.AUTHORIZATION", False):
+        with patch(f"{MODULE}.VERSIONING", False), patch(
+            f"{MODULE}.AUTHORIZATION", False
+        ):
             await set_commit(conn, "msg", {"role": "admin", "id": 1})
         conn.fetchval.assert_not_called()
 
@@ -73,7 +78,9 @@ class TestSetCommitSensorRole:
         conn = make_connection()
         sensor = {"role": "sensor", "id": 7}
         with patch(f"{MODULE}.VERSIONING", True):
-            with pytest.raises(Exception, match="Sensor cannot provide commit message"):
+            with pytest.raises(
+                Exception, match="Sensor cannot provide commit message"
+            ):
                 await set_commit(conn, "should not be here", sensor)
 
     @pytest.mark.asyncio
@@ -109,7 +116,11 @@ class TestSetCommitNoMessage:
     @pytest.mark.asyncio
     async def test_no_message_raises(self):
         conn = make_connection()
-        admin = {"role": "administrator", "id": 1, "uri": "http://example.com/users/1"}
+        admin = {
+            "role": "administrator",
+            "id": 1,
+            "uri": "http://example.com/users/1",
+        }
         with patch(f"{MODULE}.VERSIONING", True):
             with pytest.raises(Exception, match="No commit message provided"):
                 await set_commit(conn, None, admin)
@@ -117,7 +128,11 @@ class TestSetCommitNoMessage:
     @pytest.mark.asyncio
     async def test_no_message_resets_role_before_raising(self):
         conn = make_connection()
-        admin = {"role": "administrator", "id": 1, "uri": "http://example.com/users/1"}
+        admin = {
+            "role": "administrator",
+            "id": 1,
+            "uri": "http://example.com/users/1",
+        }
         with patch(f"{MODULE}.VERSIONING", True):
             with pytest.raises(Exception):
                 await set_commit(conn, None, admin)
@@ -144,8 +159,9 @@ class TestSetCommitPayloadBuilding:
             captured.update(commit)
             return 55
 
-        with patch(f"{MODULE}.VERSIONING", True), \
-             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+        with patch(f"{MODULE}.VERSIONING", True), patch(
+            f"{MODULE}.insert_commit", fake_insert_commit
+        ):
             result = await set_commit(conn, "init", None)
 
         assert captured["author"] == "anonymous"
@@ -160,8 +176,9 @@ class TestSetCommitPayloadBuilding:
             captured.update(commit)
             return 55
 
-        with patch(f"{MODULE}.VERSIONING", True), \
-             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+        with patch(f"{MODULE}.VERSIONING", True), patch(
+            f"{MODULE}.insert_commit", fake_insert_commit
+        ):
             await set_commit(conn, "init", None)
 
         assert "user_id" not in captured
@@ -175,9 +192,14 @@ class TestSetCommitPayloadBuilding:
             captured.update(commit)
             return 77
 
-        user = {"role": "administrator", "id": 3, "uri": "http://example.com/users/3"}
-        with patch(f"{MODULE}.VERSIONING", True), \
-             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+        user = {
+            "role": "administrator",
+            "id": 3,
+            "uri": "http://example.com/users/3",
+        }
+        with patch(f"{MODULE}.VERSIONING", True), patch(
+            f"{MODULE}.insert_commit", fake_insert_commit
+        ):
             await set_commit(conn, "update sensor", user)
 
         assert captured["author"] == "http://example.com/users/3"
@@ -191,9 +213,14 @@ class TestSetCommitPayloadBuilding:
             captured.update(commit)
             return 77
 
-        user = {"role": "administrator", "id": 3, "uri": "http://example.com/users/3"}
-        with patch(f"{MODULE}.VERSIONING", True), \
-             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+        user = {
+            "role": "administrator",
+            "id": 3,
+            "uri": "http://example.com/users/3",
+        }
+        with patch(f"{MODULE}.VERSIONING", True), patch(
+            f"{MODULE}.insert_commit", fake_insert_commit
+        ):
             await set_commit(conn, "update sensor", user)
 
         assert captured["user_id"] == 3
@@ -207,8 +234,9 @@ class TestSetCommitPayloadBuilding:
             captured_action["action"] = action
             return 1
 
-        with patch(f"{MODULE}.VERSIONING", True), \
-             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+        with patch(f"{MODULE}.VERSIONING", True), patch(
+            f"{MODULE}.insert_commit", fake_insert_commit
+        ):
             await set_commit(conn, "msg", None)
 
         assert captured_action["action"] == "CREATE"
@@ -222,8 +250,9 @@ class TestSetCommitPayloadBuilding:
             captured.update(commit)
             return 1
 
-        with patch(f"{MODULE}.VERSIONING", True), \
-             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+        with patch(f"{MODULE}.VERSIONING", True), patch(
+            f"{MODULE}.insert_commit", fake_insert_commit
+        ):
             await set_commit(conn, "msg", None)
 
         assert captured["encodingType"] == "text/plain"
@@ -235,8 +264,9 @@ class TestSetCommitPayloadBuilding:
         async def fake_insert_commit(_, __, ___):
             return 42
 
-        with patch(f"{MODULE}.VERSIONING", True), \
-             patch(f"{MODULE}.insert_commit", fake_insert_commit):
+        with patch(f"{MODULE}.VERSIONING", True), patch(
+            f"{MODULE}.insert_commit", fake_insert_commit
+        ):
             result = await set_commit(conn, "msg", None)
 
         assert result == 42
@@ -246,6 +276,7 @@ class TestSetCommitPayloadBuilding:
 # entity_id passed directly, and @iot.id found in payload. The third branch
 # calls insert_func and hits the DB, so it is skipped in this file.
 
+
 class TestHandleAssociationsEntityIdGiven:
     """entity_id is passed directly, payload gets the id key set, insert_func is never called."""
 
@@ -253,7 +284,9 @@ class TestHandleAssociationsEntityIdGiven:
     async def test_sets_lowercase_id_key(self):
         payload = {}
         conn = AsyncMock()
-        await handle_associations(payload, "Datastream", 42, AsyncMock(), conn, None)
+        await handle_associations(
+            payload, "Datastream", 42, AsyncMock(), conn, None
+        )
         assert payload["datastream_id"] == 42
 
     @pytest.mark.asyncio
@@ -261,14 +294,18 @@ class TestHandleAssociationsEntityIdGiven:
         payload = {}
         conn = AsyncMock()
         insert_func = AsyncMock()
-        await handle_associations(payload, "Sensor", 10, insert_func, conn, None)
+        await handle_associations(
+            payload, "Sensor", 10, insert_func, conn, None
+        )
         insert_func.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_works_for_observed_property_key(self):
         payload = {}
         conn = AsyncMock()
-        await handle_associations(payload, "ObservedProperty", 5, AsyncMock(), conn, None)
+        await handle_associations(
+            payload, "ObservedProperty", 5, AsyncMock(), conn, None
+        )
         assert payload["observedproperty_id"] == 5
 
 
@@ -279,14 +316,18 @@ class TestHandleAssociationsIotIdInPayload:
     async def test_extracts_iot_id_into_payload(self):
         payload = {"Datastream": {"@iot.id": 99}}
         conn = AsyncMock()
-        await handle_associations(payload, "Datastream", None, AsyncMock(), conn, None)
+        await handle_associations(
+            payload, "Datastream", None, AsyncMock(), conn, None
+        )
         assert payload["datastream_id"] == 99
 
     @pytest.mark.asyncio
     async def test_removes_original_key_from_payload(self):
         payload = {"Sensor": {"@iot.id": 3}}
         conn = AsyncMock()
-        await handle_associations(payload, "Sensor", None, AsyncMock(), conn, None)
+        await handle_associations(
+            payload, "Sensor", None, AsyncMock(), conn, None
+        )
         assert "Sensor" not in payload
 
     @pytest.mark.asyncio
@@ -294,13 +335,16 @@ class TestHandleAssociationsIotIdInPayload:
         payload = {"Datastream": {"@iot.id": 7}}
         conn = AsyncMock()
         insert_func = AsyncMock()
-        await handle_associations(payload, "Datastream", None, insert_func, conn, None)
+        await handle_associations(
+            payload, "Datastream", None, insert_func, conn, None
+        )
         insert_func.assert_not_called()
 
 
 # create_entity tests check that the correct SQL placeholder is generated
 # for geometry columns. ST_GeomFromGeoJSON() should wrap the placeholder
 # for "location" and "feature" keys, and plain $N for everything else.
+
 
 class TestCreateEntityGeometryBranchBug:
     """Geometry columns get ST_GeomFromGeoJSON as the placeholder, non-geometry columns get plain $N."""
@@ -315,10 +359,12 @@ class TestCreateEntityGeometryBranchBug:
             return 1
 
         conn.fetchval = fake_fetchval
-        conn.transaction = MagicMock(return_value=AsyncMock(
-            __aenter__=AsyncMock(return_value=None),
-            __aexit__=AsyncMock(return_value=False),
-        ))
+        conn.transaction = MagicMock(
+            return_value=AsyncMock(
+                __aenter__=AsyncMock(return_value=None),
+                __aexit__=AsyncMock(return_value=False),
+            )
+        )
         return conn, captured
 
     @pytest.mark.asyncio

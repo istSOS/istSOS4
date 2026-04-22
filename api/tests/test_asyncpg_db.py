@@ -25,7 +25,6 @@ os.environ.setdefault("POSTGRES_USER", "admin")
 
 import app.db.asyncpg_db as asyncpg_db  # noqa: E402  (import after path setup)
 
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -67,8 +66,9 @@ class TestGetPoolWGuard:
         POSTGRES_PORT_WRITE is a valid port string.
         """
         fake_pool = MagicMock()
-        with patch.object(asyncpg_db, "POSTGRES_PORT_WRITE", "5433"), \
-             patch("asyncpg.create_pool", new=AsyncMock(return_value=fake_pool)):
+        with patch.object(asyncpg_db, "POSTGRES_PORT_WRITE", "5433"), patch(
+            "asyncpg.create_pool", new=AsyncMock(return_value=fake_pool)
+        ):
             result = asyncio.run(asyncpg_db.get_pool_w())
 
         assert result is fake_pool
@@ -85,19 +85,23 @@ class TestGetPoolWGuard:
             captured_dsn["dsn"] = dsn
             return fake_pool
 
-        with patch.object(asyncpg_db, "POSTGRES_PORT_WRITE", "5433"), \
-             patch.object(asyncpg_db, "POSTGRES_PORT", "5432"), \
-             patch("asyncpg.create_pool", new=fake_create_pool):
+        with patch.object(
+            asyncpg_db, "POSTGRES_PORT_WRITE", "5433"
+        ), patch.object(asyncpg_db, "POSTGRES_PORT", "5432"), patch(
+            "asyncpg.create_pool", new=fake_create_pool
+        ):
             asyncio.run(asyncpg_db.get_pool_w())
 
         assert "5433" in captured_dsn["dsn"], "Write port must appear in DSN"
-        assert ":5432/" not in captured_dsn["dsn"], "Read port must NOT appear in write DSN"
+        assert (
+            ":5432/" not in captured_dsn["dsn"]
+        ), "Read port must NOT appear in write DSN"
 
     def test_pgpoolw_always_declared_at_module_level(self):
         """
         pgpoolw must be declared at module level regardless of
         POSTGRES_PORT_WRITE being set or not (fixes the original NameError).
         """
-        assert hasattr(asyncpg_db, "pgpoolw"), (
-            "pgpoolw must be declared unconditionally at module level"
-        )
+        assert hasattr(
+            asyncpg_db, "pgpoolw"
+        ), "pgpoolw must be declared unconditionally at module level"

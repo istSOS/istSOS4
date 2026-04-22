@@ -13,23 +13,23 @@ Run from repo root:  pytest test/database/test_schema_versioning.py -v
 Run from test/:      pytest database/test_schema_versioning.py -v
 """
 
-import psycopg2
-import pytest
-
 from test.database.conftest import (
-    recreate_database,
+    get_id,
     get_raw_conn,
-    make_dsn,
-    load_base_schema,
-    load_versioning_schema,
-    insert_minimal_thing,
-    insert_minimal_location,
-    insert_minimal_sensor,
-    insert_minimal_observed_property,
     insert_minimal_datastream,
     insert_minimal_foi,
-    get_id,
+    insert_minimal_location,
+    insert_minimal_observed_property,
+    insert_minimal_sensor,
+    insert_minimal_thing,
+    load_base_schema,
+    load_versioning_schema,
+    make_dsn,
+    recreate_database,
 )
+
+import psycopg2
+import pytest
 
 TEST_DB = "istsos_versioning_test"
 DSN = make_dsn(TEST_DB)
@@ -104,17 +104,21 @@ class TestSchemaVersioning:
         # FeaturesOfInterest.commit_id is nullable in the versioning schema.
         return insert_minimal_foi(cur, name)
 
-    def _insert_minimal_datastream(self, cur, thing_id, sensor_id, op_id, name="v-ds") -> int:
+    def _insert_minimal_datastream(
+        self, cur, thing_id, sensor_id, op_id, name="v-ds"
+    ) -> int:
         # Datastream.commit_id is nullable.
         return insert_minimal_datastream(cur, thing_id, sensor_id, op_id, name)
 
     def _setup_ds_foi(self, cur, suffix="v"):
         """Create the full dependency chain for Datastream/Observation tests."""
-        thing_id  = self._insert_minimal_thing(cur, f"t-{suffix}")
+        thing_id = self._insert_minimal_thing(cur, f"t-{suffix}")
         sensor_id = self._insert_minimal_sensor(cur, f"s-{suffix}")
-        op_id     = self._insert_minimal_observed_property(cur, f"op-{suffix}")
-        ds_id     = self._insert_minimal_datastream(cur, thing_id, sensor_id, op_id, f"ds-{suffix}")
-        foi_id    = self._insert_minimal_foi(cur, f"foi-{suffix}")
+        op_id = self._insert_minimal_observed_property(cur, f"op-{suffix}")
+        ds_id = self._insert_minimal_datastream(
+            cur, thing_id, sensor_id, op_id, f"ds-{suffix}"
+        )
+        foi_id = self._insert_minimal_foi(cur, f"foi-{suffix}")
         return ds_id, foi_id, thing_id
 
     # ------------------------------------------------------------------
@@ -163,7 +167,9 @@ class TestSchemaVersioning:
             )
             rows = cur.fetchall()
         assert len(rows) == 1, "exactly one archived row after one UPDATE"
-        assert not rows[0][0].upper_inf, "archived row must have a finite upper bound"
+        assert not rows[0][
+            0
+        ].upper_inf, "archived row must have a finite upper bound"
 
     def test_update_creates_single_history_entry(self, schema):
         """One UPDATE must produce exactly one row in the history table."""
@@ -204,7 +210,9 @@ class TestSchemaVersioning:
         """Changing the id of a versioned row must raise an exception."""
         with schema.cursor() as cur:
             thing_id = self._insert_minimal_thing(cur, "id-change")
-            with pytest.raises(psycopg2.errors.RaiseException, match="ID must not be changed"):
+            with pytest.raises(
+                psycopg2.errors.RaiseException, match="ID must not be changed"
+            ):
                 cur.execute(
                     'UPDATE sensorthings."Thing" SET id = %s WHERE id = %s',
                     (thing_id + 9999, thing_id),
@@ -233,9 +241,9 @@ class TestSchemaVersioning:
         for i in range(len(rows) - 1):
             _, upper = rows[i]
             next_lower, _ = rows[i + 1]
-            assert upper == next_lower, (
-                f"gap between history row {i} and {i + 1}: {upper} != {next_lower}"
-            )
+            assert (
+                upper == next_lower
+            ), f"gap between history row {i} and {i + 1}: {upper} != {next_lower}"
 
     # ------------------------------------------------------------------
     # 1. istsos_mutate_history() - skip-archiving paths
@@ -350,7 +358,9 @@ class TestSchemaVersioning:
         """DELETE must copy the row to history with an upper-inclusive, finite range."""
         with schema.cursor() as cur:
             thing_id = self._insert_minimal_thing(cur, "del-arch")
-            cur.execute('DELETE FROM sensorthings."Thing" WHERE id = %s', (thing_id,))
+            cur.execute(
+                'DELETE FROM sensorthings."Thing" WHERE id = %s', (thing_id,)
+            )
             cur.execute(
                 'SELECT "systemTimeValidity" FROM sensorthings_history."Thing" WHERE id = %s',
                 (thing_id,),
@@ -365,8 +375,13 @@ class TestSchemaVersioning:
         """After DELETE the row must no longer appear in the live table."""
         with schema.cursor() as cur:
             thing_id = self._insert_minimal_thing(cur, "del-live")
-            cur.execute('DELETE FROM sensorthings."Thing" WHERE id = %s', (thing_id,))
-            cur.execute('SELECT id FROM sensorthings."Thing" WHERE id = %s', (thing_id,))
+            cur.execute(
+                'DELETE FROM sensorthings."Thing" WHERE id = %s', (thing_id,)
+            )
+            cur.execute(
+                'SELECT id FROM sensorthings."Thing" WHERE id = %s',
+                (thing_id,),
+            )
             assert cur.fetchone() is None
 
     # ------------------------------------------------------------------
@@ -414,8 +429,14 @@ class TestSchemaVersioning:
     def test_versioned_tables_have_system_time_validity_column(self, schema):
         """Every versioned table must have a systemTimeValidity column."""
         tables = [
-            "Location", "Thing", "HistoricalLocation", "ObservedProperty",
-            "Sensor", "Datastream", "FeaturesOfInterest", "Observation",
+            "Location",
+            "Thing",
+            "HistoricalLocation",
+            "ObservedProperty",
+            "Sensor",
+            "Datastream",
+            "FeaturesOfInterest",
+            "Observation",
         ]
         with schema.cursor() as cur:
             for table in tables:
@@ -428,15 +449,17 @@ class TestSchemaVersioning:
                     """,
                     (table,),
                 )
-                assert cur.fetchone() is not None, (
-                    f'sensorthings."{table}" is missing systemTimeValidity'
-                )
+                assert (
+                    cur.fetchone() is not None
+                ), f'sensorthings."{table}" is missing systemTimeValidity'
 
     # ------------------------------------------------------------------
     # 4. systemTimeValidity exclusion constraint
     # ------------------------------------------------------------------
 
-    def test_history_exclusion_constraint_blocks_overlapping_insert(self, schema):
+    def test_history_exclusion_constraint_blocks_overlapping_insert(
+        self, schema
+    ):
         """
         Two direct INSERTs into a history table for the same id with overlapping
         systemTimeValidity ranges must raise an ExclusionViolation.
@@ -506,7 +529,9 @@ class TestSchemaVersioning:
         """After DELETE the traveltime view must still expose the deleted version via history."""
         with schema.cursor() as cur:
             thing_id = self._insert_minimal_thing(cur, "tt-del")
-            cur.execute('DELETE FROM sensorthings."Thing" WHERE id = %s', (thing_id,))
+            cur.execute(
+                'DELETE FROM sensorthings."Thing" WHERE id = %s', (thing_id,)
+            )
             cur.execute(
                 'SELECT id FROM sensorthings."Thing_traveltime" WHERE id = %s',
                 (thing_id,),
@@ -517,15 +542,32 @@ class TestSchemaVersioning:
     @pytest.mark.parametrize(
         "insert_fn, table, alias, expected_path",
         [
-            ("_insert_minimal_thing",             "Thing_traveltime",              "t",  "Things"),
-            ("_insert_minimal_location",          "Location_traveltime",           "l",  "Locations"),
-            ("_insert_minimal_sensor",            "Sensor_traveltime",             "s",  "Sensors"),
-            ("_insert_minimal_observed_property", "ObservedProperty_traveltime",   "op", "ObservedProperties"),
-            ("_setup_ds_foi",                     "Datastream_traveltime",         "d",  "Datastreams"),
-            ("_insert_minimal_foi",               "FeaturesOfInterest_traveltime", "f",  "FeaturesOfInterest"),
+            ("_insert_minimal_thing", "Thing_traveltime", "t", "Things"),
+            (
+                "_insert_minimal_location",
+                "Location_traveltime",
+                "l",
+                "Locations",
+            ),
+            ("_insert_minimal_sensor", "Sensor_traveltime", "s", "Sensors"),
+            (
+                "_insert_minimal_observed_property",
+                "ObservedProperty_traveltime",
+                "op",
+                "ObservedProperties",
+            ),
+            ("_setup_ds_foi", "Datastream_traveltime", "d", "Datastreams"),
+            (
+                "_insert_minimal_foi",
+                "FeaturesOfInterest_traveltime",
+                "f",
+                "FeaturesOfInterest",
+            ),
         ],
     )
-    def test_traveltime_selflink(self, schema, insert_fn, table, alias, expected_path):
+    def test_traveltime_selflink(
+        self, schema, insert_fn, table, alias, expected_path
+    ):
         """@iot.selfLink on each traveltime view must return the correct URL."""
         with schema.cursor() as cur:
             fn = getattr(self, insert_fn)
@@ -569,7 +611,7 @@ class TestSchemaVersioning:
         cases = [
             (0, "resultNumber", 3.14),
             (1, "resultBoolean", True),
-            (3, "resultString",  "hi"),
+            (3, "resultString", "hi"),
         ]
         with schema.cursor() as cur:
             ds_id, foi_id, _ = self._setup_ds_foi(cur, suffix="tt-result")
@@ -587,8 +629,14 @@ class TestSchemaVersioning:
                         ))
                     RETURNING id
                     """,
-                    (result_type, expected, ds_id, foi_id,
-                     result_type * 10, result_type * 10),
+                    (
+                        result_type,
+                        expected,
+                        ds_id,
+                        foi_id,
+                        result_type * 10,
+                        result_type * 10,
+                    ),
                 )
                 obs_id = cur.fetchone()[0]
 
@@ -603,6 +651,6 @@ class TestSchemaVersioning:
                     (obs_id,),
                 )
                 actual = cur.fetchone()[0]
-                assert actual == expected, (
-                    f"resultType {result_type}: expected {expected!r}, got {actual!r}"
-                )
+                assert (
+                    actual == expected
+                ), f"resultType {result_type}: expected {expected!r}, got {actual!r}"

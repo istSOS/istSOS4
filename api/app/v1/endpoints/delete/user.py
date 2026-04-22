@@ -14,8 +14,8 @@
 
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import pg_quote_ident, validate_username
 from app.oauth import get_current_user
+from app.utils.utils import pg_quote_ident, validate_username
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import (
     DependentObjectsStillExistError,
@@ -59,9 +59,9 @@ async def delete_user(
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={
-                "code": 400,
-                "type": "error",
-                "message": "Deleting the currently authenticated user is not allowed."
+                    "code": 400,
+                    "type": "error",
+                    "message": "Deleting the currently authenticated user is not allowed.",
                 },
             )
 
@@ -74,7 +74,9 @@ async def delete_user(
                     if user == current_user["username"]:
                         return JSONResponse(
                             status_code=status.HTTP_400_BAD_REQUEST,
-                            content={"message": "Cannot delete your own user account"},
+                            content={
+                                "message": "Cannot delete your own user account"
+                            },
                         )
 
                     await set_role(connection, current_user)
@@ -92,7 +94,7 @@ async def delete_user(
                         content={
                             "code": 404,
                             "type": "error",
-                            "message": "User not found"
+                            "message": "User not found",
                         },
                     )
 
@@ -136,6 +138,6 @@ async def delete_user(
             content={
                 "code": 500,
                 "type": "error",
-                "message": "Unexpected error while deleting user"
+                "message": "Unexpected error while deleting user",
             },
         )

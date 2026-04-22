@@ -62,6 +62,7 @@ Usage in a test file:
 """
 
 import pathlib
+
 import psycopg2
 import pytest
 
@@ -85,8 +86,8 @@ ADMIN_DSN = (
 _REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
 DATABASE_DIR = _REPO_ROOT / "database"
 
-SCHEMA_SQL     = DATABASE_DIR / "istsos_schema.sql"
-AUTH_SQL       = DATABASE_DIR / "istsos_auth.sql"
+SCHEMA_SQL = DATABASE_DIR / "istsos_schema.sql"
+AUTH_SQL = DATABASE_DIR / "istsos_auth.sql"
 VERSIONING_SQL = DATABASE_DIR / "istsos_schema_versioning.sql"
 
 # All roles that any of the three SQL layers can create.
@@ -97,6 +98,7 @@ ALL_SCHEMA_ROLES = ("administrator", "testuser", "user", "guest", "sensor")
 # ---------------------------------------------------------------------------
 # Connection helpers
 # ---------------------------------------------------------------------------
+
 
 def make_dsn(db_name: str) -> str:
     """Build a libpq connection string for a named database on the shared instance."""
@@ -117,7 +119,10 @@ def get_raw_conn(dsn: str) -> psycopg2.extensions.connection:
 # Database lifecycle
 # ---------------------------------------------------------------------------
 
-def recreate_database(test_db: str, roles_to_drop: tuple = ALL_SCHEMA_ROLES) -> None:
+
+def recreate_database(
+    test_db: str, roles_to_drop: tuple = ALL_SCHEMA_ROLES
+) -> None:
     """
     Drop and recreate *test_db*, cleaning up cluster-level roles beforehand.
 
@@ -197,7 +202,10 @@ def recreate_database(test_db: str, roles_to_drop: tuple = ALL_SCHEMA_ROLES) -> 
 # SQL file after setting the custom.* GUCs that the SQL expects.
 # ---------------------------------------------------------------------------
 
-def load_base_schema(conn, *, versioning: bool = False, authorization: bool = False) -> None:
+
+def load_base_schema(
+    conn, *, versioning: bool = False, authorization: bool = False
+) -> None:
     """
     Execute istsos_schema.sql on *conn*.
 
@@ -209,7 +217,9 @@ def load_base_schema(conn, *, versioning: bool = False, authorization: bool = Fa
         cur.execute("SET custom.epsg = '4326'")
         cur.execute("SET custom.duplicates = 'false'")
         cur.execute("SET custom.network = 'false'")
-        cur.execute(f"SET custom.versioning = '{'true' if versioning else 'false'}'")
+        cur.execute(
+            f"SET custom.versioning = '{'true' if versioning else 'false'}'"
+        )
         cur.execute(
             f"SELECT set_config('custom.authorization', "
             f"'{'true' if authorization else 'false'}', false)"
@@ -236,7 +246,9 @@ def load_versioning_schema(conn) -> None:
         cur.execute("SET custom.epsg = '4326'")
         cur.execute("SET custom.network = 'false'")
         cur.execute("SET custom.versioning = 'true'")
-        cur.execute("SELECT set_config('custom.authorization', 'false', false)")
+        cur.execute(
+            "SELECT set_config('custom.authorization', 'false', false)"
+        )
         cur.execute(sql)
 
 
@@ -252,12 +264,15 @@ def load_versioning_schema(conn) -> None:
 # test_auth_sql.py   -> passes commit_id (always has a User + Commit chain)
 # ---------------------------------------------------------------------------
 
+
 def get_id(row) -> int:
     """Extract the integer id from a psycopg2 row regardless of cursor factory."""
     return row[0] if not isinstance(row, dict) else row["id"]
 
 
-def insert_minimal_thing(cur, name: str = "test-thing", *, commit_id=None) -> int:
+def insert_minimal_thing(
+    cur, name: str = "test-thing", *, commit_id=None
+) -> int:
     """Insert a Thing with the minimum required columns and return its id."""
     if commit_id is None:
         cur.execute(
@@ -280,7 +295,9 @@ def insert_minimal_thing(cur, name: str = "test-thing", *, commit_id=None) -> in
     return get_id(cur.fetchone())
 
 
-def insert_minimal_location(cur, name: str = "test-loc", *, commit_id=None) -> int:
+def insert_minimal_location(
+    cur, name: str = "test-loc", *, commit_id=None
+) -> int:
     """Insert a Location with a fixed point geometry and return its id."""
     if commit_id is None:
         cur.execute(
@@ -307,7 +324,9 @@ def insert_minimal_location(cur, name: str = "test-loc", *, commit_id=None) -> i
     return get_id(cur.fetchone())
 
 
-def insert_minimal_sensor(cur, name: str = "test-sensor", *, commit_id=None) -> int:
+def insert_minimal_sensor(
+    cur, name: str = "test-sensor", *, commit_id=None
+) -> int:
     """Insert a Sensor and return its id."""
     if commit_id is None:
         cur.execute(
@@ -332,7 +351,9 @@ def insert_minimal_sensor(cur, name: str = "test-sensor", *, commit_id=None) -> 
     return get_id(cur.fetchone())
 
 
-def insert_minimal_observed_property(cur, name: str = "test-op", *, commit_id=None) -> int:
+def insert_minimal_observed_property(
+    cur, name: str = "test-op", *, commit_id=None
+) -> int:
     """Insert an ObservedProperty and return its id."""
     if commit_id is None:
         cur.execute(
@@ -358,8 +379,13 @@ def insert_minimal_observed_property(cur, name: str = "test-op", *, commit_id=No
 
 
 def insert_minimal_datastream(
-    cur, thing_id: int, sensor_id: int, op_id: int,
-    name: str = "test-ds", *, commit_id=None
+    cur,
+    thing_id: int,
+    sensor_id: int,
+    op_id: int,
+    name: str = "test-ds",
+    *,
+    commit_id=None,
 ) -> int:
     """Insert a Datastream linking the given Thing/Sensor/ObservedProperty and return its id."""
     _UOM = '{"name":"C","symbol":"C","definition":"http://d"}'
@@ -422,6 +448,7 @@ def insert_minimal_foi(cur, name: str = "test-foi", *, commit_id=None) -> int:
 # ---------------------------------------------------------------------------
 # Pytest fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def pg_conn(request):
