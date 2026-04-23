@@ -210,7 +210,7 @@ async def insertBulkObservation(
         if components:
             result_idx = components.index("result")
             ph_idx = components.index("phenomenonTime")
-            if components.index("resultTime") > -1:
+            if "resultTime" in components:
                 result_time_idx = components.index("resultTime")
             if isinstance(payload[0][result_idx], str):
                 result_type = 3
