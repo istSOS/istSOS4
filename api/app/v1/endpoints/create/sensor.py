@@ -14,11 +14,8 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import (
-    require_json_content_type,
-    validate_payload_keys,
-    validate_required_keys,
-)
+from app.rbac_roles import check_create_permission
+from app.utils.utils import validate_payload_keys, validate_required_keys, require_json_content_type
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
@@ -56,6 +53,7 @@ ALLOWED_KEYS = [
 ]
 
 REQUIRED_KEYS = ["name", "encodingType", "metadata"]
+DENIED_CREATOR_ROLES = ["viewer"]
 
 
 @v1.api_route(
@@ -73,6 +71,18 @@ async def create_sensor(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
+    if current_user is not None:
+        user_role = current_user.get("role", "")
+        if not check_create_permission(user_role):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "code": 403,
+                    "type": "error",
+                    "message": "Insufficient privileges.",
+                },
+            )
+
     try:
         require_json_content_type(request)
 
@@ -82,6 +92,8 @@ async def create_sensor(
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
+                    if current_user["role"] in DENIED_CREATOR_ROLES:
+                        raise InsufficientPrivilegeError
                     await set_role(connection, current_user)
 
                 commit_id = await set_commit(
