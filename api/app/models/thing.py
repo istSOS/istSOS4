@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
+from geoalchemy2 import Geometry
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
@@ -36,6 +37,7 @@ class Thing(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     properties = Column(JSON)
+    observed_area = Column("observedArea", Geometry)
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
     location = relationship(
         "Location", secondary=Thing_Location, back_populates="thing"
