@@ -775,7 +775,7 @@ FOR tablename IN SELECT unnest(tables)
                 RAISE EXCEPTION USING ERRCODE = '42704';
             END IF;
             
-            new_roles_ := old_roles_ || users_;
+            new_roles_ := (SELECT array_agg(DISTINCT x) FROM unnest(old_roles_ || users_) AS x);
             
             EXECUTE format('ALTER POLICY %I ON sensorthings.%I TO %s', policyname_, tablename_, array_to_string(new_roles_, ','));
 
