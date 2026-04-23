@@ -33,11 +33,6 @@ from .sta_parser.lexer import Lexer
 from .sta_parser.parser import Parser
 from .visitors import NodeVisitor
 
-try:
-    DEBUG = DEBUG
-except:
-    DEBUG = 0
-
 
 class STA2REST:
     """
