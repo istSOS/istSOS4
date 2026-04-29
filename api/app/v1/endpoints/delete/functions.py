@@ -126,32 +126,21 @@ async def update_datastream_phenomenon_time(
 async def update_datastream_phenomenon_time_from_foi(connection, ds_id):
     async with connection.transaction():
         query = """
-            WITH first_asc AS (
-                SELECT "phenomenonTime"
+            WITH bounds AS (
+                SELECT 
+                    MIN(lower("phenomenonTime")) AS new_lower,
+                    MAX(upper("phenomenonTime")) AS new_upper
                 FROM sensorthings."Observation"
                 WHERE "datastream_id" = $1
-                ORDER BY "phenomenonTime" ASC
-                LIMIT 1
-            ),
-            first_desc AS (
-                SELECT "phenomenonTime"
-                FROM sensorthings."Observation"
-                WHERE "datastream_id" = $1
-                ORDER BY "phenomenonTime" DESC
-                LIMIT 1
             )
             UPDATE sensorthings."Datastream"
-            SET "phenomenonTime" = 
+            SET "phenomenonTime" =
                 CASE
-                    WHEN (SELECT "phenomenonTime" FROM first_asc) IS NOT NULL
-                    AND (SELECT "phenomenonTime" FROM first_desc) IS NOT NULL
-                    THEN tstzrange(
-                        (SELECT lower("phenomenonTime") FROM first_asc),
-                        (SELECT upper("phenomenonTime") FROM first_desc), 
-                        '[]'
-                    )
+                    WHEN bounds.new_lower IS NOT NULL AND bounds.new_upper IS NOT NULL
+                    THEN tstzrange(bounds.new_lower, bounds.new_upper, '[]')
                     ELSE NULL
                 END
+            FROM bounds
             WHERE "id" = $1;
         """
         await connection.execute(query, ds_id)
