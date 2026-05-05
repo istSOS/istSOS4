@@ -29,9 +29,7 @@ Migrated to pytest by: Vishmayraj
 """
 
 import pytest
-
 from app.sta2rest.sta2rest import STA2REST
-
 
 """
 Test the conversion of entities.
@@ -40,27 +38,27 @@ Test the conversion of entities.
 
 ENTITY_MAPPINGS = [
     # Plural forms
-    ("Networks",            "Network"),
-    ("Commits",             "Commit"),
-    ("Things",              "Thing"),
-    ("Locations",           "Location"),
-    ("Sensors",             "Sensor"),
-    ("ObservedProperties",  "ObservedProperty"),
-    ("Datastreams",         "Datastream"),
-    ("Observations",        "Observation"),
-    ("FeaturesOfInterest",  "FeaturesOfInterest"),
+    ("Networks", "Network"),
+    ("Commits", "Commit"),
+    ("Things", "Thing"),
+    ("Locations", "Location"),
+    ("Sensors", "Sensor"),
+    ("ObservedProperties", "ObservedProperty"),
+    ("Datastreams", "Datastream"),
+    ("Observations", "Observation"),
+    ("FeaturesOfInterest", "FeaturesOfInterest"),
     ("HistoricalLocations", "HistoricalLocation"),
     # Singular forms
-    ("Network",             "Network"),
-    ("Commit",              "Commit"),
-    ("Thing",               "Thing"),
-    ("Location",            "Location"),
-    ("Sensor",              "Sensor"),
-    ("ObservedProperty",    "ObservedProperty"),
-    ("Datastream",          "Datastream"),
-    ("Observation",         "Observation"),
-    ("FeatureOfInterest",   "FeaturesOfInterest"),
-    ("HistoricalLocation",  "HistoricalLocation"),
+    ("Network", "Network"),
+    ("Commit", "Commit"),
+    ("Thing", "Thing"),
+    ("Location", "Location"),
+    ("Sensor", "Sensor"),
+    ("ObservedProperty", "ObservedProperty"),
+    ("Datastream", "Datastream"),
+    ("Observation", "Observation"),
+    ("FeatureOfInterest", "FeaturesOfInterest"),
+    ("HistoricalLocation", "HistoricalLocation"),
 ]
 
 
@@ -264,7 +262,9 @@ CONVERT_QUERY_CASES = [
 ]
 
 
-@pytest.mark.parametrize("case", CONVERT_QUERY_CASES, ids=[c["id"] for c in CONVERT_QUERY_CASES])
+@pytest.mark.parametrize(
+    "case", CONVERT_QUERY_CASES, ids=[c["id"] for c in CONVERT_QUERY_CASES]
+)
 def test_convert_query(case):
     converted = STA2REST.convert_query(case["path"])
 
@@ -275,9 +275,9 @@ def test_convert_query(case):
     assert "main_query" in converted
 
     for fragment in case["contains"]:
-        assert fragment in converted["main_query"], (
-            f"Expected {fragment!r} not found in:\n{converted['main_query']}"
-        )
+        assert (
+            fragment in converted["main_query"]
+        ), f"Expected {fragment!r} not found in:\n{converted['main_query']}"
 
     if case["is_count"]:
         assert len(converted["count_queries"]) > 0

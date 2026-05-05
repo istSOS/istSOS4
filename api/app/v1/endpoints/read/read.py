@@ -14,7 +14,6 @@
 
 import json
 import logging
-import traceback
 from datetime import datetime, timezone
 
 import asyncpg
@@ -191,7 +190,6 @@ async def catch_all_get(
         )
     except Exception:
         logger.exception("Unexpected error in catch_all_get")
-        traceback.print_exc()
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={

@@ -21,32 +21,34 @@ Usage:
 Author: Vishmayraj
 """
 
-import sys
 import os
+import sys
+
 import pytest
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-API_DIR = os.path.join(PROJECT_ROOT, 'api')
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+API_DIR = os.path.join(PROJECT_ROOT, "api")
 
 sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, API_DIR)
 
 from api.app.utils.utils import (
+    extract_iot_id,
+    get_result_type_and_column,
     safe_parse_datetime,
-    get_result_type_and_column, 
-    extract_iot_id
 )
+
 
 # Helper functions
 def assert_column_value(columns, values, column_name, expected_value):
     """Assert that a named column holds the expected value."""
-    assert column_name in columns, (
-        f"Expected column '{column_name}' to be present, got: {columns}"
-    )
+    assert (
+        column_name in columns
+    ), f"Expected column '{column_name}' to be present, got: {columns}"
     idx = columns.index(column_name)
-    assert values[idx] == expected_value, (
-        f"Column '{column_name}': expected {expected_value!r}, got {values[idx]!r}"
-    )
+    assert (
+        values[idx] == expected_value
+    ), f"Column '{column_name}': expected {expected_value!r}, got {values[idx]!r}"
 
 
 # safe_parse_datetime
@@ -90,13 +92,13 @@ class TestIotIdExtraction:
     def test_extract_iot_id_non_integer(self):
         with pytest.raises(ValueError, match="Expected int"):
             extract_iot_id({"@iot.id": "42"})
-    
+
     def test_extract_iot_id_none_value(self):
         with pytest.raises(ValueError, match="Expected int"):
             extract_iot_id({"@iot.id": None})
 
 
-# get_result_type_and_column 
+# get_result_type_and_column
 class TestReturnStructure:
     """
     Verifies the shape of the return value regardless of input type.
@@ -342,30 +344,44 @@ class TestInvalidInput:
     """
 
     def test_none_raises(self):
-        with pytest.raises(Exception, match="Cannot cast result to a valid type"):
+        with pytest.raises(
+            Exception, match="Cannot cast result to a valid type"
+        ):
             get_result_type_and_column(None)
 
     def test_list_raises(self):
-        with pytest.raises(Exception, match="Cannot cast result to a valid type"):
+        with pytest.raises(
+            Exception, match="Cannot cast result to a valid type"
+        ):
             get_result_type_and_column([1, 2, 3])
 
     def test_tuple_raises(self):
-        with pytest.raises(Exception, match="Cannot cast result to a valid type"):
+        with pytest.raises(
+            Exception, match="Cannot cast result to a valid type"
+        ):
             get_result_type_and_column((1, 2))
 
     def test_set_raises(self):
-        with pytest.raises(Exception, match="Cannot cast result to a valid type"):
+        with pytest.raises(
+            Exception, match="Cannot cast result to a valid type"
+        ):
             get_result_type_and_column({1, 2, 3})
 
     def test_bytes_raises(self):
-        with pytest.raises(Exception, match="Cannot cast result to a valid type"):
+        with pytest.raises(
+            Exception, match="Cannot cast result to a valid type"
+        ):
             get_result_type_and_column(b"bytes")
 
     def test_custom_object_raises(self):
         class Foo:
             """Dummy class representing an unsupported result type."""
+
             pass
-        with pytest.raises(Exception, match="Cannot cast result to a valid type"):
+
+        with pytest.raises(
+            Exception, match="Cannot cast result to a valid type"
+        ):
             get_result_type_and_column(Foo())
 
 
@@ -402,6 +418,6 @@ class TestColumnOrdering:
         cases = ["hello", {"k": "v"}, True, 42, 3.14]
         for val in cases:
             _, values, _ = get_result_type_and_column(val)
-            assert values[0] is not None, (
-                f"values[0] was None for input {val!r}"
-            )
+            assert (
+                values[0] is not None
+            ), f"values[0] was None for input {val!r}"

@@ -31,7 +31,7 @@ PAYLOAD_EXAMPLE = {
     "users": ["cp1"],
     "name": "test",
     "permissions": {
-        "type": "viewer",  # viewer, editor, obs_manager, sensor, custom
+        "type": "viewer",  # viewer, editor, obs_manager, sensor, qc, custom
     },
 }
 
@@ -60,7 +60,7 @@ PAYLOAD_EXAMPLE = {
     status_code=status.HTTP_201_CREATED,
 )
 async def create_policy(
-    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
@@ -101,7 +101,9 @@ async def create_policy(
                         """
                         result = await connection.fetchval(query, user)
                         if result > 0:
-                            raise Exception(f"User {user} has already a policy.")
+                            raise Exception(
+                                f"User {user} has already a policy."
+                            )
 
                         query = """
                             SELECT role
@@ -145,6 +147,12 @@ async def create_policy(
                     elif permission_type == "sensor":
                         await connection.execute(
                             "SELECT sensorthings.sensor_policy($1, $2);",
+                            payload["users"],
+                            payload["name"],
+                        )
+                    elif permission_type == "qc":
+                        await connection.execute(
+                            f"SELECT sensorthings.qc_policy($1, $2);",
                             payload["users"],
                             payload["name"],
                         )

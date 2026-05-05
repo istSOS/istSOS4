@@ -17,23 +17,23 @@ Run from repo root:  pytest test/database/test_auth_sql.py -v
 Run from test/:      pytest database/test_auth_sql.py -v
 """
 
-import psycopg2
-import pytest
-
 from test.database.conftest import (
-    recreate_database,
+    get_id,
     get_raw_conn,
-    make_dsn,
-    load_base_schema,
-    load_auth_schema,
-    insert_minimal_location,
-    insert_minimal_thing,
-    insert_minimal_sensor,
-    insert_minimal_observed_property,
     insert_minimal_datastream,
     insert_minimal_foi,
-    get_id,
+    insert_minimal_location,
+    insert_minimal_observed_property,
+    insert_minimal_sensor,
+    insert_minimal_thing,
+    load_auth_schema,
+    load_base_schema,
+    make_dsn,
+    recreate_database,
 )
+
+import psycopg2
+import pytest
 
 TEST_DB = "istsos_test_auth"
 DSN = make_dsn(TEST_DB)
@@ -98,7 +98,9 @@ class TestAuth:
     # so inserts require a User + Commit chain first.
     # ------------------------------------------------------------------
 
-    def _insert_user(self, cur, username="test-user", role="administrator") -> int:
+    def _insert_user(
+        self, cur, username="test-user", role="administrator"
+    ) -> int:
         """Insert a User and return its id."""
         cur.execute(
             """
@@ -127,15 +129,17 @@ class TestAuth:
         Insert a User + Commit + full STA entity chain.
         Returns (uid, cid, thing_id, sensor_id, op_id, ds_id, foi_id).
         """
-        uid       = self._insert_user(cur, username=f"u-{suffix}")
-        cid       = self._insert_commit(cur, uid)
-        thing_id  = insert_minimal_thing(cur, f"t-{suffix}", commit_id=cid)
+        uid = self._insert_user(cur, username=f"u-{suffix}")
+        cid = self._insert_commit(cur, uid)
+        thing_id = insert_minimal_thing(cur, f"t-{suffix}", commit_id=cid)
         sensor_id = insert_minimal_sensor(cur, f"s-{suffix}", commit_id=cid)
-        op_id     = insert_minimal_observed_property(cur, f"op-{suffix}", commit_id=cid)
-        ds_id     = insert_minimal_datastream(
+        op_id = insert_minimal_observed_property(
+            cur, f"op-{suffix}", commit_id=cid
+        )
+        ds_id = insert_minimal_datastream(
             cur, thing_id, sensor_id, op_id, f"ds-{suffix}", commit_id=cid
         )
-        foi_id    = insert_minimal_foi(cur, f"foi-{suffix}", commit_id=cid)
+        foi_id = insert_minimal_foi(cur, f"foi-{suffix}", commit_id=cid)
         return uid, cid, thing_id, sensor_id, op_id, ds_id, foi_id
 
     # ------------------------------------------------------------------
@@ -219,7 +223,14 @@ class TestAuth:
                 """
             )
             cols = {r[0] for r in cur.fetchall()}
-        for expected in ("id", "author", "message", "date", "actionType", "user_id"):
+        for expected in (
+            "id",
+            "author",
+            "message",
+            "date",
+            "actionType",
+            "user_id",
+        ):
             assert expected in cols, f"Commit table missing column: {expected}"
 
     @pytest.mark.parametrize("action", ["CREATE", "UPDATE", "DELETE"])
@@ -273,8 +284,12 @@ class TestAuth:
         with schema.cursor() as cur:
             uid = self._insert_user(cur, username="u-cascade")
             cid = self._insert_commit(cur, uid)
-            cur.execute('DELETE FROM sensorthings."User" WHERE id = %s', (uid,))
-            cur.execute('SELECT id FROM sensorthings."Commit" WHERE id = %s', (cid,))
+            cur.execute(
+                'DELETE FROM sensorthings."User" WHERE id = %s', (uid,)
+            )
+            cur.execute(
+                'SELECT id FROM sensorthings."Commit" WHERE id = %s', (cid,)
+            )
             row = cur.fetchone()
         assert row is None, "Commit must be deleted when its User is deleted"
 
@@ -294,20 +309,20 @@ class TestAuth:
                     """,
                     (table,),
                 )
-                assert cur.fetchone() is not None, (
-                    f"commit_id column missing on {table}"
-                )
+                assert (
+                    cur.fetchone() is not None
+                ), f"commit_id column missing on {table}"
 
     @pytest.mark.parametrize(
         "table, expected_nullable",
         [
-            ("Thing",               "NO"),
-            ("Location",            "NO"),
-            ("Sensor",              "NO"),
-            ("ObservedProperty",    "NO"),
-            ("Datastream",          "YES"),
-            ("Observation",         "YES"),
-            ("FeaturesOfInterest",  "YES"),
+            ("Thing", "NO"),
+            ("Location", "NO"),
+            ("Sensor", "NO"),
+            ("ObservedProperty", "NO"),
+            ("Datastream", "YES"),
+            ("Observation", "YES"),
+            ("FeaturesOfInterest", "YES"),
         ],
     )
     def test_commit_id_nullability(self, schema, table, expected_nullable):
@@ -341,11 +356,16 @@ class TestAuth:
     @pytest.mark.parametrize(
         "table, alias, insert_fn, path",
         [
-            ("Location",         "l",  "location",          "Locations"),
-            ("Thing",            "t",  "thing",             "Things"),
-            ("Sensor",           "s",  "sensor",            "Sensors"),
-            ("ObservedProperty", "op", "observed_property", "ObservedProperties"),
-            ("FeaturesOfInterest", "f", "foi",              "FeaturesOfInterest"),
+            ("Location", "l", "location", "Locations"),
+            ("Thing", "t", "thing", "Things"),
+            ("Sensor", "s", "sensor", "Sensors"),
+            (
+                "ObservedProperty",
+                "op",
+                "observed_property",
+                "ObservedProperties",
+            ),
+            ("FeaturesOfInterest", "f", "foi", "FeaturesOfInterest"),
         ],
     )
     def test_commit_nav_link(self, schema, table, alias, insert_fn, path):
@@ -354,11 +374,21 @@ class TestAuth:
             cid = self._insert_commit(cur, uid)
 
             inserter = {
-                "location":          lambda: insert_minimal_location(cur, f"nav-{table}", commit_id=cid),
-                "thing":             lambda: insert_minimal_thing(cur, f"nav-{table}", commit_id=cid),
-                "sensor":            lambda: insert_minimal_sensor(cur, f"nav-{table}", commit_id=cid),
-                "observed_property": lambda: insert_minimal_observed_property(cur, f"nav-{table}", commit_id=cid),
-                "foi":               lambda: insert_minimal_foi(cur, f"nav-{table}", commit_id=cid),
+                "location": lambda: insert_minimal_location(
+                    cur, f"nav-{table}", commit_id=cid
+                ),
+                "thing": lambda: insert_minimal_thing(
+                    cur, f"nav-{table}", commit_id=cid
+                ),
+                "sensor": lambda: insert_minimal_sensor(
+                    cur, f"nav-{table}", commit_id=cid
+                ),
+                "observed_property": lambda: insert_minimal_observed_property(
+                    cur, f"nav-{table}", commit_id=cid
+                ),
+                "foi": lambda: insert_minimal_foi(
+                    cur, f"nav-{table}", commit_id=cid
+                ),
             }[insert_fn]
             entity_id = inserter()
 
@@ -372,7 +402,9 @@ class TestAuth:
 
     def test_datastream_commit_nav_link(self, schema):
         with schema.cursor() as cur:
-            _, cid, _, _, _, ds_id, _ = self._setup_entities(cur, suffix="ds-nav")
+            _, cid, _, _, _, ds_id, _ = self._setup_entities(
+                cur, suffix="ds-nav"
+            )
             cur.execute(
                 'SELECT "Commit@iot.navigationLink"(ds) '
                 'FROM sensorthings."Datastream" ds WHERE id = %s',
@@ -383,7 +415,9 @@ class TestAuth:
 
     def test_datastream_commit_nav_link_null_when_commit_id_null(self, schema):
         with schema.cursor() as cur:
-            _, _, tid, sid, op_id, _, _ = self._setup_entities(cur, suffix="ds-null-nav")
+            _, _, tid, sid, op_id, _, _ = self._setup_entities(
+                cur, suffix="ds-null-nav"
+            )
             ds_id = insert_minimal_datastream(
                 cur, tid, sid, op_id, "ds-no-commit", commit_id=None
             )
@@ -402,13 +436,49 @@ class TestAuth:
     @pytest.mark.parametrize(
         "entity, insert_fn, nav_fn, expected_path, should_exist",
         [
-            ("Thing",  "_insert_thing_for_commit", "Things@iot.navigationLink",              "Things",              True),
-            ("Thing",  None,                       "Things@iot.navigationLink",              "Things",              False),
-            ("Location", "_insert_location_for_commit", "Locations@iot.navigationLink",      "Locations",           True),
-            ("Sensor", "_insert_sensor_for_commit", "Sensors@iot.navigationLink",            "Sensors",             True),
-            ("ObservedProperty", "_insert_op_for_commit", "ObservedProperties@iot.navigationLink", "ObservedProperties", True),
-            ("Datastream", None,                   "Datastreams@iot.navigationLink",         "Datastreams",         False),
-            ("Observation", None,                  "Observations@iot.navigationLink",        "Observations",        False),
+            (
+                "Thing",
+                "_insert_thing_for_commit",
+                "Things@iot.navigationLink",
+                "Things",
+                True,
+            ),
+            ("Thing", None, "Things@iot.navigationLink", "Things", False),
+            (
+                "Location",
+                "_insert_location_for_commit",
+                "Locations@iot.navigationLink",
+                "Locations",
+                True,
+            ),
+            (
+                "Sensor",
+                "_insert_sensor_for_commit",
+                "Sensors@iot.navigationLink",
+                "Sensors",
+                True,
+            ),
+            (
+                "ObservedProperty",
+                "_insert_op_for_commit",
+                "ObservedProperties@iot.navigationLink",
+                "ObservedProperties",
+                True,
+            ),
+            (
+                "Datastream",
+                None,
+                "Datastreams@iot.navigationLink",
+                "Datastreams",
+                False,
+            ),
+            (
+                "Observation",
+                None,
+                "Observations@iot.navigationLink",
+                "Observations",
+                False,
+            ),
         ],
     )
     def test_commit_reverse_navigation_links(
@@ -419,10 +489,18 @@ class TestAuth:
         an entity references the commit, and NULL when nothing does.
         """
         inserters = {
-            "_insert_thing_for_commit":    lambda cur, cid: insert_minimal_thing(cur, f"rev-{entity.lower()}", commit_id=cid),
-            "_insert_location_for_commit": lambda cur, cid: insert_minimal_location(cur, f"rev-{entity.lower()}", commit_id=cid),
-            "_insert_sensor_for_commit":   lambda cur, cid: insert_minimal_sensor(cur, f"rev-{entity.lower()}", commit_id=cid),
-            "_insert_op_for_commit":       lambda cur, cid: insert_minimal_observed_property(cur, f"rev-{entity.lower()}", commit_id=cid),
+            "_insert_thing_for_commit": lambda cur, cid: insert_minimal_thing(
+                cur, f"rev-{entity.lower()}", commit_id=cid
+            ),
+            "_insert_location_for_commit": lambda cur, cid: insert_minimal_location(
+                cur, f"rev-{entity.lower()}", commit_id=cid
+            ),
+            "_insert_sensor_for_commit": lambda cur, cid: insert_minimal_sensor(
+                cur, f"rev-{entity.lower()}", commit_id=cid
+            ),
+            "_insert_op_for_commit": lambda cur, cid: insert_minimal_observed_property(
+                cur, f"rev-{entity.lower()}", commit_id=cid
+            ),
         }
         with schema.cursor() as cur:
             uid = self._insert_user(cur, username=f"u-rev-{entity}")
@@ -456,16 +534,18 @@ class TestAuth:
     @pytest.mark.parametrize(
         "role, table, privilege, expected",
         [
-            ("guest",  'sensorthings."User"',        "SELECT", False),
-            ("guest",  'sensorthings."Thing"',       "SELECT", True),
-            ("user",   'sensorthings."User"',        "INSERT", False),
-            ("user",   'sensorthings."Commit"',      "UPDATE", False),
-            ("sensor", 'sensorthings."User"',        "SELECT", False),
+            ("guest", 'sensorthings."User"', "SELECT", False),
+            ("guest", 'sensorthings."Thing"', "SELECT", True),
+            ("user", 'sensorthings."User"', "INSERT", False),
+            ("user", 'sensorthings."Commit"', "UPDATE", False),
+            ("sensor", 'sensorthings."User"', "SELECT", False),
             ("sensor", 'sensorthings."Observation"', "INSERT", True),
-            ("sensor", 'sensorthings."Commit"',      "INSERT", True),
+            ("sensor", 'sensorthings."Commit"', "INSERT", True),
         ],
     )
-    def test_role_table_privileges(self, schema, role, table, privilege, expected):
+    def test_role_table_privileges(
+        self, schema, role, table, privilege, expected
+    ):
         """Validate role-based privileges across tables."""
         with schema.cursor() as cur:
             cur.execute(
@@ -492,9 +572,9 @@ class TestAuth:
                     (table,),
                 )
                 row = cur.fetchone()
-                assert row is not None and row[0] is True, (
-                    f"RLS not enabled on {table}"
-                )
+                assert (
+                    row is not None and row[0] is True
+                ), f"RLS not enabled on {table}"
 
     def test_anonymous_guest_policy_exists_for_all_core_tables(self, schema):
         """
@@ -514,9 +594,9 @@ class TestAuth:
                     """,
                     (table, f"anonymous_{table.lower()}"),
                 )
-                assert cur.fetchone() is not None, (
-                    f"anonymous_{table.lower()} policy missing"
-                )
+                assert (
+                    cur.fetchone() is not None
+                ), f"anonymous_{table.lower()} policy missing"
 
     # ------------------------------------------------------------------
     # 8. Policy generation functions
@@ -525,9 +605,9 @@ class TestAuth:
     @pytest.mark.parametrize(
         "fn_name, pname, expected_count",
         [
-            ("viewer_policy",      "test-viewer",   len(RLS_TABLES)),
-            ("editor_policy",      "test-editor",   len(RLS_TABLES)),
-            ("sensor_policy",      "test-sensor-pol", 12),
+            ("viewer_policy", "test-viewer", len(RLS_TABLES)),
+            ("editor_policy", "test-editor", len(RLS_TABLES)),
+            ("sensor_policy", "test-sensor-pol", 12),
             ("obs_manager_policy", "test-obsmgr-pol", 11),
         ],
     )
@@ -583,7 +663,9 @@ class TestAuth:
                 (f"{pname}%",),
             )
             count = cur.fetchone()[0]
-        assert count == 0, "All policies must be dropped when the last role is removed"
+        assert (
+            count == 0
+        ), "All policies must be dropped when the last role is removed"
 
     def test_add_users_to_policy_raises_for_missing_policy(self, schema):
         """add_users_to_policy must raise ERRCODE 42704 for a non-existent policy name."""
@@ -601,14 +683,14 @@ class TestAuth:
     def test_commit_id_indexes_exist_for_all_sta_tables(self, schema):
         """Btree index on commit_id must exist for every STA entity table."""
         expected = {
-            "Location":           "idx_location_commit_id",
-            "Thing":              "idx_thing_commit_id",
+            "Location": "idx_location_commit_id",
+            "Thing": "idx_thing_commit_id",
             "HistoricalLocation": "idx_historicallocation_commit_id",
-            "ObservedProperty":   "idx_observedproperty_commit_id",
-            "Sensor":             "idx_sensor_commit_id",
-            "Datastream":         "idx_datastream_commit_id",
+            "ObservedProperty": "idx_observedproperty_commit_id",
+            "Sensor": "idx_sensor_commit_id",
+            "Datastream": "idx_datastream_commit_id",
             "FeaturesOfInterest": "idx_featuresofinterest_commit_id",
-            "Observation":        "idx_observation_commit_id",
+            "Observation": "idx_observation_commit_id",
         }
         with schema.cursor() as cur:
             for table, idx in expected.items():
@@ -619,6 +701,6 @@ class TestAuth:
                     """,
                     (idx,),
                 )
-                assert cur.fetchone() is not None, (
-                    f"Index {idx} missing for {table}"
-                )
+                assert (
+                    cur.fetchone() is not None
+                ), f"Index {idx} missing for {table}"

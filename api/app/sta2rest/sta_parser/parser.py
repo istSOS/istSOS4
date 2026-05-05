@@ -283,15 +283,16 @@ class Parser:
             )
         value1 = self.current_token.value
         self.match("DATETIME")
-        if not self.current_token or self.current_token.type != "SEGMENT_SEPARATOR":
+        if (
+            not self.current_token
+            or self.current_token.type != "SEGMENT_SEPARATOR"
+        ):
             raise Exception(
                 "Invalid $from_to: missing end datetime, use $from_to=<start>/<end>"
             )
         self.match("SEGMENT_SEPARATOR")
         if not self.current_token or self.current_token.type != "DATETIME":
-            raise Exception(
-                "Invalid $from_to: missing end datetime after '/'"
-            )
+            raise Exception("Invalid $from_to: missing end datetime after '/'")
         value2 = self.current_token.value
         self.match("DATETIME")
         return ast.FromToNode(value1, value2)

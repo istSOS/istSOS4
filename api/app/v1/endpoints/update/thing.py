@@ -60,7 +60,7 @@ ALLOWED_KEYS = [
 )
 async def update_thing(
     thing_id: int,
-    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),

@@ -7,8 +7,8 @@ re-applies the same sys.path logic so imports resolve identically
 from both invocation points.
 """
 
-import sys
 import os
+import sys
 
 _TEST_DIR = os.path.abspath(os.path.dirname(__file__))
 _ROOT = os.path.abspath(os.path.join(_TEST_DIR, ".."))

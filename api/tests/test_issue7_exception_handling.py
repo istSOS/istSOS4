@@ -36,7 +36,9 @@ class TestIssue7ExceptionHandling:
 
         conn = MagicMock()
         conn.transaction = MagicMock(return_value=tx)
-        conn.fetchrow = AsyncMock(side_effect=RuntimeError("db boom details leaked"))
+        conn.fetchrow = AsyncMock(
+            side_effect=RuntimeError("db boom details leaked")
+        )
 
         acq = MagicMock()
         acq.__aenter__ = AsyncMock(return_value=conn)

@@ -4,9 +4,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-
 from unittest.mock import AsyncMock
-
 
 # Ensure api/ is on sys.path so 'app' resolves to api/app
 API_DIR = str(Path(__file__).resolve().parents[1])

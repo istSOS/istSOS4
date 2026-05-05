@@ -14,7 +14,7 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import validate_payload_keys, require_json_content_type
+from app.utils.utils import require_json_content_type, validate_payload_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
@@ -78,7 +78,7 @@ if AUTHORIZATION:
 )
 async def create_datastream(
     request: Request,
-    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -154,7 +154,7 @@ PAYLOAD_EXAMPLE_THING = {
 async def create_datastream_for_thing(
     request: Request,
     thing_id: int,
-    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE_THING}}),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE_THING),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -235,7 +235,7 @@ PAYLOAD_EXAMPLE_SENSOR = {
 async def create_datastream_for_sensor(
     request: Request,
     sensor_id: int,
-    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE_SENSOR}}),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE_SENSOR),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -319,7 +319,7 @@ PAYLOAD_EXAMPLE_OBSERVED_PROPERTY = {
 async def create_datastream_for_observed_property(
     request: Request,
     observed_property_id: int,
-    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE_OBSERVED_PROPERTY}}),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE_OBSERVED_PROPERTY),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),

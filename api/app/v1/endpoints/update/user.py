@@ -18,8 +18,7 @@ from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
-from app.utils.utils import pg_quote_ident
-from app.utils.utils import validate_payload_keys
+from app.utils.utils import pg_quote_ident, validate_payload_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Body, Depends, Query, status
@@ -56,7 +55,7 @@ async def update_user(
         alias="user",
         description="The the user to update",
     ),
-    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):

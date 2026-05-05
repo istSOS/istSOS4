@@ -12,23 +12,23 @@ Run from test/:      pytest database/test_schema.py -v
 """
 
 import json
+from test.database.conftest import (
+    get_id,
+    get_raw_conn,
+    insert_minimal_datastream,
+    insert_minimal_foi,
+    insert_minimal_location,
+    insert_minimal_observed_property,
+    insert_minimal_sensor,
+    insert_minimal_thing,
+    load_base_schema,
+    make_dsn,
+    recreate_database,
+)
+
 import psycopg2
 import psycopg2.extras
 import pytest
-
-from test.database.conftest import (
-    recreate_database,
-    get_raw_conn,
-    make_dsn,
-    load_base_schema,
-    insert_minimal_thing,
-    insert_minimal_location,
-    insert_minimal_sensor,
-    insert_minimal_observed_property,
-    insert_minimal_datastream,
-    insert_minimal_foi,
-    get_id,
-)
 
 TEST_DB = "istsos_test"
 DSN = make_dsn(TEST_DB)
@@ -93,11 +93,13 @@ class TestSchema:
 
     def _setup_ds_foi(self, cur, suffix="obs"):
         """Insert the full dependency chain needed for Observation tests."""
-        thing_id  = insert_minimal_thing(cur, f"t-{suffix}")
+        thing_id = insert_minimal_thing(cur, f"t-{suffix}")
         sensor_id = insert_minimal_sensor(cur, f"s-{suffix}")
-        op_id     = insert_minimal_observed_property(cur, f"op-{suffix}")
-        ds_id     = insert_minimal_datastream(cur, thing_id, sensor_id, op_id, f"ds-{suffix}")
-        foi_id    = insert_minimal_foi(cur, f"foi-{suffix}")
+        op_id = insert_minimal_observed_property(cur, f"op-{suffix}")
+        ds_id = insert_minimal_datastream(
+            cur, thing_id, sensor_id, op_id, f"ds-{suffix}"
+        )
+        foi_id = insert_minimal_foi(cur, f"foi-{suffix}")
         return ds_id, foi_id
 
     def _insert_observation(self, cur, ds_id, foi_id, result_type, **kwargs):
@@ -105,8 +107,11 @@ class TestSchema:
         value_map = {
             0: kwargs.get("resultNumber"),
             1: kwargs.get("resultBoolean"),
-            2: psycopg2.extras.Json(kwargs["resultJSON"])
-               if kwargs.get("resultJSON") is not None else None,
+            2: (
+                psycopg2.extras.Json(kwargs["resultJSON"])
+                if kwargs.get("resultJSON") is not None
+                else None
+            ),
             3: kwargs.get("resultString"),
         }
         sql = _INSERT_OBS_SQL.get(result_type)
@@ -121,7 +126,9 @@ class TestSchema:
                 (result_type, ds_id, foi_id),
             )
         else:
-            cur.execute(sql, (result_type, value_map[result_type], ds_id, foi_id))
+            cur.execute(
+                sql, (result_type, value_map[result_type], ds_id, foi_id)
+            )
         return get_id(cur.fetchone())
 
     def _get_result(self, cur, obs_id):
@@ -144,7 +151,9 @@ class TestSchema:
         """resultType 0 -> to_jsonb(resultNumber) round-trips correctly."""
         with schema.cursor() as cur:
             ds_id, foi_id = self._setup_ds_foi(cur)
-            obs_id = self._insert_observation(cur, ds_id, foi_id, 0, resultNumber=42.5)
+            obs_id = self._insert_observation(
+                cur, ds_id, foi_id, 0, resultNumber=42.5
+            )
             result = self._get_result(cur, obs_id)
         assert result == 42.5
 
@@ -169,7 +178,9 @@ class TestSchema:
         """resultType 1 -> to_jsonb(resultBoolean) round-trips for both values."""
         with schema.cursor() as cur:
             ds_id, foi_id = self._setup_ds_foi(cur)
-            obs_id = self._insert_observation(cur, ds_id, foi_id, 1, resultBoolean=value)
+            obs_id = self._insert_observation(
+                cur, ds_id, foi_id, 1, resultBoolean=value
+            )
             result = self._get_result(cur, obs_id)
         assert result is value
 
@@ -178,7 +189,9 @@ class TestSchema:
         payload = {"sensor": "temp", "unit": "C"}
         with schema.cursor() as cur:
             ds_id, foi_id = self._setup_ds_foi(cur)
-            obs_id = self._insert_observation(cur, ds_id, foi_id, 2, resultJSON=payload)
+            obs_id = self._insert_observation(
+                cur, ds_id, foi_id, 2, resultJSON=payload
+            )
             result = self._get_result(cur, obs_id)
         assert result == payload
 
@@ -186,7 +199,9 @@ class TestSchema:
         """resultType 3 -> to_jsonb(resultString) returns the string."""
         with schema.cursor() as cur:
             ds_id, foi_id = self._setup_ds_foi(cur)
-            obs_id = self._insert_observation(cur, ds_id, foi_id, 3, resultString="hello")
+            obs_id = self._insert_observation(
+                cur, ds_id, foi_id, 3, resultString="hello"
+            )
             result = self._get_result(cur, obs_id)
         assert result == "hello"
 
@@ -209,7 +224,7 @@ class TestSchema:
         """
         with schema.cursor() as cur:
             thing_id = insert_minimal_thing(cur, "hl-thing")
-            loc_id   = insert_minimal_location(cur, "hl-loc")
+            loc_id = insert_minimal_location(cur, "hl-loc")
 
             cur.execute(
                 """
@@ -235,22 +250,24 @@ class TestSchema:
                 """,
                 (loc_id, hl_id),
             )
-            cur.execute('DELETE FROM sensorthings."Location" WHERE id = %s', (loc_id,))
+            cur.execute(
+                'DELETE FROM sensorthings."Location" WHERE id = %s', (loc_id,)
+            )
             cur.execute(
                 'SELECT id FROM sensorthings."HistoricalLocation" WHERE id = %s',
                 (hl_id,),
             )
             row = cur.fetchone()
 
-        assert row is None, (
-            f"HistoricalLocation {hl_id} should have been deleted by the trigger"
-        )
+        assert (
+            row is None
+        ), f"HistoricalLocation {hl_id} should have been deleted by the trigger"
 
     def test_delete_location_not_linked_does_not_affect_other_hl(self, schema):
         """Deleting an unlinked Location must not touch unrelated HistoricalLocations."""
         with schema.cursor() as cur:
-            thing_id       = insert_minimal_thing(cur, "safe-thing")
-            unrelated_loc  = insert_minimal_location(cur, "unrelated-loc")
+            thing_id = insert_minimal_thing(cur, "safe-thing")
+            unrelated_loc = insert_minimal_location(cur, "unrelated-loc")
 
             cur.execute(
                 """
@@ -261,22 +278,25 @@ class TestSchema:
             )
             hl_id = cur.fetchone()[0]
 
-            cur.execute('DELETE FROM sensorthings."Location" WHERE id = %s', (unrelated_loc,))
+            cur.execute(
+                'DELETE FROM sensorthings."Location" WHERE id = %s',
+                (unrelated_loc,),
+            )
             cur.execute(
                 'SELECT id FROM sensorthings."HistoricalLocation" WHERE id = %s',
                 (hl_id,),
             )
             row = cur.fetchone()
 
-        assert row is not None, (
-            "HistoricalLocation for an unrelated Thing must survive the Location delete"
-        )
+        assert (
+            row is not None
+        ), "HistoricalLocation for an unrelated Thing must survive the Location delete"
 
     def test_delete_location_cascades_via_join_table(self, schema):
         """Trigger must follow the Location -> Thing_Location -> HistoricalLocation path."""
         with schema.cursor() as cur:
             thing_id = insert_minimal_thing(cur, "hl2-thing")
-            loc_id   = insert_minimal_location(cur, "hl2-loc")
+            loc_id = insert_minimal_location(cur, "hl2-loc")
 
             cur.execute(
                 """
@@ -302,7 +322,9 @@ class TestSchema:
                 """,
                 (loc_id, hl_id),
             )
-            cur.execute('DELETE FROM sensorthings."Location" WHERE id = %s', (loc_id,))
+            cur.execute(
+                'DELETE FROM sensorthings."Location" WHERE id = %s', (loc_id,)
+            )
             cur.execute(
                 'SELECT id FROM sensorthings."HistoricalLocation" WHERE id = %s',
                 (hl_id,),
@@ -316,11 +338,11 @@ class TestSchema:
         Previously raised CardinalityViolation when the trigger looped naively.
         """
         with schema.cursor() as cur:
-            thing1_id  = insert_minimal_thing(cur, "shared-t1")
-            thing2_id  = insert_minimal_thing(cur, "shared-t2")
-            thing3_id  = insert_minimal_thing(cur, "unrelated-t3")
-            loc_id     = insert_minimal_location(cur, "shared-loc")
-            other_loc  = insert_minimal_location(cur, "other-loc")
+            thing1_id = insert_minimal_thing(cur, "shared-t1")
+            thing2_id = insert_minimal_thing(cur, "shared-t2")
+            thing3_id = insert_minimal_thing(cur, "unrelated-t3")
+            loc_id = insert_minimal_location(cur, "shared-loc")
+            other_loc = insert_minimal_location(cur, "other-loc")
 
             for tid in (thing1_id, thing2_id):
                 cur.execute(
@@ -342,25 +364,31 @@ class TestSchema:
             for tid in (thing1_id, thing2_id, thing3_id):
                 cur.execute(
                     'INSERT INTO sensorthings."HistoricalLocation" (thing_id) '
-                    'VALUES (%s) RETURNING id',
+                    "VALUES (%s) RETURNING id",
                     (tid,),
                 )
                 hl_ids.append(cur.fetchone()[0])
             hl1_id, hl2_id, hl3_id = hl_ids
 
-            cur.execute('DELETE FROM sensorthings."Location" WHERE id = %s', (loc_id,))
+            cur.execute(
+                'DELETE FROM sensorthings."Location" WHERE id = %s', (loc_id,)
+            )
 
             cur.execute(
                 'SELECT id FROM sensorthings."HistoricalLocation" WHERE id = ANY(%s)',
                 ([hl1_id, hl2_id],),
             )
-            assert cur.fetchall() == [], "HLs for linked Things should be deleted"
+            assert (
+                cur.fetchall() == []
+            ), "HLs for linked Things should be deleted"
 
             cur.execute(
                 'SELECT id FROM sensorthings."HistoricalLocation" WHERE id = %s',
                 (hl3_id,),
             )
-            assert cur.fetchone() is not None, "HL for unrelated Thing must not be deleted"
+            assert (
+                cur.fetchone() is not None
+            ), "HL for unrelated Thing must not be deleted"
 
     # ------------------------------------------------------------------
     # 3. @iot.selfLink computed functions
@@ -436,7 +464,9 @@ class TestSchema:
         """@iot.selfLink for Observation must return '/Observations(<id>)'."""
         with schema.cursor() as cur:
             ds_id, foi_id = self._setup_ds_foi(cur)
-            obs_id = self._insert_observation(cur, ds_id, foi_id, 3, resultString="x")
+            obs_id = self._insert_observation(
+                cur, ds_id, foi_id, 3, resultString="x"
+            )
             cur.execute(
                 'SELECT "@iot.selfLink"(o) FROM sensorthings."Observation" o WHERE id = %s',
                 (obs_id,),
@@ -489,9 +519,9 @@ class TestSchema:
         if isinstance(result, str):
             result = json.loads(result)
 
-        assert result.get("Observation@iot.nextLink") is not None, (
-            "expand() should produce a non-null @iot.nextLink when rows exceed limit_-1"
-        )
+        assert (
+            result.get("Observation@iot.nextLink") is not None
+        ), "expand() should produce a non-null @iot.nextLink when rows exceed limit_-1"
 
     def test_expand_nextlink_null_when_under_limit(self, schema):
         """
@@ -500,7 +530,9 @@ class TestSchema:
         """
         with schema.cursor() as cur:
             ds_id, foi_id = self._setup_ds_foi(cur, suffix="pg2")
-            self._insert_observation(cur, ds_id, foi_id, 3, resultString="only-one")
+            self._insert_observation(
+                cur, ds_id, foi_id, 3, resultString="only-one"
+            )
 
             cur.execute(
                 """
@@ -516,6 +548,6 @@ class TestSchema:
         if isinstance(result, str):
             result = json.loads(result)
 
-        assert result.get("Observation@iot.nextLink") is None, (
-            "expand() should return null @iot.nextLink when row count < limit_-1"
-        )
+        assert (
+            result.get("Observation@iot.nextLink") is None
+        ), "expand() should return null @iot.nextLink when row count < limit_-1"
