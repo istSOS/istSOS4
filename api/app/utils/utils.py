@@ -30,7 +30,7 @@ ENTITY_URL_NAMES = {
     "Datastream": "Datastreams",
     "Observation": "Observations",
     "ObservedProperty": "ObservedProperties",
-    "FeaturesOfInterest": "FeaturesOfInterest",
+    "FeatureOfInterest": "FeaturesOfInterest",
     "HistoricalLocation": "HistoricalLocations",
     "Network": "Networks",
 }
