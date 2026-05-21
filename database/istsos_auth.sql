@@ -429,7 +429,7 @@ BEGIN
         GRANT INSERT, UPDATE, DELETE ON TABLE sensorthings."Observation" TO "sensor";
         GRANT INSERT ON TABLE sensorthings."FeaturesOfInterest" TO "sensor";
         GRANT INSERT ON TABLE sensorthings."Commit" TO "sensor";
-        GRANT UPDATE ("phenomenonTime", "last_foi_id", "observedArea") ON sensorthings."Datastream" TO "sensor";
+        GRANT UPDATE ("phenomenonTime", "resultTime", "last_foi_id", "observedArea") ON sensorthings."Datastream" TO "sensor";
         GRANT UPDATE ("gen_foi_id") ON sensorthings."Location" TO "sensor";
         REVOKE SELECT ON sensorthings."User" FROM "sensor";
         GRANT "sensor" TO "administrator" WITH ADMIN OPTION;

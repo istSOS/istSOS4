@@ -80,11 +80,11 @@ async def update_entity(
     if obs:
         return await connection.fetchrow(
             f"""
-            UPDATE sensorthings."{entity_name}"
-            SET {set_clause}
-            WHERE id = {entity_id}
-            RETURNING "phenomenonTime", "datastream_id";
-        """,
+                UPDATE sensorthings."{entity_name}"
+                SET {set_clause}
+                WHERE id = {entity_id}
+                RETURNING "phenomenonTime", "resultTime", "datastream_id";
+            """,
             *payload.values(),
         )
     await connection.fetchval(
@@ -379,7 +379,9 @@ async def update_observation_entity(connection, observation_id, payload):
     handle_associations(payload, ["Datastream", "FeatureOfInterest"])
 
     if payload:
-        await update_entity(connection, "Observation", observation_id, payload)
+        return await update_entity(
+            connection, "Observation", observation_id, payload, True
+        )
 
 
 async def update_network_entity(connection, network_id, payload):
