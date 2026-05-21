@@ -1,6 +1,6 @@
 services:
   database:
-    image: ghcr.io/istsos/istsos4/database:1.7
+    image: ghcr.io/istsos/istsos4/database:1.8
     restart: always
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -28,7 +28,7 @@ services:
       retries: 5
 
   api:
-    image: ghcr.io/istsos/istsos4/api:1.15
+    image: ghcr.io/istsos/istsos4/api:1.16
     restart: always
     depends_on:
       database:
@@ -69,7 +69,7 @@ services:
     restart: always
 
   dummy_data:
-    image: ghcr.io/istsos/istsos4/dummy_data:1.7
+    image: ghcr.io/istsos/istsos4/dummy_data:1.8
     command: python3 generator.py
     working_dir: /dummy_data
     environment:
