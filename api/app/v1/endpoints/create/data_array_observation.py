@@ -331,7 +331,13 @@ async def insertDataArrayObservation(
         insert_query = f"""
             INSERT INTO sensorthings."Observation" ({keys})
             VALUES {values_placeholders}
-            RETURNING id, lower("phenomenonTime"), upper("phenomenonTime"), datastream_id, featuresofinterest_id;
+            RETURNING
+                id,
+                lower("phenomenonTime"),
+                upper("phenomenonTime"),
+                "resultTime",
+                datastream_id,
+                featuresofinterest_id;
         """
 
         values = [
@@ -341,19 +347,42 @@ async def insertDataArrayObservation(
 
         min_phenomenon_times = [record["lower"] for record in result]
         max_phenomenon_times = [record["upper"] for record in result]
+        result_times = [
+            record["resultTime"]
+            for record in result
+            if record["resultTime"] is not None
+        ]
         update_query = """
             UPDATE sensorthings."Datastream"
             SET "phenomenonTime" = tstzrange(
                 LEAST($1::timestamptz, lower("phenomenonTime")),
                 GREATEST($2::timestamptz, upper("phenomenonTime")),
                 '[]'
-            )
-            WHERE id = $3::bigint;
+            ),
+            "resultTime" =
+                CASE
+                    WHEN $3::timestamptz IS NOT NULL
+                    AND $4::timestamptz IS NOT NULL THEN
+                        CASE
+                            WHEN "resultTime" IS NULL THEN
+                                tstzrange($3::timestamptz, $4::timestamptz, '[]')
+                            ELSE
+                                tstzrange(
+                                    LEAST($3::timestamptz, lower("resultTime")),
+                                    GREATEST($4::timestamptz, upper("resultTime")),
+                                    '[]'
+                                )
+                        END
+                    ELSE "resultTime"
+                END
+            WHERE id = $5::bigint;
         """
         await conn.execute(
             update_query,
             min(min_phenomenon_times),
             max(max_phenomenon_times),
+            min(result_times) if result_times else None,
+            max(result_times) if result_times else None,
             result[0]["datastream_id"],
         )
 

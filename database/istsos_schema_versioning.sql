@@ -41,7 +41,11 @@ BEGIN
         -- If the table is 'Datastream' and the column 'phenomenonTime' or columns 'observedArea' exist  and are updated
         IF TG_TABLE_NAME = 'Datastream' THEN
              IF (
-                (NEW."phenomenonTime" IS DISTINCT FROM OLD."phenomenonTime" OR NEW."observedArea" IS DISTINCT FROM OLD."observedArea")
+                (
+                    NEW."phenomenonTime" IS DISTINCT FROM OLD."phenomenonTime"
+                    OR NEW."resultTime" IS DISTINCT FROM OLD."resultTime"
+                    OR NEW."observedArea" IS DISTINCT FROM OLD."observedArea"
+                )
                 AND NEW."name" IS NOT DISTINCT FROM OLD."name"
                 AND NEW."description" IS NOT DISTINCT FROM OLD."description"
                 AND NEW."unitOfMeasurement" IS NOT DISTINCT FROM OLD."unitOfMeasurement"

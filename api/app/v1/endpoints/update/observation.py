@@ -113,16 +113,21 @@ async def update_observation(
 
                 if updated:
                     obs_phenomenon_time = updated["phenomenonTime"]
+                    obs_result_time = updated["resultTime"]
                     datastream_id = updated["datastream_id"]
 
                     datastream_query = """
-                        SELECT "phenomenonTime"
+                        SELECT "phenomenonTime", "resultTime"
                         FROM sensorthings."Datastream"
                         WHERE id = $1;
                     """
-                    datastream_phenomenon_time = await connection.fetchval(
+                    datastream_times = await connection.fetchrow(
                         datastream_query, datastream_id
                     )
+                    datastream_phenomenon_time = datastream_times[
+                        "phenomenonTime"
+                    ]
+                    datastream_result_time = datastream_times["resultTime"]
                     if datastream_phenomenon_time and obs_phenomenon_time:
                         obs_lower = obs_phenomenon_time.lower
                         obs_upper = obs_phenomenon_time.upper
@@ -149,6 +154,34 @@ async def update_observation(
                                 update_datastream_query,
                                 new_lower_bound,
                                 new_upper_bound,
+                                datastream_id,
+                            )
+
+                    if datastream_result_time and obs_result_time:
+                        obs_rt = obs_result_time
+                        datastream_rt_lower = datastream_result_time.lower
+                        datastream_rt_upper = datastream_result_time.upper
+                        if (
+                            obs_rt < datastream_rt_lower
+                            or obs_rt > datastream_rt_upper
+                        ):
+                            new_rt_lower_bound = min(
+                                obs_rt,
+                                datastream_rt_lower,
+                            )
+                            new_rt_upper_bound = max(
+                                obs_rt,
+                                datastream_rt_upper,
+                            )
+                            update_datastream_query = """
+                                UPDATE sensorthings."Datastream"
+                                SET "resultTime" = tstzrange($1, $2, '[]')
+                                WHERE id = $3;
+                            """
+                            await connection.execute(
+                                update_datastream_query,
+                                new_rt_lower_bound,
+                                new_rt_upper_bound,
                                 datastream_id,
                             )
 
