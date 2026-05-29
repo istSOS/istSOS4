@@ -33,7 +33,7 @@ TOKEN_TYPES = {
     "ASOF": r"\$as_of=",
     "FROMTO": r"\$from_to=",
     "RESULT_FORMAT": r"\$resultFormat=",
-    "RESULT_FORMAT_VALUE": r"\bdataArray\b",
+    "RESULT_FORMAT_VALUE": r"\bdataArray\b|\bCSV\b|\bGeoJSON\b",
     "SUBQUERY_SEPARATOR": r";",
     "VALUE_SEPARATOR": r",",
     "OPTIONS_SEPARATOR": r"&",

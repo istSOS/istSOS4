@@ -101,7 +101,6 @@ async def catch_all_get(
     pool=Depends(get_pool),
     params: CommonQueryParams = Depends(get_common_query_params),
 ):
-
     if not path_name:
         return __handle_root()
 
@@ -121,7 +120,17 @@ async def catch_all_get(
                 print("Cache miss")
 
         if not data:
-            data = sta2rest.STA2REST.convert_query(full_path)
+            try:
+                data = sta2rest.STA2REST.convert_query(full_path)
+            except Exception as e:
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "code": 400,
+                        "type": "error",
+                        "message": f"Invalid query: {str(e)}",
+                    },
+                )
 
         main_entity = data.get("main_entity")
         main_query = data.get("main_query")
