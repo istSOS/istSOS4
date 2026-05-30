@@ -28,6 +28,11 @@ def validate_role_identifier(username: str) -> str:
 
 
 async def set_role(connection, current_user):
+    """Switch the current session role to *current_user['username']*.
+
+    The username is validated against ``_PG_IDENTIFIER_RE`` before use.
+    Uses ``pg_quote_ident`` to safely quote the identifier for the query.
+    """
     async with connection.transaction():
         username = validate_role_identifier(current_user["username"])
         query = f"SET ROLE {pg_quote_ident(username)};"
