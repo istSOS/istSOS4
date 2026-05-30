@@ -38,6 +38,7 @@ from .functions import (
     set_commit,
     update_datastream_last_foi_id,
 )
+from app.v1.endpoints.functions import set_role
 
 v1 = APIRouter()
 
