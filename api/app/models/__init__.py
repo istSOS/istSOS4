@@ -13,20 +13,25 @@
 # limitations under the License.
 
 from .commit import Commit
+from .campaign import Campaign
 from .datastream import Datastream
 from .datastream_traveltime import DatastreamTravelTime
 from .feature_of_interest import FeaturesOfInterest
 from .feature_of_interest_traveltime import FeaturesOfInterestTravelTime
 from .historical_location import HistoricalLocation
 from .historical_location_traveltime import HistoricalLocationTravelTime
+from .license import License
 from .location import Location
 from .location_traveltime import LocationTravelTime
 from .network import Network
 from .network_traveltime import NetworkTravelTime
 from .observation import Observation
+from .observation_group import ObservationGroup
 from .observation_traveltime import ObservationTravelTime
 from .observed_property import ObservedProperty
 from .observed_property_traveltime import ObservedPropertyTravelTime
+from .party import Party
+from .relation import Relation
 from .sensor import Sensor
 from .sensor_traveltime import SensorTravelTime
 from .thing import Thing
@@ -43,6 +48,11 @@ __all__ = [
     "Datastream",
     "FeaturesOfInterest",
     "Observation",
+    "Party",
+    "License",
+    "Campaign",
+    "ObservationGroup",
+    "Relation",
     "NetworkTravelTime",
     "LocationTravelTime",
     "ThingTravelTime",

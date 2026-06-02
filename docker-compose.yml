@@ -11,6 +11,7 @@ services:
         -c custom.network=${NETWORK:-0}
         -c custom.versioning=${VERSIONING:-0}
         -c custom.authorization=${AUTHORIZATION:-0}
+        -c custom.staplus=${STAPLUS:-0}
         -c custom.duplicates=${DUPLICATES:-0}
         -c custom.epsg=${EPSG:-4326}
         -c custom.user=${ISTSOS_ADMIN:-admin}
@@ -53,6 +54,7 @@ services:
       ALGORITHM: ${ALGORITHM}
       ANONYMOUS_VIEWER: ${ANONYMOUS_VIEWER}
       NETWORK: ${NETWORK}
+      STAPLUS: ${STAPLUS}
     command: uvicorn --timeout-keep-alive 75 --workers 2 --host 0.0.0.0 --port 5000 app.main:app
     ports:
       - ${EXTERNAL_PORT}:5000

@@ -14,41 +14,32 @@
 
 from app import STAPLUS
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
-from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
-from .thing_location import Thing_Location
 
-
-class Thing(Base):
-    __tablename__ = "Thing"
+class Party(Base):
+    __tablename__ = "Party"
     __table_args__ = {"schema": SCHEMA_NAME}
 
     id = Column(Integer, primary_key=True)
     self_link = Column("@iot.selfLink", Text)
-    location_navigation_link = Column("Locations@iot.navigationLink", Text)
-    historicallocation_navigation_link = Column(
-        "HistoricalLocations@iot.navigationLink", Text
-    )
     datastream_navigation_link = Column("Datastreams@iot.navigationLink", Text)
+    thing_navigation_link = Column("Things@iot.navigationLink", Text)
+    campaign_navigation_link = Column("Campaigns@iot.navigationLink", Text)
+    observationgroup_navigation_link = Column(
+        "ObservationGroups@iot.navigationLink", Text
+    )
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
-    if STAPLUS:
-        party_navigation_link = Column("Party@iot.navigationLink", Text)
-    name = Column(String(255), unique=True, nullable=False)
-    description = Column(Text, nullable=False)
-    properties = Column(JSON)
+    role = Column(String(255), nullable=False)
+    description = Column(Text)
+    display_name = Column("displayName", String(255))
+    auth_id = Column("authId", String(255), unique=True)
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
     if STAPLUS:
-        party_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Party.id"))
-    location = relationship(
-        "Location", secondary=Thing_Location, back_populates="thing"
-    )
-    historicallocation = relationship(
-        "HistoricalLocation", back_populates="thing"
-    )
-    datastream = relationship("Datastream", back_populates="thing")
-    commit = relationship("Commit", back_populates="thing")
-    if STAPLUS:
-        party = relationship("Party", back_populates="thing")
+        datastream = relationship("Datastream", back_populates="party")
+        thing = relationship("Thing", back_populates="party")
+    campaign = relationship("Campaign", back_populates="party")
+    observationgroup = relationship("ObservationGroup", back_populates="party")
+    commit = relationship("Commit", back_populates="party")

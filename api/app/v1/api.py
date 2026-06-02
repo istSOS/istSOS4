@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import AUTHORIZATION, NETWORK
+from app import AUTHORIZATION, NETWORK, STAPLUS
 from app.v1.endpoints.create import bulk_observation, data_array_observation
 from app.v1.endpoints.create import datastream as create_datastream
 from app.v1.endpoints.create import (
@@ -30,6 +30,7 @@ from app.v1.endpoints.create import (
 )
 from app.v1.endpoints.create import policy as create_policy
 from app.v1.endpoints.create import sensor as create_sensor
+from app.v1.endpoints.create import staplus as create_staplus
 from app.v1.endpoints.create import thing as create_thing
 from app.v1.endpoints.create import user as create_user
 from app.v1.endpoints.delete import datastream as delete_datastream
@@ -47,6 +48,7 @@ from app.v1.endpoints.delete import (
 )
 from app.v1.endpoints.delete import policy as delete_policy
 from app.v1.endpoints.delete import sensor as delete_sensor
+from app.v1.endpoints.delete import staplus as delete_staplus
 from app.v1.endpoints.delete import thing as delete_thing
 from app.v1.endpoints.delete import user as delete_user
 from app.v1.endpoints.read import datastream as read_datastream
@@ -63,6 +65,7 @@ from app.v1.endpoints.read import observed_property as read_observed_property
 from app.v1.endpoints.read import policy as read_policy
 from app.v1.endpoints.read import read
 from app.v1.endpoints.read import sensor as read_sensor
+from app.v1.endpoints.read import staplus as read_staplus
 from app.v1.endpoints.read import thing as read_thing
 from app.v1.endpoints.read import user as read_user
 from app.v1.endpoints.update import datastream as update_datastream
@@ -80,6 +83,7 @@ from app.v1.endpoints.update import (
 )
 from app.v1.endpoints.update import policy as update_policy
 from app.v1.endpoints.update import sensor as update_sensor
+from app.v1.endpoints.update import staplus as update_staplus
 from app.v1.endpoints.update import thing as update_thing
 from app.v1.endpoints.update import user as update_user
 from fastapi import FastAPI
@@ -103,6 +107,30 @@ if NETWORK:
         {
             "name": "Networks",
             "description": "Networks that can be used to group datastreams.",
+        },
+    ]
+
+if STAPLUS:
+    tags_metadata += [
+        {
+            "name": "Parties",
+            "description": "STAplus parties associated with data ownership, authorship, or responsibility.",
+        },
+        {
+            "name": "Licenses",
+            "description": "STAplus licenses associated with reusable resources.",
+        },
+        {
+            "name": "Campaigns",
+            "description": "STAplus campaigns used to group observation activities.",
+        },
+        {
+            "name": "ObservationGroups",
+            "description": "STAplus observation groups and their associations.",
+        },
+        {
+            "name": "Relations",
+            "description": "STAplus relations between observations in an observation group.",
         },
     ]
 
@@ -171,6 +199,12 @@ if NETWORK:
     v1.include_router(create_network.v1)
     v1.include_router(update_network.v1)
     v1.include_router(delete_network.v1)
+
+if STAPLUS:
+    v1.include_router(read_staplus.v1)
+    v1.include_router(create_staplus.v1)
+    v1.include_router(update_staplus.v1)
+    v1.include_router(delete_staplus.v1)
 
 # Register the read endpoints
 v1.include_router(read_location.v1)

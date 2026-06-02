@@ -30,7 +30,7 @@ def handle_datetime_fields(payload, datastream=False):
         None
     """
     for key in list(payload.keys()):
-        if "time" in key.lower():
+        if "time" in key.lower() and payload[key] is not None:
             if "/" in payload[key]:
                 start_time, end_time = payload[key].split("/")
                 payload[key] = Range(

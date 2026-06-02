@@ -15,7 +15,15 @@
 import json
 from datetime import datetime
 
-from app import AUTHORIZATION, HOSTNAME, NETWORK, SUBPATH, VERSION, VERSIONING
+from app import (
+    AUTHORIZATION,
+    HOSTNAME,
+    NETWORK,
+    STAPLUS,
+    SUBPATH,
+    VERSION,
+    VERSIONING,
+)
 from app.utils.utils import (
     check_iot_id_in_payload,
     check_missing_properties,
@@ -26,6 +34,7 @@ from app.utils.utils import (
 from app.v1.endpoints.functions import insert_commit
 from app.v1.endpoints.update.datastream import update_datastream_entity
 from app.v1.endpoints.update.observation import update_observation_entity
+from app.v1.endpoints.update.thing import update_thing_entity
 from asyncpg.types import Range
 
 
@@ -72,7 +81,7 @@ async def create_entity(connection, entity_name, payload):
         values_placeholders = ", ".join(
             (
                 f"${i+1}"
-                if key != "location" or key != "feature"
+                if key != "location" and key != "feature"
                 else f"ST_GeomFromGeoJSON(${i+1})"
             )
             for i in range(len(payload))
@@ -87,6 +96,8 @@ async def create_entity(connection, entity_name, payload):
         )
         if entity_name == "ObservedProperty":
             entity_name = "ObservedProperties"
+        elif entity_name == "Party":
+            entity_name = "Parties"
         else:
             if entity_name != "FeaturesOfInterest":
                 entity_name = f"{entity_name}s"
@@ -140,8 +151,19 @@ async def insert_location_entity(connection, payload, commit_id):
         return location_id, location_self_link
 
 
-async def insert_thing_entity(connection, payload, commit_id):
+async def insert_thing_entity(connection, payload, commit_id, party_id=None):
     async with connection.transaction():
+        if "@iot.id" in payload:
+            check_iot_id_in_payload(payload, "Thing")
+
+            if party_id is not None:
+                payload["Party"] = {"@iot.id": party_id}
+
+            iot_id = payload.pop("@iot.id")
+            await update_thing_entity(connection, iot_id, payload)
+
+            return iot_id, f"{HOSTNAME}{SUBPATH}{VERSION}/Things({iot_id})"
+
         location_id = None
         locations_ids = []
 
@@ -159,6 +181,16 @@ async def insert_thing_entity(connection, payload, commit_id):
         payload.pop("Locations", None)
 
         datastreams = payload.pop("Datastreams", [])
+
+        if STAPLUS:
+            await handle_associations(
+                payload,
+                "Party",
+                party_id,
+                insert_party_entity,
+                connection,
+                commit_id,
+            )
 
         if commit_id is not None:
             payload["commit_id"] = commit_id
@@ -293,9 +325,13 @@ async def insert_datastream_entity(
     sensor_id=None,
     observed_property_id=None,
     network_id=None,
+    party_id=None,
+    license_id=None,
     commit_id=None,
 ):
     async with connection.transaction():
+        campaigns = payload.pop("Campaigns", [])
+
         if "@iot.id" in payload:
             check_iot_id_in_payload(payload, "Datastream")
 
@@ -307,9 +343,24 @@ async def insert_datastream_entity(
                 payload["ObservedProperty"] = {"@iot.id": observed_property_id}
             if network_id is not None:
                 payload["Network"] = {"@iot.id": network_id}
+            if party_id is not None:
+                payload["Party"] = {"@iot.id": party_id}
+            if license_id is not None:
+                payload["License"] = {"@iot.id": license_id}
 
             iot_id = payload.pop("@iot.id")
             await update_datastream_entity(connection, iot_id, payload)
+            await link_nested_collection(
+                connection,
+                campaigns,
+                "Campaign",
+                insert_campaign_entity,
+                "Campaign_Datastream",
+                "datastream_id",
+                iot_id,
+                "campaign_id",
+                commit_id,
+            )
 
             return (
                 iot_id,
@@ -353,6 +404,24 @@ async def insert_datastream_entity(
                 commit_id,
             )
 
+        if STAPLUS:
+            await handle_associations(
+                payload,
+                "Party",
+                party_id,
+                insert_party_entity,
+                connection,
+                commit_id,
+            )
+            await handle_associations(
+                payload,
+                "License",
+                license_id,
+                insert_license_entity,
+                connection,
+                commit_id,
+            )
+
         check_missing_properties(
             payload,
             (
@@ -383,6 +452,18 @@ async def insert_datastream_entity(
                     datastream_id=datastream_id,
                     commit_id=commit_id,
                 )
+
+        await link_nested_collection(
+            connection,
+            campaigns,
+            "Campaign",
+            insert_campaign_entity,
+            "Campaign_Datastream",
+            "datastream_id",
+            datastream_id,
+            "campaign_id",
+            commit_id,
+        )
 
     return datastream_id, datastream_selfLink
 
@@ -445,6 +526,29 @@ async def insert_observation_entity(
                 iot_id,
                 f"{HOSTNAME}{SUBPATH}{VERSION}/Observations({iot_id})",
             )
+
+        observation_group_ids = []
+        if STAPLUS:
+            observation_groups = payload.pop("ObservationGroups", [])
+            if isinstance(observation_groups, dict):
+                observation_groups = [observation_groups]
+
+            for observation_group in observation_groups:
+                observation_group_id = observation_group.get("@iot.id")
+                if observation_group_id is None:
+                    observation_group_id, _ = (
+                        await insert_observation_group_entity(
+                            connection,
+                            observation_group,
+                            commit_id=commit_id,
+                        )
+                    )
+                else:
+                    check_iot_id_in_payload(
+                        observation_group, "ObservationGroup"
+                    )
+
+                observation_group_ids.append(observation_group_id)
 
         await handle_associations(
             payload,
@@ -510,6 +614,16 @@ async def insert_observation_entity(
             connection, "Observation", payload
         )
 
+        for observation_group_id in observation_group_ids:
+            await link_many_to_many(
+                connection,
+                "ObservationGroup_Observation",
+                "observationgroup_id",
+                observation_group_id,
+                "observation_id",
+                observation_id,
+            )
+
         update_query = """
                 UPDATE sensorthings."Datastream"
                 SET "phenomenonTime" = tstzrange(
@@ -551,6 +665,398 @@ async def insert_network_entity(connection, payload, commit_id):
                 )
 
         return network_id, network_selfLink
+
+
+async def insert_party_entity(connection, payload, commit_id=None):
+    async with connection.transaction():
+        datastreams = payload.pop("Datastreams", [])
+        things = payload.pop("Things", [])
+        campaigns = payload.pop("Campaigns", [])
+        observation_groups = payload.pop("ObservationGroups", [])
+
+        if commit_id is not None:
+            payload["commit_id"] = commit_id
+
+        party_id, party_self_link = await create_entity(
+            connection, "Party", payload
+        )
+
+        for datastream in datastreams:
+            await insert_datastream_entity(
+                connection,
+                datastream,
+                party_id=party_id,
+                commit_id=commit_id,
+            )
+
+        for thing in things:
+            await insert_thing_entity(
+                connection,
+                thing,
+                party_id=party_id,
+                commit_id=commit_id,
+            )
+
+        for campaign in campaigns:
+            await insert_campaign_entity(
+                connection,
+                campaign,
+                party_id=party_id,
+                commit_id=commit_id,
+            )
+
+        for observation_group in observation_groups:
+            await insert_observation_group_entity(
+                connection,
+                observation_group,
+                party_id=party_id,
+                commit_id=commit_id,
+            )
+
+        return party_id, party_self_link
+
+
+async def insert_license_entity(connection, payload, commit_id=None):
+    async with connection.transaction():
+        datastreams = payload.pop("Datastreams", [])
+        campaigns = payload.pop("Campaigns", [])
+        observation_groups = payload.pop("ObservationGroups", [])
+
+        if commit_id is not None:
+            payload["commit_id"] = commit_id
+
+        license_id, license_self_link = await create_entity(
+            connection, "License", payload
+        )
+
+        for datastream in datastreams:
+            await insert_datastream_entity(
+                connection,
+                datastream,
+                license_id=license_id,
+                commit_id=commit_id,
+            )
+
+        for campaign in campaigns:
+            await insert_campaign_entity(
+                connection,
+                campaign,
+                license_id=license_id,
+                commit_id=commit_id,
+            )
+
+        for observation_group in observation_groups:
+            await insert_observation_group_entity(
+                connection,
+                observation_group,
+                license_id=license_id,
+                commit_id=commit_id,
+            )
+
+        return license_id, license_self_link
+
+
+async def insert_campaign_entity(
+    connection,
+    payload,
+    party_id=None,
+    license_id=None,
+    commit_id=None,
+):
+    async with connection.transaction():
+        datastreams = payload.pop("Datastreams", [])
+        observation_groups = payload.pop("ObservationGroups", [])
+
+        await handle_associations(
+            payload,
+            "Party",
+            party_id,
+            insert_party_entity,
+            connection,
+            commit_id,
+        )
+        await handle_associations(
+            payload,
+            "License",
+            license_id,
+            insert_license_entity,
+            connection,
+            commit_id,
+        )
+
+        if commit_id is not None:
+            payload["commit_id"] = commit_id
+
+        handle_datetime_fields(payload)
+
+        campaign_id, campaign_self_link = await create_entity(
+            connection, "Campaign", payload
+        )
+
+        await link_nested_collection(
+            connection,
+            datastreams,
+            "Datastream",
+            insert_datastream_entity,
+            "Campaign_Datastream",
+            "campaign_id",
+            campaign_id,
+            "datastream_id",
+            commit_id,
+        )
+
+        for observation_group in observation_groups:
+            observation_group_id = observation_group.get("@iot.id")
+            if observation_group_id is None:
+                observation_group_id, _ = (
+                    await insert_observation_group_entity(
+                        connection,
+                        observation_group,
+                        campaign_id=campaign_id,
+                        commit_id=commit_id,
+                    )
+                )
+            else:
+                check_iot_id_in_payload(observation_group, "ObservationGroup")
+            await link_many_to_many(
+                connection,
+                "Campaign_ObservationGroup",
+                "campaign_id",
+                campaign_id,
+                "observationgroup_id",
+                observation_group_id,
+            )
+
+        return campaign_id, campaign_self_link
+
+
+async def insert_observation_group_entity(
+    connection,
+    payload,
+    campaign_id=None,
+    party_id=None,
+    license_id=None,
+    commit_id=None,
+):
+    async with connection.transaction():
+        campaigns = payload.pop("Campaigns", [])
+        observations = payload.pop("Observations", [])
+        relations = payload.pop("Relations", [])
+
+        await handle_associations(
+            payload,
+            "Party",
+            party_id,
+            insert_party_entity,
+            connection,
+            commit_id,
+        )
+        await handle_associations(
+            payload,
+            "License",
+            license_id,
+            insert_license_entity,
+            connection,
+            commit_id,
+        )
+
+        if commit_id is not None:
+            payload["commit_id"] = commit_id
+
+        handle_datetime_fields(payload)
+
+        observation_group_id, observation_group_self_link = (
+            await create_entity(connection, "ObservationGroup", payload)
+        )
+
+        if campaign_id is not None:
+            await link_many_to_many(
+                connection,
+                "Campaign_ObservationGroup",
+                "campaign_id",
+                campaign_id,
+                "observationgroup_id",
+                observation_group_id,
+            )
+
+        await link_nested_collection(
+            connection,
+            campaigns,
+            "Campaign",
+            insert_campaign_entity,
+            "Campaign_ObservationGroup",
+            "observationgroup_id",
+            observation_group_id,
+            "campaign_id",
+            commit_id,
+        )
+
+        for observation in observations:
+            observation_id = observation.get("@iot.id")
+            if observation_id is None:
+                observation_id, _ = await insert_observation_entity(
+                    connection, observation, commit_id=commit_id
+                )
+            else:
+                check_iot_id_in_payload(observation, "Observation")
+
+            await link_many_to_many(
+                connection,
+                "ObservationGroup_Observation",
+                "observationgroup_id",
+                observation_group_id,
+                "observation_id",
+                observation_id,
+            )
+
+        for relation in relations:
+            relation_id = relation.get("@iot.id")
+            if relation_id is None:
+                relation_id, _ = await insert_relation_entity(
+                    connection,
+                    relation,
+                    observation_group_id=observation_group_id,
+                    commit_id=commit_id,
+                )
+            else:
+                check_iot_id_in_payload(relation, "Relation")
+            await link_many_to_many(
+                connection,
+                "Relation_ObservationGroup",
+                "relation_id",
+                relation_id,
+                "observationgroup_id",
+                observation_group_id,
+            )
+
+        return observation_group_id, observation_group_self_link
+
+
+async def insert_relation_entity(
+    connection,
+    payload,
+    observation_group_id=None,
+    commit_id=None,
+):
+    async with connection.transaction():
+        observation_groups = payload.pop("ObservationGroups", [])
+
+        if "Subject" in payload:
+            subject_id = payload["Subject"].get("@iot.id")
+            if subject_id is None:
+                subject_id, _ = await insert_observation_entity(
+                    connection, payload["Subject"], commit_id=commit_id
+                )
+            else:
+                check_iot_id_in_payload(payload["Subject"], "Subject")
+            payload["subject_id"] = subject_id
+            payload.pop("Subject", None)
+
+        if "Object" in payload:
+            object_id = payload["Object"].get("@iot.id")
+            if object_id is None:
+                object_id, _ = await insert_observation_entity(
+                    connection, payload["Object"], commit_id=commit_id
+                )
+            else:
+                check_iot_id_in_payload(payload["Object"], "Object")
+            payload["object_id"] = object_id
+            payload.pop("Object", None)
+
+        has_object = payload.get("object_id") is not None
+        has_external = payload.get("externalResource") is not None
+        if has_object == has_external:
+            raise Exception(
+                "Relation requires exactly one of Object or externalResource."
+            )
+
+        check_missing_properties(payload, ["Subject"])
+
+        if commit_id is not None:
+            payload["commit_id"] = commit_id
+
+        relation_id, relation_self_link = await create_entity(
+            connection, "Relation", payload
+        )
+
+        if observation_group_id is not None:
+            await link_many_to_many(
+                connection,
+                "Relation_ObservationGroup",
+                "relation_id",
+                relation_id,
+                "observationgroup_id",
+                observation_group_id,
+            )
+
+        await link_nested_collection(
+            connection,
+            observation_groups,
+            "ObservationGroup",
+            insert_observation_group_entity,
+            "Relation_ObservationGroup",
+            "relation_id",
+            relation_id,
+            "observationgroup_id",
+            commit_id,
+        )
+
+        return relation_id, relation_self_link
+
+
+async def link_many_to_many(
+    connection,
+    table,
+    left_column,
+    left_id,
+    right_column,
+    right_id,
+):
+    await connection.execute(
+        f"""
+            INSERT INTO sensorthings."{table}"
+            ("{left_column}", "{right_column}")
+            VALUES ($1, $2)
+            ON CONFLICT ("{left_column}", "{right_column}") DO NOTHING;
+        """,
+        left_id,
+        right_id,
+    )
+
+
+async def link_nested_collection(
+    connection,
+    items,
+    entity_name,
+    insert_func,
+    table,
+    source_column,
+    source_id,
+    target_column,
+    commit_id,
+):
+    if not items:
+        return
+    if isinstance(items, dict):
+        items = [items]
+    for item in items:
+        item_id = item.get("@iot.id")
+        if item_id is None:
+            item_id, _ = await insert_func(
+                connection,
+                item,
+                commit_id=commit_id,
+            )
+        else:
+            check_iot_id_in_payload(item, entity_name)
+        await link_many_to_many(
+            connection,
+            table,
+            source_column,
+            source_id,
+            target_column,
+            item_id,
+        )
 
 
 async def update_datastream_last_foi_id(conn, foi_id, datastream_id):

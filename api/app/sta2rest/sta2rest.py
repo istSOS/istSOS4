@@ -24,7 +24,7 @@ representations in a REST API.
 import re
 from datetime import datetime, timezone
 
-from app import AUTHORIZATION, DEBUG, NETWORK, VERSION, VERSIONING
+from app import AUTHORIZATION, DEBUG, NETWORK, STAPLUS, VERSION, VERSIONING
 from app.utils.utils import insert_navigation_link
 from dateutil.parser import isoparse
 
@@ -68,6 +68,23 @@ class STA2REST:
         "FeatureOfInterest": "FeaturesOfInterest",
         "HistoricalLocation": "HistoricalLocation",
     }
+
+    COLLECTION_ENTITY_NAMES = {
+        "Networks",
+        "Commits",
+        "Things",
+        "Locations",
+        "Sensors",
+        "ObservedProperties",
+        "Datastreams",
+        "Observations",
+        "FeaturesOfInterest",
+        "HistoricalLocations",
+    }
+
+    SINGLE_ENTITY_NAMES = set(ENTITY_MAPPING) - COLLECTION_ENTITY_NAMES
+
+    NAVIGATION_ALIASES = {}
 
     # Default columns for each entity
     DEFAULT_SELECT = {
@@ -300,6 +317,165 @@ class STA2REST:
         "selfLink": "self_link",
     }
 
+    if STAPLUS:
+        ENTITY_MAPPING.update(
+            {
+                "Parties": "Party",
+                "Licenses": "License",
+                "Campaigns": "Campaign",
+                "ObservationGroups": "ObservationGroup",
+                "Relations": "Relation",
+                "Party": "Party",
+                "License": "License",
+                "Campaign": "Campaign",
+                "ObservationGroup": "ObservationGroup",
+                "Relation": "Relation",
+                "Subject": "Observation",
+                "Object": "Observation",
+                "Objects": "Relation",
+                "Subjects": "Relation",
+            }
+        )
+
+        COLLECTION_ENTITY_NAMES.update(
+            {
+                "Parties",
+                "Licenses",
+                "Campaigns",
+                "ObservationGroups",
+                "Relations",
+                "Objects",
+                "Subjects",
+            }
+        )
+
+        SINGLE_ENTITY_NAMES.update(
+            {
+                "Party",
+                "License",
+                "Campaign",
+                "ObservationGroup",
+                "Relation",
+                "Subject",
+                "Object",
+            }
+        )
+
+        NAVIGATION_ALIASES.update(
+            {
+                ("Relation", "Subject"): {
+                    "target": "Observation",
+                    "relationship": "subject",
+                    "inverse_relationship": "objects",
+                },
+                ("Relation", "Object"): {
+                    "target": "Observation",
+                    "relationship": "object",
+                    "inverse_relationship": "subjects",
+                },
+                ("Observation", "Objects"): {
+                    "target": "Relation",
+                    "relationship": "objects",
+                    "inverse_relationship": "subject",
+                },
+                ("Observation", "Subjects"): {
+                    "target": "Relation",
+                    "relationship": "subjects",
+                    "inverse_relationship": "object",
+                },
+            }
+        )
+
+        DEFAULT_SELECT.update(
+            {
+                "Party": [
+                    "id",
+                    "self_link",
+                    "datastream_navigation_link",
+                    "thing_navigation_link",
+                    "campaign_navigation_link",
+                    "observationgroup_navigation_link",
+                    "role",
+                    "description",
+                    "display_name",
+                    "auth_id",
+                ],
+                "License": [
+                    "id",
+                    "self_link",
+                    "datastream_navigation_link",
+                    "campaign_navigation_link",
+                    "observationgroup_navigation_link",
+                    "name",
+                    "definition",
+                    "description",
+                    "logo",
+                    "attribution_text",
+                ],
+                "Campaign": [
+                    "id",
+                    "self_link",
+                    "party_navigation_link",
+                    "license_navigation_link",
+                    "datastream_navigation_link",
+                    "observationgroup_navigation_link",
+                    "name",
+                    "description",
+                    "classification",
+                    "terms_of_use",
+                    "privacy_policy",
+                    "creation_time",
+                    "start_time",
+                    "end_time",
+                    "url",
+                ],
+                "ObservationGroup": [
+                    "id",
+                    "self_link",
+                    "campaign_navigation_link",
+                    "party_navigation_link",
+                    "license_navigation_link",
+                    "observation_navigation_link",
+                    "relation_navigation_link",
+                    "name",
+                    "description",
+                    "purpose",
+                    "creation_time",
+                    "end_time",
+                    "terms_of_use",
+                    "privacy_policy",
+                    "data_quality",
+                    "properties",
+                ],
+                "Relation": [
+                    "id",
+                    "self_link",
+                    "observationgroup_navigation_link",
+                    "subject_navigation_link",
+                    "object_navigation_link",
+                    "role",
+                    "description",
+                    "properties",
+                    "external_resource",
+                ],
+            }
+        )
+
+        SELECT_MAPPING.update(
+            {
+                "displayName": "display_name",
+                "authId": "auth_id",
+                "attributionText": "attribution_text",
+                "termsOfUse": "terms_of_use",
+                "privacyPolicy": "privacy_policy",
+                "creationTime": "creation_time",
+                "startTime": "start_time",
+                "endTime": "end_time",
+                "dataQuality": "data_quality",
+                "externalResource": "external_resource",
+            }
+        )
+
     REVERSE_SELECT_MAPPING = {v: k for k, v in SELECT_MAPPING.items()}
 
     if VERSIONING or AUTHORIZATION:
@@ -308,6 +484,25 @@ class STA2REST:
                 insert_navigation_link(
                     DEFAULT_SELECT, key, "commit_navigation_link"
                 )
+
+        if STAPLUS:
+            insert_navigation_link(
+                DEFAULT_SELECT, "Commit", "party_navigation_link"
+            )
+            insert_navigation_link(
+                DEFAULT_SELECT, "Commit", "license_navigation_link"
+            )
+            insert_navigation_link(
+                DEFAULT_SELECT, "Commit", "campaign_navigation_link"
+            )
+            insert_navigation_link(
+                DEFAULT_SELECT,
+                "Commit",
+                "observationgroup_navigation_link",
+            )
+            insert_navigation_link(
+                DEFAULT_SELECT, "Commit", "relation_navigation_link"
+            )
 
     if NETWORK:
         insert_navigation_link(
@@ -325,6 +520,53 @@ class STA2REST:
                 "DatastreamTravelTime",
                 "network_navigation_link",
             )
+
+    if STAPLUS:
+        insert_navigation_link(
+            DEFAULT_SELECT, "Datastream", "party_navigation_link"
+        )
+        insert_navigation_link(
+            DEFAULT_SELECT, "Datastream", "license_navigation_link"
+        )
+        insert_navigation_link(
+            DEFAULT_SELECT, "Datastream", "campaign_navigation_link"
+        )
+        insert_navigation_link(
+            DEFAULT_SELECT, "Thing", "party_navigation_link"
+        )
+        insert_navigation_link(
+            DEFAULT_SELECT, "Observation", "observationgroup_navigation_link"
+        )
+        insert_navigation_link(
+            DEFAULT_SELECT, "Observation", "objects_navigation_link"
+        )
+        insert_navigation_link(
+            DEFAULT_SELECT, "Observation", "subjects_navigation_link"
+        )
+
+    @staticmethod
+    def clean_entity_name(entity: str) -> str:
+        return entity.replace("TravelTime", "")
+
+    @staticmethod
+    def resolve_navigation(parent_entity: str, navigation_name: str) -> dict:
+        parent_entity = STA2REST.clean_entity_name(parent_entity)
+        return STA2REST.NAVIGATION_ALIASES.get(
+            (parent_entity, navigation_name)
+        )
+
+    @staticmethod
+    def resolve_inverse_navigation(
+        parent_entity: str, navigation_name: str
+    ) -> str:
+        navigation = STA2REST.resolve_navigation(
+            parent_entity, navigation_name
+        )
+        return (
+            navigation.get("inverse_relationship")
+            if navigation
+            else None
+        )
 
     @staticmethod
     def get_default_column_names(entity: str) -> list:
@@ -400,7 +642,7 @@ class STA2REST:
             parser = Parser(tokens)
             query_ast = parser.parse()
 
-        main_entity, main_entity_id = uri["entity"]
+        main_entity, main_entity_id = uri["entity"][:2]
         entities = uri["entities"]
 
         if query_ast.as_of:
@@ -428,7 +670,8 @@ class STA2REST:
 
             main_entity += "TravelTime"
             entities = [
-                (entity + "TravelTime", value) for entity, value in entities
+                (entity[0] + "TravelTime", entity[1], *entity[2:])
+                for entity in entities
             ]
             as_of_filter = f"system_time_validity eq {query_ast.as_of.value}"
             query_ast.filter = FilterNode(
@@ -505,7 +748,8 @@ class STA2REST:
 
             main_entity += "TravelTime"
             entities = [
-                (entity + "TravelTime", value) for entity, value in entities
+                (entity[0] + "TravelTime", entity[1], *entity[2:])
+                for entity in entities
             ]
             from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
             query_ast.filter = FilterNode(
@@ -600,7 +844,12 @@ class STA2REST:
                             )
 
                 query_ast.expand.identifiers.append(
-                    ExpandNodeIdentifier(entity_name, sub_query, False)
+                    ExpandNodeIdentifier(
+                        entity_name,
+                        sub_query,
+                        False,
+                        entity[3] if len(entity) > 3 else None,
+                    )
                 )
                 index += 1
         else:
@@ -667,13 +916,15 @@ class STA2REST:
             # Remove the id from the entity
             entity = entity.replace(match.group(0), "")
 
+        navigation_name = entity
+
         # Check if the entity is in the ENTITY_MAPPING
         if entity in STA2REST.ENTITY_MAPPING:
             entity = STA2REST.ENTITY_MAPPING[entity]
         else:
             return None
 
-        return (entity, id)
+        return (entity, id, navigation_name)
 
     @staticmethod
     def parse_uri(uri: str) -> str:
@@ -693,11 +944,9 @@ class STA2REST:
         else:
             entity_name = parts[-1]
         single = False
-        keys_list = list(STA2REST.ENTITY_MAPPING.keys())
-        if entity_name in keys_list:
-            index = keys_list.index(entity_name)
-            if index > 9:
-                single = True
+        entity_name = re.sub(r"\(\d+\)$", "", entity_name)
+        if entity_name in STA2REST.SINGLE_ENTITY_NAMES:
+            single = True
         # Parse first entity
         main_entity = STA2REST.parse_entity(parts.pop(0))
         if not main_entity:
@@ -736,10 +985,17 @@ class STA2REST:
                     property_name += "/"
         # Reverse order of entities
         if entities:
-            entities = entities[::-1]
-            entities.append(main_entity)
-            main_entity = entities[0]
-            entities.pop(0)
+            path_entities = [main_entity] + entities
+            main_entity = path_entities[-1]
+            entities = []
+            for index in range(len(path_entities) - 2, -1, -1):
+                source_entity = path_entities[index]
+                target_entity = path_entities[index + 1]
+                inverse_relationship = STA2REST.resolve_inverse_navigation(
+                    source_entity[0],
+                    target_entity[2],
+                )
+                entities.append((*source_entity, inverse_relationship))
 
         return {
             "version": version,

@@ -12,43 +12,47 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import STAPLUS
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
-from .thing_location import Thing_Location
+from .relation_observation_group import Relation_ObservationGroup
 
 
-class Thing(Base):
-    __tablename__ = "Thing"
+class Relation(Base):
+    __tablename__ = "Relation"
     __table_args__ = {"schema": SCHEMA_NAME}
 
     id = Column(Integer, primary_key=True)
     self_link = Column("@iot.selfLink", Text)
-    location_navigation_link = Column("Locations@iot.navigationLink", Text)
-    historicallocation_navigation_link = Column(
-        "HistoricalLocations@iot.navigationLink", Text
+    observationgroup_navigation_link = Column(
+        "ObservationGroups@iot.navigationLink", Text
     )
-    datastream_navigation_link = Column("Datastreams@iot.navigationLink", Text)
+    subject_navigation_link = Column("Subject@iot.navigationLink", Text)
+    object_navigation_link = Column("Object@iot.navigationLink", Text)
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
-    if STAPLUS:
-        party_navigation_link = Column("Party@iot.navigationLink", Text)
-    name = Column(String(255), unique=True, nullable=False)
-    description = Column(Text, nullable=False)
+    role = Column(String(255), nullable=False)
+    description = Column(Text)
     properties = Column(JSON)
+    subject_id = Column(
+        Integer,
+        ForeignKey(f"{SCHEMA_NAME}.Observation.id"),
+        nullable=False,
+    )
+    object_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Observation.id"))
+    external_resource = Column("externalResource", Text)
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
-    if STAPLUS:
-        party_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Party.id"))
-    location = relationship(
-        "Location", secondary=Thing_Location, back_populates="thing"
+    observationgroup = relationship(
+        "ObservationGroup",
+        secondary=Relation_ObservationGroup,
+        back_populates="relation",
     )
-    historicallocation = relationship(
-        "HistoricalLocation", back_populates="thing"
+    subject = relationship(
+        "Observation", foreign_keys=[subject_id], back_populates="objects"
     )
-    datastream = relationship("Datastream", back_populates="thing")
-    commit = relationship("Commit", back_populates="thing")
-    if STAPLUS:
-        party = relationship("Party", back_populates="thing")
+    object = relationship(
+        "Observation", foreign_keys=[object_id], back_populates="subjects"
+    )
+    commit = relationship("Commit", back_populates="relation")

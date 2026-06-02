@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
+from app import AUTHORIZATION, POSTGRES_PORT_WRITE, STAPLUS, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role
@@ -48,6 +48,9 @@ ALLOWED_KEYS = [
     "Locations",
     "Datastreams",
 ]
+
+if STAPLUS:
+    ALLOWED_KEYS.append("Party")
 
 
 @v1.api_route(

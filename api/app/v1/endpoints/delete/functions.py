@@ -41,6 +41,21 @@ async def set_commit(
     if current_user is not None:
         commit["user_id"] = current_user["id"]
         commit_id = await insert_commit(connection, commit, "DELETE")
+        has_commit_id = await connection.fetchval(
+            """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'sensorthings'
+                      AND table_name = $1
+                      AND column_name = 'commit_id'
+                );
+            """,
+            entity_name,
+        )
+        if not has_commit_id:
+            return
+
         query = f"""
             UPDATE sensorthings."{entity_name}"
             SET "commit_id" = $1
