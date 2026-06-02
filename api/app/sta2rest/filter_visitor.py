@@ -76,6 +76,16 @@ SELECT_MAPPING = {
     "resultTime": "result_time",
     "resultQuality": "result_quality",
     "validTime": "valid_time",
+    "displayName": "display_name",
+    "authId": "auth_id",
+    "attributionText": "attribution_text",
+    "termsOfUse": "terms_of_use",
+    "privacyPolicy": "privacy_policy",
+    "creationTime": "creation_time",
+    "startTime": "start_time",
+    "endTime": "end_time",
+    "dataQuality": "data_quality",
+    "externalResource": "external_resource",
 }
 
 

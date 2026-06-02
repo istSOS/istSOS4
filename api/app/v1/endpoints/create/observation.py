@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
+from app import AUTHORIZATION, POSTGRES_PORT_WRITE, STAPLUS, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role
@@ -53,6 +53,10 @@ ALLOWED_KEYS = [
     "Datastream",
     "FeatureOfInterest",
 ]
+
+if STAPLUS:
+    PAYLOAD_EXAMPLE["ObservationGroups"] = [{"@iot.id": 1}]
+    ALLOWED_KEYS.extend(["ObservationGroups"])
 
 
 @v1.api_route(

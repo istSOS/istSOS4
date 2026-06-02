@@ -235,9 +235,29 @@ class NodeVisitor(Visitor):
         for expand_identifier in node.identifiers:
             relationship_entity = None
             fk_parent = None
-            expand_identifier.identifier = sta2rest.STA2REST.convert_entity(
-                expand_identifier.identifier
+            parent_link_column = None
+            original_identifier = expand_identifier.identifier
+            navigation = (
+                sta2rest.STA2REST.resolve_navigation(parent, original_identifier)
+                if parent
+                else None
             )
+            relationship_attribute = getattr(
+                expand_identifier, "relationship_attribute", None
+            )
+            if navigation:
+                expand_identifier.identifier = navigation["target"]
+                relationship_attribute = navigation["relationship"]
+            else:
+                expand_identifier.identifier = sta2rest.STA2REST.convert_entity(
+                    original_identifier
+                )
+                if relationship_attribute is None:
+                    relationship_attribute = (
+                        expand_identifier.identifier.replace(
+                            "TravelTime", ""
+                        ).lower()
+                    )
             sub_entity = globals()[expand_identifier.identifier]
             sub_query = None
             show_id = False
@@ -278,17 +298,16 @@ class NodeVisitor(Visitor):
             if parent:
                 # Determine the relationship entity for the parent class and identifier
                 parent_class = globals()[parent.replace("TravelTime", "")]
-                attribute_name = expand_identifier.identifier.replace(
-                    "TravelTime", ""
-                ).lower()
                 relationship_entity = getattr(
-                    parent_class, attribute_name
+                    parent_class, relationship_attribute
                 ).property
 
-                # Check for ONETOMANY relationship and get the foreign key attribute
                 if relationship_entity.direction.name == "ONETOMANY":
-                    fk_attr = f"{parent.replace('TravelTime', '').lower()}_id"
-                    fk_parent = getattr(sub_entity, fk_attr)
+                    fk_parent = relationship_entity.local_remote_pairs[0][1]
+                elif relationship_entity.direction.name == "MANYTOONE":
+                    parent_link_column = (
+                        relationship_entity.local_remote_pairs[0][0].name
+                    )
 
             # Process orderby clause if exists
             ordering = []
@@ -361,7 +380,10 @@ class NodeVisitor(Visitor):
                 for nested_expand_query in nested_expand_queries:
                     entity = nested_expand_query[2].replace("TravelTime", "")
                     attribute_sub_entity = (
-                        nested_expand_query[5]
+                        nested_expand_query[10]
+                        if len(nested_expand_query) > 10
+                        and nested_expand_query[10]
+                        else nested_expand_query[5]
                         .replace("TravelTime", "")
                         .lower()
                     )
@@ -456,6 +478,8 @@ class NodeVisitor(Visitor):
                     ),
                     show_id,
                     is_count,
+                    parent_link_column,
+                    relationship_attribute,
                 ]
             )
         return expand_queries
@@ -618,22 +642,29 @@ class NodeVisitor(Visitor):
                         identifier.replace("TravelTime", "")
                     ]
                     nested_entity_class = globals()[nested_identifier]
+                    relationship_attribute = getattr(
+                        current_identifier, "relationship_attribute", None
+                    )
+                    if relationship_attribute is None:
+                        relationship_attribute = nested_identifier.replace(
+                            "TravelTime", ""
+                        ).lower()
                     relationship = getattr(
                         entity_class,
-                        nested_identifier.replace("TravelTime", "").lower(),
+                        relationship_attribute,
                     ).property
 
                     filter_condition = None
                     if relationship.direction.name == "MANYTOONE":
-                        filter_condition = getattr(
-                            globals()[identifier],
-                            f"{nested_identifier.replace('TravelTime', '').lower()}_id",
-                        ) == getattr(nested_entity_class, "id")
+                        local_column, remote_column = (
+                            relationship.local_remote_pairs[0]
+                        )
+                        filter_condition = local_column == remote_column
                     elif relationship.direction.name == "ONETOMANY":
-                        filter_condition = getattr(
-                            nested_entity_class,
-                            f"{identifier.replace('TravelTime', '').lower()}_id",
-                        ) == getattr(globals()[identifier], "id")
+                        local_column, remote_column = (
+                            relationship.local_remote_pairs[0]
+                        )
+                        filter_condition = remote_column == local_column
                     else:
                         filter_condition = getattr(
                             entity_class, "id"
@@ -686,7 +717,9 @@ class NodeVisitor(Visitor):
                 for expand_query in expand_queries:
                     entity = self.main_entity.replace("TravelTime", "")
                     attribute_sub_entity = (
-                        expand_query[5].replace("TravelTime", "").lower()
+                        expand_query[10]
+                        if len(expand_query) > 10 and expand_query[10]
+                        else expand_query[5].replace("TravelTime", "").lower()
                     )
                     relationship = getattr(
                         globals()[entity],
@@ -1067,6 +1100,11 @@ def expand_function(
     orderby_node,
     expand_node,
 ):
+    parent_link_column = (
+        sub_query[9]
+        if len(sub_query) > 9 and sub_query[9]
+        else f"{sub_query[5].replace('TravelTime', '').lower()}_id"
+    )
     return func.sensorthings.expand(
         str(compiled_query),
         ("{}".format(sub_query[1].name) if sub_query[1] is not None else "id"),
@@ -1078,9 +1116,9 @@ def expand_function(
             )
             if sub_query[1] is not None
             else text(
-                '"{}".{}_id::integer'.format(
+                '"{}"."{}"::integer'.format(
                     globals()[sub_query[2]].__tablename__,
-                    sub_query[5].replace("TravelTime", ""),
+                    parent_link_column,
                 )
             )
         ),

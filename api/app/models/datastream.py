@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from app import STAPLUS
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from geoalchemy2 import Geometry
 from sqlalchemy.dialects.postgresql.json import JSON
@@ -19,6 +20,9 @@ from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, String, Text
+
+if STAPLUS:
+    from .campaign_datastream import Campaign_Datastream
 
 
 class Datastream(Base):
@@ -37,6 +41,12 @@ class Datastream(Base):
     )
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
     network_navigation_link = Column("Network@iot.navigationLink", Text)
+    if STAPLUS:
+        party_navigation_link = Column("Party@iot.navigationLink", Text)
+        license_navigation_link = Column("License@iot.navigationLink", Text)
+        campaign_navigation_link = Column(
+            "Campaigns@iot.navigationLink", Text
+        )
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text, nullable=False)
     unit_of_measurement = Column("unitOfMeasurement", JSON, nullable=False)
@@ -62,6 +72,9 @@ class Datastream(Base):
     )
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
     network_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Network.id"))
+    if STAPLUS:
+        party_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Party.id"))
+        license_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.License.id"))
     thing = relationship("Thing", back_populates="datastream")
     sensor = relationship("Sensor", back_populates="datastream")
     observedproperty = relationship(
@@ -70,3 +83,11 @@ class Datastream(Base):
     observation = relationship("Observation", back_populates="datastream")
     commit = relationship("Commit", back_populates="datastream")
     network = relationship("Network", back_populates="datastream")
+    if STAPLUS:
+        party = relationship("Party", back_populates="datastream")
+        license = relationship("License", back_populates="datastream")
+        campaign = relationship(
+            "Campaign",
+            secondary=Campaign_Datastream,
+            back_populates="datastream",
+        )

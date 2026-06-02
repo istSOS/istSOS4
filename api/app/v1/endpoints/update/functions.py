@@ -14,8 +14,9 @@
 
 import json
 
-from app import AUTHORIZATION, NETWORK, VERSIONING
+from app import AUTHORIZATION, NETWORK, STAPLUS, VERSIONING
 from app.utils.utils import (
+    check_iot_id_in_payload,
     handle_associations,
     handle_datetime_fields,
     handle_result_field,
@@ -172,6 +173,9 @@ async def update_location_entity(
 
 
 async def update_thing_entity(connection, thing_id, payload):
+    if STAPLUS:
+        handle_associations(payload, ["Party"])
+
     if "Locations" in payload:
         if isinstance(payload["Locations"], dict):
             payload["Locations"] = [payload["Locations"]]
@@ -337,6 +341,19 @@ async def update_datastream_entity(connection, datastream_id, payload):
         ),
     )
 
+    if STAPLUS:
+        handle_associations(payload, ["Party", "License"])
+        await handle_many_to_many_entities(
+            connection,
+            payload,
+            datastream_id,
+            "Campaigns",
+            "Campaign_Datastream",
+            "datastream_id",
+            "campaign_id",
+            "Campaign",
+        )
+
     await handle_nested_entities(
         connection,
         payload,
@@ -396,6 +413,178 @@ async def update_network_entity(connection, network_id, payload):
         await update_entity(connection, "Network", network_id, payload)
 
 
+async def update_party_entity(connection, party_id, payload):
+    await handle_nested_entities(
+        connection, payload, party_id, "Datastreams", "party_id", "Datastream"
+    )
+    await handle_nested_entities(
+        connection, payload, party_id, "Things", "party_id", "Thing"
+    )
+    await handle_nested_entities(
+        connection, payload, party_id, "Campaigns", "party_id", "Campaign"
+    )
+    await handle_nested_entities(
+        connection,
+        payload,
+        party_id,
+        "ObservationGroups",
+        "party_id",
+        "ObservationGroup",
+    )
+
+    if payload:
+        await update_entity(connection, "Party", party_id, payload)
+
+
+async def update_license_entity(connection, license_id, payload):
+    await handle_nested_entities(
+        connection,
+        payload,
+        license_id,
+        "Datastreams",
+        "license_id",
+        "Datastream",
+    )
+    await handle_nested_entities(
+        connection, payload, license_id, "Campaigns", "license_id", "Campaign"
+    )
+    await handle_nested_entities(
+        connection,
+        payload,
+        license_id,
+        "ObservationGroups",
+        "license_id",
+        "ObservationGroup",
+    )
+
+    if payload:
+        await update_entity(connection, "License", license_id, payload)
+
+
+async def update_campaign_entity(connection, campaign_id, payload):
+    handle_datetime_fields(payload)
+    handle_associations(payload, ["Party", "License"])
+
+    await handle_many_to_many_entities(
+        connection,
+        payload,
+        campaign_id,
+        "Datastreams",
+        "Campaign_Datastream",
+        "campaign_id",
+        "datastream_id",
+        "Datastream",
+    )
+    await handle_many_to_many_entities(
+        connection,
+        payload,
+        campaign_id,
+        "ObservationGroups",
+        "Campaign_ObservationGroup",
+        "campaign_id",
+        "observationgroup_id",
+        "ObservationGroup",
+    )
+
+    if payload:
+        await update_entity(connection, "Campaign", campaign_id, payload)
+
+
+async def update_observation_group_entity(
+    connection, observation_group_id, payload
+):
+    handle_datetime_fields(payload)
+    handle_associations(payload, ["Party", "License"])
+
+    await handle_many_to_many_entities(
+        connection,
+        payload,
+        observation_group_id,
+        "Campaigns",
+        "Campaign_ObservationGroup",
+        "observationgroup_id",
+        "campaign_id",
+        "Campaign",
+    )
+
+    await handle_observation_group_observations(
+        connection, payload, observation_group_id
+    )
+    await handle_many_to_many_entities(
+        connection,
+        payload,
+        observation_group_id,
+        "Relations",
+        "Relation_ObservationGroup",
+        "observationgroup_id",
+        "relation_id",
+        "Relation",
+    )
+
+    if payload:
+        await update_entity(
+            connection, "ObservationGroup", observation_group_id, payload
+        )
+
+
+async def update_relation_entity(connection, relation_id, payload):
+    has_object_input = "Object" in payload
+    has_external_input = "externalResource" in payload
+    if has_object_input and has_external_input:
+        raise Exception(
+            "Relation accepts only one of Object or externalResource."
+        )
+
+    handle_associations(payload, ["Subject", "Object"])
+    await handle_many_to_many_entities(
+        connection,
+        payload,
+        relation_id,
+        "ObservationGroups",
+        "Relation_ObservationGroup",
+        "relation_id",
+        "observationgroup_id",
+        "ObservationGroup",
+    )
+
+    has_object = payload.get("object_id") is not None
+    has_external = payload.get("externalResource") is not None
+    if has_object:
+        payload["externalResource"] = None
+    elif has_external:
+        payload["object_id"] = None
+
+    if payload:
+        await update_entity(connection, "Relation", relation_id, payload)
+
+
+async def handle_observation_group_observations(
+    connection, payload, observation_group_id
+):
+    async with connection.transaction():
+        if "Observations" in payload:
+            if isinstance(payload["Observations"], dict):
+                payload["Observations"] = [payload["Observations"]]
+            for observation in payload["Observations"]:
+                if not isinstance(observation, dict) or list(
+                    observation.keys()
+                ) != ["@iot.id"]:
+                    raise Exception(
+                        "Invalid format: Each item in 'Observations' should be a dictionary with a single key '@iot.id'."
+                    )
+                await connection.execute(
+                    """
+                        INSERT INTO sensorthings."ObservationGroup_Observation"
+                        ("observationgroup_id", "observation_id")
+                        VALUES ($1, $2)
+                        ON CONFLICT ("observationgroup_id", "observation_id") DO NOTHING;
+                    """,
+                    observation_group_id,
+                    observation["@iot.id"],
+                )
+            payload.pop("Observations")
+
+
 async def handle_nested_entities(
     connection, payload, entity_id, key, field, update_table
 ):
@@ -413,5 +602,40 @@ async def handle_nested_entities(
                 related_id = item["@iot.id"]
                 await connection.execute(
                     f'UPDATE sensorthings."{update_table}" SET {field} = {entity_id} WHERE id = {related_id};'
+                )
+            payload.pop(key)
+
+
+async def handle_many_to_many_entities(
+    connection,
+    payload,
+    entity_id,
+    key,
+    table,
+    source_column,
+    target_column,
+    target_entity,
+):
+    async with connection.transaction():
+        if key in payload:
+            if isinstance(payload[key], dict):
+                payload[key] = [payload[key]]
+            for item in payload[key]:
+                if not isinstance(item, dict) or list(item.keys()) != [
+                    "@iot.id"
+                ]:
+                    raise Exception(
+                        f"Invalid format: Each item in '{key}' should be a dictionary with a single key '@iot.id'."
+                    )
+                check_iot_id_in_payload(item, target_entity)
+                await connection.execute(
+                    f"""
+                        INSERT INTO sensorthings."{table}"
+                        ("{source_column}", "{target_column}")
+                        VALUES ($1, $2)
+                        ON CONFLICT ("{source_column}", "{target_column}") DO NOTHING;
+                    """,
+                    entity_id,
+                    item["@iot.id"],
                 )
             payload.pop(key)
