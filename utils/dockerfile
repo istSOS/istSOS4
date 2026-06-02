@@ -1,0 +1,13 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1
+
+RUN pip install --no-cache-dir pandas openpyxl requests
+
+COPY utils/models.py /app/models.py
+COPY utils/xlsx2istsos.py /app/xlsx2istsos.py
+COPY utils/eyeonwater2istsos.py /app/eyeonwater2istsos.py
+
+ENTRYPOINT ["python", "/app/xlsx2istsos.py"]
