@@ -81,11 +81,11 @@ async def update_entity(
     if obs:
         return await connection.fetchrow(
             f"""
-            UPDATE sensorthings."{entity_name}"
-            SET {set_clause}
-            WHERE id = {entity_id}
-            RETURNING "phenomenonTime", "datastream_id";
-        """,
+                UPDATE sensorthings."{entity_name}"
+                SET {set_clause}
+                WHERE id = {entity_id}
+                RETURNING "phenomenonTime", "resultTime", "datastream_id";
+            """,
             *payload.values(),
         )
     await connection.fetchval(
@@ -123,8 +123,8 @@ async def update_location_entity(
                     SET thing_id = $1
                     WHERE location_id = $2;
                 """,
-                location_id,
                 thing_id,
+                location_id,
             )
             if check is None:
                 await connection.execute(
@@ -396,7 +396,9 @@ async def update_observation_entity(connection, observation_id, payload):
     handle_associations(payload, ["Datastream", "FeatureOfInterest"])
 
     if payload:
-        await update_entity(connection, "Observation", observation_id, payload)
+        return await update_entity(
+            connection, "Observation", observation_id, payload, True
+        )
 
 
 async def update_network_entity(connection, network_id, payload):
@@ -600,8 +602,20 @@ async def handle_nested_entities(
                         f"Invalid format: Each item in '{key}' should be a dictionary with a single key '@iot.id'."
                     )
                 related_id = item["@iot.id"]
+
+                # Check the type here first and return a Bad Request here
+                if not isinstance(related_id, int) or isinstance(
+                    related_id, bool
+                ):
+                    raise Exception(
+                        f"'@iot.id' must be an integer, got {type(related_id).__name__}"
+                    )
+
+                # Parameterized Query
                 await connection.execute(
-                    f'UPDATE sensorthings."{update_table}" SET {field} = {entity_id} WHERE id = {related_id};'
+                    f'UPDATE sensorthings."{update_table}" SET "{field}" = $1 WHERE id = $2;',
+                    entity_id,
+                    related_id,
                 )
             payload.pop(key)
 

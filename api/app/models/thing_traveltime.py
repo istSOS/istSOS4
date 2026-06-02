@@ -30,7 +30,7 @@ class ThingTravelTime(Base):
     )
     datastream_navigation_link = Column("Datastreams@iot.navigationLink", Text)
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
-    name = Column(String(255), unique=True, nullable=False)
+    name = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     properties = Column(JSON)
     commit_id = Column(Integer)

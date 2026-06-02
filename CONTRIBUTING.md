@@ -1,64 +1,185 @@
-# Contributing [in developement]
+# Contributing to istSOS4
 
-There is more than one way of contributing to istSOS4.
-Here we will focus on contributions centered
-around the main istSOS4 source code.
-You can also report issues, plan new features,
-or explore <https://github.com/istSOS/istSOS4/issues>.
+Thank you for your interest in contributing to istSOS4! This document will help
+you get started with setting up the project, running tests, following code style
+guidelines, and submitting pull requests.
 
-## Changing code and documentation
+If you have questions, feel free to open an issue or reach out on the
+[OSGeo Discourse](https://discourse.osgeo.org).
 
-To contribute changes to istSOS GitHub repository, use a
-"fork and pull request" workflow. This [guide](./doc/development/github_guide.md)
-leads you through a first time setup and shows how to create a pull request.
+---
 
-To contribute effectively, please familiarize yourself with our
-[Programming Style Guide](./doc/development/style_guide.md).
+## Setting Up the Project
 
-### Testing changes
+### Prerequisites
 
-Testing helps to ensure that the changes work well with the rest
-of the project. While there are many different ways to test,
-usually you will want to compile the source code (see below),
-add test code (using _grass.gunittest_ or pytest), and run code
-linters (automated code quality checks).
+- [Docker](https://www.docker.com/products/docker-desktop) and Docker Compose
+- [Git](https://git-scm.com/)
+- Python 3.10+
 
-There is a series of automated checks which will run on your pull request
-after you create one. You don't need to run all these
-checks locally and, indeed, some of them may fail for your code. This is a part of
-the standard iterative process of integrating changes into the main code,
-so if that happens, just see the error messages, go back to your code
-and try again. If you are not sure what to do, let others know in a pull
-request comment.
+### Steps
 
-Note that there are some steps you can do locally to improve your code.
-For Python, run `black .` to apply standardized formatting. You can
-also run linter tools such as Pylint which will suggest different improvements
-to your code.
+1. **Fork** the repository on GitHub and clone your fork:
 
-## Compilation
+   ```sh
+   git clone https://github.com/<your-username>/istSOS4.git
+   cd istSOS4
+   ```
 
-More often than not, in order to test the changes, you need to create
-a runnable binary program from the source code,
-using the so-called "compilation step". While the
-source code consists of thousands of C and Python files (plus HTML
-documentation and other files), the included "makefiles" tell the build system to
-generate binaries from the source code in the correct order, render the
-manual pages, etc.
+2. Add the upstream remote:
 
-The way to install the compiler tools and Python depends on the operating
-system. To make this easier, we have collected copy-paste instructions
-to install dependencies and compile GRASS source code for most operating systems.
-Please see our dedicated wiki:
+   ```sh
+   git remote add upstream https://github.com/istSOS/istSOS4.git
+   ```
 
-[Compile and install instructions](https://grasswiki.osgeo.org/wiki/Compile_and_Install)
+3. Copy the example environment file and fill in your values:
 
-## About source code
+   ```sh
+   cp .env.example .env
+   ```
 
-GRASS GIS is written in more than one programming language, but you need
-to know only the language relevant to your contribution. While much
-of the source code is written in C, a significant portion is written in Python.
-A compiler is needed to convert the C and C++ source code into executable
-files ("binaries"). In contrast, Python is an interpreted language that
-can only be executed with Python software. There is also documentation
-in HTML files and other files in the GRASS GIS source code.
+   At minimum, set `SECRET_KEY` before running the stack:
+
+   ```sh
+   SECRET_KEY=your_generated_secret_key
+   ```
+
+4. Start the development environment:
+
+   ```sh
+   docker compose -f dev_docker-compose.yml up -d
+   ```
+
+5. The SensorThings API will be available at:
+
+   ```
+   http://127.0.0.1:8018/istsos4/v1.1
+   ```
+
+6. To stop the services:
+
+   ```sh
+   docker compose -f dev_docker-compose.yml down
+   ```
+
+---
+
+## Running the Tests
+
+istSOS4 uses [pytest](https://docs.pytest.org/) for testing.
+
+### Run all tests
+
+```sh
+pytest
+```
+
+### Run a specific test file
+
+```sh
+pytest tests/test_auth.py
+```
+
+### Run tests with verbose output
+
+```sh
+pytest -v
+```
+
+Make sure the Docker services are running before executing tests that require
+a database connection.
+
+---
+
+## Code Style
+
+istSOS4 follows consistent Python code style using **black** and **pylint**.
+
+### Formatting with black
+
+To automatically format your code:
+
+```sh
+black .
+```
+
+To check formatting without making changes:
+
+```sh
+black --check .
+```
+
+### Linting with pylint
+
+To check your code for issues:
+
+```sh
+pylint app/
+```
+
+Please make sure your code passes both `black` and `pylint` checks before
+submitting a pull request. These checks will also run automatically on your
+pull request via CI.
+
+---
+
+## Forking and Pull Requests
+
+We use a **fork and pull request** workflow for all contributions.
+
+### Steps to submit a contribution
+
+1. **Fork** the repository on GitHub.
+
+2. **Clone** your fork and add the upstream remote (see Setup above).
+
+3. **Create a new branch** for your change:
+
+   ```sh
+   git checkout -b fix/your-fix-description
+   ```
+
+4. **Make your changes** and commit them with a clear message:
+
+   ```sh
+   git add .
+   git commit -m "fix: short description of what was fixed"
+   ```
+
+5. **Keep your branch up to date** with upstream:
+
+   ```sh
+   git fetch upstream
+   git rebase upstream/main
+   ```
+
+6. **Push** your branch to your fork:
+
+   ```sh
+   git push origin fix/your-fix-description
+   ```
+
+7. Open a **Pull Request** on GitHub from your fork to the main istSOS4
+   repository. Describe what your PR does and reference any related issues
+   (e.g. `Closes #80`).
+
+### Pull request checklist
+
+- [ ] Code is formatted with `black`
+- [ ] Code passes `pylint` checks
+- [ ] Tests are added or updated where relevant
+- [ ] PR description clearly explains the change
+- [ ] Related issue is referenced in the PR description
+
+---
+
+## Reporting Issues
+
+Found a bug or have a feature request? Please open an issue at:
+
+```
+https://github.com/istSOS/istSOS4/issues
+```
+
+Provide as much detail as possible including steps to reproduce,
+expected behaviour, and actual behaviour.

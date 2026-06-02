@@ -15,10 +15,10 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.utils.utils import safe_parse_datetime
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
-from dateutil import parser
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
@@ -96,9 +96,9 @@ async def bulk_observations(
                     )
                 except InsufficientPrivilegeError:
                     return JSONResponse(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        status_code=status.HTTP_403_FORBIDDEN,
                         content={
-                            "code": 401,
+                            "code": 403,
                             "type": "error",
                             "message": "Insufficient privileges.",
                         },
@@ -157,9 +157,9 @@ async def bulk_observations(
                         )
                     except InsufficientPrivilegeError:
                         return JSONResponse(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            status_code=status.HTTP_403_FORBIDDEN,
                             content={
-                                "code": 401,
+                                "code": 403,
                                 "type": "error",
                                 "message": "Insufficient privileges.",
                             },
@@ -210,7 +210,7 @@ async def insertBulkObservation(
         if components:
             result_idx = components.index("result")
             ph_idx = components.index("phenomenonTime")
-            if components.index("resultTime") > -1:
+            if "resultTime" in components:
                 result_time_idx = components.index("resultTime")
             if isinstance(payload[0][result_idx], str):
                 result_type = 3
@@ -231,9 +231,25 @@ async def insertBulkObservation(
 
         data = []
         ph_interval = None
+        rt_interval = None
         for obs in payload:
             if result_time_idx > -1:
-                obs[result_time_idx] = parser.parse(obs[result_time_idx])
+                obs[result_time_idx] = safe_parse_datetime(
+                    obs[result_time_idx]
+                )
+                if obs[result_time_idx] is not None:
+                    if rt_interval is None:
+                        rt_interval = Range(
+                            obs[result_time_idx],
+                            obs[result_time_idx],
+                            upper_inc=True,
+                        )
+                    else:
+                        rt_interval = Range(
+                            min(rt_interval.lower, obs[result_time_idx]),
+                            max(rt_interval.upper, obs[result_time_idx]),
+                            upper_inc=True,
+                        )
             if "/" in obs[ph_idx]:
                 ph_time = obs[ph_idx].split("/")
                 obs[ph_idx] = Range(
@@ -254,25 +270,25 @@ async def insertBulkObservation(
                     upper_inc=True,
                 )
             else:
-                if parser.parse(ph_interval.lower) > parser.parse(
-                    obs[ph_idx].lower
-                ):
+                if safe_parse_datetime(
+                    ph_interval.lower
+                ) > safe_parse_datetime(obs[ph_idx].lower):
                     ph_interval = Range(
                         obs[ph_idx].lower,
                         ph_interval.upper,
                         upper_inc=True,
                     )
-                if parser.parse(ph_interval.upper) < parser.parse(
-                    obs[ph_idx].upper
-                ):
+                if safe_parse_datetime(
+                    ph_interval.upper
+                ) < safe_parse_datetime(obs[ph_idx].upper):
                     ph_interval = Range(
                         ph_interval.lower,
                         obs[ph_idx].upper,
                         upper_inc=True,
                     )
             obs[ph_idx] = Range(
-                parser.parse(obs[ph_idx].lower),
-                parser.parse(obs[ph_idx].upper),
+                safe_parse_datetime(obs[ph_idx].lower),
+                safe_parse_datetime(obs[ph_idx].upper),
                 upper_inc=True,
             )
 
@@ -283,8 +299,8 @@ async def insertBulkObservation(
 
             data.append(obs + default_obs)
         ph_interval = Range(
-            parser.parse(ph_interval.lower),
-            parser.parse(ph_interval.upper),
+            safe_parse_datetime(ph_interval.lower),
+            safe_parse_datetime(ph_interval.upper),
             upper_inc=True,
         )
 
@@ -361,13 +377,31 @@ async def insertBulkObservation(
                 LEAST($1::timestamptz, lower("phenomenonTime")),
                 GREATEST($2::timestamptz, upper("phenomenonTime")),
                 '[]'
-            )
-            WHERE id = $3::bigint;
+            ),
+            "resultTime" =
+                CASE
+                    WHEN $3::timestamptz IS NOT NULL
+                    AND $4::timestamptz IS NOT NULL THEN
+                        CASE
+                            WHEN "resultTime" IS NULL THEN
+                                tstzrange($3::timestamptz, $4::timestamptz, '[]')
+                            ELSE
+                                tstzrange(
+                                    LEAST($3::timestamptz, lower("resultTime")),
+                                    GREATEST($4::timestamptz, upper("resultTime")),
+                                    '[]'
+                                )
+                        END
+                    ELSE "resultTime"
+                END
+            WHERE id = $5::bigint;
         """
         await conn.execute(
             update_query,
             ph_interval.lower,
             ph_interval.upper,
+            rt_interval.lower if rt_interval else None,
+            rt_interval.upper if rt_interval else None,
             datastream_id,
         )
 
@@ -396,13 +430,13 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
     """
 
     async with conn.transaction():
-        query_location_from_thing_datastream = f"""
+        query_location_from_thing_datastream = """
             SELECT
                 l.id,
                 l.name,
                 l.description,
                 l."encodingType",
-                l.location,
+                ST_AsGeoJSON(l.location) AS location,
                 l.properties,
                 l.gen_foi_id
             FROM
@@ -414,10 +448,12 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
             JOIN
                 sensorthings."Location" l ON l.ID = tl.location_id
             WHERE
-                d.id = {datastream_id}
+                d.id = $1
         """
 
-        result = await conn.fetch(query_location_from_thing_datastream)
+        result = await conn.fetch(
+            query_location_from_thing_datastream, datastream_id
+        )
 
         if result:
             (
@@ -446,7 +482,7 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
                     conn, "FeaturesOfInterest", foi_payload
                 )
 
-                update_query = f"""
+                update_query = """
                     UPDATE sensorthings."Location" 
                     SET "gen_foi_id" = $1::bigint
                     WHERE id = $2::bigint;

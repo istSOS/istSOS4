@@ -15,6 +15,7 @@
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.utils.utils import pg_quote_ident, validate_username
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import (
     DependentObjectsStillExistError,
@@ -44,13 +45,58 @@ async def delete_user(
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
+        if not validate_username(user):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "code": 400,
+                    "type": "error",
+                    "message": "Invalid username: only letters, digits and underscores allowed (3\u201363 characters).",
+                },
+            )
+        # Prevent authenticated users from deleting their own account
+        if current_user is not None and current_user["username"] == user:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "code": 400,
+                    "type": "error",
+                    "message": "Deleting the currently authenticated user is not allowed.",
+                },
+            )
+
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
                     if current_user["role"] != "administrator":
                         raise InsufficientPrivilegeError
 
+                    if user == current_user["username"]:
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "message": "Cannot delete your own user account"
+                            },
+                        )
+
                     await set_role(connection, current_user)
+
+                # Check if the user exists before attempting deletion
+                query = """
+                    SELECT 1 FROM sensorthings."User"
+                    WHERE username = $1;
+                """
+                exists = await connection.fetchrow(query, user)
+
+                if not exists:
+                    return JSONResponse(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        content={
+                            "code": 404,
+                            "type": "error",
+                            "message": "User not found",
+                        },
+                    )
 
                 query = """
                     DELETE FROM sensorthings."User"
@@ -63,10 +109,7 @@ async def delete_user(
                 """
                 await connection.execute(query, user)
 
-                query = """
-                    DROP ROLE {role};
-                """
-                await connection.execute(query.format(role=user))
+                await connection.execute(f"DROP ROLE {pg_quote_ident(user)};")
 
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
@@ -86,11 +129,15 @@ async def delete_user(
         )
     except InsufficientPrivilegeError as e:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={"message": "Insufficient privileges"},
         )
     except Exception as e:
-        return Response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"message": str(e)},
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "code": 500,
+                "type": "error",
+                "message": "Unexpected error while deleting user",
+            },
         )

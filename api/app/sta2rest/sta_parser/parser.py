@@ -80,26 +80,33 @@ class Parser:
         """
         return self.current_token and self.current_token.type == token_type
 
-    def parse_identifier_list(self):
-        """
-        Parse a list of identifiers.
+    def parse_identifier(self):
+        parts = [self.current_token.value]
 
-        Returns:
-            list: A list of ast.IdentifierNode objects representing the identifiers.
-        """
-        identifiers = []
-        identifiers.append(ast.IdentifierNode(self.current_token.value))
         if self.check_token("EXPAND_IDENTIFIER"):
             self.match("EXPAND_IDENTIFIER")
         else:
             self.match("IDENTIFIER")
-        while self.check_token("VALUE_SEPARATOR"):
-            self.match("VALUE_SEPARATOR")
-            identifiers.append(ast.IdentifierNode(self.current_token.value))
+
+        while self.check_token("SEGMENT_SEPARATOR"):
+            self.match("SEGMENT_SEPARATOR")
+
+            parts.append(self.current_token.value)
+
             if self.check_token("EXPAND_IDENTIFIER"):
                 self.match("EXPAND_IDENTIFIER")
             else:
                 self.match("IDENTIFIER")
+
+        return ast.IdentifierNode("/".join(parts))
+
+    def parse_identifier_list(self):
+        identifiers = [self.parse_identifier()]
+
+        while self.check_token("VALUE_SEPARATOR"):
+            self.match("VALUE_SEPARATOR")
+            identifiers.append(self.parse_identifier())
+
         return identifiers
 
     def parse_filter(self, is_in_subquery=False):
@@ -277,9 +284,22 @@ class Parser:
             ast.FromToNode: The parsed fromto expression.
         """
         self.match("FROMTO")
+        if not self.current_token or self.current_token.type != "DATETIME":
+            raise Exception(
+                "Invalid $from_to: expected format is $from_to=<start>/<end>"
+            )
         value1 = self.current_token.value
         self.match("DATETIME")
+        if (
+            not self.current_token
+            or self.current_token.type != "SEGMENT_SEPARATOR"
+        ):
+            raise Exception(
+                "Invalid $from_to: missing end datetime, use $from_to=<start>/<end>"
+            )
         self.match("SEGMENT_SEPARATOR")
+        if not self.current_token or self.current_token.type != "DATETIME":
+            raise Exception("Invalid $from_to: missing end datetime after '/'")
         value2 = self.current_token.value
         self.match("DATETIME")
         return ast.FromToNode(value1, value2)
