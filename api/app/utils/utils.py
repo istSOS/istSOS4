@@ -33,6 +33,11 @@ ENTITY_URL_NAMES = {
     "FeaturesOfInterest": "FeaturesOfInterest",
     "HistoricalLocation": "HistoricalLocations",
     "Network": "Networks",
+    "Party": "Parties",
+    "License": "Licenses",
+    "Campaign": "Campaigns",
+    "ObservationGroup": "ObservationGroups",
+    "Relation": "Relations",
 }
 
 

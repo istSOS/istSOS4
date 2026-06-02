@@ -33,6 +33,7 @@ sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, API_DIR)
 
 from api.app.utils.utils import (
+    build_self_link,
     extract_iot_id,
     get_result_type_and_column,
     safe_parse_datetime,
@@ -49,6 +50,20 @@ def assert_column_value(columns, values, column_name, expected_value):
     assert (
         values[idx] == expected_value
     ), f"Column '{column_name}': expected {expected_value!r}, got {values[idx]!r}"
+
+
+class TestSelfLinks:
+    def test_staplus_entities_have_self_links(self):
+        expected_paths = {
+            "Party": "/Parties(1)",
+            "License": "/Licenses(1)",
+            "Campaign": "/Campaigns(1)",
+            "ObservationGroup": "/ObservationGroups(1)",
+            "Relation": "/Relations(1)",
+        }
+
+        for entity_name, expected_path in expected_paths.items():
+            assert build_self_link(entity_name, 1).endswith(expected_path)
 
 
 # safe_parse_datetime
