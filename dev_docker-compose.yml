@@ -3,6 +3,7 @@ services:
     build:
       context: ./database
       dockerfile: Dockerfile
+    restart: always
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -35,6 +36,10 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
+    restart: always
+    depends_on:
+      database:
+        condition: service_healthy
     environment:
       HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
@@ -60,6 +65,7 @@ services:
       ALGORITHM: ${ALGORITHM}
       ANONYMOUS_VIEWER: ${ANONYMOUS_VIEWER}
       NETWORK: ${NETWORK}
+      ST_AGGREGATE: ${ST_AGGREGATE}
       STAPLUS: ${STAPLUS}
     command: uvicorn --reload --host 0.0.0.0 --port 5000 app.main:app
     ports:
@@ -74,54 +80,57 @@ services:
     volumes:
       - v-istsos4-redis-data:/data
 
-  # dummy_data:
-  #   build:
-  #     context: ./dummy_data
-  #     dockerfile: Dockerfile
-  #   environment:
-  #     HOSTNAME: ${HOSTNAME}
-  #     SUBPATH: ${SUBPATH}
-  #     VERSION: ${VERSION}
-  #     VERSIONING: ${VERSIONING}
-  #     POSTGRES_DB: ${POSTGRES_DB}
-  #     ISTSOS_ADMIN: ${ISTSOS_ADMIN}
-  #     ISTSOS_ADMIN_PASSWORD: ${ISTSOS_ADMIN_PASSWORD}
-  #     POSTGRES_HOST: ${POSTGRES_HOST}
-  #     DUMMY_DATA: ${DUMMY_DATA}
-  #     CLEAR_DATA: ${CLEAR_DATA}
-  #     N_THINGS: ${N_THINGS}
-  #     N_OBSERVED_PROPERTIES: ${N_OBSERVED_PROPERTIES}
-  #     INTERVAL: ${INTERVAL}
-  #     FREQUENCY: ${FREQUENCY}
-  #     START_DATETIME: ${START_DATETIME}
-  #     CHUNK_INTERVAL: ${CHUNK_INTERVAL}
-  #     EPSG: ${EPSG}
-  #     AUTHORIZATION: ${AUTHORIZATION}
-  #     NETWORK: ${NETWORK}
-  #   command: python3 generator.py
-  #   volumes:
-  #     - ./dummy_data:/dummy_data
-  #   working_dir: /dummy_data
-  #   depends_on:
-  #     database:
-  #       condition: service_healthy
+  dummy_data:
+    build:
+      context: ./dummy_data
+      dockerfile: Dockerfile
+    environment:
+      HOSTNAME: ${HOSTNAME}
+      SUBPATH: ${SUBPATH}
+      VERSION: ${VERSION}
+      VERSIONING: ${VERSIONING}
+      POSTGRES_DB: ${POSTGRES_DB}
+      ISTSOS_ADMIN: ${ISTSOS_ADMIN}
+      ISTSOS_ADMIN_PASSWORD: ${ISTSOS_ADMIN_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      DUMMY_DATA: ${DUMMY_DATA}
+      CLEAR_DATA: ${CLEAR_DATA}
+      N_THINGS: ${N_THINGS}
+      N_OBSERVED_PROPERTIES: ${N_OBSERVED_PROPERTIES}
+      INTERVAL: ${INTERVAL}
+      FREQUENCY: ${FREQUENCY}
+      START_DATETIME: ${START_DATETIME}
+      CHUNK_INTERVAL: ${CHUNK_INTERVAL}
+      EPSG: ${EPSG}
+      AUTHORIZATION: ${AUTHORIZATION}
+      NETWORK: ${NETWORK}
+      ST_AGGREGATE: ${ST_AGGREGATE}
+    command: python3 generator.py
+    volumes:
+      - ./dummy_data:/dummy_data
+    working_dir: /dummy_data
+    depends_on:
+      database:
+        condition: service_healthy
 
-#   docs:
-#     build:
-#       context: ./docs/mkdocs
-#       dockerfile: dockerfile
-#     ports:
-#       - 8019:8000
-#     volumes:
-#       - ./docs/mkdocs:/docs
-# # You might need to run `sudo chown -R $USER schemaspy/` to fix permissions
-#   schemaspy:
-#     image: schemaspy/schemaspy:6.2.4
-#     volumes:
-#       - ./database/schemaspy/sensorthings:/output
-#     command: [ "-t", "pgsql11", "-db", "istsos", "-host", "database", "-port", "5432", "-s", "sensorthings", "-u", "postgres", "-p", "postgres", "-vizjs" ]
-#     depends_on:
-#       - database
+  docs:
+    build:
+      context: ./docs/mkdocs
+      dockerfile: dockerfile
+    restart: always
+    ports:
+      - 8019:8000
+    volumes:
+      - ./docs/mkdocs:/docs
+
+# You might need to run `sudo chown -R $USER schemaspy/` to fix permissions
+# schemaspy:
+#   image: schemaspy/schemaspy:6.2.4
+#   volumes:
+#     - ./database/schemaspy/sensorthings_history:/output
+#   command: [ "-t", "pgsql11", "-db", "istsos", "-host", "database", "-port", "5432", "-s", "sensorthings_history", "-u", "postgres", "-p", "postgres", "-vizjs" ]
+#   depends_on:
+#     - database
 
 volumes:
   v-istsos4-database-data:

@@ -44,10 +44,8 @@ class Datastream(Base):
     if STAPLUS:
         party_navigation_link = Column("Party@iot.navigationLink", Text)
         license_navigation_link = Column("License@iot.navigationLink", Text)
-        campaign_navigation_link = Column(
-            "Campaigns@iot.navigationLink", Text
-        )
-    name = Column(String(255), unique=True, nullable=False)
+        campaign_navigation_link = Column("Campaigns@iot.navigationLink", Text)
+    name = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     unit_of_measurement = Column("unitOfMeasurement", JSON, nullable=False)
     observation_type = Column("observationType", String(100), nullable=False)

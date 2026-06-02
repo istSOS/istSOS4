@@ -4,7 +4,9 @@ __pycache__/
 .cache/
 .env
 *.pkl
-.env
 docs/mkdocs/site
 database/schemaspy
+.venv/
+venv/
+env/
 .codex

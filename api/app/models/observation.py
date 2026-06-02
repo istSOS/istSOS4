@@ -45,7 +45,7 @@ class Observation(Base):
         subjects_navigation_link = Column("Subjects@iot.navigationLink", Text)
     phenomenon_time = Column("phenomenonTime", TSTZRANGE)
     result_time = Column("resultTime", TIMESTAMP, nullable=False)
-    result = Column(JSON)
+    result = Column(JSON, nullable=True)
     result_string = Column("resultString", Text)
     result_number = Column("resultNumber", Float)
     result_boolean = Column("resultBoolean", Boolean)

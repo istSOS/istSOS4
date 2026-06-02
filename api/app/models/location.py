@@ -34,7 +34,7 @@ class Location(Base):
         "HistoricalLocations@iot.navigationLink", Text
     )
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
-    name = Column(String(255), unique=True, nullable=False)
+    name = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     encoding_type = Column("encodingType", String(100), nullable=False)
     location = Column(Geometry, nullable=False)

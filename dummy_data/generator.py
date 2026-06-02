@@ -47,6 +47,9 @@ date = datetime.strptime(
 chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL", "P1Y"))
 epsg = int(os.getenv("EPSG", 4326))
 authorization = int(os.getenv("AUTHORIZATION", 0))
+st_aggregate = os.getenv("ST_AGGREGATE", "CONVEX_HULL")
+
+pgpool = None
 network = int(os.getenv("NETWORK", 0))
 
 observedProperties = []
@@ -487,6 +490,7 @@ async def generate_featuresofinterest(conn, commit_id):
 async def insert_observations(conn, observations, commit_id):
     cols = [
         "phenomenonTime",
+        "resultTime",
         "resultNumber",
         "resultType",
         "datastream_id",
@@ -518,20 +522,27 @@ async def insert_observations(conn, observations, commit_id):
 
 async def update_datastream_phenomenon_time(conn, observations, datastream_id):
     phenomenon_times = [record[0].lower for record in observations]
-
+    result_times = [record[1] for record in observations]
     update_sql = """
         UPDATE sensorthings."Datastream"
         SET "phenomenonTime" = tstzrange(
             LEAST($1::timestamptz, lower("phenomenonTime")),
             GREATEST($2::timestamptz, upper("phenomenonTime")),
             '[]'
+        ),
+        "resultTime" = tstzrange(
+            LEAST($3::timestamptz, lower("resultTime")),
+            GREATEST($4::timestamptz, upper("resultTime")),
+            '[]'
         )
-        WHERE id = $3::bigint
+        WHERE id = $5::bigint
     """
     await conn.execute(
         update_sql,
         min(phenomenon_times),
         max(phenomenon_times),
+        min(result_times),
+        max(result_times),
         datastream_id,
     )
 
@@ -558,7 +569,8 @@ async def update_datastream_observed_area(conn):
                 geometries.append(geometry)
 
         if geometries:
-            query = f"""
+            if st_aggregate == "CONVEX_HULL":
+                query = f"""
                 UPDATE sensorthings."Datastream"
                 SET "observedArea" = ST_ConvexHull(
                     ST_Collect(
@@ -566,7 +578,17 @@ async def update_datastream_observed_area(conn):
                     )
                 )
                 WHERE id = $1;
-            """
+                """
+            else:
+                query = f"""
+                UPDATE sensorthings."Datastream"
+                SET "observedArea" = ST_Envelope(
+                    ST_Collect(
+                        ARRAY[{', '.join(f"'{g}'::geometry" for g in geometries)}]
+                    )
+                )
+                WHERE id = $1;
+                """
 
             # Execute the update query, passing the datastream_id
             await conn.execute(query, ds)
@@ -595,6 +617,7 @@ async def generate_observations(conn, commit_id):
                 phenomenonTime,
                 upper_inc=True,
             )
+            resultTime = phenomenonTime
             resultNumber = random.randint(1, 100)
             resultType = 0
             datastream_id = j
@@ -604,6 +627,7 @@ async def generate_observations(conn, commit_id):
                 observations.append(
                     (
                         phenomenonTimeRange,
+                        resultTime,
                         resultNumber,
                         resultType,
                         datastream_id,
@@ -615,6 +639,7 @@ async def generate_observations(conn, commit_id):
                 observations.append(
                     (
                         phenomenonTimeRange,
+                        resultTime,
                         resultNumber,
                         resultType,
                         datastream_id,

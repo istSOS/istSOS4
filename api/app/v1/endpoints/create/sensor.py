@@ -14,7 +14,11 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import validate_payload_keys
+from app.utils.utils import (
+    require_json_content_type,
+    validate_payload_keys,
+    validate_required_keys,
+)
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
@@ -51,6 +55,8 @@ ALLOWED_KEYS = [
     "Datastreams",
 ]
 
+REQUIRED_KEYS = ["name", "encodingType", "metadata"]
+
 
 @v1.api_route(
     "/Sensors",
@@ -68,13 +74,10 @@ async def create_sensor(
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
-        if (
-            not "content-type" in request.headers
-            or request.headers["content-type"] != "application/json"
-        ):
-            raise Exception("Only content-type application/json is supported.")
+        require_json_content_type(request)
 
         validate_payload_keys(payload, ALLOWED_KEYS)
+        validate_required_keys(payload, REQUIRED_KEYS)
 
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -99,9 +102,9 @@ async def create_sensor(
         )
     except InsufficientPrivilegeError:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             content={
-                "code": 401,
+                "code": 403,
                 "type": "error",
                 "message": "Insufficient privileges.",
             },

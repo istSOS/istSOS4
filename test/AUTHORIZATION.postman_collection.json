@@ -16,13 +16,13 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "bearer XXX",
+								"value": "Bearer {{accessToken}}",
 								"type": "default"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n   \"description\":\"thing 1\",\n   \"name\":\"thing name 1\",\n   \"properties\":{\n      \"reference\":\"first\"\n   },\n   \"Locations\":[\n      {\n         \"description\":\"location 1\",\n         \"name\":\"location name 1\",\n         \"location\":{\n            \"type\":\"Point\",\n            \"coordinates\":[\n               -117.05,\n               51.05\n            ]\n         },\n         \"encodingType\":\"application/vnd.geo+json\"\n      }\n   ],\n   \"Datastreams\":[\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Lumen\",\n            \"symbol\":\"lm\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 1\",\n         \"name\":\"datastream name 1\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"properties\":{\n            \"min\":0,\n            \"max\":100\n         },\n         \"ObservedProperty\":{\n            \"name\":\"Luminous Flux\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux\",\n            \"description\":\"observedProperty 1\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 1\",\n            \"name\":\"sensor name 1\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Light flux sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-03T00:00:00Z\",\n               \"result\":true\n            },\n            {\n               \"phenomenonTime\":\"2015-03-04T00:00:00Z\",\n               \"result\":{\n                  \"value\":4\n               }\n            }\n         ]\n      },\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Centigrade\",\n            \"symbol\":\"C\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 2\",\n         \"name\":\"datastream name 2\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"ObservedProperty\":{\n            \"name\":\"Tempretaure\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/Tempreture\",\n            \"description\":\"observedProperty 2\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 2\",\n            \"name\":\"sensor name 2\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Tempreture sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-05T00:00:00Z\",\n               \"result\":\"5\"\n            },\n            {\n               \"phenomenonTime\":\"2015-03-06T00:00:00Z/2015-03-07T00:00:00Z\",\n               \"result\":6\n            }\n         ]\n      }\n   ]\n}",
+							"raw": "{\n   \"description\":\"thing 1\",\n   \"name\":\"thing name 1\",\n   \"properties\":{\n      \"reference\":\"first\"\n   },\n   \"Locations\":[\n      {\n         \"description\":\"location 1\",\n         \"name\":\"location name 1\",\n         \"location\":{\n            \"type\":\"Point\",\n            \"coordinates\":[\n               -117.05,\n               51.05\n            ]\n         },\n         \"encodingType\":\"application/vnd.geo+json\"\n      }\n   ],\n   \"Datastreams\":[\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Lumen\",\n            \"symbol\":\"lm\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 1\",\n         \"name\":\"datastream name 1\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"properties\":{\n            \"min\":0,\n            \"max\":100\n         },\n         \"ObservedProperty\":{\n            \"name\":\"Luminous Flux\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux\",\n            \"description\":\"observedProperty 1\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 1\",\n            \"name\":\"sensor name 1\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Light flux sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-03T00:00:00Z\",\n               \"result\":true\n            },\n            {\n               \"phenomenonTime\":\"2015-03-04T00:00:00Z\",\n               \"result\":{\n                  \"value\":4\n               }\n            }\n         ]\n      },\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Centigrade\",\n            \"symbol\":\"C\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 2\",\n         \"name\":\"datastream name 2\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"ObservedProperty\":{\n            \"name\":\"Temperature\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/Temperature\",\n            \"description\":\"observedProperty 2\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 2\",\n            \"name\":\"sensor name 2\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Temperature sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-05T00:00:00Z\",\n               \"result\":\"5\"\n            },\n            {\n               \"phenomenonTime\":\"2015-03-06T00:00:00Z/2015-03-07T00:00:00Z\",\n               \"result\":6\n            }\n         ]\n      }\n   ]\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -30,17 +30,14 @@
 							}
 						},
 						"url": {
-							"raw": "http://127.0.0.1:8018/istsos4/v1.1/Things",
+							"raw": "{{baseUrl}}/Things",
 							"protocol": "http",
 							"host": [
-								"127",
-								"0",
-								"0",
-								"1"
+								"{{host}}"
 							],
-							"port": "8018",
+							"port": "{{port}}",
 							"path": [
-								"istsos4",
+								"{{basePath}}",
 								"v1.1",
 								"Things"
 							]
@@ -55,7 +52,7 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "bearer XXX",
+								"value": "Bearer {{accessToken}}",
 								"type": "default"
 							}
 						],
@@ -69,17 +66,14 @@
 							}
 						},
 						"url": {
-							"raw": "http://127.0.0.1:8018/istsos4/v1.1/Datastreams(1)/Observations",
+							"raw": "{{baseUrl}}/Datastreams(1)/Observations",
 							"protocol": "http",
 							"host": [
-								"127",
-								"0",
-								"0",
-								"1"
+								"{{host}}"
 							],
-							"port": "8018",
+							"port": "{{port}}",
 							"path": [
-								"istsos4",
+								"{{basePath}}",
 								"v1.1",
 								"Datastreams(1)",
 								"Observations"
@@ -95,7 +89,7 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "bearer XXX",
+								"value": "Bearer {{accessToken}}",
 								"type": "default"
 							}
 						],
@@ -109,14 +103,14 @@
 							}
 						},
 						"url": {
-							"raw": "http://localhost:8018/istsos4/v1.1/Observations(3)",
+							"raw": "{{baseUrl}}/Observations(3)",
 							"protocol": "http",
 							"host": [
-								"localhost"
+								"{{host}}"
 							],
-							"port": "8018",
+							"port": "{{port}}",
 							"path": [
-								"istsos4",
+								"{{basePath}}",
 								"v1.1",
 								"Observations(3)"
 							]
@@ -131,7 +125,7 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "bearer XXX",
+								"value": "Bearer {{accessToken}}",
 								"type": "default"
 							}
 						],
@@ -145,14 +139,14 @@
 							}
 						},
 						"url": {
-							"raw": "http://localhost:8018/istsos4/v1.1/Observations(3)",
+							"raw": "{{baseUrl}}/Observations(3)",
 							"protocol": "http",
 							"host": [
-								"localhost"
+								"{{host}}"
 							],
-							"port": "8018",
+							"port": "{{port}}",
 							"path": [
-								"istsos4",
+								"{{basePath}}",
 								"v1.1",
 								"Observations(3)"
 							]
@@ -167,7 +161,7 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "bearer XXX",
+								"value": "Bearer {{accessToken}}",
 								"type": "default"
 							}
 						],
@@ -181,19 +175,115 @@
 							}
 						},
 						"url": {
-							"raw": "http://127.0.0.1:8018/istsos4/v1.1/BulkObservations",
+							"raw": "{{baseUrl}}/BulkObservations",
 							"protocol": "http",
 							"host": [
-								"127",
-								"0",
-								"0",
-								"1"
+								"{{host}}"
 							],
-							"port": "8018",
+							"port": "{{port}}",
 							"path": [
-								"istsos4",
+								"{{basePath}}",
 								"v1.1",
 								"BulkObservations"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Networks",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}",
+								"type": "default"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/Networks",
+							"protocol": "http",
+							"host": [
+								"{{host}}"
+							],
+							"port": "{{port}}",
+							"path": [
+								"{{basePath}}",
+								"v1.1",
+								"Networks"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"network name 1\",\n    \"description\": \"network description 1\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Networks",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}",
+								"type": "default"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/Networks(1)",
+							"protocol": "http",
+							"host": [
+								"{{host}}"
+							],
+							"port": "{{port}}",
+							"path": [
+								"{{basePath}}",
+								"v1.1",
+								"Networks(1)"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"network name 1 updated\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Networks",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}",
+								"type": "default"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/Networks(1)",
+							"protocol": "http",
+							"host": [
+								"{{host}}"
+							],
+							"port": "{{port}}",
+							"path": [
+								"{{basePath}}",
+								"v1.1",
+								"Networks(1)"
 							]
 						}
 					},
@@ -211,18 +301,18 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "bearer XXX",
+								"value": "Bearer {{accessToken}}",
 								"type": "default"
 							},
 							{
 								"key": "Commit-message",
-								"value": "XXX",
+								"value": "{{commitMessage}}",
 								"type": "default"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n   \"description\":\"thing 1\",\n   \"name\":\"thing name 1\",\n   \"properties\":{\n      \"reference\":\"first\"\n   },\n   \"Locations\":[\n      {\n         \"description\":\"location 1\",\n         \"name\":\"location name 1\",\n         \"location\":{\n            \"type\":\"Point\",\n            \"coordinates\":[\n               -117.05,\n               51.05\n            ]\n         },\n         \"encodingType\":\"application/vnd.geo+json\"\n      }\n   ],\n   \"Datastreams\":[\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Lumen\",\n            \"symbol\":\"lm\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 1\",\n         \"name\":\"datastream name 1\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"properties\":{\n            \"min\":0,\n            \"max\":100\n         },\n         \"ObservedProperty\":{\n            \"name\":\"Luminous Flux\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux\",\n            \"description\":\"observedProperty 1\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 1\",\n            \"name\":\"sensor name 1\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Light flux sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-03T00:00:00Z\",\n               \"result\":true\n            },\n            {\n               \"phenomenonTime\":\"2015-03-04T00:00:00Z\",\n               \"result\":{\n                  \"value\":4\n               }\n            }\n         ]\n      },\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Centigrade\",\n            \"symbol\":\"C\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 2\",\n         \"name\":\"datastream name 2\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"ObservedProperty\":{\n            \"name\":\"Tempretaure\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/Tempreture\",\n            \"description\":\"observedProperty 2\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 2\",\n            \"name\":\"sensor name 2\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Tempreture sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-05T00:00:00Z\",\n               \"result\":\"5\"\n            },\n            {\n               \"phenomenonTime\":\"2015-03-06T00:00:00Z/2015-03-07T00:00:00Z\",\n               \"result\":6\n            }\n         ]\n      }\n   ]\n}",
+							"raw": "{\n   \"description\":\"thing 1\",\n   \"name\":\"thing name 1\",\n   \"properties\":{\n      \"reference\":\"first\"\n   },\n   \"Locations\":[\n      {\n         \"description\":\"location 1\",\n         \"name\":\"location name 1\",\n         \"location\":{\n            \"type\":\"Point\",\n            \"coordinates\":[\n               -117.05,\n               51.05\n            ]\n         },\n         \"encodingType\":\"application/vnd.geo+json\"\n      }\n   ],\n   \"Datastreams\":[\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Lumen\",\n            \"symbol\":\"lm\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 1\",\n         \"name\":\"datastream name 1\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"properties\":{\n            \"min\":0,\n            \"max\":100\n         },\n         \"ObservedProperty\":{\n            \"name\":\"Luminous Flux\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux\",\n            \"description\":\"observedProperty 1\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 1\",\n            \"name\":\"sensor name 1\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Light flux sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-03T00:00:00Z\",\n               \"result\":true\n            },\n            {\n               \"phenomenonTime\":\"2015-03-04T00:00:00Z\",\n               \"result\":{\n                  \"value\":4\n               }\n            }\n         ]\n      },\n      {\n         \"unitOfMeasurement\":{\n            \"name\":\"Centigrade\",\n            \"symbol\":\"C\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen\"\n         },\n         \"description\":\"datastream 2\",\n         \"name\":\"datastream name 2\",\n         \"observationType\":\"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement\",\n         \"ObservedProperty\":{\n            \"name\":\"Temperature\",\n            \"definition\":\"http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/Temperature\",\n            \"description\":\"observedProperty 2\"\n         },\n         \"Sensor\":{\n            \"description\":\"sensor 2\",\n            \"name\":\"sensor name 2\",\n            \"encodingType\":\"application/pdf\",\n            \"metadata\":\"Temperature sensor\"\n         },\n         \"Observations\":[\n            {\n               \"phenomenonTime\":\"2015-03-05T00:00:00Z\",\n               \"result\":\"5\"\n            },\n            {\n               \"phenomenonTime\":\"2015-03-06T00:00:00Z/2015-03-07T00:00:00Z\",\n               \"result\":6\n            }\n         ]\n      }\n   ]\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -230,17 +320,14 @@
 							}
 						},
 						"url": {
-							"raw": "http://127.0.0.1:8018/istsos4/v1.1/Things",
+							"raw": "{{baseUrl}}/Things",
 							"protocol": "http",
 							"host": [
-								"127",
-								"0",
-								"0",
-								"1"
+								"{{host}}"
 							],
-							"port": "8018",
+							"port": "{{port}}",
 							"path": [
-								"istsos4",
+								"{{basePath}}",
 								"v1.1",
 								"Things"
 							]
@@ -255,12 +342,12 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "bearer XXX",
+								"value": "Bearer {{accessToken}}",
 								"type": "default"
 							},
 							{
 								"key": "Commit-message",
-								"value": "XXX",
+								"value": "{{commitMessage}}",
 								"type": "default"
 							}
 						],
@@ -274,17 +361,14 @@
 							}
 						},
 						"url": {
-							"raw": "http://127.0.0.1:8018/istsos4/v1.1/Datastreams(1)/Observations",
+							"raw": "{{baseUrl}}/Datastreams(1)/Observations",
 							"protocol": "http",
 							"host": [
-								"127",
-								"0",
-								"0",
-								"1"
+								"{{host}}"
 							],
-							"port": "8018",
+							"port": "{{port}}",
 							"path": [
-								"istsos4",
+								"{{basePath}}",
 								"v1.1",
 								"Datastreams(1)",
 								"Observations"
@@ -300,12 +384,12 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "bearer XXX",
+								"value": "Bearer {{accessToken}}",
 								"type": "default"
 							},
 							{
 								"key": "Commit-message",
-								"value": "XXX",
+								"value": "{{commitMessage}}",
 								"type": "default"
 							}
 						],
@@ -319,14 +403,14 @@
 							}
 						},
 						"url": {
-							"raw": "http://localhost:8018/istsos4/v1.1/Observations(4)",
+							"raw": "{{baseUrl}}/Observations(4)",
 							"protocol": "http",
 							"host": [
-								"localhost"
+								"{{host}}"
 							],
-							"port": "8018",
+							"port": "{{port}}",
 							"path": [
-								"istsos4",
+								"{{basePath}}",
 								"v1.1",
 								"Observations(4)"
 							]
@@ -341,12 +425,12 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "bearer XXX",
+								"value": "Bearer {{accessToken}}",
 								"type": "default"
 							},
 							{
-								"key": "Commit-Message",
-								"value": "XXX",
+								"key": "Commit-message",
+								"value": "{{commitMessage}}",
 								"type": "default"
 							}
 						],
@@ -360,14 +444,14 @@
 							}
 						},
 						"url": {
-							"raw": "http://localhost:8018/istsos4/v1.1/Observations(4)",
+							"raw": "{{baseUrl}}/Observations(4)",
 							"protocol": "http",
 							"host": [
-								"localhost"
+								"{{host}}"
 							],
-							"port": "8018",
+							"port": "{{port}}",
 							"path": [
-								"istsos4",
+								"{{basePath}}",
 								"v1.1",
 								"Observations(4)"
 							]
@@ -382,12 +466,12 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "bearer XXX",
+								"value": "Bearer {{accessToken}}",
 								"type": "default"
 							},
 							{
 								"key": "Commit-message",
-								"value": "XXX",
+								"value": "{{commitMessage}}",
 								"type": "default"
 							}
 						],
@@ -401,19 +485,130 @@
 							}
 						},
 						"url": {
-							"raw": "http://127.0.0.1:8018/istsos4/v1.1/BulkObservations",
+							"raw": "{{baseUrl}}/BulkObservations",
 							"protocol": "http",
 							"host": [
-								"127",
-								"0",
-								"0",
-								"1"
+								"{{host}}"
 							],
-							"port": "8018",
+							"port": "{{port}}",
 							"path": [
-								"istsos4",
+								"{{basePath}}",
 								"v1.1",
 								"BulkObservations"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Networks",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}",
+								"type": "default"
+							},
+							{
+								"key": "Commit-message",
+								"value": "{{commitMessage}}",
+								"type": "default"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/Networks",
+							"protocol": "http",
+							"host": [
+								"{{host}}"
+							],
+							"port": "{{port}}",
+							"path": [
+								"{{basePath}}",
+								"v1.1",
+								"Networks"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"network name 1\",\n    \"description\": \"network description 1\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Networks",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}",
+								"type": "default"
+							},
+							{
+								"key": "Commit-message",
+								"value": "{{commitMessage}}",
+								"type": "default"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/Networks(1)",
+							"protocol": "http",
+							"host": [
+								"{{host}}"
+							],
+							"port": "{{port}}",
+							"path": [
+								"{{basePath}}",
+								"v1.1",
+								"Networks(1)"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"network name 1 updated\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Networks",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}",
+								"type": "default"
+							},
+							{
+								"key": "Commit-message",
+								"value": "{{commitMessage}}",
+								"type": "default"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/Networks(1)",
+							"protocol": "http",
+							"host": [
+								"{{host}}"
+							],
+							"port": "{{port}}",
+							"path": [
+								"{{basePath}}",
+								"v1.1",
+								"Networks(1)"
 							]
 						}
 					},
@@ -436,16 +631,16 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:8018/istsos4/v1.1/users",
+					"raw": "{{baseUrl}}/Users",
 					"protocol": "http",
 					"host": [
-						"localhost"
+						"{{host}}"
 					],
-					"port": "8018",
+					"port": "{{port}}",
 					"path": [
-						"istsos4",
+						"{{basePath}}",
 						"v1.1",
-						"users"
+						"Users"
 					]
 				}
 			},
@@ -466,16 +661,16 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:8018/istsos4/v1.1/users",
+					"raw": "{{baseUrl}}/Users",
 					"protocol": "http",
 					"host": [
-						"localhost"
+						"{{host}}"
 					],
-					"port": "8018",
+					"port": "{{port}}",
 					"path": [
-						"istsos4",
+						"{{basePath}}",
 						"v1.1",
-						"users"
+						"Users"
 					]
 				}
 			},
@@ -496,16 +691,16 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:8018/istsos4/v1.1/users",
+					"raw": "{{baseUrl}}/Users",
 					"protocol": "http",
 					"host": [
-						"localhost"
+						"{{host}}"
 					],
-					"port": "8018",
+					"port": "{{port}}",
 					"path": [
-						"istsos4",
+						"{{basePath}}",
 						"v1.1",
-						"users"
+						"Users"
 					]
 				}
 			},
@@ -526,16 +721,16 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:8018/istsos4/v1.1/users",
+					"raw": "{{baseUrl}}/Users",
 					"protocol": "http",
 					"host": [
-						"localhost"
+						"{{host}}"
 					],
-					"port": "8018",
+					"port": "{{port}}",
 					"path": [
-						"istsos4",
+						"{{basePath}}",
 						"v1.1",
-						"users"
+						"Users"
 					]
 				}
 			},
@@ -556,16 +751,16 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:8018/istsos4/v1.1/users",
+					"raw": "{{baseUrl}}/Users",
 					"protocol": "http",
 					"host": [
-						"localhost"
+						"{{host}}"
 					],
-					"port": "8018",
+					"port": "{{port}}",
 					"path": [
-						"istsos4",
+						"{{basePath}}",
 						"v1.1",
-						"users"
+						"Users"
 					]
 				}
 			},
@@ -586,27 +781,27 @@
 						},
 						{
 							"key": "username",
-							"value": "XXX",
+							"value": "{{username}}",
 							"type": "default"
 						},
 						{
 							"key": "password",
-							"value": "XXX",
+							"value": "{{password}}",
 							"type": "default"
 						}
 					]
 				},
 				"url": {
-					"raw": "http://localhost:8018/istsos4/v1.1/login",
+					"raw": "{{baseUrl}}/Login",
 					"protocol": "http",
 					"host": [
-						"localhost"
+						"{{host}}"
 					],
-					"port": "8018",
+					"port": "{{port}}",
 					"path": [
-						"istsos4",
+						"{{basePath}}",
 						"v1.1",
-						"login"
+						"Login"
 					]
 				}
 			},
@@ -619,22 +814,19 @@
 				"header": [
 					{
 						"key": "Authorization",
-						"value": "bearer XXX",
+						"value": "Bearer {{accessToken}}",
 						"type": "default"
 					}
 				],
 				"url": {
-					"raw": "http://127.0.0.1:8018/istsos4/v1.1/Things",
+					"raw": "{{baseUrl}}/Things",
 					"protocol": "http",
 					"host": [
-						"127",
-						"0",
-						"0",
-						"1"
+						"{{host}}"
 					],
-					"port": "8018",
+					"port": "{{port}}",
 					"path": [
-						"istsos4",
+						"{{basePath}}",
 						"v1.1",
 						"Things"
 					]
@@ -649,19 +841,19 @@
 				"header": [
 					{
 						"key": "Authorization",
-						"value": "bearer XXX",
+						"value": "Bearer {{accessToken}}",
 						"type": "default"
 					}
 				],
 				"url": {
-					"raw": "http://localhost:8018/istsos4/v1.1/Observations?$expand=Commit",
+					"raw": "{{baseUrl}}/Observations?$expand=Commit",
 					"protocol": "http",
 					"host": [
-						"localhost"
+						"{{host}}"
 					],
-					"port": "8018",
+					"port": "{{port}}",
 					"path": [
-						"istsos4",
+						"{{basePath}}",
 						"v1.1",
 						"Observations"
 					],
@@ -674,6 +866,67 @@
 				}
 			},
 			"response": []
+		},
+		{
+			"name": "Networks",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{accessToken}}",
+						"type": "default"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/Networks",
+					"protocol": "http",
+					"host": [
+						"{{host}}"
+					],
+					"port": "{{port}}",
+					"path": [
+						"{{basePath}}",
+						"v1.1",
+						"Networks"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "host",
+			"value": "localhost"
+		},
+		{
+			"key": "port",
+			"value": "8018"
+		},
+		{
+			"key": "basePath",
+			"value": "istsos4"
+		},
+		{
+			"key": "baseUrl",
+			"value": "http://{{host}}:{{port}}/{{basePath}}/v1.1"
+		},
+		{
+			"key": "accessToken",
+			"value": "XXX"
+		},
+		{
+			"key": "commitMessage",
+			"value": "XXX"
+		},
+		{
+			"key": "username",
+			"value": "XXX"
+		},
+		{
+			"key": "password",
+			"value": "XXX"
 		}
 	]
 }

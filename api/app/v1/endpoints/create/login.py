@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+
+from app import REDIS
 from app.db.redis_db import redis
 from app.oauth import (
     authenticate_user,
@@ -24,6 +27,27 @@ from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
 v1 = APIRouter()
+
+
+def _extract_bearer_token(authorization: str | None) -> str:
+    prefix = "Bearer "
+    if authorization is None or not authorization.lower().startswith(
+        prefix.lower()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid authorization header format",
+        )
+    return authorization[len(prefix) :].strip()
+
+
+def _ttl_from_exp(exp: int | float | str | None) -> int:
+    if exp is None:
+        return 1
+    try:
+        return max(int(exp) - int(time.time()), 1)
+    except (TypeError, ValueError):
+        return 1
 
 
 @v1.api_route(
@@ -62,14 +86,22 @@ async def login(
     status_code=status.HTTP_200_OK,
     include_in_schema=False,
 )
-async def refresh_token(authorization=Header()):
-    prefix = "Bearer "
-    if not authorization.lower().startswith(prefix.lower()):
+async def refresh_token(authorization: str | None = Header(default=None)):
+    token = _extract_bearer_token(authorization)
+
+    if REDIS and redis.get(token) is not None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid authorization header format",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    token = authorization[len(prefix) :].strip()
+
+    if REDIS and redis.get(token) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     try:
         payload = decode_token(token)
@@ -79,9 +111,9 @@ async def refresh_token(authorization=Header()):
             detail="Invalid token",
         )
 
-    expire = payload.get("exp")
-
-    redis.set(token, "refreshed", ex=expire)
+    if REDIS:
+        expire = payload.get("exp")
+        redis.set(token, "refreshed", ex=_ttl_from_exp(expire))
 
     access_token, expire = create_refresh_token(payload)
 
@@ -102,24 +134,20 @@ async def refresh_token(authorization=Header()):
     status_code=status.HTTP_200_OK,
     include_in_schema=False,
 )
-async def logout(authorization=Header()):
-    prefix = "Bearer "
-    if not authorization.lower().startswith(prefix.lower()):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid authorization header format",
-        )
-    token = authorization[len(prefix) :].strip()
+async def logout(authorization: str | None = Header(default=None)):
+    token = _extract_bearer_token(authorization)
 
     try:
-        expire = decode_token(token).get("exp")
+        payload = decode_token(token)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid token",
         )
 
-    redis.set(token, "logged_out", ex=expire)
+    if REDIS:
+        expire = payload.get("exp")
+        redis.set(token, "logged_out", ex=_ttl_from_exp(expire))
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,
