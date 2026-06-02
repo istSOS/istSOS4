@@ -186,7 +186,11 @@ class STAClient:
         r = requests.get(
             f"{self.base_url}/{endpoint}", params=params, headers=self.headers
         )
-        r.raise_for_status()
+        if not r.ok:
+            message = r.text.strip()
+            raise RuntimeError(
+                f"GET {endpoint} failed with status {r.status_code}: {message}"
+            )
         data = r.json()
         return data.get("value", data)
 
@@ -202,7 +206,11 @@ class STAClient:
                 print(r.text)
             return None
 
-        r.raise_for_status()
+        if not r.ok:
+            message = r.text.strip()
+            raise RuntimeError(
+                f"POST {endpoint} failed with status {r.status_code}: {message}"
+            )
 
         if r.text.strip():
             return r.json()

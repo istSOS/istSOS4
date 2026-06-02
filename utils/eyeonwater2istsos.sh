@@ -28,6 +28,9 @@ docker run --rm \
   --network host \
   --env-file "${ROOT_DIR}/.env" \
   -v "${FILE}:${FILE}:ro" \
+  -v "${ROOT_DIR}/utils/models.py:/app/models.py:ro" \
+  -v "${ROOT_DIR}/utils/xlsx2istsos.py:/app/xlsx2istsos.py:ro" \
+  -v "${ROOT_DIR}/utils/eyeonwater2istsos.py:/app/eyeonwater2istsos.py:ro" \
   --entrypoint python \
   xlsx2istsos \
   /app/eyeonwater2istsos.py \
