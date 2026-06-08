@@ -86,6 +86,7 @@ from app.v1.endpoints.update import sensor as update_sensor
 from app.v1.endpoints.update import thing as update_thing
 from app.v1.endpoints.update import user as update_user
 from app.v1.endpoints.update import password as update_password
+from app.v1.endpoints.update import role as update_role
 from fastapi import FastAPI
 
 if AUTHORIZATION:
@@ -173,6 +174,7 @@ if AUTHORIZATION:
     v1.include_router(activate_user.v1)   # POST /Users/{id}/activate
     v1.include_router(update_user.v1)
     v1.include_router(update_password.v1)  # PATCH /Users/{id}/password
+    v1.include_router(update_role.v1)      # PATCH /Users/{id}/role
     v1.include_router(delete_user.v1)
     v1.include_router(read_policy.v1)
     v1.include_router(create_policy.v1)
