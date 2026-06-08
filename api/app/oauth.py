@@ -198,6 +198,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except InvalidTokenError:
         raise credentials_exception
 
+    # NOTE: role is intentionally fetched live from the DB on every request.
+    # This ensures role changes (via PATCH /Users/{id}/role) take effect
+    # immediately without requiring JWT rotation, eliminating stale JWT
+    # vulnerabilities.
     user = await get_user_from_db(username)
     if user is None:
         raise credentials_exception
