@@ -162,6 +162,9 @@ class TestUpdateLocalPasswordCRUD:
 
     The asyncpg pool and passlib's CryptContext are replaced with mocks so
     these tests run without a live Postgres instance or real bcrypt work.
+
+    Legacy-path tests (password IS NULL) mock ``get_auth_connection`` to
+    simulate the PostgreSQL fallback without a live database.
     """
 
     def _run(self, coro):
@@ -207,28 +210,70 @@ class TestUpdateLocalPasswordCRUD:
         assert "External identities" in exc_info.value.detail
 
     # -----------------------------------------------------------------------
-    # 2c. No local credential (password IS NULL) → 400
+    # 2c. Legacy account (password IS NULL) — wrong legacy password → 401
     # -----------------------------------------------------------------------
-    def test_null_password_raises_400(self):
+    def test_legacy_wrong_password_raises_401(self):
+        from contextlib import asynccontextmanager
         from fastapi import HTTPException
         from app.db import password_crud
 
+        @asynccontextmanager
+        async def _bad_legacy(username, password):
+            yield None  # fallback signals wrong password
+
         pool = _make_pool(row=_make_row(auth_provider=None, password=None))
-        with patch.object(password_crud, "get_pool", AsyncMock(return_value=pool)):
+        with patch.object(password_crud, "get_pool", AsyncMock(return_value=pool)), \
+             patch("app.oauth.get_auth_connection", _bad_legacy):
             with pytest.raises(HTTPException) as exc_info:
                 self._run(
                     password_crud.update_local_password(
                         user_id=42,
-                        current_password="OldPass1!",
+                        current_password="WrongOldPass1!",
                         new_password="NewSecure1Pass!",
                     )
                 )
-        assert exc_info.value.status_code == 400
-        assert "No local credential" in exc_info.value.detail
+        assert exc_info.value.status_code == 401
+        assert "incorrect" in exc_info.value.detail.lower()
 
     # -----------------------------------------------------------------------
-    # 2d. Wrong current password (verify returns False) → 401
+    # 2d. Legacy account (password IS NULL) — correct legacy password → UPDATE
     # -----------------------------------------------------------------------
+    def test_legacy_correct_password_upgrades_to_bcrypt(self):
+        from contextlib import asynccontextmanager
+        from unittest.mock import MagicMock
+        from app.db import password_crud
+
+        @asynccontextmanager
+        async def _good_legacy(username, password):
+            yield MagicMock()  # successful connection
+
+        executed: list = []
+        read_pool  = _make_pool(row=_make_row(auth_provider=None, password=None))
+        write_pool = _make_pool(row=_make_row(auth_provider=None, password=None),
+                                execute_capture=executed)
+        fake_hash  = "$2b$12$legacy_upgraded_hash_for_testing"
+
+        with patch.object(password_crud, "get_pool",   AsyncMock(return_value=read_pool)), \
+             patch.object(password_crud, "get_pool_w", AsyncMock(return_value=write_pool)), \
+             patch.object(password_crud.pwd_context, "hash", return_value=fake_hash), \
+             patch("app.oauth.get_auth_connection", _good_legacy), \
+             patch("app.POSTGRES_PORT_WRITE", "5433"):
+            self._run(
+                password_crud.update_local_password(
+                    user_id=42,
+                    current_password="OldLegacyPass1!",
+                    new_password="NewSecure1Pass!",
+                )
+            )
+
+        assert len(executed) == 1, "Expected exactly one UPDATE"
+        query, args = executed[0]
+        assert "UPDATE" in query.upper()
+        assert "ALTER"  not in query.upper()
+        assert fake_hash in args
+        assert 42 in args
+
+
     def test_wrong_current_password_raises_401(self):
         from fastapi import HTTPException
         from app.db import password_crud

@@ -21,16 +21,20 @@ istSOS users are **application-level entities** stored in
 single master service account (``ISTSOS_ADMIN``); individual users do NOT
 have their own PostgreSQL login roles.
 
-This module therefore manages the ``password`` column in
-``sensorthings."User"`` directly, using Python-side bcrypt hashing via
-``passlib``.  No ``ALTER USER`` DDL or ``asyncpg.connect()``-as-user tricks
-are involved.
+This module manages the ``password`` column in ``sensorthings."User"``
+directly, using Python-side bcrypt hashing via ``passlib``.
+
+For legacy accounts (``password IS NULL``), ``current_password`` is verified
+via ``get_auth_connection()`` against PostgreSQL's ``pg_authid`` instead of
+a bcrypt check, giving these users a seamless self-service path to adopt the
+new application-level credential in one step.
 
 Execution order in ``update_local_password``
 --------------------------------------------
-1. SELECT the user row (including the stored bcrypt hash).
+1. SELECT the user row (id, username, auth_provider, password).
 2. OIDC Guard — block external identities immediately.
-3. Verify the supplied ``current_password`` against the stored hash.
+3a. If password IS NOT NULL: verify via ``pwd_context.verify()``.
+3b. If password IS NULL (legacy): verify via ``get_auth_connection()``.
 4. Hash the new password with bcrypt.
 5. Persist via a parameterised SQL ``UPDATE``.
 """
@@ -56,24 +60,25 @@ async def update_local_password(
 ) -> None:
     """Update the local istSOS credential for a non-OIDC user.
 
+    Legacy accounts (``password IS NULL``) are verified via the PostgreSQL
+    fallback (``get_auth_connection``) and simultaneously upgraded to bcrypt
+    in the same operation — no separate migration step required.
+
     Args:
         user_id:          Primary key of the target ``sensorthings."User"`` row.
-        current_password: The user's existing plaintext password (verified
-                          against the stored bcrypt hash before any change is
-                          made).
+        current_password: The user's existing plaintext password.
         new_password:     The validated new password.  Strength rules are
                           enforced by the Pydantic schema before this function
                           is called.
 
     Raises:
         HTTPException 404: User not found.
-        HTTPException 400: User is an external OIDC identity, or has no local
-                           credential set yet (``password`` column is NULL).
-        HTTPException 401: ``current_password`` does not match the stored hash.
+        HTTPException 400: User is an external OIDC identity.
+        HTTPException 401: ``current_password`` is incorrect.
         HTTPException 500: Database error during the UPDATE.
     """
     # ------------------------------------------------------------------
-    # 1. Fetch user row — need auth_provider + the stored password hash.
+    # 1. Fetch user row
     # ------------------------------------------------------------------
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -101,37 +106,48 @@ async def update_local_password(
             detail="External identities cannot update passwords locally.",
         )
 
-    # ------------------------------------------------------------------
-    # 3. Guard against accounts with no local credential set yet.
-    #    (e.g. admin user created before migration 002 was applied, or
-    #     accounts imported without a password hash.)
-    # ------------------------------------------------------------------
     stored_hash = row["password"]
-    if stored_hash is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "No local credential is set for this account. "
-                "Please contact an administrator."
-            ),
+
+    # ------------------------------------------------------------------
+    # 3a. Modern account — verify current_password against bcrypt hash.
+    # ------------------------------------------------------------------
+    if stored_hash is not None:
+        if not pwd_context.verify(current_password, stored_hash):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Current password is incorrect.",
+            )
+
+    # ------------------------------------------------------------------
+    # 3b. Legacy account (password IS NULL) — fall back to pg_authid to
+    #     verify the current password.  The new bcrypt hash written in
+    #     step 5 is the one-time migration for this account.
+    # ------------------------------------------------------------------
+    else:
+        from app.oauth import get_auth_connection  # local import to avoid circular
+
+        username = row["username"]
+        async with get_auth_connection(username, current_password) as legacy_conn:
+            if legacy_conn is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Current password is incorrect.",
+                )
+        logger.info(
+            "update_local_password: legacy credential verified for user id=%d;"
+            " upgrading to bcrypt.",
+            user_id,
         )
 
     # ------------------------------------------------------------------
-    # 4. Verify current_password against the stored bcrypt hash.
-    #    This is entirely Python-side — no extra DB round-trip.
-    # ------------------------------------------------------------------
-    if not pwd_context.verify(current_password, stored_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Current password is incorrect.",
-        )
-
-    # ------------------------------------------------------------------
-    # 5. Hash the new password and persist via a standard UPDATE.
-    #    No DDL, no string interpolation — fully parameterised.
+    # 4. Hash the new password.
     # ------------------------------------------------------------------
     new_hash = pwd_context.hash(new_password)
 
+    # ------------------------------------------------------------------
+    # 5. Persist via a standard parameterised UPDATE.
+    #    No DDL, no string interpolation — fully parameterised.
+    # ------------------------------------------------------------------
     try:
         from app import POSTGRES_PORT_WRITE  # local import to avoid circular
 
