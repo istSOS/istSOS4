@@ -21,23 +21,29 @@ istSOS users are **application-level entities** stored in
 master service account (``ISTSOS_ADMIN``).  Individual users do NOT have
 their own PostgreSQL login roles.
 
-Consequently, all local credential verification is handled on the Python
-side using ``passlib`` (bcrypt), reading the ``password`` column from the
-``sensorthings."User"`` table.  There is no ``asyncpg.connect()``-as-user
-or ``pg_authid`` involvement in the login flow.
+Local credential verification uses ``passlib`` (bcrypt) against the
+``password`` column in ``sensorthings."User"``.  For legacy accounts created
+before migration 002 (where ``password IS NULL``), ``get_auth_connection()``
+is used as a transparent fallback that simultaneously migrates the credential
+to the application layer — so the next login uses bcrypt directly.
 
-OIDC users (``auth_provider IS NOT NULL``) have a NULL ``password`` column
-and are authenticated exclusively through their external identity provider.
-The ``/Login`` endpoint is only for local (non-OIDC) istSOS credentials.
+OIDC users (``auth_provider IS NOT NULL``) are authenticated exclusively
+through their external identity provider and are blocked from the
+``/Login`` endpoint.
 """
 
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
+import asyncpg
 import jwt
 from app import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     ALGORITHM,
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PORT,
     REDIS,
     SECRET_KEY,
 )
@@ -77,30 +83,91 @@ async def get_user_from_db(username: str):
     return None
 
 
+@asynccontextmanager
+async def get_auth_connection(username: str, password: str):
+    """Legacy fallback: open a direct PostgreSQL connection as the target user.
+
+    Used only for accounts where ``sensorthings."User"."password" IS NULL``
+    (i.e. accounts created before migration 002 was applied).  A successful
+    connection proves the user knows their old credential; the caller is
+    responsible for immediately migrating the hash to the application layer.
+
+    Yields the connection on success, or ``None`` if the password is wrong.
+    All other errors are re-raised as ``HTTPException 503``.
+    """
+    connection = None
+    try:
+        connection = await asyncpg.connect(
+            user=username,
+            password=password,
+            database=POSTGRES_DB,
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            timeout=5.0,
+            command_timeout=10.0,
+        )
+        yield connection
+    except asyncpg.InvalidPasswordError:
+        yield None
+    except asyncpg.TooManyConnectionsError:
+        logger.error("Database connection limit reached during legacy auth for %r", username)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service temporarily unavailable.",
+        )
+    except (asyncpg.PostgresConnectionError, asyncpg.PostgresIOError) as exc:
+        logger.error("DB connection error during legacy auth for %r: %s", username, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service temporarily unavailable.",
+        )
+    except Exception as exc:
+        logger.error("Unexpected error during legacy auth for %r: %s", username, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service temporarily unavailable.",
+        )
+    finally:
+        if connection is not None:
+            try:
+                await connection.close()
+            except Exception as exc:
+                logger.error("Error closing legacy auth connection: %s", exc)
+
+
 async def authenticate_user(username: str, password: str):
-    """Authenticate a local istSOS user against the application-level credential.
+    """Authenticate a local istSOS user.
 
-    Verification is performed entirely on the Python side using ``passlib``
-    (bcrypt).  The stored ``password`` column in ``sensorthings."User"``
-    holds the bcrypt hash set at registration time.
-
-    Accounts with a NULL ``password`` column (OIDC users, or users created
-    before migration 002 was applied) cannot authenticate via this endpoint
-    and will receive ``None`` (→ HTTP 401 at the call site).
+    Flow
+    ----
+    1. Fetch ``id, role, password, auth_provider`` from ``sensorthings."User"``.
+       Return ``None`` if the user does not exist.
+    2. OIDC guard: if ``auth_provider IS NOT NULL``, return ``None`` — federated
+       users must authenticate through their identity provider.
+    3. If ``password`` column IS NOT NULL (modern account): verify with
+       ``pwd_context.verify()``.  Return the token payload on success, ``None``
+       on failure.
+    4. If ``password`` column IS NULL (legacy account): fall back to
+       ``get_auth_connection()`` against PostgreSQL's ``pg_authid``.  On
+       success, immediately write the bcrypt hash to ``User.password`` so the
+       next login skips the fallback.  Return the token payload.  On failure,
+       return ``None``.
 
     Args:
         username: The login username.
         password: The plaintext password supplied by the user.
 
     Returns:
-        ``{"sub": username, "role": role}`` on success, or ``None`` on any
-        authentication failure (unknown user, NULL hash, wrong password).
+        ``{"sub": username, "role": role}`` on success, ``None`` on any failure.
     """
+    # ------------------------------------------------------------------
+    # 1. Fetch user row
+    # ------------------------------------------------------------------
     pool = await get_pool()
-    async with pool.acquire() as connection:
-        row = await connection.fetchrow(
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
             """
-            SELECT id, role, password
+            SELECT id, role, password, auth_provider
             FROM sensorthings."User"
             WHERE username = $1
             """,
@@ -108,23 +175,62 @@ async def authenticate_user(username: str, password: str):
         )
 
     if row is None:
-        # User not found — return None to produce a generic 401 at call site.
         logger.debug("authenticate_user: username %r not found.", username)
         return None
 
-    stored_hash = row["password"]
-    if stored_hash is None:
-        # OIDC user or pre-migration account — no local credential set.
+    # ------------------------------------------------------------------
+    # 2. OIDC guard — federated users must use their IdP
+    # ------------------------------------------------------------------
+    if row["auth_provider"] is not None:
         logger.debug(
-            "authenticate_user: username %r has no local credential (NULL hash).",
-            username,
+            "authenticate_user: username %r is a federated user (provider=%r).",
+            username, row["auth_provider"],
         )
         return None
 
-    if not pwd_context.verify(password, stored_hash):
-        # Wrong password — return None; the call site emits HTTP 401.
+    stored_hash = row["password"]
+
+    # ------------------------------------------------------------------
+    # 3. Modern account — bcrypt hash present
+    # ------------------------------------------------------------------
+    if stored_hash is not None:
+        if pwd_context.verify(password, stored_hash):
+            return {"sub": username, "role": row["role"]}
         logger.debug("authenticate_user: wrong password for username %r.", username)
         return None
+
+    # ------------------------------------------------------------------
+    # 4. Legacy account — password IS NULL, fall back to pg_authid
+    # ------------------------------------------------------------------
+    logger.info(
+        "authenticate_user: username %r has no bcrypt hash — using legacy fallback.",
+        username,
+    )
+    async with get_auth_connection(username, password) as legacy_conn:
+        if legacy_conn is None:
+            # Wrong password for the legacy account
+            return None
+
+    # Fallback succeeded: migrate the credential to the application layer
+    # so subsequent logins use bcrypt directly (JIT upgrade).
+    new_hash = pwd_context.hash(password)
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                'UPDATE sensorthings."User" SET password = $1 WHERE id = $2',
+                new_hash,
+                row["id"],
+            )
+        logger.info(
+            "authenticate_user: JIT credential upgrade complete for username %r.",
+            username,
+        )
+    except Exception as exc:
+        # Non-fatal: log and continue — the user is still authenticated.
+        logger.error(
+            "authenticate_user: failed to write bcrypt hash for username %r: %s",
+            username, exc,
+        )
 
     return {"sub": username, "role": row["role"]}
 
