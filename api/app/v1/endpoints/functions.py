@@ -22,12 +22,26 @@ _PG_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _validate_role_identifier(username: str) -> str:
+    """Validate that *username* is a safe PostgreSQL identifier.
+
+    asyncpg does not support $1 placeholders for SET ROLE identifiers —
+    PostgreSQL's SET ROLE only accepts a literal role name.  We therefore
+    validate the identifier before interpolating it into the query string.
+
+    Raises:
+        ValueError: if the username does not match a plain PG identifier.
+    """
     if not isinstance(username, str) or not _PG_IDENTIFIER_RE.match(username):
         raise ValueError("Invalid role identifier")
     return username
 
 
 async def set_role(connection, current_user):
+    """Switch the current session role to *current_user['username']*.
+
+    The username is validated against ``_PG_IDENTIFIER_RE`` before use.
+    Uses ``pg_quote_ident`` to safely quote the identifier for the query.
+    """
     async with connection.transaction():
         username = _validate_role_identifier(current_user["username"])
         query = f"SET ROLE {pg_quote_ident(username)};"
