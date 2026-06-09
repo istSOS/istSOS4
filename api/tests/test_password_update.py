@@ -14,6 +14,14 @@
 
 """Tests for PATCH /Users/{id}/password.
 
+Architecture note
+-----------------
+istSOS users are application-level entities; they do NOT have individual
+PostgreSQL login roles.  The FastAPI backend connects via a single master
+service account.  Passwords are stored as bcrypt hashes in the
+``sensorthings."User"."password"`` column and managed entirely on the
+Python side using ``passlib``.
+
 Coverage
 --------
 * Pydantic schema validation (no DB required):
@@ -22,16 +30,18 @@ Coverage
     - No digit → 422
     - Valid payload passes schema
 
-* CRUD-layer unit tests (DB stubbed with mocks):
-    - OIDC user blocked → HTTPException 400
-    - Wrong current password → HTTPException 401
+* CRUD-layer unit tests (DB stubbed, passlib mocked):
     - User not found → HTTPException 404
+    - OIDC user (auth_provider set) → HTTPException 400
+    - Account with no local credential (password IS NULL) → HTTPException 400
+    - Wrong current password (pwd_context.verify returns False) → HTTPException 401
+    - Success: UPDATE executed with new bcrypt hash → no exception
 
 * Endpoint authorization (router-level, no real DB):
     - Non-owner, non-admin user → 403
 
-All tests are synchronous (no live database required). asyncio is used only
-where we need to drive async CRUD functions via asyncio.run().
+All tests are synchronous (no live database required). ``asyncio.run()``
+drives async functions under test.
 """
 
 import asyncio
@@ -63,15 +73,51 @@ os.environ.setdefault("ALGORITHM", "HS256")
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_row(auth_provider=None, username="alice", user_id=42):
-    """Build a minimal asyncpg-like Record stub."""
+_FAKE_HASH = "$2b$12$fakehashfortestingpurposesonly...."
+
+
+def _make_row(
+    auth_provider=None,
+    username="alice",
+    user_id=42,
+    password=_FAKE_HASH,
+):
+    """Build a minimal asyncpg-like Record stub.
+
+    The ``password`` field defaults to a fake bcrypt-shaped hash so that
+    tests don't accidentally hit the NULL-credential guard unless they
+    explicitly pass ``password=None``.
+    """
     row = MagicMock()
     row.__getitem__ = lambda self, key: {
         "id": user_id,
         "username": username,
         "auth_provider": auth_provider,
+        "password": password,
     }[key]
     return row
+
+
+def _make_pool(row=None, execute_capture=None):
+    """Return a fake asyncpg pool whose connection returns ``row`` on fetchrow.
+
+    If ``execute_capture`` is a list, tuples of (query, args) are appended
+    to it every time ``conn.execute()`` is called.
+    """
+    pool = MagicMock()
+    conn = AsyncMock()
+    conn.fetchrow = AsyncMock(return_value=row)
+
+    if execute_capture is not None:
+        async def _capture(query, *args):
+            execute_capture.append((query, list(args)))
+        conn.execute = _capture
+    else:
+        conn.execute = AsyncMock()
+
+    pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
+    pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+    return pool
 
 
 # ===========================================================================
@@ -80,49 +126,42 @@ def _make_row(auth_provider=None, username="alice", user_id=42):
 
 class TestPasswordUpdateRequestSchema:
 
-    def _import_schema(self):
+    def _schema(self):
         from app.models.password import PasswordUpdateRequest
         return PasswordUpdateRequest
 
     def test_valid_payload_passes(self):
-        schema = self._import_schema()
-        req = schema(current_password="OldPass1!", new_password="NewSecure1Pass!")
+        req = self._schema()(current_password="OldPass1!", new_password="NewSecure1Pass!")
         assert req.new_password == "NewSecure1Pass!"
 
     def test_too_short_raises_422(self):
         from pydantic import ValidationError
-        schema = self._import_schema()
         with pytest.raises(ValidationError) as exc_info:
-            schema(current_password="old", new_password="Short1A")
-        errors = exc_info.value.errors()
-        assert any("12 characters" in str(e["msg"]) for e in errors)
+            self._schema()(current_password="old", new_password="Short1A")
+        assert any("12 characters" in str(e["msg"]) for e in exc_info.value.errors())
 
     def test_no_uppercase_raises_422(self):
         from pydantic import ValidationError
-        schema = self._import_schema()
         with pytest.raises(ValidationError) as exc_info:
-            schema(current_password="old", new_password="alllowercase1pass!")
-        errors = exc_info.value.errors()
-        assert any("uppercase" in str(e["msg"]) for e in errors)
+            self._schema()(current_password="old", new_password="alllowercase1pass!")
+        assert any("uppercase" in str(e["msg"]) for e in exc_info.value.errors())
 
     def test_no_digit_raises_422(self):
         from pydantic import ValidationError
-        schema = self._import_schema()
         with pytest.raises(ValidationError) as exc_info:
-            schema(current_password="old", new_password="NoDigitHereAtAll!")
-        errors = exc_info.value.errors()
-        assert any("digit" in str(e["msg"]) for e in errors)
+            self._schema()(current_password="old", new_password="NoDigitHereAtAll!")
+        assert any("digit" in str(e["msg"]) for e in exc_info.value.errors())
 
 
 # ===========================================================================
-# 2. CRUD-layer unit tests (DB stubbed)
+# 2. CRUD-layer unit tests (DB stubbed, passlib mocked)
 # ===========================================================================
 
 class TestUpdateLocalPasswordCRUD:
-    """Tests for app.db.password_crud.update_local_password.
+    """Tests for ``app.db.password_crud.update_local_password``.
 
-    The real database pool and asyncpg.connect are replaced with mocks so
-    these tests run without a live Postgres instance.
+    The asyncpg pool and passlib's CryptContext are replaced with mocks so
+    these tests run without a live Postgres instance or real bcrypt work.
     """
 
     def _run(self, coro):
@@ -135,15 +174,8 @@ class TestUpdateLocalPasswordCRUD:
         from fastapi import HTTPException
         from app.db import password_crud
 
-        async def _fake_get_pool():
-            pool = MagicMock()
-            conn = AsyncMock()
-            conn.fetchrow = AsyncMock(return_value=None)  # no row
-            pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
-            pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
-            return pool
-
-        with patch.object(password_crud, "get_pool", _fake_get_pool):
+        pool = _make_pool(row=None)
+        with patch.object(password_crud, "get_pool", AsyncMock(return_value=pool)):
             with pytest.raises(HTTPException) as exc_info:
                 self._run(
                     password_crud.update_local_password(
@@ -155,23 +187,14 @@ class TestUpdateLocalPasswordCRUD:
         assert exc_info.value.status_code == 404
 
     # -----------------------------------------------------------------------
-    # 2b. OIDC user (auth_provider set) → 400
+    # 2b. OIDC user (auth_provider IS NOT NULL) → 400
     # -----------------------------------------------------------------------
     def test_oidc_user_blocked_raises_400(self):
         from fastapi import HTTPException
         from app.db import password_crud
 
-        oidc_row = _make_row(auth_provider="google", username="alice")
-
-        async def _fake_get_pool():
-            pool = MagicMock()
-            conn = AsyncMock()
-            conn.fetchrow = AsyncMock(return_value=oidc_row)
-            pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
-            pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
-            return pool
-
-        with patch.object(password_crud, "get_pool", _fake_get_pool):
+        pool = _make_pool(row=_make_row(auth_provider="google"))
+        with patch.object(password_crud, "get_pool", AsyncMock(return_value=pool)):
             with pytest.raises(HTTPException) as exc_info:
                 self._run(
                     password_crud.update_local_password(
@@ -184,28 +207,35 @@ class TestUpdateLocalPasswordCRUD:
         assert "External identities" in exc_info.value.detail
 
     # -----------------------------------------------------------------------
-    # 2c. Wrong current password → 401
+    # 2c. No local credential (password IS NULL) → 400
     # -----------------------------------------------------------------------
-    def test_wrong_current_password_raises_401(self):
-        import asyncpg
+    def test_null_password_raises_400(self):
         from fastapi import HTTPException
         from app.db import password_crud
 
-        local_row = _make_row(auth_provider=None, username="alice")
+        pool = _make_pool(row=_make_row(auth_provider=None, password=None))
+        with patch.object(password_crud, "get_pool", AsyncMock(return_value=pool)):
+            with pytest.raises(HTTPException) as exc_info:
+                self._run(
+                    password_crud.update_local_password(
+                        user_id=42,
+                        current_password="OldPass1!",
+                        new_password="NewSecure1Pass!",
+                    )
+                )
+        assert exc_info.value.status_code == 400
+        assert "No local credential" in exc_info.value.detail
 
-        async def _fake_get_pool():
-            pool = MagicMock()
-            conn = AsyncMock()
-            conn.fetchrow = AsyncMock(return_value=local_row)
-            pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
-            pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
-            return pool
+    # -----------------------------------------------------------------------
+    # 2d. Wrong current password (verify returns False) → 401
+    # -----------------------------------------------------------------------
+    def test_wrong_current_password_raises_401(self):
+        from fastapi import HTTPException
+        from app.db import password_crud
 
-        async def _bad_connect(**kwargs):
-            raise asyncpg.InvalidPasswordError("bad password")
-
-        with patch.object(password_crud, "get_pool", _fake_get_pool), \
-             patch("asyncpg.connect", _bad_connect):
+        pool = _make_pool(row=_make_row(auth_provider=None))
+        with patch.object(password_crud, "get_pool", AsyncMock(return_value=pool)), \
+             patch.object(password_crud.pwd_context, "verify", return_value=False):
             with pytest.raises(HTTPException) as exc_info:
                 self._run(
                     password_crud.update_local_password(
@@ -218,33 +248,21 @@ class TestUpdateLocalPasswordCRUD:
         assert "incorrect" in exc_info.value.detail.lower()
 
     # -----------------------------------------------------------------------
-    # 2d. Happy path: ALTER USER DDL is executed
+    # 2e. Happy path: UPDATE issued with the new hash → no exception
     # -----------------------------------------------------------------------
-    def test_success_executes_alter_user(self):
+    def test_success_executes_update_with_hash(self):
         from app.db import password_crud
 
-        local_row = _make_row(auth_provider=None, username="alice")
-        executed_queries: list[str] = []
+        executed: list = []
+        read_pool  = _make_pool(row=_make_row(auth_provider=None))
+        write_pool = _make_pool(row=_make_row(auth_provider=None), execute_capture=executed)
+        fake_hash  = "$2b$12$newhashedvalue_for_testing_only."
 
-        async def _fake_get_pool():
-            pool = MagicMock()
-            conn = AsyncMock()
-            conn.fetchrow = AsyncMock(return_value=local_row)
-
-            async def _execute(query):
-                executed_queries.append(query)
-
-            conn.execute = _execute
-            pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
-            pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
-            return pool
-
-        async def _good_connect(**kwargs):
-            mock_conn = AsyncMock()
-            return mock_conn
-
-        with patch.object(password_crud, "get_pool", _fake_get_pool), \
-             patch("asyncpg.connect", _good_connect):
+        with patch.object(password_crud, "get_pool",   AsyncMock(return_value=read_pool)), \
+             patch.object(password_crud, "get_pool_w", AsyncMock(return_value=write_pool)), \
+             patch.object(password_crud.pwd_context, "verify", return_value=True), \
+             patch.object(password_crud.pwd_context, "hash",   return_value=fake_hash), \
+             patch("app.POSTGRES_PORT_WRITE", "5433"):
             self._run(
                 password_crud.update_local_password(
                     user_id=42,
@@ -253,12 +271,12 @@ class TestUpdateLocalPasswordCRUD:
                 )
             )
 
-        assert any("ALTER USER" in q for q in executed_queries), (
-            "Expected ALTER USER DDL to be executed"
-        )
-        assert any('"alice"' in q for q in executed_queries), (
-            "Username should be quoted with pg_quote_ident"
-        )
+        assert len(executed) == 1, "Expected exactly one SQL statement"
+        query, args = executed[0]
+        assert "UPDATE" in query.upper(), "Expected UPDATE, not DDL"
+        assert "ALTER"  not in query.upper(), "No DDL ALTER should appear"
+        assert fake_hash in args, "New bcrypt hash must be a parameterised arg"
+        assert 42 in args, "user_id must be a parameterised arg"
 
 
 # ===========================================================================
@@ -266,13 +284,10 @@ class TestUpdateLocalPasswordCRUD:
 # ===========================================================================
 
 class TestUpdatePasswordEndpointAuthorization:
-    """Verify the endpoint-layer ownership/admin guard.
-
-    We test the guard logic directly without spinning up the FastAPI app.
-    """
+    """Verify the endpoint-layer ownership/admin guard without spinning up FastAPI."""
 
     def test_non_owner_non_admin_is_rejected(self):
-        """A regular user attempting to change someone else's password → 403."""
+        """A viewer trying to change someone else's password → 403."""
         from fastapi import HTTPException
         from app.v1.endpoints.update.password import update_password
         from app.models.password import PasswordUpdateRequest
@@ -286,7 +301,7 @@ class TestUpdatePasswordEndpointAuthorization:
         with pytest.raises(HTTPException) as exc_info:
             asyncio.run(
                 update_password(
-                    user_id=99,      # someone else's ID
+                    user_id=99,          # someone else's ID
                     payload=payload,
                     current_user=current_user,
                 )

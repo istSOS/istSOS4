@@ -21,7 +21,7 @@ class PasswordUpdateRequest(BaseModel):
     """Request body for a local-password update.
 
     Attributes:
-        current_password: The user's existing PostgreSQL password, used to
+        current_password: The user's existing local istSOS credential, used to
             verify identity before the update is applied.
         new_password: The desired new password. Must satisfy the strength
             rules enforced by ``validate_new_password``.
