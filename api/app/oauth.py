@@ -12,22 +12,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Authentication helpers for the istSOS FastAPI application.
+
+Architecture
+------------
+istSOS users are **application-level entities** stored in
+``sensorthings."User"``.  The backend connects to PostgreSQL via a single
+master service account (``ISTSOS_ADMIN``).  Individual users do NOT have
+their own PostgreSQL login roles.
+
+Consequently, all local credential verification is handled on the Python
+side using ``passlib`` (bcrypt), reading the ``password`` column from the
+``sensorthings."User"`` table.  There is no ``asyncpg.connect()``-as-user
+or ``pg_authid`` involvement in the login flow.
+
+OIDC users (``auth_provider IS NOT NULL``) have a NULL ``password`` column
+and are authenticated exclusively through their external identity provider.
+The ``/Login`` endpoint is only for local (non-OIDC) istSOS credentials.
+"""
+
 import logging
-from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
-import asyncpg
 import jwt
 from app import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     ALGORITHM,
-    POSTGRES_DB,
-    POSTGRES_HOST,
-    POSTGRES_PORT,
     REDIS,
     SECRET_KEY,
 )
 from app.db.asyncpg_db import get_pool
+from app.db.password_crud import pwd_context
 from app.db.redis_db import redis
 from app.rbac_roles import PENDING_ROLE
 from fastapi import Depends, HTTPException, status
@@ -39,6 +54,11 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="Login")
 
 
 async def get_user_from_db(username: str):
+    """Fetch the user dict from ``sensorthings."User"`` by username.
+
+    Returns a dict with ``{id, username, role, uri}`` or ``None`` if the
+    username does not exist.
+    """
     pool = await get_pool()
     async with pool.acquire() as connection:
         query = """
@@ -57,99 +77,56 @@ async def get_user_from_db(username: str):
     return None
 
 
-@asynccontextmanager
-async def get_auth_connection(username: str, password: str):
-    """
-    Context manager for authentication connections.
-
-    Ensures connection is properly closed even on errors.
-    Includes timeout protection and comprehensive error handling.
-    """
-    connection = None
-    try:
-        connection = await asyncpg.connect(
-            user=username,
-            password=password,
-            database=POSTGRES_DB,
-            host=POSTGRES_HOST,
-            port=POSTGRES_PORT,
-            timeout=5.0,  # Connection timeout
-            command_timeout=10.0,  # Command execution timeout
-        )
-        yield connection
-    except asyncpg.InvalidPasswordError:
-        # Invalid credentials - return None to signal auth failure
-        yield None
-    except asyncpg.TooManyConnectionsError:
-        logger.error("Database connection limit reached during authentication")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service temporarily unavailable - too many connections",
-        )
-    except (asyncpg.PostgresConnectionError, asyncpg.PostgresIOError) as e:
-        logger.error(f"Database connection error during authentication: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service temporarily unavailable",
-        )
-    except asyncpg.PostgresError as e:
-        logger.error(f"Database error during authentication: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service error",
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error during authentication: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service temporarily unavailable",
-        )
-    finally:
-        if connection is not None:
-            try:
-                await connection.close()
-            except Exception as e:
-                logger.error(f"Error closing authentication connection: {e}")
-
-
 async def authenticate_user(username: str, password: str):
-    """
-    Authenticate user using PostgreSQL's built-in authentication.
+    """Authenticate a local istSOS user against the application-level credential.
 
-    Uses a context manager to ensure connections are properly closed
-    and includes comprehensive error handling.
-    """
-    # Step 1: Verify credentials with PostgreSQL
-    async with get_auth_connection(username, password) as auth_conn:
-        if auth_conn is None:
-            # Invalid credentials
-            return None
+    Verification is performed entirely on the Python side using ``passlib``
+    (bcrypt).  The stored ``password`` column in ``sensorthings."User"``
+    holds the bcrypt hash set at registration time.
 
-    # Step 2: Get user role from User table (using connection pool)
+    Accounts with a NULL ``password`` column (OIDC users, or users created
+    before migration 002 was applied) cannot authenticate via this endpoint
+    and will receive ``None`` (→ HTTP 401 at the call site).
+
+    Args:
+        username: The login username.
+        password: The plaintext password supplied by the user.
+
+    Returns:
+        ``{"sub": username, "role": role}`` on success, or ``None`` on any
+        authentication failure (unknown user, NULL hash, wrong password).
+    """
     pool = await get_pool()
-    try:
-        async with pool.acquire() as connection:
-            query = 'SELECT role FROM sensorthings."User" WHERE username=$1'
-            row = await connection.fetchrow(query, username)
-
-            if not row:
-                # User authenticated with PostgreSQL but not in User table
-                # This indicates an inconsistent state
-                logger.warning(
-                    f"User '{username}' authenticated with PostgreSQL "
-                    "but not found in User table"
-                )
-                return None
-
-            return {"sub": username, "role": row["role"]}
-    except TypeError as e:
-        logger.error(
-            f"Unexpected pool acquire error during authentication: {e}"
+    async with pool.acquire() as connection:
+        row = await connection.fetchrow(
+            """
+            SELECT id, role, password
+            FROM sensorthings."User"
+            WHERE username = $1
+            """,
+            username,
         )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service temporarily unavailable",
+
+    if row is None:
+        # User not found — return None to produce a generic 401 at call site.
+        logger.debug("authenticate_user: username %r not found.", username)
+        return None
+
+    stored_hash = row["password"]
+    if stored_hash is None:
+        # OIDC user or pre-migration account — no local credential set.
+        logger.debug(
+            "authenticate_user: username %r has no local credential (NULL hash).",
+            username,
         )
+        return None
+
+    if not pwd_context.verify(password, stored_hash):
+        # Wrong password — return None; the call site emits HTTP 401.
+        logger.debug("authenticate_user: wrong password for username %r.", username)
+        return None
+
+    return {"sub": username, "role": row["role"]}
 
 
 def create_access_token(data: dict):
@@ -198,6 +175,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except InvalidTokenError:
         raise credentials_exception
 
+    # NOTE: role is intentionally fetched live from the DB on every request.
+    # This ensures role changes (via PATCH /Users/{id}/role) take effect
+    # immediately without requiring JWT rotation, eliminating stale JWT
+    # vulnerabilities.
     user = await get_user_from_db(username)
     if user is None:
         raise credentials_exception
