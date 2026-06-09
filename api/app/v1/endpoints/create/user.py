@@ -17,6 +17,7 @@ import logging
 
 from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.db.password_crud import pwd_context
 from app.oauth import get_current_user
 from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
 from app.utils.utils import pg_quote_ident, pg_quote_literal, validate_username
@@ -130,6 +131,18 @@ async def create_user(
                     RETURNING id, username, uri;
                 """
                 user = await connection.fetchrow(query, *payload.values())
+
+                # Store the bcrypt hash of the password in the application-
+                # level User table so that the /password update endpoint and
+                # future login flows can verify credentials without touching
+                # PostgreSQL's pg_authid catalog.
+                if password:
+                    hashed_pw = pwd_context.hash(password)
+                    await connection.execute(
+                        'UPDATE sensorthings."User" SET password = $1 WHERE id = $2',
+                        hashed_pw,
+                        user["id"],
+                    )
 
                 if not payload.get("uri"):
                     query = """

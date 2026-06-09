@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
     tags=["Users"],
     summary="Update a local user's password",
     description=(
-        "Change the PostgreSQL password for a local (non-OIDC) user. "
+        "Change the local istSOS credential for a non-OIDC user. "
         "External identities (auth_provider IS NOT NULL) are blocked with "
         "HTTP 400. Requires the caller to supply their current password for "
         "verification. Admins may update any user's password; regular users "
