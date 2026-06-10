@@ -21,10 +21,14 @@ Flow
 3. Validate the requested target role via ``validate_rbac_role``.
 4. Within a single transaction:
    a. UPDATE sensorthings."User".role  → target role.
-   b. CREATE ROLE <username> NOLOGIN IN ROLE <db_group_role>
-      (NOLOGIN because the user authenticates via OIDC, not pg password).
-   c. GRANT <username> TO <activating_admin>  (so admin can later administer).
-   d. Call the appropriate RLS policy function for the target role.
+   b. Apply the appropriate RLS policy function for the target role.
+
+Architecture note
+-----------------
+istSOS users are application-level entities; they do NOT have individual
+PostgreSQL login roles.  Activation is therefore a pure application-state
+mutation: an UPDATE on the role column plus an RLS policy call.  No
+``CREATE ROLE``, ``GRANT``, or other DDL is issued.
 """
 
 import logging
@@ -32,29 +36,18 @@ import logging
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.rbac_roles import PENDING_ROLE, get_db_role_for_rbac, validate_rbac_role
-from app.utils.utils import pg_quote_ident
+from app.rbac_roles import PENDING_ROLE, POLICY_FN_MAP, validate_rbac_role
 from asyncpg.exceptions import (
     InsufficientPrivilegeError,
     PostgresConnectionError,
     QueryCanceledError,
     TooManyConnectionsError,
-    UniqueViolationError,
 )
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 v1 = APIRouter()
 logger = logging.getLogger(__name__)
-
-# Maps each assignable RBAC role to the stored PostgreSQL RLS-policy function.
-# Must stay in sync with create/user.py's _POLICY_FN_MAP.
-_POLICY_FN_MAP = {
-    "viewer":      "sensorthings.viewer_policy",
-    "editor":      "sensorthings.editor_policy",
-    "obs_manager": "sensorthings.obs_manager_policy",
-    "sensor":      "sensorthings.sensor_policy",
-}
 
 ACTIVATE_PAYLOAD_EXAMPLE = {
     "role": "viewer",  # one of: viewer, editor, obs_manager, sensor, custom
@@ -68,8 +61,8 @@ ACTIVATE_PAYLOAD_EXAMPLE = {
     summary="Activate a pending OIDC user",
     description=(
         "Promote a user from the 'pending' waiting room to a fully active "
-        "role. Creates the user's PostgreSQL database role and applies Row-Level "
-        "Security policies. Only accessible by an administrator."
+        "role.  Applies Row-Level Security policies for the assigned role. "
+        "Only accessible by an administrator.  No PostgreSQL DDL is issued."
     ),
     status_code=status.HTTP_200_OK,
 )
@@ -132,7 +125,6 @@ async def activate_user(
                 )
 
             username = user_row["username"]
-            db_group_role = get_db_role_for_rbac(target_role)
 
             # ----------------------------------------------------------
             # 4. All mutations inside a single transaction so any
@@ -141,6 +133,7 @@ async def activate_user(
             async with conn.transaction():
 
                 # 4a. Promote the application-layer role in the User table.
+                #     Pure parameterised UPDATE — no DDL.
                 await conn.execute(
                     """
                     UPDATE sensorthings."User"
@@ -151,29 +144,12 @@ async def activate_user(
                     user_id,
                 )
 
-                # 4b. Create the PostgreSQL role (NOLOGIN because the user
-                #     authenticates via OIDC; no pg password is required).
-                #     pg_quote_ident protects against identifier injection.
-                await conn.execute(
-                    "CREATE ROLE {} NOLOGIN IN ROLE {};".format(
-                        pg_quote_ident(username),
-                        pg_quote_ident(db_group_role),
-                    )
-                )
-
-                # 4c. Grant the new role to the activating admin so the
-                #     admin can later administer it (matches create/user.py).
-                await conn.execute(
-                    "GRANT {} TO {};".format(
-                        pg_quote_ident(username),
-                        pg_quote_ident(current_user["username"]),
-                    )
-                )
-
-                # 4d. Apply the default RLS policy for the target role.
+                # 4b. Apply the default RLS policy for the target role.
                 #     'custom' has no default policy function; admin must
                 #     create one explicitly via POST /Policies.
-                policy_fn = _POLICY_FN_MAP.get(target_role)
+                #     POLICY_FN_MAP is the single source of truth — imported
+                #     from rbac_roles.py to stay in sync with create/user.py.
+                policy_fn = POLICY_FN_MAP.get(target_role)
                 if policy_fn:
                     policyname = f"{username}_default"
                     await conn.execute(
@@ -199,17 +175,6 @@ async def activate_user(
             },
         )
 
-    except UniqueViolationError:
-        # The CREATE ROLE failed because a PG role with this name already exists.
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={
-                "message": (
-                    f"A PostgreSQL role named '{username}' already exists. "
-                    "Manual cleanup may be required."
-                )
-            },
-        )
     except InsufficientPrivilegeError:
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
