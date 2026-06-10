@@ -26,6 +26,26 @@ DB_ROLE_BY_RBAC_ROLE = {
     "custom": "user",
 }
 
+# ---------------------------------------------------------------------------
+# Shared RLS policy function map.
+# Maps each assignable application role to the stored PostgreSQL policy
+# function that applies Row-Level Security rules for that role.
+#
+# 'administrator' and 'custom' are intentionally absent:
+#   - administrator bypasses RLS by database privilege, not by policy.
+#   - custom has no default policy; admins create one explicitly via
+#     POST /Policies after activation.
+#
+# This is the single source of truth — import it into any module that
+# needs to dispatch to a policy function (create/user.py, activate_user.py).
+# ---------------------------------------------------------------------------
+POLICY_FN_MAP = {
+    "viewer":      "sensorthings.viewer_policy",
+    "editor":      "sensorthings.editor_policy",
+    "obs_manager": "sensorthings.obs_manager_policy",
+    "sensor":      "sensorthings.sensor_policy",
+}
+
 
 def validate_rbac_role(role: str) -> str:
     """Validate that *role* is one of the assignable RBAC roles.
