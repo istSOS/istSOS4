@@ -15,28 +15,71 @@
 import json
 import re
 
-from app import ST_AGGREGATE
+from app import EPSG, ST_AGGREGATE
+from app.rbac_roles import DB_ROLE_BY_RBAC_ROLE
 from app.utils.utils import pg_quote_ident
 
 _PG_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
+# PostgreSQL group role for the 'administrator' application role.
+# Kept separate because 'administrator' is intentionally excluded from
+# DB_ROLE_BY_RBAC_ROLE (it is a bootstrap-only role, not API-assignable).
+_ADMIN_PG_ROLE = "administrator"
 
+<<<<<<< HEAD
 def validate_role_identifier(username: str) -> str:
     if not isinstance(username, str) or not _PG_IDENTIFIER_RE.match(username):
+=======
+
+def _validate_role_identifier(role_name: str) -> str:
+    """Validate that *role_name* is a safe PostgreSQL identifier.
+
+    asyncpg does not support $1 placeholders for SET ROLE identifiers —
+    PostgreSQL's SET ROLE only accepts a literal role name.  We therefore
+    validate the identifier before interpolating it into the query string.
+
+    Raises:
+        ValueError: if the role_name does not match a plain PG identifier.
+    """
+    if not isinstance(role_name, str) or not _PG_IDENTIFIER_RE.match(role_name):
+>>>>>>> b3e7ef1 (fix(rbac): kill split-brain DDL — SET LOCAL ROLE, bcrypt, pure UPDATE)
         raise ValueError("Invalid role identifier")
-    return username
+    return role_name
 
 
 async def set_role(connection, current_user):
-    """Switch the current session role to *current_user['username']*.
+    """Switch to the correct PostgreSQL group role for this request.
 
-    The username is validated against ``_PG_IDENTIFIER_RE`` before use.
-    Uses ``pg_quote_ident`` to safely quote the identifier for the query.
+    Maps the application-layer role (e.g. 'viewer', 'editor') to its
+    underlying PostgreSQL group role (e.g. 'user', 'sensor') using
+    ``DB_ROLE_BY_RBAC_ROLE``.
+
+    Uses ``SET LOCAL ROLE`` which is **transaction-scoped**: it auto-reverts
+    when the enclosing transaction commits or rolls back.  This eliminates
+    the need for ``RESET ROLE`` calls and prevents pool leaks if a request
+    is cancelled mid-stream.
+
+    Must be called **inside** an open ``connection.transaction()`` block.
     """
+<<<<<<< HEAD
     async with connection.transaction():
         username = validate_role_identifier(current_user["username"])
         query = f"SET ROLE {pg_quote_ident(username)};"
         await connection.execute(query)
+=======
+    app_role = current_user.get("role", current_user.get("username"))
+    pg_group_role = DB_ROLE_BY_RBAC_ROLE.get(app_role)
+    if pg_group_role is None:
+        # 'administrator' is not in DB_ROLE_BY_RBAC_ROLE — handle explicitly.
+        if app_role == _ADMIN_PG_ROLE:
+            pg_group_role = _ADMIN_PG_ROLE
+        else:
+            # Fallback: treat the value itself as the PG role name (e.g. 'guest').
+            pg_group_role = app_role
+
+    pg_group_role = _validate_role_identifier(pg_group_role)
+    await connection.execute(f"SET LOCAL ROLE {pg_quote_ident(pg_group_role)};")
+>>>>>>> b3e7ef1 (fix(rbac): kill split-brain DDL — SET LOCAL ROLE, bcrypt, pure UPDATE)
 
 
 async def insert_commit(connection, payload, action):
