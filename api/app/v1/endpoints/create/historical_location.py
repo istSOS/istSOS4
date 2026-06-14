@@ -79,7 +79,6 @@ async def create_historical_location(
             )
 
             if current_user is not None:
-                await connection.execute("RESET ROLE;")
 
     return Response(
         status_code=status.HTTP_201_CREATED,
@@ -133,7 +132,6 @@ async def create_historical_location_for_thing(
             )
 
             if current_user is not None:
-                await connection.execute("RESET ROLE;")
 
     return Response(
         status_code=status.HTTP_201_CREATED,
