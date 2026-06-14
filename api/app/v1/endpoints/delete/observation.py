@@ -96,13 +96,11 @@ async def delete_observation(
 
             if id_deleted is None:
                 if current_user is not None:
-                    await connection.execute("RESET ROLE;")
                 return error_response(
                     status.HTTP_404_NOT_FOUND,
                     f"Observation with id {observation_id} not found",
                 )
 
             if current_user is not None:
-                await connection.execute("RESET ROLE;")
 
     return Response(status_code=status.HTTP_200_OK)

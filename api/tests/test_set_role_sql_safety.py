@@ -1,7 +1,6 @@
 import asyncio
 import os
 import sys
-from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -29,23 +28,61 @@ class DummyConnection:
     def __init__(self):
         self.execute = AsyncMock()
 
-    @asynccontextmanager
-    async def transaction(self):
-        yield
 
-
-def test_set_role_quotes_valid_identifier():
+def test_set_role_maps_viewer_to_user_group_role():
+    """Viewer app role → SET LOCAL ROLE "user"."""
     conn = DummyConnection()
-    current_user = {"username": "test_user"}
+    current_user = {"username": "alice", "role": "viewer"}
 
     asyncio.run(set_role(conn, current_user))
 
-    conn.execute.assert_awaited_once_with('SET ROLE "test_user";')
+    conn.execute.assert_awaited_once_with('SET LOCAL ROLE "user";')
+
+
+def test_set_role_maps_editor_to_user_group_role():
+    """Editor app role → SET LOCAL ROLE "user" (same PG group as viewer)."""
+    conn = DummyConnection()
+    current_user = {"username": "bob", "role": "editor"}
+
+    asyncio.run(set_role(conn, current_user))
+
+    conn.execute.assert_awaited_once_with('SET LOCAL ROLE "user";')
+
+
+def test_set_role_maps_sensor_to_sensor_group_role():
+    """Sensor app role → SET LOCAL ROLE "sensor"."""
+    conn = DummyConnection()
+    current_user = {"username": "sensor01", "role": "sensor"}
+
+    asyncio.run(set_role(conn, current_user))
+
+    conn.execute.assert_awaited_once_with('SET LOCAL ROLE "sensor";')
+
+
+def test_set_role_maps_administrator_to_administrator_group_role():
+    """Administrator app role → SET LOCAL ROLE "administrator"."""
+    conn = DummyConnection()
+    current_user = {"username": "admin", "role": "administrator"}
+
+    asyncio.run(set_role(conn, current_user))
+
+    conn.execute.assert_awaited_once_with('SET LOCAL ROLE "administrator";')
+
+
+def test_set_role_maps_guest_fallback():
+    """Unknown role (e.g. 'guest') falls through to using the name as-is."""
+    conn = DummyConnection()
+    current_user = {"username": "anon", "role": "guest"}
+
+    asyncio.run(set_role(conn, current_user))
+
+    conn.execute.assert_awaited_once_with('SET LOCAL ROLE "guest";')
 
 
 def test_set_role_rejects_invalid_identifier():
+    """SQL injection attempt via role → ValueError."""
     conn = DummyConnection()
-    current_user = {"username": 'bad"name'}
+    current_user = {"username": "admin", "role": 'bad"name'}
 
     with pytest.raises(ValueError, match="Invalid role identifier"):
         asyncio.run(set_role(conn, current_user))
