@@ -16,45 +16,31 @@
 
 Design decisions
 ----------------
-* All mutations (UPDATE + optional REVOKE/GRANT) run inside a single
-  asyncpg transaction. If the DDL step fails the User.role column reverts
-  atomically — the two can never diverge.
+* All mutations run inside a single asyncpg transaction so a failure
+  reverts atomically.
 
 * The SELECT uses FOR UPDATE to serialize concurrent re-assignments of
   the same user row and to make the last-admin count safe under load.
 
-* REVOKE/GRANT use pg_quote_ident for SQL-injection safety. asyncpg $N
-  placeholders are not supported in DDL statements.
-
-* viewer and editor both map to the 'user' PG group role; obs_manager and
-  sensor both map to 'sensor'. When the underlying PG role is unchanged
-  (e.g. viewer → editor) only the application-layer User.role column is
-  updated — no DDL is issued.
-
-* 'administrator' has no entry in DB_ROLE_BY_RBAC_ROLE because it is a
-  bootstrap-only role. get_db_role_for_rbac() therefore cannot be called
-  with 'administrator'. The demotion path uses a raw REVOKE of the
-  'administrator' PG role directly.
+* Role reassignment is a pure UPDATE on sensorthings."User".role.
+  No PostgreSQL DDL (REVOKE/GRANT) is issued — users are application-layer
+  entities and do not have individual PostgreSQL login roles.  The
+  set_role() function in functions.py maps app roles to PG group roles
+  dynamically at request time.
 """
 
 import logging
 
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.rbac_roles import PENDING_ROLE, DB_ROLE_BY_RBAC_ROLE, get_db_role_for_rbac
-from app.utils.utils import pg_quote_ident
+from app.rbac_roles import PENDING_ROLE
 from fastapi import HTTPException, status
 
 logger = logging.getLogger(__name__)
 
-# The PostgreSQL group role that backs the 'administrator' application role.
-# Kept here rather than in rbac_roles.py because administrator is intentionally
-# excluded from the public-facing VALID_RBAC_ROLES mapping.
-_ADMIN_PG_ROLE = "administrator"
-
 
 async def update_user_role(user_id: int, new_role: str) -> None:
-    """Atomically update a user's application role and PostgreSQL group membership.
+    """Atomically update a user's application role.
 
     Execution order (all within a single transaction):
         1. SELECT … FOR UPDATE — fetch user row; 404 if missing.
@@ -62,9 +48,6 @@ async def update_user_role(user_id: int, new_role: str) -> None:
         3. Guard: no-op if current_role == new_role (return early).
         4. Guard: last-admin lockout — 409 if demoting the only admin.
         5. UPDATE sensorthings."User" SET role = new_role WHERE id = user_id.
-        6. If the underlying PostgreSQL group role changes:
-               REVOKE <old_pg_role> FROM <username>
-               GRANT  <new_pg_role> TO  <username>
 
     Args:
         user_id:  Primary key of the target User row.
@@ -134,7 +117,7 @@ async def update_user_role(user_id: int, new_role: str) -> None:
             # 4. Last-administrator lockout guard.
             #    Only fires when the user being reassigned is currently an admin.
             # ------------------------------------------------------------------
-            if current_role == _ADMIN_PG_ROLE:
+            if current_role == "administrator":
                 admin_count = await conn.fetchval(
                     """
                     SELECT COUNT(*)
@@ -164,45 +147,8 @@ async def update_user_role(user_id: int, new_role: str) -> None:
                 user_id,
             )
 
-            # ------------------------------------------------------------------
-            # 6. Update PostgreSQL group role membership if it has changed.
-            #    administrator is handled separately since it is not in
-            #    DB_ROLE_BY_RBAC_ROLE.
-            # ------------------------------------------------------------------
-            if current_role == _ADMIN_PG_ROLE:
-                # Demoting an admin: revoke the administrator PG role and
-                # grant the new target PG group role.
-                old_pg_role = _ADMIN_PG_ROLE
-                new_pg_role = get_db_role_for_rbac(new_role)
-            else:
-                old_pg_role = DB_ROLE_BY_RBAC_ROLE.get(current_role)
-                new_pg_role = get_db_role_for_rbac(new_role)
-
-            if old_pg_role and old_pg_role != new_pg_role:
-                await conn.execute(
-                    "REVOKE {} FROM {};".format(
-                        pg_quote_ident(old_pg_role),
-                        pg_quote_ident(username),
-                    )
-                )
-                await conn.execute(
-                    "GRANT {} TO {};".format(
-                        pg_quote_ident(new_pg_role),
-                        pg_quote_ident(username),
-                    )
-                )
-                logger.info(
-                    "PG role for user %r (id=%d): REVOKE %r, GRANT %r.",
-                    username, user_id, old_pg_role, new_pg_role,
-                )
-            else:
-                logger.info(
-                    "User %r (id=%d): app role %r → %r "
-                    "(same underlying PG role '%s', no DDL issued).",
-                    username, user_id, current_role, new_role, new_pg_role,
-                )
-
     logger.info(
         "Role for user %r (id=%d) updated: %r → %r.",
         username, user_id, current_role, new_role,
     )
+

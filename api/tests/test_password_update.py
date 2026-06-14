@@ -63,13 +63,14 @@ os.environ.setdefault("ALGORITHM", "HS256")
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_row(auth_provider=None, username="alice", user_id=42):
+def _make_row(auth_provider=None, username="alice", user_id=42, password="$2b$12$fakehash"):
     """Build a minimal asyncpg-like Record stub."""
     row = MagicMock()
     row.__getitem__ = lambda self, key: {
         "id": user_id,
         "username": username,
         "auth_provider": auth_provider,
+        "password": password,
     }[key]
     return row
 
@@ -187,11 +188,10 @@ class TestUpdateLocalPasswordCRUD:
     # 2c. Wrong current password → 401
     # -----------------------------------------------------------------------
     def test_wrong_current_password_raises_401(self):
-        import asyncpg
         from fastapi import HTTPException
         from app.db import password_crud
 
-        local_row = _make_row(auth_provider=None, username="alice")
+        local_row = _make_row(auth_provider=None, username="alice", password="$2b$12$fakehash")
 
         async def _fake_get_pool():
             pool = MagicMock()
@@ -201,11 +201,8 @@ class TestUpdateLocalPasswordCRUD:
             pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
             return pool
 
-        async def _bad_connect(**kwargs):
-            raise asyncpg.InvalidPasswordError("bad password")
-
         with patch.object(password_crud, "get_pool", _fake_get_pool), \
-             patch("asyncpg.connect", _bad_connect):
+             patch.object(password_crud.pwd_context, "verify", return_value=False):
             with pytest.raises(HTTPException) as exc_info:
                 self._run(
                     password_crud.update_local_password(
@@ -218,33 +215,32 @@ class TestUpdateLocalPasswordCRUD:
         assert "incorrect" in exc_info.value.detail.lower()
 
     # -----------------------------------------------------------------------
-    # 2d. Happy path: ALTER USER DDL is executed
+    # 2d. Happy path: UPDATE with bcrypt hash is executed
     # -----------------------------------------------------------------------
-    def test_success_executes_alter_user(self):
+    def test_success_executes_update_with_hash(self):
         from app.db import password_crud
 
-        local_row = _make_row(auth_provider=None, username="alice")
-        executed_queries: list[str] = []
+        local_row = _make_row(auth_provider=None, username="alice", password="$2b$12$fakehash")
+        executed_queries: list = []
 
         async def _fake_get_pool():
             pool = MagicMock()
             conn = AsyncMock()
             conn.fetchrow = AsyncMock(return_value=local_row)
 
-            async def _execute(query):
-                executed_queries.append(query)
+            async def _execute(query, *args):
+                executed_queries.append((query, args))
 
             conn.execute = _execute
             pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
             pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
             return pool
 
-        async def _good_connect(**kwargs):
-            mock_conn = AsyncMock()
-            return mock_conn
-
         with patch.object(password_crud, "get_pool", _fake_get_pool), \
-             patch("asyncpg.connect", _good_connect):
+             patch.object(password_crud, "get_pool_w", _fake_get_pool), \
+             patch.object(password_crud.pwd_context, "verify", return_value=True), \
+             patch.object(password_crud.pwd_context, "hash", return_value="$2b$12$newhash"), \
+             patch("app.POSTGRES_PORT_WRITE", None):
             self._run(
                 password_crud.update_local_password(
                     user_id=42,
@@ -253,12 +249,15 @@ class TestUpdateLocalPasswordCRUD:
                 )
             )
 
-        assert any("ALTER USER" in q for q in executed_queries), (
-            "Expected ALTER USER DDL to be executed"
+        # Must contain an UPDATE on User.password with the bcrypt hash as param
+        assert any("UPDATE" in q[0] and "password" in q[0] for q in executed_queries), (
+            "Expected UPDATE on User.password"
         )
-        assert any('"alice"' in q for q in executed_queries), (
-            "Username should be quoted with pg_quote_ident"
-        )
+        assert any(
+            len(q[1]) >= 1 and q[1][0] == "$2b$12$newhash"
+            for q in executed_queries
+            if "UPDATE" in q[0]
+        ), "Expected bcrypt hash as parameterised argument"
 
 
 # ===========================================================================
