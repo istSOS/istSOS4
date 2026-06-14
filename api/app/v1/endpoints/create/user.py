@@ -146,8 +146,6 @@ async def create_user(
                     }
                     await insert_commit(connection, commit, "CREATE")
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
                 # Auto-create the default RLS policy for the new user.
                 # POLICY_FN_MAP imported from rbac_roles.py — single source

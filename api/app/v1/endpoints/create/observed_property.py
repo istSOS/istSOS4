@@ -92,8 +92,6 @@ async def create_observed_property(
                     connection, payload, commit_id
                 )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"location": header},

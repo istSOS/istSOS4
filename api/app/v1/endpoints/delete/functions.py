@@ -24,12 +24,10 @@ async def set_commit(
 
     if current_user and current_user["role"] == "sensor":
         if commit_message:
-            await connection.execute("RESET ROLE;")
             raise Exception("Sensor cannot provide commit message")
         return
 
     if not commit_message:
-        await connection.execute("RESET ROLE;")
         raise Exception("No commit message provided")
 
     commit = {

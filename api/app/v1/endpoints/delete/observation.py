@@ -93,8 +93,6 @@ async def delete_observation(
                     )
 
                 if id_deleted is None:
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
                     return JSONResponse(
                         status_code=status.HTTP_404_NOT_FOUND,
                         content={
@@ -104,8 +102,6 @@ async def delete_observation(
                         },
                     )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
     except InsufficientPrivilegeError:

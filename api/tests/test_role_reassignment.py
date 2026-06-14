@@ -204,10 +204,12 @@ class TestUpdateUserRoleCRUD:
         assert "last administrator" in exc.value.detail.lower()
 
     # -----------------------------------------------------------------------
-    # 2e. Different underlying PG role → REVOKE + GRANT triggered
-    #     (viewer → obs_manager: 'user' → 'sensor')
+    # 2e. Different underlying PG group → still UPDATE only, no DDL.
+    #     (viewer → obs_manager: 'user' → 'sensor', but no REVOKE/GRANT)
+    #     Under the app-layer credential model, set_role() handles the
+    #     PG group role mapping at request time — no DDL is needed.
     # -----------------------------------------------------------------------
-    def test_different_pg_role_triggers_revoke_grant(self):
+    def test_different_pg_group_still_no_ddl(self):
         from app.db import role_crud
 
         pool, conn = _make_pool(fetchrow_result=_make_user_row(role="viewer"))
@@ -224,17 +226,16 @@ class TestUpdateUserRoleCRUD:
 
         # UPDATE must have been called
         assert any("UPDATE" in q for q in executed), "Expected UPDATE statement"
-        # REVOKE the old PG group role 'user'
-        assert any("REVOKE" in q and '"user"' in q for q in executed), (
-            "Expected REVOKE of 'user' group role"
+        # No REVOKE or GRANT — we no longer issue DDL for role changes
+        assert not any("REVOKE" in q for q in executed), (
+            "REVOKE should NOT be issued — users are app-layer entities"
         )
-        # GRANT the new PG group role 'sensor'
-        assert any("GRANT" in q and '"sensor"' in q for q in executed), (
-            "Expected GRANT of 'sensor' group role"
+        assert not any("GRANT" in q for q in executed), (
+            "GRANT should NOT be issued — users are app-layer entities"
         )
 
     # -----------------------------------------------------------------------
-    # 2f. Same underlying PG role → UPDATE only, no REVOKE/GRANT
+    # 2f. Same underlying PG role → UPDATE only, no DDL
     #     (viewer → editor: both map to 'user')
     # -----------------------------------------------------------------------
     def test_same_pg_role_no_ddl(self):

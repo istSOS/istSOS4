@@ -94,8 +94,6 @@ async def create_feature_of_interest(
                     connection, payload, commit_id=commit_id
                 )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"location": header},
