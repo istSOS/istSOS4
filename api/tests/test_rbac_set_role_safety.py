@@ -23,44 +23,37 @@ import app.v1.endpoints.create.data_array_observation as dao
 from app.v1.endpoints.functions import set_role
 
 
-class _Tx:
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        return False
-
-
 class _Conn:
     def __init__(self):
         self.executed = []
-
-    def transaction(self):
-        return _Tx()
 
     async def execute(self, query):
         self.executed.append(query)
 
 
 @pytest.mark.parametrize(
-    "username, expected_query",
+    "app_role, expected_query",
     [
-        ("alice", 'SET ROLE "alice";'),
-        ("user_1", 'SET ROLE "user_1";'),
+        ("viewer", 'SET LOCAL ROLE "user";'),
+        ("editor", 'SET LOCAL ROLE "user";'),
+        ("obs_manager", 'SET LOCAL ROLE "sensor";'),
+        ("sensor", 'SET LOCAL ROLE "sensor";'),
+        ("administrator", 'SET LOCAL ROLE "administrator";'),
     ],
 )
-def test_set_role_allows_safe_identifiers(username, expected_query):
+def test_set_role_maps_app_role_to_pg_group_role(app_role, expected_query):
+    """set_role() maps each application role to the correct PG group role."""
     conn = _Conn()
 
     async def _run():
-        await set_role(conn, {"username": username})
+        await set_role(conn, {"username": "test_user", "role": app_role})
 
     asyncio.run(_run())
     assert conn.executed == [expected_query]
 
 
 @pytest.mark.parametrize(
-    "username",
+    "role",
     [
         'attacker"; RESET ROLE; --',
         "bad-user",
@@ -69,11 +62,12 @@ def test_set_role_allows_safe_identifiers(username, expected_query):
         "",
     ],
 )
-def test_set_role_rejects_unsafe_identifiers(username):
+def test_set_role_rejects_unsafe_identifiers(role):
+    """Roles that fail identifier validation raise ValueError."""
     conn = _Conn()
 
     async def _run():
-        await set_role(conn, {"username": username})
+        await set_role(conn, {"username": "test_user", "role": role})
 
     with pytest.raises(ValueError, match="Invalid role identifier"):
         asyncio.run(_run())

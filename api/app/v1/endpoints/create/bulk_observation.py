@@ -133,7 +133,6 @@ async def bulk_observations(
                 )
 
             if current_user is not None:
-                await conn.execute("RESET ROLE;")
     return Response(status_code=status.HTTP_201_CREATED)
 
 
