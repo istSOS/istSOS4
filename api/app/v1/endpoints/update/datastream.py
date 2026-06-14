@@ -102,8 +102,6 @@ async def update_datastream(
                 if not await check_id_exists(
                     connection, "Datastream", datastream_id
                 ):
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
 
                     return error_response(
                         status.HTTP_404_NOT_FOUND, "Datastream not found."
@@ -116,8 +114,6 @@ async def update_datastream(
                 )
 
                 if not payload:
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
                     return Response(status_code=status.HTTP_200_OK)
 
                 validate_payload_keys(payload, ALLOWED_KEYS)
@@ -136,8 +132,6 @@ async def update_datastream(
                     payload,
                 )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
     except InsufficientPrivilegeError:
