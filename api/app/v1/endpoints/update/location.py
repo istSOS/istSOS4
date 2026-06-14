@@ -84,6 +84,7 @@ async def update_location(
                 if not await check_id_exists(
                     connection, "Location", location_id
                 ):
+                    if current_user is not None:
                     return error_response(status.HTTP_404_NOT_FOUND, "Location not found.")
 
                 # req/create-update-delete/update-entity-jsonpatch: resolve an

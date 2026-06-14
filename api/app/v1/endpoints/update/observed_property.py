@@ -86,6 +86,7 @@ async def update_observed_property(
                 if not await check_id_exists(
                     connection, "ObservedProperty", observed_property_id
                 ):
+                    if current_user is not None:
                     return error_response(status.HTTP_404_NOT_FOUND, "Observed Property ID not found.")
 
                 # req/create-update-delete/update-entity-jsonpatch: resolve an
