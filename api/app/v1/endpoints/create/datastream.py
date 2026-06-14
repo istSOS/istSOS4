@@ -108,7 +108,6 @@ async def create_datastream(
             )
 
             if current_user is not None:
-                await connection.execute("RESET ROLE;")
     return Response(
         status_code=status.HTTP_201_CREATED,
         headers={"location": header},
@@ -170,7 +169,6 @@ async def create_datastream_for_thing(
             )
 
             if current_user is not None:
-                await connection.execute("RESET ROLE;")
     return Response(
         status_code=status.HTTP_201_CREATED,
         headers={"location": header},
@@ -235,7 +233,6 @@ async def create_datastream_for_sensor(
             )
 
             if current_user is not None:
-                await connection.execute("RESET ROLE;")
     return Response(
         status_code=status.HTTP_201_CREATED,
         headers={"location": header},
@@ -313,7 +310,6 @@ if NETWORK:
                 )
 
                 if current_user is not None:
-                    await connection.execute("RESET ROLE;")
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"location": header},
@@ -378,7 +374,6 @@ async def create_datastream_for_observed_property(
             )
 
             if current_user is not None:
-                await connection.execute("RESET ROLE;")
     return Response(
         status_code=status.HTTP_201_CREATED,
         headers={"location": header},

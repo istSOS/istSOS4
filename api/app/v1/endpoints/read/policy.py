@@ -107,8 +107,6 @@ async def get_policies(
                     ujson.loads(record["policies"]) for record in policies
                 ]
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
         return JSONResponse(
             status_code=status.HTTP_200_OK, content={"value": policies}
