@@ -97,6 +97,7 @@ async def delete_observation(
                     )
 
                 if id_deleted is None:
+                    if current_user is not None:
                     return error_response(status.HTTP_404_NOT_FOUND, f"Observation with id {observation_id} not found")
 
 

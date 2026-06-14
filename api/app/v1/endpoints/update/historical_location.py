@@ -76,6 +76,7 @@ async def update_historical_location(
                 if not await check_id_exists(
                     connection, "HistoricalLocation", historical_location_id
                 ):
+                    if current_user is not None:
                     return error_response(status.HTTP_404_NOT_FOUND, "Historical Location not found.")
 
                 # req/create-update-delete/update-entity-jsonpatch: resolve an
