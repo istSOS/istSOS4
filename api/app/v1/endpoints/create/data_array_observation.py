@@ -17,12 +17,16 @@ from datetime import datetime
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.rbac_roles import check_create_permission
+from app.v1.endpoints.functions import set_role
 from app.utils.utils import (
     build_self_link,
     check_iot_id_in_payload,
     check_missing_properties,
     handle_datetime_fields,
     handle_result_field,
+    build_self_link,
+    extract_iot_id,
 )
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
@@ -99,6 +103,18 @@ async def data_array_observation(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
+    if current_user is not None:
+        user_role = current_user.get("role", "")
+        if not check_create_permission(user_role):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "code": 403,
+                    "type": "error",
+                    "message": "Insufficient privileges.",
+                },
+            )
+
     try:
         response_urls = []
 

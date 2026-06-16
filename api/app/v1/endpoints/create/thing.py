@@ -14,11 +14,8 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import (
-    require_json_content_type,
-    validate_payload_keys,
-    validate_required_keys,
-)
+from app.rbac_roles import check_create_permission
+from app.utils.utils import validate_payload_keys, validate_required_keys, require_json_content_type
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
@@ -71,6 +68,18 @@ async def create_thing(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
+    if current_user is not None:
+        user_role = current_user.get("role", "")
+        if not check_create_permission(user_role):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "code": 403,
+                    "type": "error",
+                    "message": "Insufficient privileges.",
+                },
+            )
+
     try:
         require_json_content_type(request)
 
@@ -134,6 +143,18 @@ async def create_thing_for_location(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
+    if current_user is not None:
+        user_role = current_user.get("role", "")
+        if not check_create_permission(user_role):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "code": 403,
+                    "type": "error",
+                    "message": "Insufficient privileges.",
+                },
+            )
+
     try:
         require_json_content_type(request)
 

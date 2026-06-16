@@ -14,7 +14,8 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
-from app.utils.utils import require_json_content_type, validate_payload_keys
+from app.rbac_roles import check_create_permission
+from app.utils.utils import validate_payload_keys, require_json_content_type
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UniqueViolationError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
@@ -70,6 +71,18 @@ async def create_observation(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
+    if current_user is not None:
+        user_role = current_user.get("role", "")
+        if not check_create_permission(user_role):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "code": 403,
+                    "type": "error",
+                    "message": "Insufficient privileges.",
+                },
+            )
+
     try:
         require_json_content_type(request)
 
@@ -149,12 +162,24 @@ async def create_observation_for_datastream(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
+    if current_user is not None:
+        user_role = current_user.get("role", "")
+        if not check_create_permission(user_role):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "code": 403,
+                    "type": "error",
+                    "message": "Insufficient privileges.",
+                },
+            )
+
     try:
         require_json_content_type(request)
 
         if not datastream_id:
             raise Exception("Datastream ID not provided")
-
+ 
         validate_payload_keys(payload, ALLOWED_KEYS)
 
         async with pool.acquire() as connection:
@@ -211,7 +236,7 @@ async def create_observation_for_datastream(
 
 
 @v1.api_route(
-    "/FeaturesOfInterest({feature_of_interest_id})/Observations",
+    "/FeaturesOfInterest({foi_id})/Observations",
     methods=["POST"],
     tags=["Observations"],
     summary="Create a new Observation for a FeatureOfInterest",
@@ -220,16 +245,28 @@ async def create_observation_for_datastream(
 )
 async def create_observation_for_feature_of_interest(
     request: Request,
-    feature_of_interest_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    foi_id: int,
+    payload: dict = Body(examples={"default": {"value": PAYLOAD_EXAMPLE}}),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
+    if current_user is not None:
+        user_role = current_user.get("role", "")
+        if not check_create_permission(user_role):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "code": 403,
+                    "type": "error",
+                    "message": "Insufficient privileges.",
+                },
+            )
+
     try:
         require_json_content_type(request)
 
-        if not feature_of_interest_id:
+        if not foi_id:
             raise Exception("FeatureOfInterest ID not provided")
 
         validate_payload_keys(payload, ALLOWED_KEYS)
@@ -248,7 +285,7 @@ async def create_observation_for_feature_of_interest(
                 _, header = await insert_observation_entity(
                     connection,
                     payload,
-                    feature_of_interest_id=feature_of_interest_id,
+                    feature_of_interest_id=foi_id,
                     commit_id=commit_id,
                 )
 

@@ -6,12 +6,13 @@ VALID_RBAC_ROLES = {
     "custom",
 }
 
+DENIED_CREATOR_ROLES = {"viewer"}
+
 DB_ROLE_BY_RBAC_ROLE = {
     "viewer": "user",
     "editor": "user",
     "obs_manager": "sensor",
     "sensor": "sensor",
-    # Custom policies still require baseline schema/table permissions.
     "custom": "user",
 }
 
@@ -28,3 +29,9 @@ def validate_rbac_role(role: str) -> str:
 
 def get_db_role_for_rbac(role: str) -> str:
     return DB_ROLE_BY_RBAC_ROLE[validate_rbac_role(role)]
+
+
+def check_create_permission(role) -> bool:
+    if role is None:
+        return True
+    return role.lower() not in DENIED_CREATOR_ROLES
