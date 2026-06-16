@@ -676,6 +676,54 @@ class TestAuth:
                     (["guest"], "nonexistent_policy_xyz"),
                 )
 
+    def test_add_users_to_policy_deduplicates_duplicate_users(self, schema):
+        """
+        add_users_to_policy must remove duplicate usernames when the same user
+        is added multiple times (either across calls or within the same call).
+        """
+        pname = "test-dedup-pol"
+        with schema.cursor() as cur:
+            # Create initial policy with alice, bob
+            cur.execute(
+                "SELECT sensorthings.viewer_policy(%s::text[], %s)",
+                (["alice", "bob"], pname),
+            )
+
+            # Verify initial state: each policy should have exactly alice, bob
+            cur.execute(
+                """
+                SELECT roles FROM pg_policies
+                WHERE schemaname = 'sensorthings'
+                  AND policyname LIKE %s
+                ORDER BY tablename
+                """,
+                (f"{pname}%",),
+            )
+            initial_roles = [row[0] for row in cur.fetchall()]
+            assert all(set(r) == {"alice", "bob"} for r in initial_roles)
+
+            # Add duplicates: alice and bob already present, add bob again + charlie
+            cur.execute(
+                "SELECT sensorthings.add_users_to_policy(%s::text[], %s)",
+                (["alice", "bob", "charlie"], pname),
+            )
+
+            # Verify deduplication: final set should be {alice, bob, charlie}
+            cur.execute(
+                """
+                SELECT roles FROM pg_policies
+                WHERE schemaname = 'sensorthings'
+                  AND policyname LIKE %s
+                ORDER BY tablename
+                """,
+                (f"{pname}%",),
+            )
+            final_roles = [row[0] for row in cur.fetchall()]
+            for roles in final_roles:
+                assert sorted(roles) == ["alice", "bob", "charlie"], (
+                    f"Expected deduped ['alice','bob','charlie'], got {roles}"
+                )
+
     # ------------------------------------------------------------------
     # 10. Btree indexes on commit_id
     # ------------------------------------------------------------------
