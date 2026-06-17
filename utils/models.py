@@ -19,11 +19,27 @@ import json
 import requests
 
 
+def safe_header_value(value):
+    return (
+        str(value)
+        .replace("’", "'")
+        .replace("‘", "'")
+        .replace("“", '"')
+        .replace("”", '"')
+        .replace("–", "-")
+        .replace("—", "-")
+    )
+
+
+def escape_odata_string(value):
+    return str(value).replace("'", "''")
+
+
 class Thing:
     def __init__(self, name, description, properties=None, location_id=None):
         self.name = name
         self.description = description
-        self.properties = properties if properties is not None else {}
+        self.properties = properties
         self.location_id = location_id
 
     def to_dict(self):
@@ -104,18 +120,20 @@ class Datastream:
         self.observed_property_id = observed_property_id
 
     def to_dict(self):
-        return {
+        data = {
             "name": self.name,
             "description": self.description,
             "observationType": self.observationType,
             "unitOfMeasurement": self.unitOfMeasurement,
             "properties": self.properties,
-            "phenomenonTime": self.phenomenon_time,
             "Network": {"@iot.id": self.network_id},
             "Thing": {"@iot.id": self.thing_id},
             "Sensor": {"@iot.id": self.sensor_id},
             "ObservedProperty": {"@iot.id": self.observed_property_id},
+            "phenomenonTime": self.phenomenon_time,
         }
+
+        return data
 
     def create(self, server_url, token):
         # check if already exists
@@ -235,7 +253,8 @@ class ObservedProperty:
 
     def create(self, server_url, token):
         # check if already exists
-        url = f"{server_url}/ObservedProperties?$filter=name eq '{self.name}'"
+        safe_name = escape_odata_string(self.name)
+        url = f"{server_url}/ObservedProperties?$filter=name eq '{safe_name}'"
         response = requests.get(
             url, headers={"Authorization": f"Bearer {token}"}
         )
@@ -250,7 +269,9 @@ class ObservedProperty:
         headers = {
             "Content-type": "application/json",
             "Authorization": f"Bearer {token}",
-            "Commit-message": f"Create {self.name} observed property",
+            "Commit-message": safe_header_value(
+                f"Create {self.name} observed property"
+            ),
         }
         # Converti la ObservedProperty in JSON
         data = json.dumps(self.to_dict())
@@ -259,7 +280,8 @@ class ObservedProperty:
 
         if response.status_code == 201:
             print(f"ObservedProperty {self.name} creata con successo!")
-            url = f"{server_url}/ObservedProperties?$filter=name eq '{self.name}'"
+            safe_name = escape_odata_string(self.name)
+            url = f"{server_url}/ObservedProperties?$filter=name eq '{safe_name}'"
             response = requests.get(
                 url, headers={"Authorization": f"Bearer {token}"}
             )
