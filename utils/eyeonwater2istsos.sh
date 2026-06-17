@@ -2,16 +2,34 @@
 
 set -euo pipefail
 
-FILE="${FILE:-${1:-}}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+ENV_FILE="${ISTSOS4_UTILS_ENV_FILE:-${ROOT_DIR}/utils/.env}"
 
-if [ -z "$FILE" ]; then
-  echo "Usage: FILE=/absolute/path/to/file.json utils/eyeonwater2istsos.sh [--thing-id ID] [--network-name NAME]" >&2
-  echo "   or: utils/eyeonwater2istsos.sh /absolute/path/to/file.json [--thing-id ID] [--network-name NAME]" >&2
+if [ ! -f "$ENV_FILE" ] && [ -f "${ROOT_DIR}/.env" ]; then
+  ENV_FILE="${ROOT_DIR}/.env"
+fi
+
+if [ ! -f "$ENV_FILE" ]; then
+  echo "Env file not found: $ENV_FILE" >&2
   exit 1
 fi
 
-if [ "${FILE:-}" = "${1:-}" ]; then
+set -a
+. "$ENV_FILE"
+set +a
+
+if [ -n "${1:-}" ] && [[ "$1" != -* ]]; then
+  FILE="$1"
   shift
+else
+  FILE="${EYEONWATER_JSON_PATH:-${FILE:-}}"
+fi
+
+if [ -z "$FILE" ]; then
+  echo "Usage: EYEONWATER_JSON_PATH=/absolute/path/to/file.json utils/eyeonwater2istsos.sh [--thing-id ID] [--network-name NAME]" >&2
+  echo "   or: FILE=/absolute/path/to/file.json utils/eyeonwater2istsos.sh [--thing-id ID] [--network-name NAME]" >&2
+  echo "   or: utils/eyeonwater2istsos.sh /absolute/path/to/file.json [--thing-id ID] [--network-name NAME]" >&2
+  exit 1
 fi
 
 if [ ! -f "$FILE" ]; then
@@ -19,20 +37,17 @@ if [ ! -f "$FILE" ]; then
   exit 1
 fi
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 FILE_DIR="$(cd "$(dirname "$FILE")" && pwd -P)"
 FILE_NAME="$(basename "$FILE")"
 FILE="${FILE_DIR}/${FILE_NAME}"
+IMAGE="${ISTSOS4_UTILS_IMAGE:-istsos4-utils}"
+DOCKER="${DOCKER:-/usr/bin/docker}"
 
-docker run --rm \
+"${DOCKER}" run --rm \
   --network host \
-  --env-file "${ROOT_DIR}/.env" \
+  --env-file "$ENV_FILE" \
   -v "${FILE}:${FILE}:ro" \
-  -v "${ROOT_DIR}/utils/models.py:/app/models.py:ro" \
-  -v "${ROOT_DIR}/utils/xlsx2istsos.py:/app/xlsx2istsos.py:ro" \
-  -v "${ROOT_DIR}/utils/eyeonwater2istsos.py:/app/eyeonwater2istsos.py:ro" \
-  --entrypoint python \
-  xlsx2istsos \
+  "${IMAGE}" \
   /app/eyeonwater2istsos.py \
   "$FILE" \
   "$@"

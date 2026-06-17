@@ -3,7 +3,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
-
+from datetime import datetime
+from typing import Iterable
 import requests
 
 from xlsx2istsos import (

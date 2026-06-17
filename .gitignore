@@ -10,3 +10,4 @@ database/schemaspy
 venv/
 env/
 .codex
+launch.json
