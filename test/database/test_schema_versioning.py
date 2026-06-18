@@ -620,13 +620,11 @@ class TestSchemaVersioning:
                     f"""
                     INSERT INTO sensorthings."Observation"
                         ("resultType", "{col}", "datastream_id",
-                         "featuresofinterest_id", "phenomenonTime")
+                         "featuresofinterest_id", "phenomenonTimeStart",
+                         "phenomenonTimeEnd")
                     VALUES (%s, %s, %s, %s,
-                        tstzrange(
-                            now() + (%s || ' seconds')::interval,
-                            now() + (%s || ' seconds')::interval,
-                            '[]'
-                        ))
+                        now() + (%s || ' seconds')::interval,
+                        now() + (%s || ' seconds')::interval)
                     RETURNING id
                     """,
                     (

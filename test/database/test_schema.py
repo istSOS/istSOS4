@@ -494,13 +494,11 @@ class TestSchema:
                     """
                     INSERT INTO sensorthings."Observation"
                         ("resultType", "resultString", "datastream_id",
-                         "featuresofinterest_id", "phenomenonTime")
+                         "featuresofinterest_id", "phenomenonTimeStart",
+                         "phenomenonTimeEnd")
                     VALUES (%s, %s, %s, %s,
-                        tstzrange(
-                            now() + (%s || ' seconds')::interval,
-                            now() + (%s || ' seconds')::interval,
-                            '[]'
-                        ))
+                        now() + (%s || ' seconds')::interval,
+                        now() + (%s || ' seconds')::interval)
                     """,
                     (3, f"obs-{i}", ds_id, foi_id, i, i),
                 )
