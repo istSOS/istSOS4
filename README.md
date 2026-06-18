@@ -39,24 +39,19 @@ docker compose -f dev_docker-compose.yml down -v --rmi local
 ```
 
 
-## Start EDU environment for tutorial and learning
+## Restore database from backup
 
 ```sh
-docker compose -f edu_docker-compose.yml up -d
+docker exec -i istsos4-database sh -c '
+  PGPASSWORD="$POSTGRES_PASSWORD" \
+  pg_restore \
+    -U "$POSTGRES_USER" \
+    -d "$POSTGRES_DB" \
+    -v \
+    --clean \
+    --if-exists
+' < istsos4.backup
 ```
-
-To switch off the services:
-
-```sh
-docker compose -f edu_docker-compose.yml down
-```
-
-To remove all images and volumes:
-
-```sh
-docker compose -f edu_docker-compose.yml down -v --rmi local
-```
-
 
 ## Use Sensor Things APIs
 
