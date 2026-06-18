@@ -135,3 +135,138 @@ LEFT JOIN sensorthings."ObservedProperty" op ON op.id = d."observedproperty_id"
 LEFT JOIN sensorthings."Sensor" s           ON s.id = d.sensor_id
 ORDER BY t.id, d.id;
 """
+
+
+# Row-level normalisation helpers
+# Each function maps a slice of one flat asyncpg.Record into the internal
+# dict schema. All take the raw record plus enough context (thing_id,
+# ds_id) to log a useful warning.
+def _parse_unit_of_measurement(raw: Optional[dict]) -> Optional[dict]:
+    """Normalise the uom JSON column into a flat dict. None stays None."""
+    if not raw:
+        return None
+    return {
+        "name": raw.get("name"),
+        "symbol": raw.get("symbol"),
+        "definition": raw.get("definition"),
+    }
+
+
+def _parse_observed_property(row: asyncpg.Record, thing_id: int, ds_id: Any) -> Optional[dict]:
+    """
+    Normalise the op_* columns on a row into an ObservedProperty dict.
+
+    Returns None if op_id is NULL -- the Datastream simply has no linked
+    ObservedProperty.
+    """
+    op_id = row["op_id"]
+    if op_id is None:
+        return None
+
+    name = row["op_name"] or ""
+    if not name:
+        logger.warning(
+            "ObservedProperty %s in Datastream %s (Thing %s) missing name, using empty string",
+            op_id, ds_id, thing_id,
+        )
+
+    return {
+        "id": op_id,
+        "name": name,
+        "description": row["op_description"],
+        "definition": row["op_definition"],
+        "properties": row["op_properties"] or None,
+    }
+
+
+def _parse_sensor(row: asyncpg.Record, thing_id: int, ds_id: Any) -> Optional[dict]:
+    """
+    Normalise the sensor_* columns on a row into a Sensor dict.
+
+    Returns None if sensor_id is NULL -- the Datastream simply has no
+    linked Sensor.
+    """
+    sensor_id = row["sensor_id"]
+    if sensor_id is None:
+        return None
+
+    name = row["sensor_name"] or ""
+    if not name:
+        logger.warning(
+            "Sensor %s in Datastream %s (Thing %s) missing name, using empty string",
+            sensor_id, ds_id, thing_id,
+        )
+
+    return {
+        "id": sensor_id,
+        "name": name,
+        "description": row["sensor_description"],
+        "properties": row["sensor_properties"] or None,
+        "encoding_type": row["sensor_encoding_type"] or "",
+        "metadata": row["sensor_metadata"],
+    }
+
+
+def _parse_datastream(row: asyncpg.Record, thing_id: int) -> Optional[dict]:
+    """
+    Normalise the ds_* columns on a row into a Datastream dict.
+
+    Returns None if ds_id is NULL -- this row is a Thing-Location cross
+    row for a Thing with no Datastreams, not an actual Datastream.
+    """
+    ds_id = row["ds_id"]
+    if ds_id is None:
+        return None
+
+    name = row["ds_name"] or ""
+    if not name:
+        logger.warning(
+            "Datastream %s in Thing %s missing name, using empty string",
+            ds_id, thing_id,
+        )
+
+    return {
+        "id": ds_id,
+        "name": name,
+        "description": row["ds_description"],
+        "properties": row["ds_properties"] or None,
+        "phenomenon_time": row["phenomenon_time"],
+        "result_time": row["result_time"],
+        "observed_area": row["observed_area"],
+        "observation_type": row["observation_type"],
+        "unit_of_measurement": _parse_unit_of_measurement(row["uom"]),
+        "observed_property": _parse_observed_property(row, thing_id, ds_id),
+        "sensor": _parse_sensor(row, thing_id, ds_id),
+    }
+
+
+def _parse_location(row: asyncpg.Record, thing_id: int) -> Optional[dict]:
+    """
+    Normalise the loc_* columns on a row into a Location dict.
+
+    The geometry column (location_geometry, already a parsed GeoJSON
+    dict via ST_AsGeoJSON) is exposed under the key "geometry" to avoid
+    confusion with the Location entity itself.
+
+    Returns None if loc_id is NULL -- this row is a Thing-Datastream
+    cross row for a Thing with no Locations, not an actual Location.
+    """
+    loc_id = row["loc_id"]
+    if loc_id is None:
+        return None
+
+    name = row["loc_name"] or ""
+    if not name:
+        logger.warning(
+            "Location %s in Thing %s missing name, using empty string",
+            loc_id, thing_id,
+        )
+
+    return {
+        "id": loc_id,
+        "name": name,
+        "description": row["loc_description"],
+        "properties": row["loc_properties"] or None,
+        "encoding_type": row["loc_encoding_type"] or "application/geo+json",
+        "geometry": row["location_geometry"],
+    }
