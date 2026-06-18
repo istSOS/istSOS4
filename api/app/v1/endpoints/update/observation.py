@@ -112,7 +112,8 @@ async def update_observation(
                 )
 
                 if updated:
-                    obs_phenomenon_time = updated["phenomenonTime"]
+                    obs_phenomenon_start = updated["phenomenonTimeStart"]
+                    obs_phenomenon_end = updated["phenomenonTimeEnd"]
                     obs_result_time = updated["resultTime"]
                     datastream_id = updated["datastream_id"]
 
@@ -128,9 +129,12 @@ async def update_observation(
                         "phenomenonTime"
                     ]
                     datastream_result_time = datastream_times["resultTime"]
-                    if datastream_phenomenon_time and obs_phenomenon_time:
-                        obs_lower = obs_phenomenon_time.lower
-                        obs_upper = obs_phenomenon_time.upper
+                    if datastream_phenomenon_time and (
+                        obs_phenomenon_start is not None
+                        and obs_phenomenon_end is not None
+                    ):
+                        obs_lower = obs_phenomenon_start
+                        obs_upper = obs_phenomenon_end
                         datastream_lower = datastream_phenomenon_time.lower
                         datastream_upper = datastream_phenomenon_time.upper
                         if (

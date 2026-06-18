@@ -26,7 +26,6 @@ from app.utils.utils import (
 )
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
-from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse
 
@@ -301,13 +300,10 @@ async def insertDataArrayObservation(
             handle_datetime_fields(obs)
             handle_result_field(obs)
 
-            if obs.get("phenomenonTime") is None:
+            if obs.get("phenomenonTimeStart") is None:
                 current_time = datetime.now()
-                obs["phenomenonTime"] = Range(
-                    current_time,
-                    current_time,
-                    upper_inc=True,
-                )
+                obs["phenomenonTimeStart"] = current_time
+                obs["phenomenonTimeEnd"] = current_time
 
             for key, value in obs.items():
                 if isinstance(value, dict):
@@ -333,8 +329,8 @@ async def insertDataArrayObservation(
             VALUES {values_placeholders}
             RETURNING
                 id,
-                lower("phenomenonTime"),
-                upper("phenomenonTime"),
+                "phenomenonTimeStart",
+                "phenomenonTimeEnd",
                 "resultTime",
                 datastream_id,
                 featuresofinterest_id;
@@ -345,8 +341,12 @@ async def insertDataArrayObservation(
         ]
         result = await conn.fetch(insert_query, *values)
 
-        min_phenomenon_times = [record["lower"] for record in result]
-        max_phenomenon_times = [record["upper"] for record in result]
+        min_phenomenon_times = [
+            record["phenomenonTimeStart"] for record in result
+        ]
+        max_phenomenon_times = [
+            record["phenomenonTimeEnd"] for record in result
+        ]
         result_times = [
             record["resultTime"]
             for record in result

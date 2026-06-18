@@ -283,7 +283,8 @@ async def asyncpg_stream_results(
                     and not from_to_value
                 ):
                     partition_data = ujson.loads(partition[0]["json"])
-                    partition_data["@iot.as_of"] = as_of_value
+                    if isinstance(partition_data, dict):
+                        partition_data["@iot.as_of"] = as_of_value
                     partition_json = ujson.dumps(
                         partition_data,
                         escape_forward_slashes=False,

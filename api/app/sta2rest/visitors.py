@@ -48,7 +48,7 @@ from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.expression import cast
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
-from .filter_visitor import FilterVisitor
+from .filter_visitor import FilterVisitor, resolve_field
 from .odata_query.grammar import ODataLexer, ODataParser
 from .sta_parser.ast import *
 from .sta_parser.visitor import Visitor
@@ -177,7 +177,9 @@ class NodeVisitor(Visitor):
         attributes, orders = [], []
         for identifier in identifiers:
             attribute_name, *_, order = identifier.split(".")
-            attributes.append([getattr(globals()[entity], attribute_name)])
+            attributes.append(
+                [resolve_field(globals()[entity], attribute_name)]
+            )
             orders.append(order)
         return attributes, orders
 
@@ -267,10 +269,11 @@ class NodeVisitor(Visitor):
                 identifiers.append("id")
 
             for identifier in identifiers:
+                sub_attr = resolve_field(sub_entity, identifier)
                 select_fields.append(
                     get_select_attr(
-                        getattr(sub_entity, identifier),
-                        getattr(sub_entity, identifier).name,
+                        sub_attr,
+                        sub_attr.name,
                         nested=True,
                     )
                 )
@@ -529,12 +532,12 @@ class NodeVisitor(Visitor):
                     field_parts = (
                         field_parts[0].split("/") if field_parts else []
                     )
-                    json_path = getattr(main_entity, field)
+                    json_path = resolve_field(main_entity, field)
                     for part in field_parts:
                         json_path = json_path.op("->")(part)
                     select_query.append(json_path)
                 else:
-                    select_query.append(getattr(main_entity, field_name))
+                    select_query.append(resolve_field(main_entity, field_name))
 
         components = [
             sta2rest.STA2REST.REVERSE_SELECT_MAPPING.get(
@@ -911,10 +914,12 @@ class NodeVisitor(Visitor):
             value = None
             if isinstance(select_query[0], InstrumentedAttribute):
                 value = select_query[0].name
+                if value == "phenomenonTimeStart":
+                    value = "phenomenonTime"
             else:
                 value = select_query[0].right
             main_query = select(
-                main_query.c.json.op("->")(text(f"'{value}'"))
+                main_query.c.json.op("->")(text(f"'{value}'")).label("json")
             ).select_from(main_query)
 
         main_query_str = str(
@@ -942,21 +947,29 @@ class NodeVisitor(Visitor):
 
 
 def get_select_attr(attr, label, nested=False, as_of=None):
+    table_name = getattr(getattr(attr, "table", None), "name", None)
+
+    if getattr(attr, "name", None) == "phenomenonTimeStart" and table_name in (
+        "Observation",
+        "Observation_traveltime",
+    ):
+        start_bound = attr
+        end_bound = attr.table.c["phenomenonTimeEnd"]
+        return case(
+            (
+                start_bound == end_bound,
+                func.to_char(start_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+            ),
+            else_=func.to_char(start_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+            + "/"
+            + func.to_char(end_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+        ).label("phenomenonTime")
+
     if isinstance(attr.type, Geometry):
         return func.ST_AsGeoJSON(attr).cast(JSONB).label(label)
     elif isinstance(attr.type, TSTZRANGE):
         lower_bound = func.lower(attr)
         upper_bound = func.upper(attr)
-        if attr.name == "phenomenonTime" and attr.table.name == "Observation":
-            return case(
-                (
-                    lower_bound == upper_bound,
-                    func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-                ),
-                else_=func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-                + "/"
-                + func.to_char(upper_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-            ).label(label)
         if VERSIONING and attr.name == "systemTimeValidity":
             return case(
                 (

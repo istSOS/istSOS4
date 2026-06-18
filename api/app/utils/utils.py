@@ -118,11 +118,21 @@ def handle_datetime_fields(payload, datastream=False):
     """
     for key in list(payload.keys()):
         if "time" in key.lower():
+            is_observation_phenomenon = (
+                key == "phenomenonTime" and not datastream
+            )
             if "/" in payload[key]:
                 start_str, end_str = payload[key].split("/", 1)
                 start_time = safe_parse_datetime(start_str)
                 end_time = safe_parse_datetime(end_str)
-                if start_time and end_time:
+                if is_observation_phenomenon:
+                    payload.pop("phenomenonTime")
+                    valid = bool(start_time and end_time)
+                    payload["phenomenonTimeStart"] = (
+                        start_time if valid else None
+                    )
+                    payload["phenomenonTimeEnd"] = end_time if valid else None
+                elif start_time and end_time:
                     payload[key] = Range(
                         start_time,
                         end_time,
@@ -133,7 +143,11 @@ def handle_datetime_fields(payload, datastream=False):
                     payload[key] = None
             else:
                 parsed_time = safe_parse_datetime(payload[key])
-                if key == "phenomenonTime" or (
+                if is_observation_phenomenon:
+                    payload.pop("phenomenonTime")
+                    payload["phenomenonTimeStart"] = parsed_time
+                    payload["phenomenonTimeEnd"] = parsed_time
+                elif key == "phenomenonTime" or (
                     datastream and key == "resultTime"
                 ):
                     if parsed_time:
