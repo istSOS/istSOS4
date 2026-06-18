@@ -27,7 +27,6 @@ from app.utils.utils import (
 from app.v1.endpoints.functions import insert_commit
 from app.v1.endpoints.update.datastream import update_datastream_entity
 from app.v1.endpoints.update.observation import update_observation_entity
-from asyncpg.types import Range
 
 
 def normalize_geojson_geometry(value):
@@ -508,13 +507,10 @@ async def insert_observation_entity(
         handle_datetime_fields(payload)
         handle_result_field(payload)
 
-        if payload.get("phenomenonTime") is None:
+        if payload.get("phenomenonTimeStart") is None:
             current_time = datetime.now()
-            payload["phenomenonTime"] = Range(
-                current_time,
-                current_time,
-                upper_inc=True,
-            )
+            payload["phenomenonTimeStart"] = current_time
+            payload["phenomenonTimeEnd"] = current_time
 
         if commit_id is not None:
             payload["commit_id"] = commit_id
@@ -534,8 +530,8 @@ async def insert_observation_entity(
         """
         await connection.execute(
             update_query,
-            payload["phenomenonTime"].lower,
-            payload["phenomenonTime"].upper,
+            payload["phenomenonTimeStart"],
+            payload["phenomenonTimeEnd"],
             payload["datastream_id"],
         )
 

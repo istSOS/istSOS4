@@ -77,13 +77,15 @@ async def delete_observation(
 
                 if deleted:
                     id_deleted = deleted["id"]
-                    obs_phenomenon_time = deleted["phenomenonTime"]
+                    obs_phenomenon_start = deleted["phenomenonTimeStart"]
+                    obs_phenomenon_end = deleted["phenomenonTimeEnd"]
                     obs_result_time = deleted["resultTime"]
                     datastream_id = deleted["datastream_id"]
 
                     await update_datastream_phenomenon_time(
                         connection,
-                        obs_phenomenon_time,
+                        obs_phenomenon_start,
+                        obs_phenomenon_end,
                         datastream_id,
                         obs_result_time,
                     )

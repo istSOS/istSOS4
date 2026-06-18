@@ -79,6 +79,19 @@ SELECT_MAPPING = {
 }
 
 
+def resolve_field(model, name):
+    """Resolve a logical (snake_case) field name to a mapped column attribute.
+
+    The Observation phenomenonTime is split into two TIMESTAMPTZ columns; the
+    logical "phenomenon_time" resolves to the start column, which is the scalar
+    handle used for select / filter / orderby (output recombines start+end in
+    get_select_attr).
+    """
+    if name == "phenomenon_time" and not hasattr(model, "phenomenon_time"):
+        name = "phenomenon_time_start"
+    return getattr(model, name)
+
+
 class FilterVisitor(visitor.NodeVisitor):
     """
     Visitor for the filter AST.
@@ -205,7 +218,7 @@ class FilterVisitor(visitor.NodeVisitor):
             for old_key, new_key in SELECT_MAPPING.items():
                 if old_key == node.name:
                     name = new_key
-            return getattr(globals()[self.root_model], name)
+            return resolve_field(globals()[self.root_model], name)
         except AttributeError:
             raise ex.InvalidFieldException(node.name)
 
