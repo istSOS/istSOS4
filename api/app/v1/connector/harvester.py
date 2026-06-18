@@ -270,3 +270,102 @@ def _parse_location(row: asyncpg.Record, thing_id: int) -> Optional[dict]:
         "encoding_type": row["loc_encoding_type"] or "application/geo+json",
         "geometry": row["location_geometry"],
     }
+
+
+# Row grouping (at "Row grouping" in the reference doc)
+def _build_catalog(rows: list[asyncpg.Record]) -> HarvestedCatalog:
+    """
+    Group flat (Thing x Location x Datastream) rows into a HarvestedCatalog.
+
+    The query is a cross product within each Thing: a Thing with 2
+    Locations and 3 Datastreams produces 6 rows, all sharing identical
+    Thing columns. This groups by thing_id first, then deduplicates
+    Locations and Datastreams within each Thing by their own id so the
+    cross product collapses back into the right list sizes -- without
+    this, a Thing with 2 Locations and 3 Datastreams would otherwise end
+    up with 6 entries in each list instead of 2 and 3.
+
+    Things with no Datastreams (ds_id NULL on every row for that Thing)
+    end up with an empty datastreams list. Same rule for Locations.
+    """
+    things_by_id: dict[int, HarvestedThing] = {}
+    seen_location_ids: dict[int, set] = {}
+    seen_datastream_ids: dict[int, set] = {}
+
+    for row in rows:
+        thing_id = row["thing_id"]
+        if thing_id is None:
+            logger.warning("Skipping row with NULL thing_id: %s", dict(row))
+            continue
+
+        thing = things_by_id.get(thing_id)
+        if thing is None:
+            name = row["thing_name"] or ""
+            if not name:
+                logger.warning("Thing %s missing name, using empty string", thing_id)
+            thing = HarvestedThing(
+                id=thing_id,
+                name=name,
+                description=row["thing_description"],
+                properties=row["thing_properties"] or None,
+                locations=[],
+                datastreams=[],
+            )
+            things_by_id[thing_id] = thing
+            seen_location_ids[thing_id] = set()
+            seen_datastream_ids[thing_id] = set()
+
+        location = _parse_location(row, thing_id)
+        if location is not None and location["id"] not in seen_location_ids[thing_id]:
+            seen_location_ids[thing_id].add(location["id"])
+            thing.locations.append(location)
+
+        datastream = _parse_datastream(row, thing_id)
+        if datastream is not None and datastream["id"] not in seen_datastream_ids[thing_id]:
+            seen_datastream_ids[thing_id].add(datastream["id"])
+            thing.datastreams.append(datastream)
+
+    things = list(things_by_id.values())
+
+    if not things:
+        logger.warning("Harvest query returned no Things")
+
+    return HarvestedCatalog(
+        things=things,
+        harvested_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    )
+
+
+# Public interface
+async def harvest(pool: asyncpg.Pool) -> HarvestedCatalog:
+    """
+    Run the harvest JOIN query against pool and return a HarvestedCatalog.
+
+    This is the only entry point for the harvesting layer. It does not
+    interact with Redis, an advisory lock, or the transformers -- that
+    orchestration belongs to scheduled_harvest_job() in scheduler.py.
+    Pure read.
+
+    Raises:
+        HarvesterQueryError: the query itself failed (connection lost,
+            bad SQL, permissions, pool exhausted, etc).
+    """
+    logger.info("Starting harvest")
+    start = time.monotonic()
+
+    try:
+        rows = await pool.fetch(_HARVEST_QUERY)
+    except Exception as exc:
+        raise HarvesterQueryError(f"Harvest query failed: {exc}") from exc
+
+    catalog = _build_catalog(rows)
+
+    elapsed = time.monotonic() - start
+    total_datastreams = sum(len(t.datastreams) for t in catalog.things)
+
+    logger.info(
+        "Harvest complete: %d Things, %d total Datastreams, elapsed=%.3fs",
+        catalog.thing_count, total_datastreams, elapsed,
+    )
+
+    return catalog
