@@ -12,12 +12,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Dummy data generator and FROST migration utility for istSOS4.
+
+MODES (controlled by RUN_MIGRATION in .env or environment):
+
+  RUN_MIGRATION=0 (default)
+    Generates lightweight synthetic dummy data directly into the database.
+    Controlled by N_THINGS, N_OBSERVED_PROPERTIES, INTERVAL, FREQUENCY, etc.
+    Use this for quick local dev and testing.
+
+  RUN_MIGRATION=1
+    Fetches the full entity tree from a Fraunhofer FROST SensorThings API
+    endpoint and inserts it into the istSOS deployment via direct postgres
+    writes. Wipes existing data before inserting.
+    Tested against: https://airquality-frost.k8s.ilt-dmz.iosb.fraunhofer.de/v1.1
+    (5610 Things, ~23k Datastreams, 9 ObservedProperties)
+
+IMPORTANT before running migration:
+  - Set NETWORK=0 in .env (FROST data has no network concept)
+  - Set FROST_BASE_URL if targeting a different STA endpoint
+  - Migration runs once; use `docker compose down` without -v to preserve data
+
+USAGE:
+  # automatic via docker compose (reads RUN_MIGRATION from .env)
+  docker compose -f dev_docker-compose.yml up -d
+
+  # manual one-shot run against a live stack
+  docker run --rm --env-file .env -e RUN_MIGRATION=1 -e POSTGRES_HOST=istsos4-database --network istsos4-network istsos4-dummy_data python3 generator.py
+"""
+
 import asyncio
 import json
 import os
 import random
 from datetime import datetime, time
+from typing import Any, Optional
 
+import aiohttp
 import asyncpg
 import isodate
 from asyncpg.types import Range
@@ -49,7 +81,13 @@ epsg = int(os.getenv("EPSG", 4326))
 authorization = int(os.getenv("AUTHORIZATION", 0))
 st_aggregate = os.getenv("ST_AGGREGATE", "CONVEX_HULL")
 
-pgpool = None
+run_migration = os.getenv("RUN_MIGRATION", "0") == "1"
+frost_base_url = os.getenv(
+    "FROST_BASE_URL",
+    "https://airquality-frost.k8s.ilt-dmz.iosb.fraunhofer.de/v1.1",
+)
+frost_page_size = int(os.getenv("FROST_PAGE_SIZE", 5613))
+frost_timeout = float(os.getenv("FROST_TIMEOUT", 60.0))
 network = int(os.getenv("NETWORK", 0))
 
 observedProperties = []
@@ -490,7 +528,6 @@ async def generate_featuresofinterest(conn, commit_id):
 async def insert_observations(conn, observations, commit_id):
     cols = [
         "phenomenonTime",
-        "resultTime",
         "resultNumber",
         "resultType",
         "datastream_id",
@@ -522,27 +559,20 @@ async def insert_observations(conn, observations, commit_id):
 
 async def update_datastream_phenomenon_time(conn, observations, datastream_id):
     phenomenon_times = [record[0].lower for record in observations]
-    result_times = [record[1] for record in observations]
+
     update_sql = """
         UPDATE sensorthings."Datastream"
         SET "phenomenonTime" = tstzrange(
             LEAST($1::timestamptz, lower("phenomenonTime")),
             GREATEST($2::timestamptz, upper("phenomenonTime")),
             '[]'
-        ),
-        "resultTime" = tstzrange(
-            LEAST($3::timestamptz, lower("resultTime")),
-            GREATEST($4::timestamptz, upper("resultTime")),
-            '[]'
         )
-        WHERE id = $5::bigint
+        WHERE id = $3::bigint
     """
     await conn.execute(
         update_sql,
         min(phenomenon_times),
         max(phenomenon_times),
-        min(result_times),
-        max(result_times),
         datastream_id,
     )
 
@@ -617,7 +647,6 @@ async def generate_observations(conn, commit_id):
                 phenomenonTime,
                 upper_inc=True,
             )
-            resultTime = phenomenonTime
             resultNumber = random.randint(1, 100)
             resultType = 0
             datastream_id = j
@@ -627,7 +656,6 @@ async def generate_observations(conn, commit_id):
                 observations.append(
                     (
                         phenomenonTimeRange,
-                        resultTime,
                         resultNumber,
                         resultType,
                         datastream_id,
@@ -639,7 +667,6 @@ async def generate_observations(conn, commit_id):
                 observations.append(
                     (
                         phenomenonTimeRange,
-                        resultTime,
                         resultNumber,
                         resultType,
                         datastream_id,
@@ -765,8 +792,419 @@ async def delete_data():
         await pool.close()
 
 
+async def _fetch_json(session: aiohttp.ClientSession, url: str) -> dict[str, Any]:
+    async with session.get(url) as resp:
+        resp.raise_for_status()
+        return await resp.json(content_type=None)
+
+
+async def _paginate_all(
+    session: aiohttp.ClientSession,
+    initial_url: str,
+    label: str,
+) -> list[dict]:
+    """Walk @iot.nextLink until exhausted, collecting all raw items."""
+    results: list[dict] = []
+    url: Optional[str] = initial_url
+    page = 0
+    while url:
+        payload = await _fetch_json(session, url)
+        items = payload.get("value", [])
+        results.extend(items)
+        page += 1
+        url = payload.get("@iot.nextLink") or None
+        print(f"[migration] {label}: page {page}, {len(results)} total")
+    return results
+
+
+async def _fetch_frost(config_url: str, page_size: int, timeout: float) -> list[dict]:
+    """
+    Fetch all Things from FROST with inline Locations, Datastreams,
+    Sensors, and ObservedProperties expanded.
+    """
+    http_timeout = aiohttp.ClientTimeout(total=timeout)
+    expand = "Locations,Datastreams($expand=ObservedProperty,Sensor)"
+    initial_url = f"{config_url}/Things?$expand={expand}&$top={page_size}"
+    async with aiohttp.ClientSession(timeout=http_timeout) as session:
+        return await _paginate_all(session, initial_url, "Things")
+
+
+def _extract_geometry_wkt(location_obj: Optional[dict], epsg_code: int) -> Optional[str]:
+    """
+    Convert a GeoJSON geometry dict from FROST into a PostGIS WKT string.
+    Returns None if geometry is absent or unrecognised.
+    """
+    if not location_obj:
+        return None
+    geom_type = location_obj.get("type", "")
+    coords = location_obj.get("coordinates")
+    if not coords:
+        return None
+    if geom_type == "Point":
+        return f"SRID={epsg_code};POINT({coords[0]} {coords[1]})"
+    if geom_type == "Polygon":
+        ring = coords[0]
+        points = ", ".join(f"{x} {y}" for x, y in ring)
+        return f"SRID={epsg_code};POLYGON(({points}))"
+    if geom_type == "MultiPoint":
+        points = ", ".join(f"({x} {y})" for x, y in coords)
+        return f"SRID={epsg_code};MULTIPOINT({points})"
+    return None
+
+
+async def _insert_sensor(conn, raw: dict, commit_id: Optional[int]) -> int:
+    name = raw.get("name") or f"sensor_{raw['@iot.id']}"
+    description = raw.get("description") or ""
+    encoding_type = raw.get("encodingType") or "application/pdf"
+    metadata = raw.get("metadata") or ""
+    if isinstance(metadata, dict):
+        metadata = json.dumps(metadata)
+
+    if commit_id is not None:
+        return await conn.fetchval(
+            """
+            INSERT INTO sensorthings."Sensor" (description, name, "encodingType", metadata, commit_id)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+            RETURNING id
+            """,
+            description, name, encoding_type, metadata, commit_id,
+        )
+    return await conn.fetchval(
+        """
+        INSERT INTO sensorthings."Sensor" (description, name, "encodingType", metadata)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id
+        """,
+        description, name, encoding_type, metadata,
+    )
+
+
+async def _insert_observed_property(conn, raw: dict, commit_id: Optional[int]) -> int:
+    name = raw.get("name") or f"op_{raw['@iot.id']}"
+    definition = raw.get("definition") or "{}"
+    if isinstance(definition, dict):
+        definition = json.dumps(definition)
+    description = raw.get("description") or ""
+
+    if commit_id is not None:
+        return await conn.fetchval(
+            """
+            INSERT INTO sensorthings."ObservedProperty" (name, definition, description, commit_id)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+            RETURNING id
+            """,
+            name, definition, description, commit_id,
+        )
+    return await conn.fetchval(
+        """
+        INSERT INTO sensorthings."ObservedProperty" (name, definition, description)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id
+        """,
+        name, definition, description,
+    )
+
+
+async def _insert_location(conn, raw: dict, commit_id: Optional[int], epsg_code: int) -> Optional[int]:
+    name = raw.get("name") or f"location_{raw['@iot.id']}"
+    description = raw.get("description") or ""
+    encoding_type = raw.get("encodingType") or "application/geo+json"
+    wkt = _extract_geometry_wkt(raw.get("location"), epsg_code)
+    if not wkt:
+        print(f"[migration] skipping location {raw['@iot.id']}: no parseable geometry")
+        return None
+
+    if commit_id is not None:
+        return await conn.fetchval(
+            """
+            INSERT INTO sensorthings."Location" (description, name, location, "encodingType", commit_id)
+            VALUES ($1, $2, $3::public.geometry, $4, $5)
+            ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+            RETURNING id
+            """,
+            description, name, wkt, encoding_type, commit_id,
+        )
+    return await conn.fetchval(
+        """
+        INSERT INTO sensorthings."Location" (description, name, location, "encodingType")
+        VALUES ($1, $2, $3::public.geometry, $4)
+        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id
+        """,
+        description, name, wkt, encoding_type,
+    )
+
+
+async def _insert_thing(conn, raw: dict, commit_id: Optional[int]) -> int:
+    name = raw.get("name") or f"thing_{raw['@iot.id']}"
+    description = raw.get("description") or ""
+    properties = json.dumps(raw["properties"]) if raw.get("properties") else json.dumps({})
+
+    if commit_id is not None:
+        return await conn.fetchval(
+            """
+            INSERT INTO sensorthings."Thing" (description, name, properties, commit_id)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+            RETURNING id
+            """,
+            description, name, properties, commit_id,
+        )
+    return await conn.fetchval(
+        """
+        INSERT INTO sensorthings."Thing" (description, name, properties)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id
+        """,
+        description, name, properties,
+    )
+
+
+def _parse_frost_phenomenon_time(raw_value: Optional[str]) -> Optional[Range]:
+    """
+    Parse a FROST phenomenonTime string into an asyncpg Range for direct
+    insertion into the tstzrange column sensorthings."Datastream"."phenomenonTime".
+
+    FROST sends this as an ISO 8601 interval string in "start/end" form
+    (e.g. "2020-01-01T00:00:00.000Z/2020-06-01T00:00:00.000Z"). An
+    open-ended interval uses ".." for the missing side. Returns None
+    when raw_value is missing or either bound fails to parse, so the
+    caller can simply omit the column rather than insert a bad range.
+    """
+    if not raw_value:
+        return None
+
+    parts = raw_value.split("/", 1)
+    start_str = parts[0].strip()
+    end_str = parts[1].strip() if len(parts) > 1 else ""
+
+    try:
+        start = datetime.fromisoformat(start_str.replace("Z", "+00:00")) if start_str and start_str != ".." else None
+        end = datetime.fromisoformat(end_str.replace("Z", "+00:00")) if end_str and end_str != ".." else None
+    except ValueError:
+        print(f"[migration] could not parse phenomenonTime {raw_value!r}, leaving column unset")
+        return None
+
+    if start is None:
+        return None
+
+    return Range(start, end, upper_inc=False)
+
+
+async def _insert_datastream(
+    conn,
+    raw: dict,
+    istsos_thing_id: int,
+    istsos_sensor_id: int,
+    istsos_op_id: int,
+    commit_id: Optional[int],
+    network_id: int,
+) -> int:
+    name = raw.get("name") or f"datastream_{raw['@iot.id']}"
+    description = raw.get("description") or ""
+    observation_type = raw.get("observationType") or "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"
+    uom = raw.get("unitOfMeasurement") or {"name": "", "symbol": "", "definition": ""}
+    properties = json.dumps(raw["properties"]) if raw.get("properties") else None
+    phenomenon_time = _parse_frost_phenomenon_time(raw.get("phenomenonTime"))
+    result_time = raw.get("resultTime") or None
+
+    cols = [
+        '"name"', '"description"', '"unitOfMeasurement"', '"observationType"',
+        '"thing_id"', '"sensor_id"', '"observedproperty_id"', '"network_id"',
+    ]
+    vals: list[Any] = [
+        name, description, json.dumps(uom), observation_type,
+        istsos_thing_id, istsos_sensor_id, istsos_op_id, network_id,
+    ]
+
+    if properties is not None:
+        cols.append('"properties"')
+        vals.append(properties)
+
+    if commit_id is not None:
+        cols.append('"commit_id"')
+        vals.append(commit_id)
+
+    if phenomenon_time is not None:
+        cols.append('"phenomenonTime"')
+        vals.append(phenomenon_time)
+
+    if result_time is not None:
+        cols.append('"resultTime"')
+        vals.append(result_time)
+
+    placeholders = ", ".join(f"${i+1}" for i in range(len(vals)))
+    col_str = ", ".join(cols)
+
+    return await conn.fetchval(
+        f"""
+        INSERT INTO sensorthings."Datastream" ({col_str}) VALUES ({placeholders})
+        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id
+        """,
+        *vals,
+    )
+
+
+async def migrate():
+    """
+    Fetch every Thing from FROST and insert the full entity tree into the
+    local istSOS deployment via direct postgres writes.
+
+    ID mapping dicts translate FROST @iot.id values to istSOS-assigned IDs
+    so foreign key references stay consistent across all inserts.
+    """
+    print(f"[migration] starting -- source: {frost_base_url}")
+
+    raw_things = await _fetch_frost(frost_base_url, frost_page_size, frost_timeout)
+    print(f"[migration] fetched {len(raw_things)} Things from FROST")
+
+    pool = await get_pool()
+    try:
+        async with pool.acquire() as conn:
+            user_id = None
+            user_uri = "anonymous"
+            if authorization:
+                user = await get_user(conn)
+                user_id = user["id"]
+                user_uri = user["uri"]
+
+            commit_id = None
+            if versioning or authorization:
+                commit_id = await conn.fetchval(
+                    """
+                    INSERT INTO sensorthings."Commit" (author, "encodingType", message, "actionType")
+                    VALUES ($1, $2, $3, $4) RETURNING id
+                    """,
+                    user_uri, "text/plain", f"FROST migration from {frost_base_url}", "CREATE",
+                ) if not authorization else await conn.fetchval(
+                    """
+                    INSERT INTO sensorthings."Commit" (author, "encodingType", message, "actionType", user_id)
+                    VALUES ($1, $2, $3, $4, $5) RETURNING id
+                    """,
+                    user_uri, "text/plain", f"FROST migration from {frost_base_url}", "CREATE", user_id,
+                )
+
+            # Wipe any partial data from a previous migration attempt before starting fresh
+            print("[migration] clearing any existing data before fresh insert")
+            await conn.execute('DELETE FROM sensorthings."Observation"')
+            await conn.execute('DELETE FROM sensorthings."Datastream"')
+            await conn.execute('DELETE FROM sensorthings."FeaturesOfInterest"')
+            await conn.execute('DELETE FROM sensorthings."Location_HistoricalLocation"')
+            await conn.execute('DELETE FROM sensorthings."HistoricalLocation"')
+            await conn.execute('DELETE FROM sensorthings."Thing_Location"')
+            await conn.execute('DELETE FROM sensorthings."Thing"')
+            await conn.execute('DELETE FROM sensorthings."Location"')
+            await conn.execute('DELETE FROM sensorthings."Sensor"')
+            await conn.execute('DELETE FROM sensorthings."ObservedProperty"')
+            await conn.execute('DELETE FROM sensorthings."Network" WHERE name = $1', "frost-migration")
+            print("[migration] database cleared, starting insert")
+
+            # All migrated Datastreams are attributed to a single network representing
+            # the FROST source being migrated from, since Datastream.network_id is NOT NULL.
+            network_id = await conn.fetchval(
+                """
+                INSERT INTO sensorthings."Network" (name, commit_id)
+                VALUES ($1, $2)
+                RETURNING id
+                """ if commit_id is not None else """
+                INSERT INTO sensorthings."Network" (name)
+                VALUES ($1)
+                RETURNING id
+                """,
+                *(["frost-migration", commit_id] if commit_id is not None else ["frost-migration"]),
+            )
+
+            # frost_id -> istsos_id for deduplication across things sharing sensors/ops
+            sensor_id_map: dict[int, int] = {}
+            op_id_map: dict[int, int] = {}
+
+            total_things = 0
+            total_ds = 0
+
+            for raw_thing in raw_things:
+                frost_thing_id = raw_thing.get("@iot.id")
+                if frost_thing_id is None:
+                    continue
+
+                istsos_thing_id = await _insert_thing(conn, raw_thing, commit_id)
+                total_things += 1
+
+                # Insert locations and link them to the thing
+                for raw_loc in raw_thing.get("Locations", []):
+                    frost_loc_id = raw_loc.get("@iot.id")
+                    if frost_loc_id is None:
+                        continue
+                    istsos_loc_id = await _insert_location(conn, raw_loc, commit_id, epsg)
+                    if istsos_loc_id is None:
+                        continue
+
+                    await conn.execute(
+                        'INSERT INTO sensorthings."Thing_Location" (thing_id, location_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                        istsos_thing_id, istsos_loc_id,
+                    )
+
+                    # One HistoricalLocation per location per thing
+                    hl_id = await conn.fetchval(
+                        """
+                        INSERT INTO sensorthings."HistoricalLocation" (time, thing_id)
+                        VALUES (NOW(), $1) RETURNING id
+                        """ if commit_id is None else """
+                        INSERT INTO sensorthings."HistoricalLocation" (time, thing_id, commit_id)
+                        VALUES (NOW(), $1, $2) RETURNING id
+                        """,
+                        *([istsos_thing_id] if commit_id is None else [istsos_thing_id, commit_id]),
+                    )
+                    await conn.execute(
+                        'INSERT INTO sensorthings."Location_HistoricalLocation" (location_id, historicallocation_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                        istsos_loc_id, hl_id,
+                    )
+
+                # Insert datastreams with their sensor and observed property
+                for raw_ds in raw_thing.get("Datastreams", []):
+                    frost_ds_id = raw_ds.get("@iot.id")
+                    if frost_ds_id is None:
+                        continue
+
+                    raw_sensor = raw_ds.get("Sensor") or {}
+                    frost_sensor_id = raw_sensor.get("@iot.id")
+                    if frost_sensor_id not in sensor_id_map:
+                        if not raw_sensor.get("name"):
+                            print(f"[migration] skipping datastream {frost_ds_id}: no Sensor data expanded")
+                            continue
+                        sensor_id_map[frost_sensor_id] = await _insert_sensor(conn, raw_sensor, commit_id)
+                    istsos_sensor_id = sensor_id_map[frost_sensor_id]
+
+                    raw_op = raw_ds.get("ObservedProperty") or {}
+                    frost_op_id = raw_op.get("@iot.id")
+                    if frost_op_id not in op_id_map:
+                        if not raw_op.get("name"):
+                            print(f"[migration] skipping datastream {frost_ds_id}: no ObservedProperty data expanded")
+                            continue
+                        op_id_map[frost_op_id] = await _insert_observed_property(conn, raw_op, commit_id)
+                    istsos_op_id = op_id_map[frost_op_id]
+
+                    await _insert_datastream(conn, raw_ds, istsos_thing_id, istsos_sensor_id, istsos_op_id, commit_id, network_id)
+                    total_ds += 1
+
+                if total_things % 100 == 0:
+                    print(f"[migration] progress: {total_things} Things, {total_ds} Datastreams inserted")
+
+            print(f"[migration] done -- {total_things} Things, {total_ds} Datastreams, "
+                  f"{len(sensor_id_map)} Sensors, {len(op_id_map)} ObservedProperties inserted")
+    finally:
+        await pool.close()
+
+
 if __name__ == "__main__":
-    if delete_dummy_data:
+    if run_migration:
+        asyncio.run(migrate())
+    elif delete_dummy_data:
         asyncio.run(delete_data())
-    if create_dummy_data:
+    elif create_dummy_data:
         asyncio.run(create_data())
