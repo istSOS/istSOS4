@@ -752,16 +752,24 @@ class NodeVisitor(Visitor):
             filter, join_relationships = self.visit_FilterNode(
                 node.filter, self.main_entity
             )
+            if join_relationships:
+                # The filter reaches into related entities. Joining them directly
+                # onto the main query would multiply its rows once per matching
+                # related row (a Thing with N Datastreams would appear N times).
+                # Use a semi-join instead: collect the matching ids in a subquery
+                # that carries the joins + filter, then restrict the main query
+                # to those ids. This yields exactly one row per main entity,
+                # matching the SensorThings "entities that have any related ..."
+                # semantics and the already-distinct count.
+                id_attr = getattr(main_entity, "id")
+                id_subquery = select(id_attr)
+                for relationship in join_relationships:
+                    id_subquery = id_subquery.join(relationship)
+                id_subquery = id_subquery.where(filter)
+                filter = id_attr.in_(id_subquery)
             main_query = main_query.filter(filter)
             query_count = query_count.filter(filter)
             query_estimate_count = query_estimate_count.filter(filter)
-            if join_relationships:
-                for relationship in join_relationships:
-                    main_query = main_query.join(relationship)
-                    query_count = query_count.join(relationship)
-                    query_estimate_count = query_estimate_count.join(
-                        relationship
-                    )
 
         # Process orderby clause if exists
         ordering = []
