@@ -138,15 +138,55 @@ cp config.example.yaml config.yaml
 python mqtt2istsos.py
 ```
 
-## Run With Docker Compose
+## Run With Docker Scripts
 
-Build the normal image:
+Build the default image tag:
 
 ```bash
-docker build -t mqtt2istsos:0.1 .
+./docker-build.sh
 ```
 
-Start the service:
+The default image tag is:
+
+```bash
+ghcr.io/istsos/istsos4/utils/mqtt2istsos:0.1
+```
+
+Run with `config.yaml`:
+
+```bash
+./docker-run.sh
+```
+
+Use another config file:
+
+```bash
+CONFIG_FILE=/path/to/config.yaml ./docker-run.sh
+```
+
+Push the image after building:
+
+```bash
+PUSH_IMAGE=1 ./docker-build.sh
+```
+
+The run wrapper mounts `config.yaml` read-only at `/app/config.yaml`, sets
+`MQTT2ISTSOS_CONFIG=/app/config.yaml`, and uses `NETWORK_MODE=host` by default.
+Set `NETWORK_MODE=` to use Docker's default bridge network.
+
+Wrapper environment variables:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `IMAGE_NAME` | `ghcr.io/istsos/istsos4/utils/mqtt2istsos:0.1` | Docker image name to build, pull, and run. |
+| `CONFIG_FILE` | `./config.yaml` | Host config file to mount into the container. |
+| `NETWORK_MODE` | `host` | Docker network mode. Set to an empty value to use Docker's default bridge network. |
+| `PULL_IMAGE` | `1` | Pull the image before running. Set to `0` to skip pulling. |
+| `PUSH_IMAGE` | `0` | Push the image after building. Set to `1` to enable. |
+
+## Run With Docker Compose
+
+The compose file uses the published image by default:
 
 ```bash
 docker compose up -d
@@ -187,14 +227,14 @@ container is named `mqtt2istsos-dev`.
 Use the dev compose file when changing code:
 
 ```bash
-docker compose -f docker-compose.dev.yml up --build
+docker compose -f dev_docker-compose.yml up --build
 ```
 
 The dev service bind-mounts the project directory into `/app`, so code changes
 are visible inside the container. Restart the service after editing Python code:
 
 ```bash
-docker compose -f docker-compose.dev.yml restart mqtt2istsos
+docker compose -f dev_docker-compose.yml restart mqtt2istsos
 ```
 
 ## Logs
