@@ -233,10 +233,30 @@ async def data_array_observation(
                 "message": "Database temporarily unavailable",
             },
         )
-    except Exception as e:
+    except ValueError as e:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"code": 400, "type": "error", "message": str(e)},
+        )
+    except asyncpg.ForeignKeyViolationError:
+        # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "code": 400,
+                "type": "error",
+                "message": "Referenced entity does not exist.",
+            },
+        )
+    except Exception:
+        # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "code": 500,
+                "type": "error",
+                "message": "Internal server error",
+            },
         )
 
 

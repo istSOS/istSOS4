@@ -102,8 +102,18 @@ async def delete_thing(
                 "message": "Database temporarily unavailable",
             },
         )
-    except Exception as e:
+    except ValueError as e:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"code": 400, "type": "error", "message": str(e)},
+        )
+    except Exception:
+        # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "code": 500,
+                "type": "error",
+                "message": "Internal server error",
+            },
         )
