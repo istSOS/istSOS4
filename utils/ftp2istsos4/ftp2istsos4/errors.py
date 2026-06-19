@@ -1,0 +1,2 @@
+class DuplicateObservationError(RuntimeError):
+    pass
