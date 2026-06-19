@@ -5,10 +5,13 @@ import re
 from pathlib import Path
 
 import pandas as pd
-import requests
 from models import (
+    build_istsos_url,
     Datastream,
+    get_credentials,
     Location,
+    load_environment,
+    login,
     Network,
     ObservedProperty,
     Sensor,
@@ -23,65 +26,6 @@ UOM_MAPPING = {
     "g": "Gram",
     "m": "Meter",
 }
-
-
-def load_env_file(env_path):
-    if not env_path.exists():
-        return
-
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        os.environ.setdefault(key, value)
-
-
-def load_environment():
-    script_dir = Path(__file__).resolve().parent
-    candidate_paths = [
-        Path.cwd() / ".env",
-        script_dir / ".env",
-        script_dir.parent / ".env",
-    ]
-
-    seen = set()
-    for path in candidate_paths:
-        resolved = path.resolve()
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        load_env_file(resolved)
-
-
-def build_istsos_url():
-    explicit_url = os.getenv("ISTSOS4_URL")
-    if explicit_url:
-        return explicit_url.rstrip("/")
-
-    hostname = os.getenv("HOSTNAME", "http://localhost:8018").rstrip("/")
-    subpath = os.getenv("SUBPATH", "/istsos4").strip("/")
-    version = os.getenv("VERSION", "/v1.1").strip("/")
-    return f"{hostname}/{subpath}/{version}"
-
-
-def get_credentials():
-    username = os.getenv("ISTSOS4_USERNAME") or os.getenv("ISTSOS_ADMIN")
-    password = os.getenv("ISTSOS4_PASSWORD") or os.getenv(
-        "ISTSOS_ADMIN_PASSWORD"
-    )
-
-    if not username or not password:
-        raise RuntimeError(
-            "Missing istSOS credentials. Set ISTSOS4_USERNAME/ISTSOS4_PASSWORD "
-            "or ISTSOS_ADMIN/ISTSOS_ADMIN_PASSWORD in .env."
-        )
-
-    return username, password
-
 
 def normalize_header(value):
     if pd.isna(value):
@@ -204,26 +148,6 @@ def read_configuration(xlsx_path, sheet_name):
     things = df.to_dict("records")
 
     return things
-
-
-def login(server_url, username, password):
-    response = requests.post(
-        f"{server_url}/Login",
-        data={
-            "username": username,
-            "password": password,
-            "grant_type": "password",
-        },
-        timeout=30,
-    )
-
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"Login failed with status {response.status_code}: {response.text}"
-        )
-
-    return response.json()["access_token"]
-
 
 def require_field(procedure, key):
     value = clean_value(procedure.get(key))

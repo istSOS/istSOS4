@@ -6,7 +6,7 @@ from pathlib import Path
 
 import requests
 
-from xlsx2istsos import (
+from models import (
     build_istsos_url,
     get_credentials,
     load_environment,
