@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
+from app import AUTHORIZATION, NETWORK, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role
@@ -65,7 +65,12 @@ ALLOWED_KEYS = [
     "Observations",
 ]
 
-if AUTHORIZATION:
+# conformance: NETWORK extension — the "Network" relation is a mandatory
+# Datastream association that exists exactly when the NETWORK extension is
+# enabled (NETWORK=1), independent of AUTHORIZATION. Gating it on AUTHORIZATION
+# wrongly rejected "Network" under NETWORK=1/AUTHORIZATION=0 with
+# "Invalid keys in payload: Network".
+if NETWORK:
     ALLOWED_KEYS.append("Network")
 
 
