@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
     # Scheduling
     HARVEST_INTERVAL_MINUTES: int = Field(
-        default=15,
+        default=5,
         description=(
             "How often scheduled_harvest_job() fires. Read by the "
             "APScheduler registration in istSOS main.py, not by the "
