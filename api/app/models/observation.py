@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import STAPLUS
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.dialects.postgresql.json import JSON
@@ -21,9 +20,8 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Boolean, Float, Integer, Text
 
-if STAPLUS:
-    from .observation_group_observation import ObservationGroup_Observation
-    from .relation import Relation
+from .observation_group_observation import ObservationGroup_Observation
+from .relation import Relation
 
 
 class Observation(Base):
@@ -37,12 +35,11 @@ class Observation(Base):
     )
     datastream_navigation_link = Column("Datastream@iot.navigationLink", Text)
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
-    if STAPLUS:
-        observationgroup_navigation_link = Column(
-            "ObservationGroups@iot.navigationLink", Text
-        )
-        objects_navigation_link = Column("Objects@iot.navigationLink", Text)
-        subjects_navigation_link = Column("Subjects@iot.navigationLink", Text)
+    observationgroup_navigation_link = Column(
+        "ObservationGroups@iot.navigationLink", Text
+    )
+    objects_navigation_link = Column("Objects@iot.navigationLink", Text)
+    subjects_navigation_link = Column("Subjects@iot.navigationLink", Text)
     phenomenon_time = Column("phenomenonTime", TSTZRANGE)
     result_time = Column("resultTime", TIMESTAMP, nullable=False)
     result = Column(JSON, nullable=True)
@@ -69,19 +66,18 @@ class Observation(Base):
     )
     datastream = relationship("Datastream", back_populates="observation")
     commit = relationship("Commit", back_populates="observation")
-    if STAPLUS:
-        observationgroup = relationship(
-            "ObservationGroup",
-            secondary=ObservationGroup_Observation,
-            back_populates="observation",
-        )
-        objects = relationship(
-            "Relation",
-            foreign_keys=[Relation.subject_id],
-            back_populates="subject",
-        )
-        subjects = relationship(
-            "Relation",
-            foreign_keys=[Relation.object_id],
-            back_populates="object",
-        )
+    observationgroup = relationship(
+        "ObservationGroup",
+        secondary=ObservationGroup_Observation,
+        back_populates="observation",
+    )
+    objects = relationship(
+        "Relation",
+        foreign_keys=[Relation.subject_id],
+        back_populates="subject",
+    )
+    subjects = relationship(
+        "Relation",
+        foreign_keys=[Relation.object_id],
+        back_populates="object",
+    )

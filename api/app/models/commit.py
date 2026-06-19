@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import STAPLUS
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.orm import relationship
@@ -43,14 +42,13 @@ class Commit(Base):
         "Observations@iot.navigationLink", Text
     )
     network_navigation_link = Column("Networks@iot.navigationLink", Text)
-    if STAPLUS:
-        party_navigation_link = Column("Parties@iot.navigationLink", Text)
-        license_navigation_link = Column("Licenses@iot.navigationLink", Text)
-        campaign_navigation_link = Column("Campaigns@iot.navigationLink", Text)
-        observationgroup_navigation_link = Column(
-            "ObservationGroups@iot.navigationLink", Text
-        )
-        relation_navigation_link = Column("Relations@iot.navigationLink", Text)
+    party_navigation_link = Column("Parties@iot.navigationLink", Text)
+    license_navigation_link = Column("Licenses@iot.navigationLink", Text)
+    campaign_navigation_link = Column("Campaigns@iot.navigationLink", Text)
+    observationgroup_navigation_link = Column(
+        "ObservationGroups@iot.navigationLink", Text
+    )
+    relation_navigation_link = Column("Relations@iot.navigationLink", Text)
     author = Column(String(255), nullable=False)
     encoding_type = Column("encodingType", String(100))
     message = Column(String(255), nullable=False)
@@ -71,11 +69,10 @@ class Commit(Base):
     )
     observation = relationship("Observation", back_populates="commit")
     network = relationship("Network", back_populates="commit")
-    if STAPLUS:
-        party = relationship("Party", back_populates="commit")
-        license = relationship("License", back_populates="commit")
-        campaign = relationship("Campaign", back_populates="commit")
-        observationgroup = relationship(
-            "ObservationGroup", back_populates="commit"
-        )
-        relation = relationship("Relation", back_populates="commit")
+    party = relationship("Party", back_populates="commit")
+    license = relationship("License", back_populates="commit")
+    campaign = relationship("Campaign", back_populates="commit")
+    observationgroup = relationship(
+        "ObservationGroup", back_populates="commit"
+    )
+    relation = relationship("Relation", back_populates="commit")

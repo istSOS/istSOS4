@@ -219,39 +219,80 @@ class FilterVisitor(visitor.NodeVisitor):
         except AttributeError:
             raise ex.InvalidFieldException(node.name)
 
+    @staticmethod
+    def _relationship_attribute(model, segment):
+        """Resolve an OGC navigation property name to a relationship attribute.
+
+        The navigation name is mapped to the internal (singular, lower-case)
+        relationship attribute through the same table used by $expand
+        (STA2REST.ENTITY_MAPPING), so e.g. Thing/"Datastreams",
+        Datastream/"Sensor" and Observation/"FeatureOfInterest" all resolve, and
+        both the singular and the plural spelling of a collection map to the
+        same attribute. Returns None when `segment` is not a navigation property
+        on `model` (i.e. it is a column).
+        """
+        # Deferred import: breaks the sta2rest <-> visitors <-> filter_visitor
+        # import cycle that a module-level import would create.
+        from .sta2rest import STA2REST
+
+        attr_name = STA2REST.ENTITY_MAPPING.get(segment, segment)
+        attr_name = attr_name.replace("TravelTime", "").lower()
+        candidate = getattr(model, attr_name, None)
+        if candidate is not None and isinstance(
+            getattr(candidate, "property", None), RelationshipProperty
+        ):
+            return candidate
+        return None
+
+    @staticmethod
+    def _resolve_path_column(model, segments):
+        """Resolve a column on `model`, with an optional trailing JSON path.
+
+        `segments[0]` is the column; any further segments index into it as a
+        JSON path (`#>`), matching the existing properties/<key> behaviour.
+        """
+        col_name = segments[0]
+        name = col_name.lower() if col_name[0].isupper() else col_name
+        name = SELECT_MAPPING.get(col_name, name)
+        try:
+            column = getattr(model, name)
+        except AttributeError:
+            raise ex.InvalidFieldException(col_name)
+        if len(segments) > 1:
+            path = "{" + ", ".join(segments[1:]) + "}"
+            column = column.op("#>")(path)
+        return column
+
     def visit_Attribute(self, node: ast.Attribute) -> ColumnClause:
+        # Flatten the navigation path into ordered segments, e.g.
+        # Datastreams/Sensor/id -> ["Datastreams", "Sensor", "id"].
         attributes = []
         owner = node.owner
 
         while not isinstance(owner, ast.Identifier):
             attributes.append(owner.attr)
             owner = owner.owner
+        segments = [owner.name] + attributes[::-1] + [node.attr]
 
-        name = owner.name
-        attributes = attributes[::-1]
-        rel_attr = self.visit(owner)
-        prop_inspect = inspect(rel_attr).property
-        table_attr = None
-
-        if isinstance(prop_inspect, RelationshipProperty):
+        # Walk the leading relationship hops, emitting one JOIN per hop, until a
+        # segment is no longer a navigation property. SensorThings allows direct
+        # multi-hop traversal in $filter (e.g.
+        # Things?$filter=Datastreams/Sensor/id eq 1) without any()/all(), so
+        # every relationship segment is joined. The final segment is always the
+        # column, hence the `len(segments) - 1` bound.
+        model = globals()[self.root_model]
+        index = 0
+        while index < len(segments) - 1:
+            rel_attr = self._relationship_attribute(model, segments[index])
+            if rel_attr is None:
+                break
             self.join_relationships.append(rel_attr)
-            owner_cls = prop_inspect.entity.class_
-            if attributes:
-                table_attr = getattr(owner_cls, attributes[0])
-                path = "{" + ", ".join(attributes[1:] + [node.attr]) + "}"
-                table_attr = table_attr.op("#>")(path)
-            else:
-                table_attr = getattr(owner_cls, node.attr)
-        else:
-            name = SELECT_MAPPING.get(name, name)
-            table_attr = getattr(globals()[str(rel_attr.table.name)], name)
-            path = "{" + ", ".join(attributes + [node.attr]) + "}"
-            table_attr = table_attr.op("#>")(path)
+            model = inspect(rel_attr).property.mapper.class_
+            index += 1
 
-        if table_attr is None:
-            raise ex.InvalidFieldException(node.attr)
-
-        return table_attr
+        # Remaining segments are a column on the reached entity plus an optional
+        # JSON sub-path.
+        return self._resolve_path_column(model, segments[index:])
 
     def visit_BinOp(self, node: ast.BinOp) -> Any:
         left = self.visit(node.left)

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import STAPLUS
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.json import JSON
 from sqlalchemy.orm import relationship
@@ -34,14 +33,12 @@ class Thing(Base):
     )
     datastream_navigation_link = Column("Datastreams@iot.navigationLink", Text)
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
-    if STAPLUS:
-        party_navigation_link = Column("Party@iot.navigationLink", Text)
+    party_navigation_link = Column("Party@iot.navigationLink", Text)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     properties = Column(JSON)
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
-    if STAPLUS:
-        party_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Party.id"))
+    party_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Party.id"))
     location = relationship(
         "Location", secondary=Thing_Location, back_populates="thing"
     )
@@ -50,5 +47,4 @@ class Thing(Base):
     )
     datastream = relationship("Datastream", back_populates="thing")
     commit = relationship("Commit", back_populates="thing")
-    if STAPLUS:
-        party = relationship("Party", back_populates="thing")
+    party = relationship("Party", back_populates="thing")

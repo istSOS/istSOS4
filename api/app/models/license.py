@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import STAPLUS
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
@@ -39,8 +38,7 @@ class License(Base):
     logo = Column(Text)
     attribution_text = Column("attributionText", Text)
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
-    if STAPLUS:
-        datastream = relationship("Datastream", back_populates="license")
+    datastream = relationship("Datastream", back_populates="license")
     campaign = relationship("Campaign", back_populates="license")
     observationgroup = relationship(
         "ObservationGroup", back_populates="license"
