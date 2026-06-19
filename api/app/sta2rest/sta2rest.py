@@ -28,6 +28,7 @@ from app import AUTHORIZATION, DEBUG, NETWORK, VERSION, VERSIONING
 from app.utils.utils import insert_navigation_link
 from dateutil.parser import isoparse
 
+from .odata_query.exceptions import InvalidCollectionException
 from .sta_parser.ast import *
 from .sta_parser.lexer import Lexer
 from .sta_parser.parser import Parser
@@ -699,9 +700,12 @@ class STA2REST:
             if index > 9:
                 single = True
         # Parse first entity
-        main_entity = STA2REST.parse_entity(parts.pop(0))
+        first_part = parts.pop(0)
+        main_entity = STA2REST.parse_entity(first_part)
         if not main_entity:
-            raise Exception("Error parsing uri: invalid entity")
+            # req/resource-path (18-088 §9.2): an unknown collection/entity is a
+            # client error (4xx/404), not a server error.
+            raise InvalidCollectionException(first_part)
 
         # Check all the entities in the uri
         entities = []

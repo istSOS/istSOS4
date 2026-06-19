@@ -183,6 +183,11 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> Callable[[ClauseElement], ClauseElement]:
         return operator.invert
 
+    def visit_USub(
+        self, node: ast.USub
+    ) -> Callable[[ClauseElement], ClauseElement]:
+        return operator.neg
+
     def visit_In(
         self, node: ast.In
     ) -> Callable[[ClauseElement, ClauseElement], BinaryExpression]:
@@ -323,6 +328,15 @@ class FilterVisitor(visitor.NodeVisitor):
         op = self.visit(node.op)
         return op(left, right)
 
+    def visit_UnaryOp(self, node: ast.UnaryOp) -> ClauseElement:
+        # req/request-data/built-in-filter-operations: apply the unary operator
+        # (logical `not` -> SQL NOT, arithmetic `-` -> negation) to its operand.
+        # Without this, UnaryOp nodes fell through to generic_visit which
+        # returned None, so `not (...)` produced an empty/always-false filter.
+        operand = self.visit(node.operand)
+        op = self.visit(node.op)
+        return op(operand)
+
     def visit_Compare(self, node: ast.Compare) -> BinaryExpression:
         left = self.visit(node.left)
         right = self.visit(node.right)
@@ -423,10 +437,14 @@ class FilterVisitor(visitor.NodeVisitor):
         if isinstance(field, ast.Identifier) and field.name == "result":
             identifier = getattr(globals()[self.root_model], "result_string")
             return identifier.contains(self.visit(substr))
-        if isinstance(substr, ast.Identifier):
-            return self._substr_function(field, substr, "contains")
-        if isinstance(field, ast.Identifier):
-            return self._substr_function(substr, field, "contains")
+        # conformance: req/request-data/built-in-query-functions — substringof
+        # OData/STA Table 23 semantics: substringof(p0, p1) means "p1 contains
+        # p0", i.e. the SECOND argument (field/haystack) must contain the FIRST
+        # (substr/needle). This emits p1 LIKE '%' || p0 || '%' through the same
+        # .contains() machinery used by startswith/endswith. The previous code
+        # swapped the operands (built "needle LIKE %haystack%"), so a valid
+        # substring matched only on equality and otherwise returned [].
+        return self._substr_function(field, substr, "contains")
 
     def func_endswith(
         self, field: ast._Node, substr: ast._Node
@@ -630,13 +648,29 @@ class FilterVisitor(visitor.NodeVisitor):
             WKTElement(geography.val, srid=EPSG),
         )
 
-    def func_geolength(self, field: ast.Identifier) -> functions.Function:
-        return functions.func.ST_Length(
-            getattr(
+    def _geo_argument(self, arg: ast._Node):
+        """Resolve a geospatial-function argument to a column or geometry.
+
+        conformance: req/request-data/built-in-query-functions — a geo.* function
+        argument may be a geometry PROPERTY (ast.Identifier -> mapped column) or
+        an inline geography LITERAL (ast.Geography -> WKT geometry). The literal
+        form (e.g. geo.length(geography'LINESTRING(...)'), the Table 23 example)
+        previously crashed with "'Geography' object has no attribute 'name'"
+        because only the property form was handled.
+        """
+        if isinstance(arg, ast.Geography):
+            return WKTElement(arg.val, srid=EPSG)
+        if isinstance(arg, ast.Identifier):
+            return getattr(
                 globals()[self.root_model],
-                SELECT_MAPPING.get(field.name, field.name),
+                SELECT_MAPPING.get(arg.name, arg.name),
             )
-        )
+        return self.visit(arg)
+
+    def func_geolength(self, field: ast._Node) -> functions.Function:
+        # conformance: req/request-data/built-in-query-functions — geo.length
+        # accepts either a geometry property or a geography literal argument.
+        return functions.func.ST_Length(self._geo_argument(field))
 
     def func_geointersects(
         self, field: ast.Identifier, geography: ast.Geography

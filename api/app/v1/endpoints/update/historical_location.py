@@ -17,7 +17,7 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
-from fastapi import APIRouter, Body, Depends, Header, status
+from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
 
 from .functions import (
@@ -25,6 +25,8 @@ from .functions import (
     set_commit,
     update_historical_location_entity,
 )
+from .json_patch import apply_json_patch_to_entity, normalize_patch_body
+from .put import handle_put_replace, request_body_openapi_example
 
 v1 = APIRouter()
 
@@ -51,10 +53,11 @@ ALLOWED_KEYS = ["time", "Thing", "Locations"]
     summary="Update a Historical Location",
     description="Update a Historical Location",
     status_code=status.HTTP_200_OK,
+    openapi_extra=request_body_openapi_example(PAYLOAD_EXAMPLE),
 )
 async def update_historical_location(
     historical_location_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload=Depends(normalize_patch_body),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -81,6 +84,15 @@ async def update_historical_location(
                             "message": "Historical Location not found.",
                         },
                     )
+
+                # req/create-update-delete/update-entity-jsonpatch: resolve an
+                # RFC 6902 array body into a merge dict; dict bodies pass through.
+                payload = await apply_json_patch_to_entity(
+                    connection,
+                    "HistoricalLocation",
+                    historical_location_id,
+                    payload,
+                )
 
                 if not payload:
                     if current_user is not None:
@@ -121,3 +133,43 @@ async def update_historical_location(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"code": 400, "type": "error", "message": str(e)},
         )
+
+
+# conformance: req/create-update-delete/update-entity-put — "time" is the only
+# mutable scalar property (NOT NULL) and is mandatory. The Thing and Locations
+# relations are left untouched when absent so the existing, required Thing link
+# is not orphaned.
+REQUIRED_PUT_KEYS = ["time"]
+OPTIONAL_PUT_KEYS = []
+
+
+@v1.api_route(
+    "/HistoricalLocations({historical_location_id})",
+    methods=["PUT"],
+    tags=["HistoricalLocations"],
+    summary="Replace a Historical Location",
+    description="Replace a Historical Location (full update)",
+    status_code=status.HTTP_200_OK,
+    openapi_extra=request_body_openapi_example(PAYLOAD_EXAMPLE),
+)
+async def replace_historical_location(
+    historical_location_id: int,
+    request: Request,
+    commit_message=message,
+    current_user=user,
+    pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
+):
+    # conformance: req/create-update-delete/update-entity-put (18-088 §10.3)
+    return await handle_put_replace(
+        pool=pool,
+        request=request,
+        entity_db_name="HistoricalLocation",
+        not_found_message="Historical Location not found.",
+        entity_id=historical_location_id,
+        commit_message=commit_message,
+        current_user=current_user,
+        allowed_keys=ALLOWED_KEYS,
+        required_keys=REQUIRED_PUT_KEYS,
+        optional_keys=OPTIONAL_PUT_KEYS,
+        update_entity_fn=update_historical_location_entity,
+    )

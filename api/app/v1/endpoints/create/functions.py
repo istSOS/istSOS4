@@ -258,6 +258,14 @@ async def insert_sensor_entity(connection, payload, commit_id):
 
         datastreams = payload.pop("Datastreams", [])
 
+        # req/create-update-delete/create-entity + 18-088 §8.2.5: Sensor.metadata
+        # is stored in a JSON(B) column but its type depends on encodingType
+        # (e.g. for application/pdf it is a link, i.e. a bare string). A bare
+        # scalar is not valid JSON text, so JSON-encode it here; object metadata
+        # is already serialized by create_entity, so only non-dict values need it.
+        if "metadata" in payload and not isinstance(payload["metadata"], dict):
+            payload["metadata"] = json.dumps(payload["metadata"])
+
         if commit_id is not None:
             payload["commit_id"] = commit_id
 
