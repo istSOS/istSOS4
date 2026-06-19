@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import STAPLUS
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
@@ -37,9 +36,8 @@ class Party(Base):
     display_name = Column("displayName", String(255))
     auth_id = Column("authId", String(255), unique=True)
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
-    if STAPLUS:
-        datastream = relationship("Datastream", back_populates="party")
-        thing = relationship("Thing", back_populates="party")
+    datastream = relationship("Datastream", back_populates="party")
+    thing = relationship("Thing", back_populates="party")
     campaign = relationship("Campaign", back_populates="party")
     observationgroup = relationship("ObservationGroup", back_populates="party")
     commit = relationship("Commit", back_populates="party")

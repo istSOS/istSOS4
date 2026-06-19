@@ -562,11 +562,7 @@ class STA2REST:
         navigation = STA2REST.resolve_navigation(
             parent_entity, navigation_name
         )
-        return (
-            navigation.get("inverse_relationship")
-            if navigation
-            else None
-        )
+        return navigation.get("inverse_relationship") if navigation else None
 
     @staticmethod
     def get_default_column_names(entity: str) -> list:

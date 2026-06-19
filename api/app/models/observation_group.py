@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import STAPLUS
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.dialects.postgresql.json import JSON
@@ -20,10 +19,9 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
-if STAPLUS:
-    from .campaign_observation_group import Campaign_ObservationGroup
-    from .observation_group_observation import ObservationGroup_Observation
-    from .relation_observation_group import Relation_ObservationGroup
+from .campaign_observation_group import Campaign_ObservationGroup
+from .observation_group_observation import ObservationGroup_Observation
+from .relation_observation_group import Relation_ObservationGroup
 
 
 class ObservationGroup(Base):
@@ -52,24 +50,21 @@ class ObservationGroup(Base):
     party_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Party.id"))
     license_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.License.id"))
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
-    if STAPLUS:
-        campaign = relationship(
-            "Campaign",
-            secondary=Campaign_ObservationGroup,
-            back_populates="observationgroup",
-        )
+    campaign = relationship(
+        "Campaign",
+        secondary=Campaign_ObservationGroup,
+        back_populates="observationgroup",
+    )
     party = relationship("Party", back_populates="observationgroup")
     license = relationship("License", back_populates="observationgroup")
-    if STAPLUS:
-        observation = relationship(
-            "Observation",
-            secondary=ObservationGroup_Observation,
-            back_populates="observationgroup",
-        )
-    if STAPLUS:
-        relation = relationship(
-            "Relation",
-            secondary=Relation_ObservationGroup,
-            back_populates="observationgroup",
-        )
+    observation = relationship(
+        "Observation",
+        secondary=ObservationGroup_Observation,
+        back_populates="observationgroup",
+    )
+    relation = relationship(
+        "Relation",
+        secondary=Relation_ObservationGroup,
+        back_populates="observationgroup",
+    )
     commit = relationship("Commit", back_populates="observationgroup")

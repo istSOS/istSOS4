@@ -31,7 +31,7 @@ services:
       retries: 5
 
   api:
-    image: ghcr.io/istsos/istsos4/api:0.1_staplus
+    image: ghcr.io/istsos/istsos4/api:0.2_staplus
     restart: always
     depends_on:
       database:
