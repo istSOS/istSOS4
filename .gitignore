@@ -9,3 +9,6 @@ database/schemaspy
 .venv/
 venv/
 env/
+.codex
+.vscode
+.python-version
