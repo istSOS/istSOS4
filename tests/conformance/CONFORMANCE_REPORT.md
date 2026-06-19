@@ -1,0 +1,152 @@
+# OGC SensorThings API v1.1 — Conformance Report (istSOS4)
+
+Black-box conformance suite for istSOS4's STA v1.1 endpoint, covering the three
+core conformance classes plus the Data Array extension. Scope:
+`docs/CONFORMANCE_PLAN.md`. Per-URI ledger + gap analysis:
+`docs/COVERAGE_MATRIX.md`. Engine request set: `docs/ENGINE_REQUESTS.txt`.
+
+**Target:** `http://localhost:8018/v4/v1.1` (override `STA_BASE_URL`).
+**Standard:** OGC 18-088 — SensorThings API Part 1: Sensing v1.1.
+
+## Result
+
+| Suite | Class | Files | Passed | xfail | Failed |
+|---|---|---|---:|---:|---:|
+| `-m c01` | Sensing Core | `test_c01_sensing_core.py` | 203 | 0 | 0 |
+| `-m c02` | Create-Update-Delete | `test_c02_cud.py`, `test_c02_jsonpatch.py` | 62 | 0 | 0 |
+| `-m c03` | Filtering Extension | `test_c03_filtering.py`, `…_logic_arith.py`, `…_string.py`, `…_datetime.py`, `…_geo.py` | 120 | 0 | 0 |
+| `-m data_array` | Data Array extension | `test_data_array.py` | 9 | 0 | 0 |
+| **`-n auto` (all)** | | | **394** | **0** | **0** |
+
+All green with **no `xfail`s**: `contains` (an OData-4.01 alias not in 18-088
+Table 23) is out-of-scope and is no longer tested (see register below). Parallel
+isolation holds. The `seed` fixture
+loads the exact compliance dataset and tears it down (verified: zero leftover
+entities).
+
+```bash
+PY=tests/conformance/.venv/bin/python
+$PY -m pytest tests/conformance -m c01          # 203 passed
+$PY -m pytest tests/conformance -m c02          # 62 passed
+$PY -m pytest tests/conformance -m c03          # 120 passed
+$PY -m pytest tests/conformance -m data_array   # 9 passed
+$PY -m pytest tests/conformance -n auto         # 394 passed
+```
+
+## What changed this round
+
+`serverSettings.conformance` was **expanded** and now declares, among others,
+`built-in-query-functions`, `count`, `pagination`, `status-code`,
+`query-status-code`, `update-entity-put`, `historical-location-auto-creation`
+and `data-array/data-array`. Declaring a class is a promise: every URI must have
+a **passing** test. Four prior `xfail`s had been justified by "class not
+declared" — that justification became false, so each was either fixed in source
+and converted to a positive test, or (for `contains`) re-justified on
+Table-23 grounds. Baseline before this round: **350 passed / 5 xfailed**;
+now **394 passed / 1 xfailed**.
+
+- **4 ex-`xfail`s → green positive tests** (after source fixes [A][B][C][D]):
+  `substringof`, empty-set `@iot.count:0`, `geo.length` on a literal geography,
+  and PUT full-replace.
+- **New coverage for newly-declared classes:** pagination (full `@iot.nextLink`
+  traversal), `status-code`/`query-status-code` (200 valid / 400 malformed, never
+  500), `historical-location-auto-creation`, and the 16 `datamodel/*/properties`
+  + `datamodel/*/relations` URIs (both directions).
+- **New `data_array` class** (`test_data_array.py`, 9 tests) covering GET
+  `?$resultFormat=dataArray` (nav + collection, `$top`, `$orderby`) and POST
+  `/CreateObservations` — after a 4-part read-path fix (DA1–DA4).
+
+## API changes this round (source only; tests never weakened)
+
+Reproduced via curl before/after; each tagged `# conformance: <req-id>` in source.
+
+| # | Violation (declared class) | Root cause & fix | Files |
+|---|---|---|---|
+| A | `substringof(p0,p1)` returned `[]` for a valid substring (matched on equality) | translate to SQL `p1 LIKE '%'||p0||'%'` (req/request-data/built-in-query-functions) | `sta2rest/filter_visitor.py` |
+| B | `$count=true` on an empty set omitted `@iot.count` | always emit `@iot.count` (= 0 when empty); non-empty unchanged; `$count=false` still omits (req/request-data/count, §9.3.4 Req 28) | `v1/endpoints/read/read.py` |
+| C | `geo.length(geography'LINESTRING(...)')` → 400 `'Geography' object has no attribute 'name'` | branch on literal-geography vs property in the geo-function resolver | `sta2rest/filter_visitor.py` |
+| D | PUT full-replace → 405 | new PUT routes with full-replace semantics: missing mandatory → 400, omitted optional → null, `@iot.id`/selfLink preserved, mandatory relations kept valid (req/create-update-delete/update-entity-put, §10.3) | new `v1/endpoints/update/put.py` + thing/location/sensor/observed_property/datastream/observation/feature_of_interest/historical_location routes + `utils/utils.py` |
+| DA1 | dataArray nav path wrapped each group in a non-spec `json` key | emit the group object directly (req/data-array/data-array) | `sta2rest/visitors.py` |
+| DA2 | dataArray collection path returned a single flat row + hardcoded `dataArray@iot.count:1`, dropping all but one observation per datastream | group per datastream, stream all observations as list-of-rows with the real per-group count | `sta2rest/visitors.py` (+`sta_parser/lexer.py`) |
+| DA3 | dataArray nav `$top=1` → 0 rows (off-by-one) | fix row-aggregation slice | `sta2rest/visitors.py` |
+| DA4 | dataArray + `$orderby` → 500 Internal Server Error | fold the orderby into the per-group row aggregation | `sta2rest/visitors.py` |
+
+No regressions — every previously passing test remains green.
+
+## xfail register
+
+**None.** The suite has zero `xfail`s.
+
+`contains` (an OData-4.01 alias **not** in 18-088 §9.3.3.5.2 Table 23 — the spec's
+substring predicate is `substringof`, which is implemented and tested) was the
+last `xfail`; it has been **removed** as out-of-conformance-scope (istSOS4 returns
+400 `Unknown function: contains`; not a required function of any declared class).
+See `docs/COVERAGE_MATRIX.md` §14.
+
+The four previously-registered `xfail`s (`test_put_replace_thing`,
+`test_count_empty_set_returns_zero`, `test_substringof`,
+`test_geo_length_literal_linestring`) are now **positive passing tests** — their
+"class not declared" justification was invalidated by the expanded conformance
+array and the underlying violations were fixed in source.
+
+## Coverage by class
+
+- **c01 Sensing Core (203)** — service root + conformance; per-collection GET;
+  control info; entity-by-id; property access + raw `$value`; `$ref`
+  single/collection; navigation both directions across the 2-datastream tree;
+  deep resource paths; **datamodel mandatory-properties + relations for all 8
+  entities** (`req/datamodel/*/properties` + `*/relations`); **status-code (200
+  valid)** and **query-status-code (400 on malformed `$filter`/`$orderby`/`$top`/
+  `$skip`/unknown function — never 500)**; 404 error handling.
+- **c02 CUD (62)** — POST per collection (201 + Location); deep insert (+ status
+  code); link-to-existing via `{"@iot.id"}`; POST-to-navigation; FoI
+  auto-generation; PATCH partial + link-change; **PUT full-replace** (replace
+  semantics, missing-mandatory → 400, omitted-optional → null); **JSON Patch**
+  (add/replace/copy/move/remove/test); DELETE + explicit cascade matrix;
+  validation errors; **historical-location auto-creation** (deep-insert and
+  POST-to-nav both auto-create a linked HistoricalLocation with a time).
+- **c03 Filtering (120)** — `$orderby`/`$top`/`$skip`/`$count`(±`false`,
+  empty-set→0)/**`@iot.nextLink` full traversal**; `$select` props + navigation;
+  `$expand` single/multiple/nested/nested-with-options; `$filter`
+  comparison/logical/arithmetic; string fns incl. **`substringof`**; datetime
+  fns; math fns; geospatial + all `st_*` relations incl. **`geo.length` literal**;
+  relation filters (1-/2-/multi-hop); combinations. Scoped to the seed for exact
+  result-sets. No `xfail`s (`contains` removed as out-of-scope).
+- **data_array (9)** — GET `?$resultFormat=dataArray` strict spec shape (no `json`
+  wrapper, list-of-rows, real `dataArray@iot.count`) on the nav path and the
+  collection path, with `$top` and `$orderby`; POST `/CreateObservations`
+  (success + missing-result / missing-datastream validation). Created
+  observations cleaned up in teardown.
+
+## Methodology
+
+Coverage was driven by four sets (full matrix in `docs/COVERAGE_MATRIX.md`):
+**A** = OGC TeamEngine requests (block-parsed `full_logs.txt` →
+`docs/ENGINE_REQUESTS.txt`; query options + the six comparison operators only);
+**B** = FROST-Server v2.7.2 c01/c02/c03 tests (read-only, extensions excluded);
+**C** = OGC 18-088 (§8/§9/§10 + Table 23); the suite implements `(B ∪ C) − A`
+plus everything the expanded `serverSettings.conformance` now declares.
+
+**Seed:** the session-scoped `seed` fixture deep-inserts **`entitiesDefault.json`**
+verbatim (1 Thing → 1 Location + 2 Datastreams × [Sensor + ObservedProperty + 2
+Observations]; results 3/4/5/6; phenomenonTime 2015-03-03..06; Point(-117.05,
+51.05); the intentional typos `Tempretaure`/`Tempreture` preserved) and deletes
+everything on teardown. All assertions scope to seed ids so they hold under
+`-n auto` (per-worker seeds) and against a non-empty live DB.
+
+**Adjudication:** a deviation on a **declared** URI is a real 18-088 violation →
+routed to api-fixer (sources only; tests never weakened). A deviation on a
+non-declared item is optional. A 500 is never acceptable. FROST-only items (not
+in 18-088) are out-of-scope (matrix §14). File ownership held throughout:
+authors wrote only their `test_*` files; the api-fixer touched only `api/app/`
+sources; the lead alone routed violations and owns the scaffolding.
+
+## Deliverables
+
+- `tests/conformance/` — scaffolding (`conftest.py`, `client.py`, `sample_data.py`,
+  `pytest.ini`, `requirements.txt`, isolated `.venv`) + 9 test files (this report,
+  `README.md`).
+- `docs/ENGINE_REQUESTS.txt` — set A (unique engine requests).
+- `docs/COVERAGE_MATRIX.md` — per-URI ledger + A/B/C/GAP matrix with adjudication.
+- API source fixes under `api/app/` (this round: A,B,C,D + DA1–DA4; tagged
+  `# conformance:`; uncommitted, staged for review).
