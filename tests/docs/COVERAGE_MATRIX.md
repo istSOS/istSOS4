@@ -8,7 +8,7 @@ Sections 1+ keep the A/B/C/GAP analysis used to build the suite.
 | Set | Meaning | Source |
 |---|---|---|
 | **Decl** | Declared in the live `serverSettings.conformance` | live root `GET /v4/v1.1` |
-| **A** | Exercised by the OGC TeamEngine compliance run | `docs/ENGINE_REQUESTS.txt` (2387 blocks → 1495 unique) |
+| **A** | Exercised by the OGC TeamEngine compliance run | `tests/docs/ENGINE_REQUESTS.txt` (2387 blocks → 1495 unique) |
 | **B** | Present in FROST-Server **v2.7.2** c01/c02/c03 tests (extensions excluded) | `~/workspace/GIT/FROST-Server` (read-only, tag v2.7.2) |
 | **C** | Required/defined by OGC 18-088 | §8/§9/§10, esp. §9.3.3 + §9.3.3.5.2 Table 23 |
 

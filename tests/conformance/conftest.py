@@ -18,8 +18,15 @@ Fixture contract (see docs/CONFORMANCE_PLAN.md):
 from __future__ import annotations
 
 import os
+import sys
 import uuid
 from dataclasses import dataclass, field
+
+# Anchor tests/conformance/ (this file's dir) on sys.path so test modules living
+# in the c01/ c02/ c03/ data_array/ subfolders can still `import sample_data` /
+# `from client import …`. Runs before the local imports below and before any test
+# module is imported (conftest is loaded first), so it works in any --import-mode.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pytest
 

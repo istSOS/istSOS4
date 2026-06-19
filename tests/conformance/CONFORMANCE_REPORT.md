@@ -2,8 +2,8 @@
 
 Black-box conformance suite for istSOS4's STA v1.1 endpoint, covering the three
 core conformance classes plus the Data Array extension. Scope:
-`docs/CONFORMANCE_PLAN.md`. Per-URI ledger + gap analysis:
-`docs/COVERAGE_MATRIX.md`. Engine request set: `docs/ENGINE_REQUESTS.txt`.
+`tests/docs/CONFORMANCE_PLAN.md`. Per-URI ledger + gap analysis:
+`tests/docs/COVERAGE_MATRIX.md`. Engine request set: `tests/docs/ENGINE_REQUESTS.txt`.
 
 **Target:** `http://localhost:8018/v4/v1.1` (override `STA_BASE_URL`).
 **Standard:** OGC 18-088 — SensorThings API Part 1: Sensing v1.1.
@@ -12,10 +12,10 @@ core conformance classes plus the Data Array extension. Scope:
 
 | Suite | Class | Files | Passed | xfail | Failed |
 |---|---|---|---:|---:|---:|
-| `-m c01` | Sensing Core | `test_c01_sensing_core.py` | 203 | 0 | 0 |
-| `-m c02` | Create-Update-Delete | `test_c02_cud.py`, `test_c02_jsonpatch.py` | 62 | 0 | 0 |
-| `-m c03` | Filtering Extension | `test_c03_filtering.py`, `…_logic_arith.py`, `…_string.py`, `…_datetime.py`, `…_geo.py` | 120 | 0 | 0 |
-| `-m data_array` | Data Array extension | `test_data_array.py` | 9 | 0 | 0 |
+| `-m c01` | Sensing Core | `c01/` — service_root, read_entities, navigation, properties, refs, errors | 203 | 0 | 0 |
+| `-m c02` | Create-Update-Delete | `c02/` — create, deep_insert, update_patch, update_put, delete, validation, jsonpatch | 62 | 0 | 0 |
+| `-m c03` | Filtering Extension | `c03/` — query_options, filter_logic_arith, filter_string, filter_datetime, filter_geo | 120 | 0 | 0 |
+| `-m data_array` | Data Array extension | `data_array/test_data_array.py` | 9 | 0 | 0 |
 | **`-n auto` (all)** | | | **394** | **0** | **0** |
 
 All green with **no `xfail`s**: `contains` (an OData-4.01 alias not in 18-088
@@ -43,7 +43,9 @@ a **passing** test. Four prior `xfail`s had been justified by "class not
 declared" — that justification became false, so each was either fixed in source
 and converted to a positive test, or (for `contains`) re-justified on
 Table-23 grounds. Baseline before this round: **350 passed / 5 xfailed**;
-now **394 passed / 1 xfailed**.
+now **394 passed / 0 xfailed**. The suite is organized into per-class subfolders
+(`c01/ c02/ c03/ data_array/`) under `tests/conformance/`; the shared fixtures
+(`conftest.py`, `client.py`, `sample_data.py`) stay at the root and are inherited.
 
 - **4 ex-`xfail`s → green positive tests** (after source fixes [A][B][C][D]):
   `substringof`, empty-set `@iot.count:0`, `geo.length` on a literal geography,
@@ -52,7 +54,7 @@ now **394 passed / 1 xfailed**.
   traversal), `status-code`/`query-status-code` (200 valid / 400 malformed, never
   500), `historical-location-auto-creation`, and the 16 `datamodel/*/properties`
   + `datamodel/*/relations` URIs (both directions).
-- **New `data_array` class** (`test_data_array.py`, 9 tests) covering GET
+- **New `data_array` class** (`data_array/test_data_array.py`, 9 tests) covering GET
   `?$resultFormat=dataArray` (nav + collection, `$top`, `$orderby`) and POST
   `/CreateObservations` — after a 4-part read-path fix (DA1–DA4).
 
@@ -81,7 +83,7 @@ No regressions — every previously passing test remains green.
 substring predicate is `substringof`, which is implemented and tested) was the
 last `xfail`; it has been **removed** as out-of-conformance-scope (istSOS4 returns
 400 `Unknown function: contains`; not a required function of any declared class).
-See `docs/COVERAGE_MATRIX.md` §14.
+See `tests/docs/COVERAGE_MATRIX.md` §14.
 
 The four previously-registered `xfail`s (`test_put_replace_thing`,
 `test_count_empty_set_returns_zero`, `test_substringof`,
@@ -120,9 +122,9 @@ array and the underlying violations were fixed in source.
 
 ## Methodology
 
-Coverage was driven by four sets (full matrix in `docs/COVERAGE_MATRIX.md`):
+Coverage was driven by four sets (full matrix in `tests/docs/COVERAGE_MATRIX.md`):
 **A** = OGC TeamEngine requests (block-parsed `full_logs.txt` →
-`docs/ENGINE_REQUESTS.txt`; query options + the six comparison operators only);
+`tests/docs/ENGINE_REQUESTS.txt`; query options + the six comparison operators only);
 **B** = FROST-Server v2.7.2 c01/c02/c03 tests (read-only, extensions excluded);
 **C** = OGC 18-088 (§8/§9/§10 + Table 23); the suite implements `(B ∪ C) − A`
 plus everything the expanded `serverSettings.conformance` now declares.
@@ -143,10 +145,13 @@ sources; the lead alone routed violations and owns the scaffolding.
 
 ## Deliverables
 
-- `tests/conformance/` — scaffolding (`conftest.py`, `client.py`, `sample_data.py`,
-  `pytest.ini`, `requirements.txt`, isolated `.venv`) + 9 test files (this report,
-  `README.md`).
-- `docs/ENGINE_REQUESTS.txt` — set A (unique engine requests).
-- `docs/COVERAGE_MATRIX.md` — per-URI ledger + A/B/C/GAP matrix with adjudication.
+- `tests/conformance/` — root scaffolding (`conftest.py`, `client.py`,
+  `sample_data.py`, `pytest.ini`, `requirements.txt`, isolated `.venv`, this report,
+  `README.md`) + per-class subfolders `c01/` (6 files), `c02/` (7), `c03/` (5),
+  `data_array/` (1) — 19 test files, 394 tests. Subfolders inherit the root
+  fixtures; `--import-mode=importlib`.
+- `tests/docs/` — `CONFORMANCE_PLAN.md`, `COVERAGE_MATRIX.md`, `ENGINE_REQUESTS.txt`,
+  `entitiesDefault.json` (seed dataset).
+- `tests/docs/COVERAGE_MATRIX.md` — per-URI ledger + A/B/C/GAP matrix with adjudication.
 - API source fixes under `api/app/` (this round: A,B,C,D + DA1–DA4; tagged
   `# conformance:`; uncommitted, staged for review).
