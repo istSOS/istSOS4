@@ -1,0 +1,39 @@
+# Copy this file to config.yaml and edit it for your deployment.
+
+log_level: INFO
+dry_run: true
+
+mqtt:
+  host: localhost
+  port: 1883
+  client_id: mqtt2istsos
+  username:
+  password:
+  tls: false
+  tls_insecure: false
+  keepalive: 60
+  qos: 0
+  reconnect_delay_sec: 10
+  queue_maxsize: 1000
+
+  # Optional. If omitted or empty, the app subscribes to every mapping key.
+  # Use a wildcard topic only for debugging/discovery.
+  topics: []
+  # topics:
+  #   - istsos/maggiore/#
+
+istsos:
+  url: http://localhost:8018/v4/v1.1
+  username:
+  password:
+  timeout_sec: 15
+  commit_message: mqtt2istsos observation import
+
+# Topic keys are MQTT topics. Values are ordered istSOS datastream names.
+# The first MQTT payload field is the timestamp; value fields start from index 1.
+mapping:
+  topic/a:
+    - DatastreamA
+    - DatastreamB
+  topic/b:
+    - DatastreamC
