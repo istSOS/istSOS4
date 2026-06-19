@@ -8,9 +8,9 @@ re-architecture, no renames, no public-signature changes, no SQL/perf changes.
 `pytest tests/conformance -n auto -q` → must stay **394 passed**. If any test goes
 red, revert that change. One small isolated diff at a time.
 
-**STATUS: FASE 2 complete — P1 + P2 (§5), then P3 + an FK-violation→400 rung (§6).
-Suite green at 399 (394 + 5 new link-validation tests). P4 still NOT applied. See §6
-for the P3 round.**
+**STATUS: FASE 2 complete — P1+P2 (§5), P3 + FK→400 rung (§6), P4 DRY helper (§7).
+All four items applied. Suite green at 399; error bodies byte-identical (zero output
+change). Off-limits never touched.**
 
 ---
 
@@ -250,6 +250,40 @@ query-status-code `*_returns_400` still 400.
   off-limits files were reverted to HEAD (diffs verified pure-P3), and the FK round
   honored stop-on-first-red (no reds occurred).
 
-### Still not applied
-- **P4** (DRY the duplicated 403/503/400/500 blocks into a helper) — broad sweep
-  across ~27 files; deferred unless requested.
+---
+
+## 7. FASE 2 — P4 (DRY the duplicated error blocks)
+
+Behaviour-preserving refactor: **zero output change** (same status, byte-identical
+JSON body). Approved as a verified broad sweep.
+
+### Helper
+New module `api/app/v1/endpoints/error_response.py`:
+`error_response(status_code, message) -> JSONResponse` building exactly
+`{"code": status_code, "type": "error", "message": message}` — the same shape every
+endpoint emitted inline (verified: across all 200 error blocks the body `code`
+always equalled the HTTP status, and `type` was always `"error"`).
+
+### Sweep
+Replaced **162 non-auth** inline `return JSONResponse(status_code=…, content={code,
+type,message})` blocks with `return error_response(…)` across **27** create/update/
+delete endpoint files. **The 38 auth/RBAC blocks (401×17, 403×21,
+`InsufficientPrivilegeError`) were left inline** — off-limits ("401/403/RBAC
+branches"). Note: 403 appears in the P4 chain example, but off-limits names it
+explicitly, so it stays inline; flagged to the user.
+
+### Protocol & verification
+Phased with revert-on-fail + stop: pilot (`create/thing.py`) → create-rest →
+update → delete; after EACH phase `pytest -n auto` (**399**) **and** byte-for-byte
+comparison of golden error bodies (FK-400, ValueError-400, 404). All phases green,
+all goldens byte-identical. Final manual probes confirmed:
+- `POST /Datastreams` bad link → `{"code":400,"type":"error","message":"Referenced entity does not exist."}` (identical).
+- `GET /Things?$filter=name eq` → 400 (read path, identical — unchanged).
+Completeness: the only inline error blocks left are the 38 auth ones; no non-auth
+block remains inline. Off-limits (network/policy/user/login/oauth) carry no
+`error_response`.
+
+### Result
+`-n auto`: **399 passed, 0 failed, 0 xfailed**; error bodies byte-identical to
+pre-P4. Files: `error_response.py` (new) + 27 endpoint files. All four refactor
+items (P1–P4) are now applied.

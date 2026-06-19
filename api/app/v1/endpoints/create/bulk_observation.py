@@ -22,6 +22,7 @@ from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
+from app.v1.endpoints.error_response import error_response
 
 from .functions import create_entity, set_commit, update_datastream_last_foi_id
 
@@ -113,37 +114,16 @@ async def bulk_observations(
                     data_array = observation_set.get("dataArray", [])
 
                     if not datastream_id:
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Missing 'datastream_id' in Datastream.",
-                            },
-                        )
+                        return error_response(status.HTTP_400_BAD_REQUEST, "Missing 'datastream_id' in Datastream.")
 
                     # Check that at least phenomenonTime and result are present
                     if (
                         "phenomenonTime" not in components
                         or "result" not in components
                     ):
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Missing required properties 'phenomenonTime' or 'result' in components.",
-                            },
-                        )
+                        return error_response(status.HTTP_400_BAD_REQUEST, "Missing required properties 'phenomenonTime' or 'result' in components.")
                     if "featureOfInterest" in components:
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "This method does not support 'featureOfInterest' in components. It will support in future.",
-                            },
-                        )
+                        return error_response(status.HTTP_400_BAD_REQUEST, "This method does not support 'featureOfInterest' in components. It will support in future.")
                     try:
                         foi_id = await get_foi_id(
                             datastream_id, conn, commit_id=commit_id
@@ -167,45 +147,17 @@ async def bulk_observations(
                         )
                     except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
                         # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-                        return JSONResponse(
-                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                            content={
-                                "code": 503,
-                                "type": "error",
-                                "message": "Database temporarily unavailable",
-                            },
-                        )
+                        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
                     except ValueError as e:
                         if current_user is not None:
                             await conn.execute("RESET ROLE;")
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": str(e),
-                            },
-                        )
+                        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
                     except asyncpg.ForeignKeyViolationError:
                         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Referenced entity does not exist.",
-                            },
-                        )
+                        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
                     except Exception:
                         # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
-                        return JSONResponse(
-                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            content={
-                                "code": 500,
-                                "type": "error",
-                                "message": "Internal server error",
-                            },
-                        )
+                        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
 
                 if current_user is not None:
                     await conn.execute("RESET ROLE;")
@@ -213,39 +165,15 @@ async def bulk_observations(
 
     except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
         # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={
-                "code": 503,
-                "type": "error",
-                "message": "Database temporarily unavailable",
-            },
-        )
+        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
     except ValueError as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
+        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": "Referenced entity does not exist.",
-            },
-        )
+        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
     except Exception:
         # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "code": 500,
-                "type": "error",
-                "message": "Internal server error",
-            },
-        )
+        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
 
 
 async def insertBulkObservation(
