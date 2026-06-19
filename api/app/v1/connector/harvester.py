@@ -41,6 +41,7 @@ Public interface:
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -49,7 +50,7 @@ from typing import Any, Optional
 
 import asyncpg
 
-from connector.exceptions import HarvesterQueryError
+from app.v1.connector.exceptions import HarvesterQueryError
 
 logger = logging.getLogger(__name__)
 
@@ -97,36 +98,36 @@ class HarvestedCatalog:
 # The harvest query
 _HARVEST_QUERY = """
 SELECT
-    t.id                            AS thing_id,
-    t.name                          AS thing_name,
-    t.description                   AS thing_description,
-    t.properties                    AS thing_properties,
-    l.id                             AS loc_id,
-    l.name                           AS loc_name,
-    l.description                   AS loc_description,
-    l."encodingType"                AS loc_encoding_type,
-    ST_AsGeoJSON(l.location)::json  AS location_geometry,
-    l.properties                    AS loc_properties,
-    d.id                            AS ds_id,
-    d.name                          AS ds_name,
-    d.description                   AS ds_description,
-    d."unitOfMeasurement"           AS uom,
-    d."observationType"             AS observation_type,
-    d."observedArea"                AS observed_area,
-    d."phenomenonTime"              AS phenomenon_time,
-    d."resultTime"                  AS result_time,
-    d.properties                    AS ds_properties,
-    op.id                           AS op_id,
-    op.name                         AS op_name,
-    op.description                  AS op_description,
-    op.definition                   AS op_definition,
-    op.properties                   AS op_properties,
-    s.id                            AS sensor_id,
-    s.name                          AS sensor_name,
-    s.description                   AS sensor_description,
-    s."encodingType"                AS sensor_encoding_type,
-    s.metadata                      AS sensor_metadata,
-    s.properties                    AS sensor_properties
+    t.id                                 AS thing_id,
+    t.name                               AS thing_name,
+    t.description                        AS thing_description,
+    t.properties                         AS thing_properties,
+    l.id                                 AS loc_id,
+    l.name                               AS loc_name,
+    l.description                        AS loc_description,
+    l."encodingType"                     AS loc_encoding_type,
+    ST_AsGeoJSON(l.location)::json       AS location_geometry,
+    l.properties                         AS loc_properties,
+    d.id                                 AS ds_id,
+    d.name                               AS ds_name,
+    d.description                        AS ds_description,
+    d."unitOfMeasurement"                AS uom,
+    d."observationType"                  AS observation_type,
+    ST_AsGeoJSON(d."observedArea")::json AS observed_area,
+    d."phenomenonTime"                   AS phenomenon_time,
+    d."resultTime"                       AS result_time,
+    d.properties                         AS ds_properties,
+    op.id                                AS op_id,
+    op.name                              AS op_name,
+    op.description                       AS op_description,
+    op.definition                        AS op_definition,
+    op.properties                        AS op_properties,
+    s.id                                 AS sensor_id,
+    s.name                               AS sensor_name,
+    s.description                        AS sensor_description,
+    s."encodingType"                     AS sensor_encoding_type,
+    s.metadata                           AS sensor_metadata,
+    s.properties                         AS sensor_properties
 FROM sensorthings."Thing" t
 LEFT JOIN sensorthings."Thing_Location" tl  ON tl.thing_id = t.id
 LEFT JOIN sensorthings."Location" l         ON l.id = tl.location_id
@@ -141,8 +142,43 @@ ORDER BY t.id, d.id;
 # Each function maps a slice of one flat asyncpg.Record into the internal
 # dict schema. All take the raw record plus enough context (thing_id,
 # ds_id) to log a useful warning.
+def _coerce_json(raw: Any) -> Optional[Any]:
+    """
+    Defensively decode a json/jsonb column value.
+
+    The shared istSOS4 pool (app.db.asyncpg_db.get_pool) does not
+    register a json/jsonb type codec on its connections, and other
+    STA read paths (e.g. endpoints/read/datastream.py) appear to rely
+    on that -- they stream pre-built JSON straight through without an
+    intermediate json.loads()/json.dumps() round trip. Registering a
+    global codec on the shared pool would silently change behaviour
+    for that unrelated code, so instead of touching asyncpg_db.py the
+    harvester decodes JSON columns itself, locally, only for the rows
+    it consumes.
+
+    Handles three cases seen from asyncpg in practice:
+      - None                -> None
+      - already a dict/list -> returned unchanged (codec is registered)
+      - a JSON-encoded str   -> json.loads()'d into a dict/list
+
+    On malformed JSON, logs a warning and returns None rather than
+    raising -- a single bad properties blob should not fail the whole
+    harvest cycle.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Failed to parse JSON column value: %r", raw[:200])
+            return None
+    return raw
+
+
 def _parse_unit_of_measurement(raw: Optional[dict]) -> Optional[dict]:
     """Normalise the uom JSON column into a flat dict. None stays None."""
+    raw = _coerce_json(raw)
     if not raw:
         return None
     return {
@@ -175,7 +211,7 @@ def _parse_observed_property(row: asyncpg.Record, thing_id: int, ds_id: Any) -> 
         "name": name,
         "description": row["op_description"],
         "definition": row["op_definition"],
-        "properties": row["op_properties"] or None,
+        "properties": _coerce_json(row["op_properties"]),
     }
 
 
@@ -201,8 +237,10 @@ def _parse_sensor(row: asyncpg.Record, thing_id: int, ds_id: Any) -> Optional[di
         "id": sensor_id,
         "name": name,
         "description": row["sensor_description"],
-        "properties": row["sensor_properties"] or None,
+        "properties": _coerce_json(row["sensor_properties"]),
         "encoding_type": row["sensor_encoding_type"] or "",
+        # sensor.metadata is STA free-text (not guaranteed JSON) -- left
+        # as-is, unlike the *_properties columns which are always json/jsonb.
         "metadata": row["sensor_metadata"],
     }
 
@@ -229,10 +267,10 @@ def _parse_datastream(row: asyncpg.Record, thing_id: int) -> Optional[dict]:
         "id": ds_id,
         "name": name,
         "description": row["ds_description"],
-        "properties": row["ds_properties"] or None,
+        "properties": _coerce_json(row["ds_properties"]),
         "phenomenon_time": row["phenomenon_time"],
         "result_time": row["result_time"],
-        "observed_area": row["observed_area"],
+        "observed_area": _coerce_json(row["observed_area"]),
         "observation_type": row["observation_type"],
         "unit_of_measurement": _parse_unit_of_measurement(row["uom"]),
         "observed_property": _parse_observed_property(row, thing_id, ds_id),
@@ -244,9 +282,13 @@ def _parse_location(row: asyncpg.Record, thing_id: int) -> Optional[dict]:
     """
     Normalise the loc_* columns on a row into a Location dict.
 
-    The geometry column (location_geometry, already a parsed GeoJSON
-    dict via ST_AsGeoJSON) is exposed under the key "geometry" to avoid
-    confusion with the Location entity itself.
+    The geometry column (location_geometry) comes from
+    ST_AsGeoJSON(...)::json in SQL, but the ::json cast only affects
+    the Postgres-side type -- asyncpg still hands it back as a raw str
+    unless a json/jsonb codec is registered on the pool (it isn't, see
+    _coerce_json). It is decoded here the same way as the other JSON
+    columns and exposed under the key "geometry" to avoid confusion
+    with the Location entity itself.
 
     Returns None if loc_id is NULL -- this row is a Thing-Datastream
     cross row for a Thing with no Locations, not an actual Location.
@@ -266,9 +308,9 @@ def _parse_location(row: asyncpg.Record, thing_id: int) -> Optional[dict]:
         "id": loc_id,
         "name": name,
         "description": row["loc_description"],
-        "properties": row["loc_properties"] or None,
+        "properties": _coerce_json(row["loc_properties"]),
         "encoding_type": row["loc_encoding_type"] or "application/geo+json",
-        "geometry": row["location_geometry"],
+        "geometry": _coerce_json(row["location_geometry"]),
     }
 
 
@@ -307,7 +349,7 @@ def _build_catalog(rows: list[asyncpg.Record]) -> HarvestedCatalog:
                 id=thing_id,
                 name=name,
                 description=row["thing_description"],
-                properties=row["thing_properties"] or None,
+                properties=_coerce_json(row["thing_properties"]),
                 locations=[],
                 datastreams=[],
             )
