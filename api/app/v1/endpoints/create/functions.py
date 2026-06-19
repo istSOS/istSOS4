@@ -805,6 +805,14 @@ async def handle_associations(
 ):
     if entity_id is not None:
         payload[f"{key.lower()}_id"] = entity_id
+        # conformance: NETWORK extension / nested create — when the relation is
+        # supplied via the URL (e.g. POST /Things(id)/Datastreams), the handler
+        # also leaves the relation object in the body (payload["Thing"]). The FK
+        # column above fully represents the link, so drop the redundant relation
+        # object; otherwise create_entity would try to INSERT a non-existent
+        # "Thing"/"Sensor"/... column and raise (HTTP 500). Mirrors the pop in
+        # the body-supplied branch below.
+        payload.pop(key, None)
     elif key in payload:
         if "@iot.id" in payload[key]:
             check_iot_id_in_payload(payload[key], key)
