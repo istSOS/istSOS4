@@ -668,7 +668,7 @@ def build_stac_catalog(catalog: HarvestedCatalog, config: Settings) -> dict:
             f"istSOS4 deployment: {catalog.thing_count} Things, "
             f"harvested at {catalog.harvested_at}."
         ),
-        catalog_type=pystac.CatalogType.SELF_CONTAINED,
+        catalog_type=pystac.CatalogType.ABSOLUTE_PUBLISHED,
     )
 
     skipped_items = 0
@@ -691,7 +691,15 @@ def build_stac_catalog(catalog: HarvestedCatalog, config: Settings) -> dict:
         collection = _build_collection(thing, items, config)
         root_catalog.add_child(collection)
 
-    root_catalog.normalize_hrefs(stac_root_href)
+    root_catalog.set_self_href(f"{stac_root_href}")
+    root_catalog.set_root(root_catalog)
+
+    for collection in root_catalog.get_children():
+        collection_href = f"{stac_root_href}/collections/{collection.id}"
+        collection.set_self_href(collection_href)
+
+        for item in collection.get_items():
+            item.set_self_href(f"{collection_href}/items/{item.id}")
 
     logger.info(
         "STAC transform complete: %d Collections, %d Items skipped",
