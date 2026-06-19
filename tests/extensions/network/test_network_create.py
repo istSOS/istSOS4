@@ -66,6 +66,13 @@ def test_post_network_minimal(client, unique_name):
         _purge(client, tag)
 
 
+def test_post_network_missing_name_returns_400(client):
+    """Validation: POST /Networks without the mandatory `name` -> 400."""
+    r = client.create("Networks", {})
+    assert r.status_code == 400, f"{r.status_code}: {r.text[:200]}"
+    assert "name" in r.json().get("message", "")
+
+
 def test_deep_insert_thing_datastream_with_network_inline(client, unique_name):
     """Deep-insert a Thing whose Datastream carries its Network inline -> 201,
     and the datastream resolves to that network."""
