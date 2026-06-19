@@ -8,8 +8,9 @@ re-architecture, no renames, no public-signature changes, no SQL/perf changes.
 `pytest tests/conformance -n auto -q` → must stay **394 passed**. If any test goes
 red, revert that change. One small isolated diff at a time.
 
-**STATUS: FASE 2 complete for the approved items (P1 + P2). Suite green at 394.
-P3 and P4 NOT applied (not approved). See §5 for results.**
+**STATUS: FASE 2 complete — P1 + P2 (§5), then P3 + an FK-violation→400 rung (§6).
+Suite green at 399 (394 + 5 new link-validation tests). P4 still NOT applied. See §6
+for the P3 round.**
 
 ---
 
@@ -178,9 +179,9 @@ location, observation, observed_property, put, sensor, thing. (delete): datastre
 feature_of_interest, historical_location, location, observation, observed_property,
 sensor, thing.
 
-### Not applied (as agreed)
-- **P3** (400/500 split) — medium risk / borderline scope: skipped.
-- **P4** (DRY the ~27 duplicated blocks) — broad sweep: skipped.
+### Not applied in this round (P1+P2)
+- **P3** (400/500 split) — applied later; see §6.
+- **P4** (DRY the ~27 duplicated blocks) — broad sweep: still skipped.
 - **Off-limits** (auth incl. all 401/403/privilege/RBAC, network, versioning/commit):
   untouched.
 
@@ -195,3 +196,60 @@ All 27 patched files `import asyncpg`; live POST/GET still 200/201; the new 503
 rung sits before the 400 catch-all in each chain. (DB-unavailable itself is not
 exercised by the suite, so it is not regression-covered — the change is additive
 and the existing 400/403/200 paths are unchanged.)
+
+---
+
+## 6. FASE 2 — P3 (400 vs 500 split) + FK-violation→400 rung
+
+Applied after explicit approval. Protocol: one endpoint at a time, after each
+`pytest -n auto` (394) **and** `pytest -m c01 -k "returns_400 or 400_body"`
+(query-status-code), revert-on-red.
+
+**Final per-endpoint order:** `403 → 503 → 400 (ValueError) → 400
+(ForeignKeyViolation) → 500 (Exception)`.
+
+### P3 — `except ValueError → 400` + `except Exception → 500` (controlled msg)
+The write catch-all `except Exception → 400 (str(e))` was split: validation/client
+errors (`ValueError`, incl. the P2-migrated validators and `json.JSONDecodeError`)
+stay **400** with their message; everything else becomes **500 "Internal server
+error"** (no stacktrace in the body). Applied to all in-scope write endpoints
+(create/update/delete).
+
+### FK rung — `except asyncpg.ForeignKeyViolationError → 400`
+A bad `@iot.id` reference surfaces as a Postgres FK violation (`ForeignKeyViolationError`,
+sqlstate 23503), **not** a `ValueError` — so naked P3 turned it into 500 on the
+linking endpoints (a client error wrongly reported as a server error, and the old
+catch-all had been leaking the raw PG constraint text). Added, **before** the 500
+branch, `except asyncpg.ForeignKeyViolationError → 400` with a **controlled**
+message `"Referenced entity does not exist."` (no constraint/table/column names →
+no info leak). Applied to the **19 linking create/update endpoints**.
+`delete/*` keep P3 only (deletes don't establish links; FK-on-delete is
+409/referenced-by semantics, out of this round's scope).
+
+### Coverage
+- P3 (500 rung): all in-scope create/update/delete write endpoints.
+- FK rung (400): 19 create/update endpoints. Off-limits: **0** markers (network/
+  policy reverted via `git checkout HEAD`; oauth/rbac/user/login never touched).
+
+### Regression-lock tests (c02-author, owns `tests/conformance/c02/`)
+`test_link_to_nonexistent_returns_4xx` (parametrized over Datastreams/
+HistoricalLocations/Observations) + `test_patch_link_to_nonexistent_returns_4xx`:
+assert a bad-link write is **4xx (never 5xx)** and the body carries **no** Postgres
+internals (markers `constraint`/`DETAIL`/`violates`/`fkey`/`Key (` absent). These
+lock the behavior so it cannot silently regress to 500/leak again.
+
+### Result
+`-n auto`: **399 passed, 0 failed, 0 xfailed** (394 + 5 new tests). Per class:
+c01 **203**, c02 **67**, c03 **120**, data_array **9**. Verified live: bad links →
+`400 "Referenced entity does not exist."` (no PG leak); internal errors → 500;
+query-status-code `*_returns_400` still 400.
+
+### Process notes (deviations, corrected)
+- A first P3 pass wrongly edited 6 off-limits files (`network`/`policy` ×3) and
+  continued past the first red instead of stopping. Both were corrected: the
+  off-limits files were reverted to HEAD (diffs verified pure-P3), and the FK round
+  honored stop-on-first-red (no reds occurred).
+
+### Still not applied
+- **P4** (DRY the duplicated 403/503/400/500 blocks into a helper) — broad sweep
+  across ~27 files; deferred unless requested.
