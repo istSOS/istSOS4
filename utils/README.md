@@ -47,7 +47,7 @@ ISTSOS4_PASSWORD=admin
 
 EYEONWATER_THING_ID=12
 EYEONWATER_NETWORK_NAME=winca4ti
-EYEONWATER_BBOX=6.116638,46.187437,6.963959,46.545639
+EYEONWATER_BBOX=46.187437,6.116638,46.545639,6.963959
 EYEONWATER_LOOKBACK_DAYS=2
 
 XLSX_PATH=/absolute/path/to/file.xlsx
@@ -85,7 +85,7 @@ BEGIN="2026-06-01T00:00:00" utils/fetch_eyeonwater2istsos.sh
 Fetch EyeOnWater with a custom bbox:
 
 ```bash
-BBOX="6.116638,46.187437,6.963959,46.545639" utils/fetch_eyeonwater2istsos.sh
+BBOX="46.187437,6.116638,46.545639,6.963959" utils/fetch_eyeonwater2istsos.sh
 ```
 
 Import sensors/datastreams from Excel using `XLSX_PATH` from `utils/.env`:
@@ -129,7 +129,7 @@ First full EyeOnWater API import, without a `begin` filter:
 docker run --rm --network host --env-file utils/.env \
   istsos4-utils \
   /app/fetch_eyeonwater2istsos.py \
-  --bbox "6.116638,46.187437,6.963959,46.545639"
+  --bbox "46.187437,6.116638,46.545639,6.963959"
 ```
 
 Import Excel directly with Docker:

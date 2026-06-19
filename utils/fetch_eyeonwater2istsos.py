@@ -26,7 +26,7 @@ def parse_bbox(value):
         bbox = list(value)
 
     if len(bbox) != 4:
-        raise ValueError("bbox must be [min_lon, min_lat, max_lon, max_lat]")
+        raise ValueError("bbox must be [min_lat, min_lon, max_lat, max_lon]")
 
     return [float(part) for part in bbox]
 
@@ -41,7 +41,7 @@ def get_eyeonwater_observations(
     Request EyeOnWater observations and return JSON.
 
     bbox format:
-        [min_lon, min_lat, max_lon, max_lat]
+        [min_lat, min_lon, max_lat, max_lon]
 
     begin/end:
         ISO strings or datetime objects, e.g. "2026-01-01T00:00:00Z"
@@ -64,7 +64,7 @@ def get_eyeonwater_observations(
     if bbox is not None:
         params["bbox"] = ",".join(map(str, bbox))
         params["bboxVersion"] = (
-            "1.3.0"  # Use version 1.3.0 for correct axis ordering
+            "1.3.0"  # WMS 1.3.0 uses latitude/longitude axis ordering.
         )
 
     r = requests.get(EYEONWATER_API_URL, params=params, timeout=timeout)
@@ -106,7 +106,7 @@ def parse_args():
     parser.add_argument(
         "--bbox",
         default=os.getenv("EYEONWATER_BBOX"),
-        help="Bounding box for fetching EyeOnWater observations (min_lon,min_lat,max_lon,max_lat).",
+        help="Bounding box for fetching EyeOnWater observations (min_lat,min_lon,max_lat,max_lon).",
     )
     return parser.parse_args()
 
