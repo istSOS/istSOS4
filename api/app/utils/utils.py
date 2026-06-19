@@ -45,14 +45,15 @@ def require_json_content_type(request):
         request (Request): Incoming FastAPI request.
 
     Raises:
-        Exception: If the request does not declare a JSON content type.
+        ValueError: If the request does not declare a JSON content type.
     """
 
     content_type = request.headers.get("content-type", "")
     media_type = content_type.split(";", 1)[0].strip().lower()
 
     if media_type != "application/json":
-        raise Exception("Only content-type application/json is supported.")
+        # conformance: uniform validation errors raise ValueError (not bare Exception)
+        raise ValueError("Only content-type application/json is supported.")
 
 
 def safe_parse_datetime(value):
@@ -339,13 +340,15 @@ def build_nextLink(full_path, count_links):
 def validate_payload_keys(payload, keys):
     invalid_keys = [key for key in payload.keys() if key not in keys]
     if invalid_keys:
-        raise Exception(f"Invalid keys in payload: {', '.join(invalid_keys)}")
+        # conformance: uniform validation errors raise ValueError (not bare Exception)
+        raise ValueError(f"Invalid keys in payload: {', '.join(invalid_keys)}")
 
 
 def validate_required_keys(payload, required_keys):
     missing = [key for key in required_keys if key not in payload]
     if missing:
-        raise Exception(f"Missing required fields: {', '.join(missing)}")
+        # conformance: uniform validation errors raise ValueError (not bare Exception)
+        raise ValueError(f"Missing required fields: {', '.join(missing)}")
 
 
 def validate_epsg(key):

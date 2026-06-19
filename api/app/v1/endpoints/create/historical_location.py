@@ -16,6 +16,7 @@ from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import require_json_content_type, validate_payload_keys
 from app.v1.endpoints.functions import set_role
+import asyncpg
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
@@ -95,6 +96,16 @@ async def create_historical_location(
                 "message": "Insufficient privileges.",
             },
         )
+    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
+        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "code": 503,
+                "type": "error",
+                "message": "Database temporarily unavailable",
+            },
+        )
     except Exception as e:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -166,6 +177,16 @@ async def create_historical_location_for_thing(
                 "code": 403,
                 "type": "error",
                 "message": "Insufficient privileges.",
+            },
+        )
+    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
+        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "code": 503,
+                "type": "error",
+                "message": "Database temporarily unavailable",
             },
         )
     except Exception as e:

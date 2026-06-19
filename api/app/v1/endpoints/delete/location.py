@@ -17,6 +17,7 @@ from typing import Optional
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.v1.endpoints.functions import set_role
+import asyncpg
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
@@ -93,6 +94,16 @@ async def delete_location(
                 "code": 401,
                 "type": "error",
                 "message": "Insufficient privileges.",
+            },
+        )
+    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
+        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "code": 503,
+                "type": "error",
+                "message": "Database temporarily unavailable",
             },
         )
     except Exception as e:
