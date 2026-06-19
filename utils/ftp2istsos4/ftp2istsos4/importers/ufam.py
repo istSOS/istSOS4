@@ -53,7 +53,7 @@ def process_ufam(item, client):
                 result["printed"] += 1
 
             source_log(item, f"parse {full_path}")
-            observations = sensor_things_observations(
+            observations, skipped_existing = sensor_things_observations(
                 client, text, file_config, tz_name
             )
             source_log(
@@ -61,12 +61,18 @@ def process_ufam(item, client):
                 f"observations parsed from {full_path}: "
                 f"{len(observations)}",
             )
-            if not observations:
+            if not observations and not skipped_existing:
                 raise ValueError(f"{full_path} produced 0 observations")
+            if not observations:
+                posted = 0
+                updated = 0
+                skipped_duplicates = skipped_existing
+            else:
+                posted, skipped_duplicates, updated = post_observations(
+                    client, observations, full_path
+                )
+                skipped_duplicates += skipped_existing
 
-            posted, skipped_duplicates = post_observations(
-                client, observations, full_path
-            )
         except Exception as exc:
             result["error"] += 1
             source_log(item, f"ERROR processing {full_path}: {exc}")
@@ -75,6 +81,7 @@ def process_ufam(item, client):
 
         result["processed"] += 1
         result["posted"] += posted
+        result["updated"] += updated
         result["skipped_duplicates"] += skipped_duplicates
 
     return result

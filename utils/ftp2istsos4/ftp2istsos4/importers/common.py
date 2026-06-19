@@ -7,6 +7,7 @@ def import_result(**extra):
         "sent": 0,
         "error": 0,
         "posted": 0,
+        "updated": 0,
         "skipped_duplicates": 0,
     }
     result.update(extra)
@@ -30,7 +31,8 @@ def import_result_details(result):
         ("sent", "moved to sent"),
         ("error", "errors"),
         ("posted", "posted observations"),
-        ("skipped_duplicates", "skipped duplicates"),
+        ("updated", "updated observations"),
+        ("skipped_duplicates", "skipped existing/duplicates"),
         ("skipped_invalid_rows", "skipped invalid rows"),
         ("printed", "printed files"),
     ]
