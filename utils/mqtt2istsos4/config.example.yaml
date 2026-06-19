@@ -31,9 +31,11 @@ istsos:
 
 # Topic keys are MQTT topics. Values are ordered istSOS datastream names.
 # The first MQTT payload field is the timestamp; value fields start from index 1.
-mapping:
+mapping: 
   topic/a:
     - DatastreamA
     - DatastreamB
+    - Skip
+    - DatastreamD
   topic/b:
     - DatastreamC
