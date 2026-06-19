@@ -118,6 +118,12 @@ def handle_datetime_fields(payload, datastream=False):
     """
     for key in list(payload.keys()):
         if "time" in key.lower():
+            # conformance: req/create-update-delete/update-entity-put — a PUT
+            # that omits an optional time property resets it to null. A null
+            # value has no datetime to parse, so leave it as-is (the column is
+            # set to NULL) instead of crashing on `"/" in None`.
+            if payload[key] is None:
+                continue
             is_observation_phenomenon = (
                 key == "phenomenonTime" and not datastream
             )

@@ -401,7 +401,11 @@ async def update_datastream_entity(connection, datastream_id, payload):
 async def update_feature_of_interest_entity(
     connection, feature_of_interest_id, payload
 ):
-    if payload["feature"]:
+    # req/create-update-delete/update-entity (18-088 §10.3): PATCH is a partial
+    # merge, so only validate/transform "feature" when the body actually
+    # supplies it. Using payload["feature"] unconditionally raised KeyError
+    # (-> 400) whenever a partial PATCH omitted the geometry.
+    if payload.get("feature"):
         validate_epsg(payload["feature"])
 
     await handle_nested_entities(

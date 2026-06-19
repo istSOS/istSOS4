@@ -35,6 +35,10 @@ from app.db.redis_db import redis
 from app.oauth import get_current_user
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
+from app.sta2rest.odata_query.exceptions import (
+    InvalidCollectionException,
+    InvalidFieldException,
+)
 from app.utils.utils import build_nextLink
 from app.v1.endpoints.functions import set_role
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -131,6 +135,7 @@ async def catch_all_get(
         as_of_value = data.get("as_of_value")
         from_to_value = data.get("from_to_value")
         single_result = data.get("single_result")
+        value = data.get("value")
 
         result = asyncpg_stream_results(
             main_entity,
@@ -144,13 +149,16 @@ async def catch_all_get(
             single_result,
             full_path,
             current_user,
+            value,
         )
 
         try:
             first_item = await anext(result)
+            # 18-088 §9.2 Usage 5: a $value response is the raw property literal,
+            # served as text/plain rather than the JSON media type.
             return StreamingResponse(
                 wrapped_result_generator(first_item, result),
-                media_type="application/json",
+                media_type="text/plain" if value else "application/json",
                 status_code=status.HTTP_200_OK,
             )
         except StopAsyncIteration:
@@ -175,6 +183,18 @@ async def catch_all_get(
 
     except HTTPException:
         raise
+    except (InvalidFieldException, InvalidCollectionException) as e:
+        # req/resource-path (18-088 §9.2): an unknown collection / entity / a
+        # property that does not exist is a client error (4xx, normally 404),
+        # not a server error (5xx). OData 4.0 §9.5.1 specifies 404.
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "code": 404,
+                "type": "error",
+                "message": str(e),
+            },
+        )
     except (
         asyncpg.PostgresConnectionError,
         asyncpg.TooManyConnectionsError,
@@ -212,6 +232,7 @@ async def asyncpg_stream_results(
     single_result,
     full_path,
     current_user,
+    value=False,
 ):
     async with pgpool.acquire() as connection:
         async with connection.transaction():
@@ -248,6 +269,26 @@ async def asyncpg_stream_results(
                 else ""
             )
             await connection.execute(f"DECLARE my_cursor CURSOR FOR {query}")
+
+            if value:
+                # 18-088 §9.2 Usage 5 ($value): emit the raw scalar literal as
+                # text/plain (the query already extracts it with JSON ->> so it
+                # is unquoted text). No JSON envelope / quoting is applied. If no
+                # row matches the generator yields nothing, which the caller maps
+                # to a 404.
+                while True:
+                    partition = await connection.fetch(
+                        f"FETCH {PARTITION_CHUNK} FROM my_cursor"
+                    )
+                    if not partition:
+                        break
+                    raw = partition[0]["json"]
+                    if raw is not None:
+                        yield str(raw)
+                await connection.execute("CLOSE my_cursor")
+                if current_user is not None:
+                    await connection.execute("RESET ROLE")
+                return
 
             start_json = ""
             is_first_partition = True
@@ -329,7 +370,14 @@ async def asyncpg_stream_results(
                     yield "," + partition_json
 
             if not has_rows and not single_result:
-                yield '{"value": []}'
+                # conformance: req/request-data/count (18-088 §9.3.4, Req 28) —
+                # when $count=true the "@iot.count" annotation SHALL always be
+                # present, including the value 0 for an empty result set. The
+                # streaming branch above only emits iot_count alongside the first
+                # non-empty partition, so emit it explicitly here for the empty
+                # case. When $count is false/absent iot_count is "" and the
+                # response stays '{"value": []}' as before.
+                yield "{" + iot_count + '"value": []}'
 
             if has_rows and not single_result:
                 yield "]}"

@@ -91,13 +91,19 @@ class Lexer:
             text (str): The input text to be tokenized.
         """
 
-        if "'" in urllib.parse.unquote(text):
-            if "+" in text:
-                self.text = urllib.parse.unquote_plus(text)
-            else:
-                self.text = urllib.parse.unquote(text)
-        else:
-            self.text = urllib.parse.unquote(text)
+        # conformance: req/data-array/data-array (and general query parsing) —
+        # an HTTP query string is application/x-www-form-urlencoded, where "+"
+        # encodes a SPACE and a literal plus is sent percent-encoded as "%2B".
+        # Clients (curl --data-urlencode, Python requests, browsers) therefore
+        # send option values such as "$orderby=phenomenonTime+asc" or
+        # "$filter=result+gt+1000". Always decode with unquote_plus so "+" becomes
+        # a space everywhere. The previous heuristic only did this when a "'"
+        # (string literal) was present, so a space-separated $orderby/$filter
+        # WITHOUT quotes reached the tokenizer with a raw "+" and raised
+        # "Invalid character ... +" (HTTP 500) — e.g. dataArray + $orderby.
+        # "%20" and "%2B" are decoded identically by unquote_plus, so clients
+        # that encode spaces as %20 (e.g. the conformance suite) are unaffected.
+        self.text = urllib.parse.unquote_plus(text)
 
         self.tokens = self.tokenize()
 

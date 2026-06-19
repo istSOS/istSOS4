@@ -20,6 +20,7 @@ from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
 from .functions import check_id_exists, set_commit, update_network_entity
+from .json_patch import apply_json_patch_to_entity, normalize_patch_body
 
 v1 = APIRouter()
 
@@ -51,7 +52,7 @@ ALLOWED_KEYS = ["name", "Datastreams"]
 )
 async def update_network(
     network_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload=Depends(normalize_patch_body),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -79,6 +80,12 @@ async def update_network(
                             "message": "Sensor not found.",
                         },
                     )
+
+                # req/create-update-delete/update-entity-jsonpatch: resolve an
+                # RFC 6902 array body into a merge dict; dict bodies pass through.
+                payload = await apply_json_patch_to_entity(
+                    connection, "Network", network_id, payload
+                )
 
                 if not payload:
                     if current_user is not None:

@@ -17,10 +17,12 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
-from fastapi import APIRouter, Body, Depends, Header, status
+from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
 
 from .functions import check_id_exists, set_commit, update_datastream_entity
+from .json_patch import apply_json_patch_to_entity, normalize_patch_body
+from .put import handle_put_replace, request_body_openapi_example
 
 v1 = APIRouter()
 
@@ -72,10 +74,11 @@ if AUTHORIZATION:
     summary="Update a Datastream",
     description="Update a Datastream",
     status_code=status.HTTP_200_OK,
+    openapi_extra=request_body_openapi_example(PAYLOAD_EXAMPLE),
 )
 async def update_datastream(
     datastream_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload=Depends(normalize_patch_body),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -103,6 +106,12 @@ async def update_datastream(
                             "message": "Datastream not found.",
                         },
                     )
+
+                # req/create-update-delete/update-entity-jsonpatch: resolve an
+                # RFC 6902 array body into a merge dict; dict bodies pass through.
+                payload = await apply_json_patch_to_entity(
+                    connection, "Datastream", datastream_id, payload
+                )
 
                 if not payload:
                     if current_user is not None:
@@ -143,3 +152,45 @@ async def update_datastream(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"code": 400, "type": "error", "message": str(e)},
         )
+
+
+# conformance: req/create-update-delete/update-entity-put — mandatory Datastream
+# properties (also NOT NULL in the schema). observedArea / phenomenonTime /
+# resultTime / properties are optional and reset to null when a PUT omits them.
+# The mandatory relations (Thing, Sensor, ObservedProperty[, Network]) and the
+# Observations collection are left untouched when absent so the existing,
+# required links are not orphaned.
+REQUIRED_PUT_KEYS = ["name", "description", "unitOfMeasurement", "observationType"]
+OPTIONAL_PUT_KEYS = ["observedArea", "phenomenonTime", "resultTime", "properties"]
+
+
+@v1.api_route(
+    "/Datastreams({datastream_id})",
+    methods=["PUT"],
+    tags=["Datastreams"],
+    summary="Replace a Datastream",
+    description="Replace a Datastream (full update)",
+    status_code=status.HTTP_200_OK,
+    openapi_extra=request_body_openapi_example(PAYLOAD_EXAMPLE),
+)
+async def replace_datastream(
+    datastream_id: int,
+    request: Request,
+    commit_message=message,
+    current_user=user,
+    pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
+):
+    # conformance: req/create-update-delete/update-entity-put (18-088 §10.3)
+    return await handle_put_replace(
+        pool=pool,
+        request=request,
+        entity_db_name="Datastream",
+        not_found_message="Datastream not found.",
+        entity_id=datastream_id,
+        commit_message=commit_message,
+        current_user=current_user,
+        allowed_keys=ALLOWED_KEYS,
+        required_keys=REQUIRED_PUT_KEYS,
+        optional_keys=OPTIONAL_PUT_KEYS,
+        update_entity_fn=update_datastream_entity,
+    )
