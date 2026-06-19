@@ -1,0 +1,1506 @@
+# Engine requests extracted from full_logs.txt (set A)
+# total request blocks parsed: 2387; unique (METHOD + path+query, ids->(ID)): 1495
+# methods: GET=2170, DELETE=138, POST=59, PATCH=20
+
+## GET (1470)
+GET /v4/v1.1
+GET /v4/v1.1/Datastreams
+GET /v4/v1.1/Datastreams(ID)
+GET /v4/v1.1/Datastreams(ID)/Observations
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/Datastream
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/Datastream/$ref
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/Datastream/Observations
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/Datastream/Observations/$ref
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/Datastream/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/Datastream/ObservedProperty/$ref
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/Datastream/Sensor
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/Datastream/Sensor/$ref
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/Datastream/Thing
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/Datastream/Thing/$ref
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/FeatureOfInterest
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/FeatureOfInterest/$ref
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/FeatureOfInterest/Observations
+GET /v4/v1.1/Datastreams(ID)/Observations(ID)/FeatureOfInterest/Observations/$ref
+GET /v4/v1.1/Datastreams(ID)/Observations/$ref
+GET /v4/v1.1/Datastreams(ID)/Observations?$expand=Datastream
+GET /v4/v1.1/Datastreams(ID)/Observations?$expand=Datastream,FeatureOfInterest
+GET /v4/v1.1/Datastreams(ID)/Observations?$expand=Datastream/Observations
+GET /v4/v1.1/Datastreams(ID)/Observations?$expand=Datastream/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/Observations?$expand=Datastream/Sensor
+GET /v4/v1.1/Datastreams(ID)/Observations?$expand=Datastream/Thing
+GET /v4/v1.1/Datastreams(ID)/Observations?$expand=Datastream/Thing,Datastream/Sensor
+GET /v4/v1.1/Datastreams(ID)/Observations?$expand=Datastream/Thing,Datastream/Sensor,Datastream/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/Observations?$expand=Datastream/Thing,Datastream/Sensor,Datastream/ObservedProperty,Datastream/Observations
+GET /v4/v1.1/Datastreams(ID)/Observations?$expand=Datastream/Thing,Datastream/Sensor,Datastream/ObservedProperty,Datastream/Observations,FeatureOfInterest/Observations
+GET /v4/v1.1/Datastreams(ID)/Observations?$expand=FeatureOfInterest
+GET /v4/v1.1/Datastreams(ID)/Observations?$expand=FeatureOfInterest/Observations
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=phenomenonTime
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=phenomenonTime asc
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=phenomenonTime asc,result asc
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=phenomenonTime asc,result asc,resultTime asc
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=phenomenonTime desc
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=phenomenonTime desc,result desc
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=phenomenonTime desc,result desc,resultTime desc
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=phenomenonTime,result
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=phenomenonTime,result,resultTime
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=result
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=result asc
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=result desc
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=resultTime
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=resultTime asc
+GET /v4/v1.1/Datastreams(ID)/Observations?$orderby=resultTime desc
+GET /v4/v1.1/Datastreams(ID)/Observations?$select=phenomenonTime
+GET /v4/v1.1/Datastreams(ID)/Observations?$select=phenomenonTime,result
+GET /v4/v1.1/Datastreams(ID)/Observations?$select=phenomenonTime,result,resultTime
+GET /v4/v1.1/Datastreams(ID)/Observations?$select=result
+GET /v4/v1.1/Datastreams(ID)/Observations?$select=resultTime
+GET /v4/v1.1/Datastreams(ID)/Observations?$skip=1
+GET /v4/v1.1/Datastreams(ID)/Observations?$top=3
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty/$ref
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty/Datastreams
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty/Datastreams(ID)/Observations
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty/Datastreams(ID)/Observations/$ref
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty/Datastreams(ID)/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty/Datastreams(ID)/ObservedProperty/$ref
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty/Datastreams(ID)/Sensor
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty/Datastreams(ID)/Sensor/$ref
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty/Datastreams(ID)/Thing
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty/Datastreams(ID)/Thing/$ref
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty/Datastreams/$ref
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$expand=Datastreams
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$expand=Datastreams/Observations
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$expand=Datastreams/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$expand=Datastreams/Sensor
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$expand=Datastreams/Thing
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$expand=Datastreams/Thing,Datastreams/Sensor
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$select=definition
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$select=description
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$select=name
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$select=name,definition
+GET /v4/v1.1/Datastreams(ID)/ObservedProperty?$select=name,definition,description
+GET /v4/v1.1/Datastreams(ID)/Sensor
+GET /v4/v1.1/Datastreams(ID)/Sensor/$ref
+GET /v4/v1.1/Datastreams(ID)/Sensor/Datastreams
+GET /v4/v1.1/Datastreams(ID)/Sensor/Datastreams(ID)/Observations
+GET /v4/v1.1/Datastreams(ID)/Sensor/Datastreams(ID)/Observations/$ref
+GET /v4/v1.1/Datastreams(ID)/Sensor/Datastreams(ID)/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/Sensor/Datastreams(ID)/ObservedProperty/$ref
+GET /v4/v1.1/Datastreams(ID)/Sensor/Datastreams(ID)/Sensor
+GET /v4/v1.1/Datastreams(ID)/Sensor/Datastreams(ID)/Sensor/$ref
+GET /v4/v1.1/Datastreams(ID)/Sensor/Datastreams(ID)/Thing
+GET /v4/v1.1/Datastreams(ID)/Sensor/Datastreams(ID)/Thing/$ref
+GET /v4/v1.1/Datastreams(ID)/Sensor/Datastreams/$ref
+GET /v4/v1.1/Datastreams(ID)/Sensor?$expand=Datastreams
+GET /v4/v1.1/Datastreams(ID)/Sensor?$expand=Datastreams/Observations
+GET /v4/v1.1/Datastreams(ID)/Sensor?$expand=Datastreams/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/Sensor?$expand=Datastreams/Sensor
+GET /v4/v1.1/Datastreams(ID)/Sensor?$expand=Datastreams/Thing
+GET /v4/v1.1/Datastreams(ID)/Sensor?$expand=Datastreams/Thing,Datastreams/Sensor
+GET /v4/v1.1/Datastreams(ID)/Sensor?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/Sensor?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations
+GET /v4/v1.1/Datastreams(ID)/Sensor?$select=description
+GET /v4/v1.1/Datastreams(ID)/Sensor?$select=encodingType
+GET /v4/v1.1/Datastreams(ID)/Sensor?$select=metadata
+GET /v4/v1.1/Datastreams(ID)/Sensor?$select=name
+GET /v4/v1.1/Datastreams(ID)/Sensor?$select=name,description
+GET /v4/v1.1/Datastreams(ID)/Sensor?$select=name,description,encodingType
+GET /v4/v1.1/Datastreams(ID)/Sensor?$select=name,description,encodingType,metadata
+GET /v4/v1.1/Datastreams(ID)/Thing
+GET /v4/v1.1/Datastreams(ID)/Thing/$ref
+GET /v4/v1.1/Datastreams(ID)/Thing/Datastreams
+GET /v4/v1.1/Datastreams(ID)/Thing/Datastreams(ID)/Observations
+GET /v4/v1.1/Datastreams(ID)/Thing/Datastreams(ID)/Observations/$ref
+GET /v4/v1.1/Datastreams(ID)/Thing/Datastreams(ID)/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/Thing/Datastreams(ID)/ObservedProperty/$ref
+GET /v4/v1.1/Datastreams(ID)/Thing/Datastreams(ID)/Sensor
+GET /v4/v1.1/Datastreams(ID)/Thing/Datastreams(ID)/Sensor/$ref
+GET /v4/v1.1/Datastreams(ID)/Thing/Datastreams(ID)/Thing
+GET /v4/v1.1/Datastreams(ID)/Thing/Datastreams(ID)/Thing/$ref
+GET /v4/v1.1/Datastreams(ID)/Thing/Datastreams/$ref
+GET /v4/v1.1/Datastreams(ID)/Thing/HistoricalLocations
+GET /v4/v1.1/Datastreams(ID)/Thing/HistoricalLocations(ID)/Locations
+GET /v4/v1.1/Datastreams(ID)/Thing/HistoricalLocations(ID)/Locations/$ref
+GET /v4/v1.1/Datastreams(ID)/Thing/HistoricalLocations(ID)/Thing
+GET /v4/v1.1/Datastreams(ID)/Thing/HistoricalLocations(ID)/Thing/$ref
+GET /v4/v1.1/Datastreams(ID)/Thing/HistoricalLocations/$ref
+GET /v4/v1.1/Datastreams(ID)/Thing/Locations
+GET /v4/v1.1/Datastreams(ID)/Thing/Locations(ID)/HistoricalLocations
+GET /v4/v1.1/Datastreams(ID)/Thing/Locations(ID)/HistoricalLocations/$ref
+GET /v4/v1.1/Datastreams(ID)/Thing/Locations(ID)/Things
+GET /v4/v1.1/Datastreams(ID)/Thing/Locations(ID)/Things/$ref
+GET /v4/v1.1/Datastreams(ID)/Thing/Locations/$ref
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams,HistoricalLocations
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams,HistoricalLocations,Locations
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams/Observations
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams/Sensor
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams/Thing
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing,HistoricalLocations/Locations
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing,HistoricalLocations/Locations,Locations/HistoricalLocations
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing,HistoricalLocations/Locations,Locations/HistoricalLocations,Locations/Things
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=HistoricalLocations
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=HistoricalLocations/Locations
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=HistoricalLocations/Thing
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Locations
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Locations/HistoricalLocations
+GET /v4/v1.1/Datastreams(ID)/Thing?$expand=Locations/Things
+GET /v4/v1.1/Datastreams(ID)/Thing?$select=description
+GET /v4/v1.1/Datastreams(ID)/Thing?$select=name
+GET /v4/v1.1/Datastreams(ID)/Thing?$select=name,description
+GET /v4/v1.1/Datastreams(ID)/description
+GET /v4/v1.1/Datastreams(ID)/description/$value
+GET /v4/v1.1/Datastreams(ID)/name
+GET /v4/v1.1/Datastreams(ID)/name/$value
+GET /v4/v1.1/Datastreams(ID)/observationType
+GET /v4/v1.1/Datastreams(ID)/observationType/$value
+GET /v4/v1.1/Datastreams(ID)/unitOfMeasurement
+GET /v4/v1.1/Datastreams(ID)/unitOfMeasurement/$value
+GET /v4/v1.1/Datastreams/$ref
+GET /v4/v1.1/Datastreams?$count=false
+GET /v4/v1.1/Datastreams?$count=true
+GET /v4/v1.1/Datastreams?$expand=Observations
+GET /v4/v1.1/Datastreams?$expand=Observations/Datastream
+GET /v4/v1.1/Datastreams?$expand=Observations/FeatureOfInterest
+GET /v4/v1.1/Datastreams?$expand=ObservedProperty
+GET /v4/v1.1/Datastreams?$expand=ObservedProperty/Datastreams
+GET /v4/v1.1/Datastreams?$expand=Sensor
+GET /v4/v1.1/Datastreams?$expand=Sensor/Datastreams
+GET /v4/v1.1/Datastreams?$expand=Thing
+GET /v4/v1.1/Datastreams?$expand=Thing,Sensor
+GET /v4/v1.1/Datastreams?$expand=Thing,Sensor,ObservedProperty
+GET /v4/v1.1/Datastreams?$expand=Thing,Sensor,ObservedProperty,Observations
+GET /v4/v1.1/Datastreams?$expand=Thing/Datastreams
+GET /v4/v1.1/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations
+GET /v4/v1.1/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations
+GET /v4/v1.1/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams
+GET /v4/v1.1/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams
+GET /v4/v1.1/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams,Observations/Datastream
+GET /v4/v1.1/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams,Observations/Datastream,Observations/FeatureOfInterest
+GET /v4/v1.1/Datastreams?$expand=Thing/HistoricalLocations
+GET /v4/v1.1/Datastreams?$expand=Thing/Locations
+GET /v4/v1.1/Datastreams?$filter=description eq 'datastream+1'
+GET /v4/v1.1/Datastreams?$filter=description ge 'datastream+1'
+GET /v4/v1.1/Datastreams?$filter=description gt 'datastream+1'
+GET /v4/v1.1/Datastreams?$filter=description le 'datastream+1'
+GET /v4/v1.1/Datastreams?$filter=description lt 'datastream+1'
+GET /v4/v1.1/Datastreams?$filter=description ne 'datastream+1'
+GET /v4/v1.1/Datastreams?$filter=name eq 'datastream+1'
+GET /v4/v1.1/Datastreams?$filter=name ge 'datastream+1'
+GET /v4/v1.1/Datastreams?$filter=name gt 'datastream+1'
+GET /v4/v1.1/Datastreams?$filter=name le 'datastream+1'
+GET /v4/v1.1/Datastreams?$filter=name lt 'datastream+1'
+GET /v4/v1.1/Datastreams?$filter=name ne 'datastream+1'
+GET /v4/v1.1/Datastreams?$filter=observationType eq 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Datastreams?$filter=observationType ge 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Datastreams?$filter=observationType gt 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Datastreams?$filter=observationType le 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Datastreams?$filter=observationType lt 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Datastreams?$filter=observationType ne 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Datastreams?$orderby=description
+GET /v4/v1.1/Datastreams?$orderby=description asc
+GET /v4/v1.1/Datastreams?$orderby=description desc
+GET /v4/v1.1/Datastreams?$orderby=name
+GET /v4/v1.1/Datastreams?$orderby=name asc
+GET /v4/v1.1/Datastreams?$orderby=name asc,description asc
+GET /v4/v1.1/Datastreams?$orderby=name asc,description asc,observationType asc
+GET /v4/v1.1/Datastreams?$orderby=name desc
+GET /v4/v1.1/Datastreams?$orderby=name desc,description desc
+GET /v4/v1.1/Datastreams?$orderby=name desc,description desc,observationType desc
+GET /v4/v1.1/Datastreams?$orderby=name,description
+GET /v4/v1.1/Datastreams?$orderby=name,description,observationType
+GET /v4/v1.1/Datastreams?$orderby=observationType
+GET /v4/v1.1/Datastreams?$orderby=observationType asc
+GET /v4/v1.1/Datastreams?$orderby=observationType desc
+GET /v4/v1.1/Datastreams?$select=description
+GET /v4/v1.1/Datastreams?$select=name
+GET /v4/v1.1/Datastreams?$select=name,description
+GET /v4/v1.1/Datastreams?$select=name,description,unitOfMeasurement
+GET /v4/v1.1/Datastreams?$select=name,description,unitOfMeasurement,observationType
+GET /v4/v1.1/Datastreams?$select=observationType
+GET /v4/v1.1/Datastreams?$select=unitOfMeasurement
+GET /v4/v1.1/Datastreams?$skip=1
+GET /v4/v1.1/Datastreams?$skip=12
+GET /v4/v1.1/Datastreams?$skip=2
+GET /v4/v1.1/Datastreams?$skip=3
+GET /v4/v1.1/Datastreams?$skip=4
+GET /v4/v1.1/Datastreams?$top=1
+GET /v4/v1.1/Datastreams?$top=12
+GET /v4/v1.1/Datastreams?$top=13
+GET /v4/v1.1/Datastreams?$top=2
+GET /v4/v1.1/Datastreams?$top=3
+GET /v4/v1.1/Datastreams?$top=4
+GET /v4/v1.1/Datastreams?$top=5
+GET /v4/v1.1/FeaturesOfInterest
+GET /v4/v1.1/FeaturesOfInterest(ID)
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/Datastream
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/Datastream/$ref
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/Datastream/Observations
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/Datastream/Observations/$ref
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/Datastream/ObservedProperty
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/Datastream/ObservedProperty/$ref
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/Datastream/Sensor
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/Datastream/Sensor/$ref
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/Datastream/Thing
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/Datastream/Thing/$ref
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/FeatureOfInterest
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/FeatureOfInterest/$ref
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/FeatureOfInterest/Observations
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations(ID)/FeatureOfInterest/Observations/$ref
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations/$ref
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$count=false
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$count=true
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$expand=Datastream
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$expand=Datastream,FeatureOfInterest
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$expand=Datastream/Observations
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$expand=Datastream/ObservedProperty
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$expand=Datastream/Sensor
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$expand=Datastream/Thing
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$expand=Datastream/Thing,Datastream/Sensor
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$expand=Datastream/Thing,Datastream/Sensor,Datastream/ObservedProperty
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$expand=Datastream/Thing,Datastream/Sensor,Datastream/ObservedProperty,Datastream/Observations
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$expand=Datastream/Thing,Datastream/Sensor,Datastream/ObservedProperty,Datastream/Observations,FeatureOfInterest/Observations
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$expand=FeatureOfInterest
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$expand=FeatureOfInterest/Observations
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=phenomenonTime eq 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=phenomenonTime ge 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=phenomenonTime gt 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=phenomenonTime le 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=phenomenonTime lt 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=phenomenonTime ne 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=result eq '2'
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=result ge '2'
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=result gt '2'
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=result le '2'
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=result lt '2'
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=result ne '2'
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=resultTime eq 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=resultTime ge 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=resultTime gt 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=resultTime le 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=resultTime lt 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$filter=resultTime ne 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=phenomenonTime
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=phenomenonTime asc
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=phenomenonTime asc,result asc
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=phenomenonTime asc,result asc,resultTime asc
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=phenomenonTime desc
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=phenomenonTime desc,result desc
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=phenomenonTime desc,result desc,resultTime desc
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=phenomenonTime,result
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=phenomenonTime,result,resultTime
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=result
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=result asc
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=result desc
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=resultTime
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=resultTime asc
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$orderby=resultTime desc
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$select=phenomenonTime
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$select=phenomenonTime,result
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$select=phenomenonTime,result,resultTime
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$select=result
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$select=resultTime
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$skip=1
+GET /v4/v1.1/FeaturesOfInterest(ID)/Observations?$top=3
+GET /v4/v1.1/FeaturesOfInterest(ID)/description
+GET /v4/v1.1/FeaturesOfInterest(ID)/description/$value
+GET /v4/v1.1/FeaturesOfInterest(ID)/encodingType
+GET /v4/v1.1/FeaturesOfInterest(ID)/encodingType/$value
+GET /v4/v1.1/FeaturesOfInterest(ID)/feature
+GET /v4/v1.1/FeaturesOfInterest(ID)/feature/$value
+GET /v4/v1.1/FeaturesOfInterest(ID)/name
+GET /v4/v1.1/FeaturesOfInterest(ID)/name/$value
+GET /v4/v1.1/FeaturesOfInterest/$ref
+GET /v4/v1.1/FeaturesOfInterest?$count=false
+GET /v4/v1.1/FeaturesOfInterest?$count=true
+GET /v4/v1.1/FeaturesOfInterest?$expand=Observations
+GET /v4/v1.1/FeaturesOfInterest?$expand=Observations/Datastream
+GET /v4/v1.1/FeaturesOfInterest?$expand=Observations/Datastream,Observations/FeatureOfInterest
+GET /v4/v1.1/FeaturesOfInterest?$expand=Observations/FeatureOfInterest
+GET /v4/v1.1/FeaturesOfInterest?$filter=description eq 'Generated+using+location+details:+location+1'
+GET /v4/v1.1/FeaturesOfInterest?$filter=description ge 'Generated+using+location+details:+location+1'
+GET /v4/v1.1/FeaturesOfInterest?$filter=description gt 'Generated+using+location+details:+location+1'
+GET /v4/v1.1/FeaturesOfInterest?$filter=description le 'Generated+using+location+details:+location+1'
+GET /v4/v1.1/FeaturesOfInterest?$filter=description lt 'Generated+using+location+details:+location+1'
+GET /v4/v1.1/FeaturesOfInterest?$filter=description ne 'Generated+using+location+details:+location+1'
+GET /v4/v1.1/FeaturesOfInterest?$filter=encodingType eq 'application/vnd.geo+json'
+GET /v4/v1.1/FeaturesOfInterest?$filter=encodingType ge 'application/vnd.geo+json'
+GET /v4/v1.1/FeaturesOfInterest?$filter=encodingType gt 'application/vnd.geo+json'
+GET /v4/v1.1/FeaturesOfInterest?$filter=encodingType le 'application/vnd.geo+json'
+GET /v4/v1.1/FeaturesOfInterest?$filter=encodingType lt 'application/vnd.geo+json'
+GET /v4/v1.1/FeaturesOfInterest?$filter=encodingType ne 'application/vnd.geo+json'
+GET /v4/v1.1/FeaturesOfInterest?$filter=name eq 'Generated+using+location+details:+location+1'
+GET /v4/v1.1/FeaturesOfInterest?$filter=name ge 'Generated+using+location+details:+location+1'
+GET /v4/v1.1/FeaturesOfInterest?$filter=name gt 'Generated+using+location+details:+location+1'
+GET /v4/v1.1/FeaturesOfInterest?$filter=name le 'Generated+using+location+details:+location+1'
+GET /v4/v1.1/FeaturesOfInterest?$filter=name lt 'Generated+using+location+details:+location+1'
+GET /v4/v1.1/FeaturesOfInterest?$filter=name ne 'Generated+using+location+details:+location+1'
+GET /v4/v1.1/FeaturesOfInterest?$orderby=description
+GET /v4/v1.1/FeaturesOfInterest?$orderby=description asc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=description desc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=encodingType
+GET /v4/v1.1/FeaturesOfInterest?$orderby=encodingType asc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=encodingType desc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=feature
+GET /v4/v1.1/FeaturesOfInterest?$orderby=feature asc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=feature desc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=name
+GET /v4/v1.1/FeaturesOfInterest?$orderby=name asc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=name asc,description asc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=name asc,description asc,encodingType asc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=name asc,description asc,encodingType asc,feature asc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=name desc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=name desc,description desc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=name desc,description desc,encodingType desc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=name desc,description desc,encodingType desc,feature desc
+GET /v4/v1.1/FeaturesOfInterest?$orderby=name,description
+GET /v4/v1.1/FeaturesOfInterest?$orderby=name,description,encodingType
+GET /v4/v1.1/FeaturesOfInterest?$orderby=name,description,encodingType,feature
+GET /v4/v1.1/FeaturesOfInterest?$select=description
+GET /v4/v1.1/FeaturesOfInterest?$select=encodingType
+GET /v4/v1.1/FeaturesOfInterest?$select=feature
+GET /v4/v1.1/FeaturesOfInterest?$select=name
+GET /v4/v1.1/FeaturesOfInterest?$select=name,description
+GET /v4/v1.1/FeaturesOfInterest?$select=name,description,encodingType
+GET /v4/v1.1/FeaturesOfInterest?$select=name,description,encodingType,feature
+GET /v4/v1.1/FeaturesOfInterest?$skip=1
+GET /v4/v1.1/FeaturesOfInterest?$skip=12
+GET /v4/v1.1/FeaturesOfInterest?$skip=2
+GET /v4/v1.1/FeaturesOfInterest?$skip=3
+GET /v4/v1.1/FeaturesOfInterest?$skip=4
+GET /v4/v1.1/FeaturesOfInterest?$top=1
+GET /v4/v1.1/FeaturesOfInterest?$top=12
+GET /v4/v1.1/FeaturesOfInterest?$top=13
+GET /v4/v1.1/FeaturesOfInterest?$top=2
+GET /v4/v1.1/FeaturesOfInterest?$top=3
+GET /v4/v1.1/FeaturesOfInterest?$top=4
+GET /v4/v1.1/FeaturesOfInterest?$top=5
+GET /v4/v1.1/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations(ID)
+GET /v4/v1.1/HistoricalLocations(ID)/Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/HistoricalLocations(ID)/Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/HistoricalLocations(ID)/Locations/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/HistoricalLocations(ID)/Thing
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/HistoricalLocations(ID)/Thing/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/HistoricalLocations/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/Things
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/Things(ID)/Datastreams
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/Things(ID)/Datastreams/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/Things(ID)/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/Things(ID)/HistoricalLocations/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/Things(ID)/Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/Things(ID)/Locations/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Locations(ID)/Things/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Locations/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$expand=HistoricalLocations
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$expand=HistoricalLocations,Things
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$expand=HistoricalLocations/Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$expand=HistoricalLocations/Thing
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$expand=HistoricalLocations/Thing,HistoricalLocations/Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$expand=HistoricalLocations/Thing,HistoricalLocations/Locations,Things/Datastreams
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$expand=HistoricalLocations/Thing,HistoricalLocations/Locations,Things/Datastreams,Things/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$expand=HistoricalLocations/Thing,HistoricalLocations/Locations,Things/Datastreams,Things/HistoricalLocations,Things/Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$expand=Things
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$expand=Things/Datastreams
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$expand=Things/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$expand=Things/Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=description
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=description asc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=description desc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=encodingType
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=encodingType asc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=encodingType desc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=location
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=location asc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=location desc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=name
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=name asc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=name asc,description asc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=name asc,description asc,encodingType asc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=name asc,description asc,encodingType asc,location asc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=name desc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=name desc,description desc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=name desc,description desc,encodingType desc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=name desc,description desc,encodingType desc,location desc
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=name,description
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=name,description,encodingType
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$orderby=name,description,encodingType,location
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$select=description
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$select=encodingType
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$select=location
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$select=name
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$select=name,description
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$select=name,description,encodingType
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$select=name,description,encodingType,location
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$skip=1
+GET /v4/v1.1/HistoricalLocations(ID)/Locations?$top=3
+GET /v4/v1.1/HistoricalLocations(ID)/Thing
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Datastreams
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Datastreams(ID)/Observations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Datastreams(ID)/Observations/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Datastreams(ID)/ObservedProperty
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Datastreams(ID)/ObservedProperty/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Datastreams(ID)/Sensor
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Datastreams(ID)/Sensor/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Datastreams(ID)/Thing
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Datastreams(ID)/Thing/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Datastreams/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/HistoricalLocations(ID)/Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/HistoricalLocations(ID)/Locations/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/HistoricalLocations(ID)/Thing
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/HistoricalLocations(ID)/Thing/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/HistoricalLocations/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Locations(ID)/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Locations(ID)/HistoricalLocations/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Locations(ID)/Things
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Locations(ID)/Things/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Thing/Locations/$ref
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams,HistoricalLocations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams,HistoricalLocations,Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams/Observations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams/ObservedProperty
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams/Sensor
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams/Thing
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing,HistoricalLocations/Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing,HistoricalLocations/Locations,Locations/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing,HistoricalLocations/Locations,Locations/HistoricalLocations,Locations/Things
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=HistoricalLocations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=HistoricalLocations/Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=HistoricalLocations/Thing
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Locations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Locations/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$expand=Locations/Things
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$select=description
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$select=name
+GET /v4/v1.1/HistoricalLocations(ID)/Thing?$select=name,description
+GET /v4/v1.1/HistoricalLocations(ID)/time
+GET /v4/v1.1/HistoricalLocations(ID)/time/$value
+GET /v4/v1.1/HistoricalLocations/$ref
+GET /v4/v1.1/HistoricalLocations?$count=false
+GET /v4/v1.1/HistoricalLocations?$count=true
+GET /v4/v1.1/HistoricalLocations?$expand=Locations
+GET /v4/v1.1/HistoricalLocations?$expand=Locations/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations?$expand=Locations/Things
+GET /v4/v1.1/HistoricalLocations?$expand=Thing
+GET /v4/v1.1/HistoricalLocations?$expand=Thing,Locations
+GET /v4/v1.1/HistoricalLocations?$expand=Thing/Datastreams
+GET /v4/v1.1/HistoricalLocations?$expand=Thing/Datastreams,Thing/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations
+GET /v4/v1.1/HistoricalLocations?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Locations/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Locations/HistoricalLocations,Locations/Things
+GET /v4/v1.1/HistoricalLocations?$expand=Thing/HistoricalLocations
+GET /v4/v1.1/HistoricalLocations?$expand=Thing/Locations
+GET /v4/v1.1/HistoricalLocations?$filter=time eq 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/HistoricalLocations?$filter=time ge 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/HistoricalLocations?$filter=time gt 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/HistoricalLocations?$filter=time le 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/HistoricalLocations?$filter=time lt 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/HistoricalLocations?$filter=time ne 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/HistoricalLocations?$orderby=time
+GET /v4/v1.1/HistoricalLocations?$orderby=time asc
+GET /v4/v1.1/HistoricalLocations?$orderby=time desc
+GET /v4/v1.1/HistoricalLocations?$select=time
+GET /v4/v1.1/HistoricalLocations?$skip=1
+GET /v4/v1.1/HistoricalLocations?$skip=12
+GET /v4/v1.1/HistoricalLocations?$skip=2
+GET /v4/v1.1/HistoricalLocations?$skip=3
+GET /v4/v1.1/HistoricalLocations?$skip=4
+GET /v4/v1.1/HistoricalLocations?$top=1
+GET /v4/v1.1/HistoricalLocations?$top=12
+GET /v4/v1.1/HistoricalLocations?$top=13
+GET /v4/v1.1/HistoricalLocations?$top=2
+GET /v4/v1.1/HistoricalLocations?$top=3
+GET /v4/v1.1/HistoricalLocations?$top=4
+GET /v4/v1.1/HistoricalLocations?$top=5
+GET /v4/v1.1/Locations
+GET /v4/v1.1/Locations(ID)
+GET /v4/v1.1/Locations(ID)/HistoricalLocations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Locations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Locations(ID)/HistoricalLocations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Locations(ID)/HistoricalLocations/$ref
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Locations(ID)/Things
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Locations(ID)/Things/$ref
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Locations/$ref
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Thing
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Thing/$ref
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Thing/Datastreams
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Thing/Datastreams/$ref
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Thing/HistoricalLocations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Thing/HistoricalLocations/$ref
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Thing/Locations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations(ID)/Thing/Locations/$ref
+GET /v4/v1.1/Locations(ID)/HistoricalLocations/$ref
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$count=false
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$count=true
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$expand=Locations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$expand=Locations/HistoricalLocations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$expand=Locations/Things
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$expand=Thing
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$expand=Thing,Locations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$expand=Thing/Datastreams
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$expand=Thing/Datastreams,Thing/HistoricalLocations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Locations/HistoricalLocations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Locations/HistoricalLocations,Locations/Things
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$expand=Thing/HistoricalLocations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$expand=Thing/Locations
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$filter=time eq 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$filter=time ge 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$filter=time gt 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$filter=time le 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$filter=time lt 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$filter=time ne 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$orderby=time
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$orderby=time asc
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$orderby=time desc
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$select=time
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$skip=1
+GET /v4/v1.1/Locations(ID)/HistoricalLocations?$top=3
+GET /v4/v1.1/Locations(ID)/Things
+GET /v4/v1.1/Locations(ID)/Things(ID)/Datastreams
+GET /v4/v1.1/Locations(ID)/Things(ID)/Datastreams(ID)/Observations
+GET /v4/v1.1/Locations(ID)/Things(ID)/Datastreams(ID)/Observations/$ref
+GET /v4/v1.1/Locations(ID)/Things(ID)/Datastreams(ID)/ObservedProperty
+GET /v4/v1.1/Locations(ID)/Things(ID)/Datastreams(ID)/ObservedProperty/$ref
+GET /v4/v1.1/Locations(ID)/Things(ID)/Datastreams(ID)/Sensor
+GET /v4/v1.1/Locations(ID)/Things(ID)/Datastreams(ID)/Sensor/$ref
+GET /v4/v1.1/Locations(ID)/Things(ID)/Datastreams(ID)/Thing
+GET /v4/v1.1/Locations(ID)/Things(ID)/Datastreams(ID)/Thing/$ref
+GET /v4/v1.1/Locations(ID)/Things(ID)/Datastreams/$ref
+GET /v4/v1.1/Locations(ID)/Things(ID)/HistoricalLocations
+GET /v4/v1.1/Locations(ID)/Things(ID)/HistoricalLocations(ID)/Locations
+GET /v4/v1.1/Locations(ID)/Things(ID)/HistoricalLocations(ID)/Locations/$ref
+GET /v4/v1.1/Locations(ID)/Things(ID)/HistoricalLocations(ID)/Thing
+GET /v4/v1.1/Locations(ID)/Things(ID)/HistoricalLocations(ID)/Thing/$ref
+GET /v4/v1.1/Locations(ID)/Things(ID)/HistoricalLocations/$ref
+GET /v4/v1.1/Locations(ID)/Things(ID)/Locations
+GET /v4/v1.1/Locations(ID)/Things(ID)/Locations(ID)/HistoricalLocations
+GET /v4/v1.1/Locations(ID)/Things(ID)/Locations(ID)/HistoricalLocations/$ref
+GET /v4/v1.1/Locations(ID)/Things(ID)/Locations(ID)/Things
+GET /v4/v1.1/Locations(ID)/Things(ID)/Locations(ID)/Things/$ref
+GET /v4/v1.1/Locations(ID)/Things(ID)/Locations/$ref
+GET /v4/v1.1/Locations(ID)/Things/$ref
+GET /v4/v1.1/Locations(ID)/Things?$count=false
+GET /v4/v1.1/Locations(ID)/Things?$count=true
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams,HistoricalLocations
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams,HistoricalLocations,Locations
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams/Observations
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams/ObservedProperty
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams/Sensor
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams/Thing
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams/Thing,Datastreams/Sensor
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing,HistoricalLocations/Locations
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing,HistoricalLocations/Locations,Locations/HistoricalLocations
+GET /v4/v1.1/Locations(ID)/Things?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing,HistoricalLocations/Locations,Locations/HistoricalLocations,Locations/Things
+GET /v4/v1.1/Locations(ID)/Things?$expand=HistoricalLocations
+GET /v4/v1.1/Locations(ID)/Things?$expand=HistoricalLocations/Locations
+GET /v4/v1.1/Locations(ID)/Things?$expand=HistoricalLocations/Thing
+GET /v4/v1.1/Locations(ID)/Things?$expand=Locations
+GET /v4/v1.1/Locations(ID)/Things?$expand=Locations/HistoricalLocations
+GET /v4/v1.1/Locations(ID)/Things?$expand=Locations/Things
+GET /v4/v1.1/Locations(ID)/Things?$filter=description eq 'thing+1'
+GET /v4/v1.1/Locations(ID)/Things?$filter=description ge 'thing+1'
+GET /v4/v1.1/Locations(ID)/Things?$filter=description gt 'thing+1'
+GET /v4/v1.1/Locations(ID)/Things?$filter=description le 'thing+1'
+GET /v4/v1.1/Locations(ID)/Things?$filter=description lt 'thing+1'
+GET /v4/v1.1/Locations(ID)/Things?$filter=description ne 'thing+1'
+GET /v4/v1.1/Locations(ID)/Things?$filter=name eq 'thing+1'
+GET /v4/v1.1/Locations(ID)/Things?$filter=name ge 'thing+1'
+GET /v4/v1.1/Locations(ID)/Things?$filter=name gt 'thing+1'
+GET /v4/v1.1/Locations(ID)/Things?$filter=name le 'thing+1'
+GET /v4/v1.1/Locations(ID)/Things?$filter=name lt 'thing+1'
+GET /v4/v1.1/Locations(ID)/Things?$filter=name ne 'thing+1'
+GET /v4/v1.1/Locations(ID)/Things?$orderby=description
+GET /v4/v1.1/Locations(ID)/Things?$orderby=description asc
+GET /v4/v1.1/Locations(ID)/Things?$orderby=description desc
+GET /v4/v1.1/Locations(ID)/Things?$orderby=name
+GET /v4/v1.1/Locations(ID)/Things?$orderby=name asc
+GET /v4/v1.1/Locations(ID)/Things?$orderby=name asc,description asc
+GET /v4/v1.1/Locations(ID)/Things?$orderby=name desc
+GET /v4/v1.1/Locations(ID)/Things?$orderby=name desc,description desc
+GET /v4/v1.1/Locations(ID)/Things?$orderby=name,description
+GET /v4/v1.1/Locations(ID)/Things?$select=description
+GET /v4/v1.1/Locations(ID)/Things?$select=name
+GET /v4/v1.1/Locations(ID)/Things?$select=name,description
+GET /v4/v1.1/Locations(ID)/Things?$skip=1
+GET /v4/v1.1/Locations(ID)/Things?$top=3
+GET /v4/v1.1/Locations(ID)/description
+GET /v4/v1.1/Locations(ID)/description/$value
+GET /v4/v1.1/Locations(ID)/encodingType
+GET /v4/v1.1/Locations(ID)/encodingType/$value
+GET /v4/v1.1/Locations(ID)/location
+GET /v4/v1.1/Locations(ID)/location/$value
+GET /v4/v1.1/Locations(ID)/name
+GET /v4/v1.1/Locations(ID)/name/$value
+GET /v4/v1.1/Locations/$ref
+GET /v4/v1.1/Locations?$count=false
+GET /v4/v1.1/Locations?$count=true
+GET /v4/v1.1/Locations?$expand=HistoricalLocations
+GET /v4/v1.1/Locations?$expand=HistoricalLocations,Things
+GET /v4/v1.1/Locations?$expand=HistoricalLocations/Locations
+GET /v4/v1.1/Locations?$expand=HistoricalLocations/Thing
+GET /v4/v1.1/Locations?$expand=HistoricalLocations/Thing,HistoricalLocations/Locations
+GET /v4/v1.1/Locations?$expand=HistoricalLocations/Thing,HistoricalLocations/Locations,Things/Datastreams
+GET /v4/v1.1/Locations?$expand=HistoricalLocations/Thing,HistoricalLocations/Locations,Things/Datastreams,Things/HistoricalLocations
+GET /v4/v1.1/Locations?$expand=HistoricalLocations/Thing,HistoricalLocations/Locations,Things/Datastreams,Things/HistoricalLocations,Things/Locations
+GET /v4/v1.1/Locations?$expand=Things
+GET /v4/v1.1/Locations?$expand=Things/Datastreams
+GET /v4/v1.1/Locations?$expand=Things/HistoricalLocations
+GET /v4/v1.1/Locations?$expand=Things/Locations
+GET /v4/v1.1/Locations?$filter=description eq 'location+2'
+GET /v4/v1.1/Locations?$filter=description ge 'location+2'
+GET /v4/v1.1/Locations?$filter=description gt 'location+2'
+GET /v4/v1.1/Locations?$filter=description le 'location+2'
+GET /v4/v1.1/Locations?$filter=description lt 'location+2'
+GET /v4/v1.1/Locations?$filter=description ne 'location+2'
+GET /v4/v1.1/Locations?$filter=encodingType eq 'application/vnd.geo+json'
+GET /v4/v1.1/Locations?$filter=encodingType ge 'application/vnd.geo+json'
+GET /v4/v1.1/Locations?$filter=encodingType gt 'application/vnd.geo+json'
+GET /v4/v1.1/Locations?$filter=encodingType le 'application/vnd.geo+json'
+GET /v4/v1.1/Locations?$filter=encodingType lt 'application/vnd.geo+json'
+GET /v4/v1.1/Locations?$filter=encodingType ne 'application/vnd.geo+json'
+GET /v4/v1.1/Locations?$filter=name eq 'location+2'
+GET /v4/v1.1/Locations?$filter=name ge 'location+2'
+GET /v4/v1.1/Locations?$filter=name gt 'location+2'
+GET /v4/v1.1/Locations?$filter=name le 'location+2'
+GET /v4/v1.1/Locations?$filter=name lt 'location+2'
+GET /v4/v1.1/Locations?$filter=name ne 'location+2'
+GET /v4/v1.1/Locations?$orderby=description
+GET /v4/v1.1/Locations?$orderby=description asc
+GET /v4/v1.1/Locations?$orderby=description desc
+GET /v4/v1.1/Locations?$orderby=encodingType
+GET /v4/v1.1/Locations?$orderby=encodingType asc
+GET /v4/v1.1/Locations?$orderby=encodingType desc
+GET /v4/v1.1/Locations?$orderby=location
+GET /v4/v1.1/Locations?$orderby=location asc
+GET /v4/v1.1/Locations?$orderby=location desc
+GET /v4/v1.1/Locations?$orderby=name
+GET /v4/v1.1/Locations?$orderby=name asc
+GET /v4/v1.1/Locations?$orderby=name asc,description asc
+GET /v4/v1.1/Locations?$orderby=name asc,description asc,encodingType asc
+GET /v4/v1.1/Locations?$orderby=name asc,description asc,encodingType asc,location asc
+GET /v4/v1.1/Locations?$orderby=name desc
+GET /v4/v1.1/Locations?$orderby=name desc,description desc
+GET /v4/v1.1/Locations?$orderby=name desc,description desc,encodingType desc
+GET /v4/v1.1/Locations?$orderby=name desc,description desc,encodingType desc,location desc
+GET /v4/v1.1/Locations?$orderby=name,description
+GET /v4/v1.1/Locations?$orderby=name,description,encodingType
+GET /v4/v1.1/Locations?$orderby=name,description,encodingType,location
+GET /v4/v1.1/Locations?$select=description
+GET /v4/v1.1/Locations?$select=encodingType
+GET /v4/v1.1/Locations?$select=location
+GET /v4/v1.1/Locations?$select=name
+GET /v4/v1.1/Locations?$select=name,description
+GET /v4/v1.1/Locations?$select=name,description,encodingType
+GET /v4/v1.1/Locations?$select=name,description,encodingType,location
+GET /v4/v1.1/Locations?$skip=1
+GET /v4/v1.1/Locations?$skip=12
+GET /v4/v1.1/Locations?$skip=2
+GET /v4/v1.1/Locations?$skip=3
+GET /v4/v1.1/Locations?$skip=4
+GET /v4/v1.1/Locations?$top=1
+GET /v4/v1.1/Locations?$top=12
+GET /v4/v1.1/Locations?$top=13
+GET /v4/v1.1/Locations?$top=2
+GET /v4/v1.1/Locations?$top=3
+GET /v4/v1.1/Locations?$top=4
+GET /v4/v1.1/Locations?$top=5
+GET /v4/v1.1/Observations
+GET /v4/v1.1/Observations(ID)
+GET /v4/v1.1/Observations(ID)/Datastream
+GET /v4/v1.1/Observations(ID)/Datastream/$ref
+GET /v4/v1.1/Observations(ID)/Datastream/Observations
+GET /v4/v1.1/Observations(ID)/Datastream/Observations(ID)/Datastream
+GET /v4/v1.1/Observations(ID)/Datastream/Observations(ID)/Datastream/$ref
+GET /v4/v1.1/Observations(ID)/Datastream/Observations(ID)/FeatureOfInterest
+GET /v4/v1.1/Observations(ID)/Datastream/Observations(ID)/FeatureOfInterest/$ref
+GET /v4/v1.1/Observations(ID)/Datastream/Observations/$ref
+GET /v4/v1.1/Observations(ID)/Datastream/ObservedProperty
+GET /v4/v1.1/Observations(ID)/Datastream/ObservedProperty/$ref
+GET /v4/v1.1/Observations(ID)/Datastream/ObservedProperty/Datastreams
+GET /v4/v1.1/Observations(ID)/Datastream/ObservedProperty/Datastreams/$ref
+GET /v4/v1.1/Observations(ID)/Datastream/Sensor
+GET /v4/v1.1/Observations(ID)/Datastream/Sensor/$ref
+GET /v4/v1.1/Observations(ID)/Datastream/Sensor/Datastreams
+GET /v4/v1.1/Observations(ID)/Datastream/Sensor/Datastreams/$ref
+GET /v4/v1.1/Observations(ID)/Datastream/Thing
+GET /v4/v1.1/Observations(ID)/Datastream/Thing/$ref
+GET /v4/v1.1/Observations(ID)/Datastream/Thing/Datastreams
+GET /v4/v1.1/Observations(ID)/Datastream/Thing/Datastreams/$ref
+GET /v4/v1.1/Observations(ID)/Datastream/Thing/HistoricalLocations
+GET /v4/v1.1/Observations(ID)/Datastream/Thing/HistoricalLocations/$ref
+GET /v4/v1.1/Observations(ID)/Datastream/Thing/Locations
+GET /v4/v1.1/Observations(ID)/Datastream/Thing/Locations/$ref
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Observations
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Observations/Datastream
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Observations/FeatureOfInterest
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=ObservedProperty
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=ObservedProperty/Datastreams
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Sensor
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Sensor/Datastreams
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing,Sensor
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing,Sensor,ObservedProperty
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing,Sensor,ObservedProperty,Observations
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing/Datastreams
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing/Datastreams,Thing/HistoricalLocations
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams,Observations/Datastream
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams,Observations/Datastream,Observations/FeatureOfInterest
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing/HistoricalLocations
+GET /v4/v1.1/Observations(ID)/Datastream?$expand=Thing/Locations
+GET /v4/v1.1/Observations(ID)/Datastream?$select=description
+GET /v4/v1.1/Observations(ID)/Datastream?$select=name
+GET /v4/v1.1/Observations(ID)/Datastream?$select=name,description
+GET /v4/v1.1/Observations(ID)/Datastream?$select=name,description,unitOfMeasurement
+GET /v4/v1.1/Observations(ID)/Datastream?$select=name,description,unitOfMeasurement,observationType
+GET /v4/v1.1/Observations(ID)/Datastream?$select=observationType
+GET /v4/v1.1/Observations(ID)/Datastream?$select=unitOfMeasurement
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest/$ref
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest/Observations
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest/Observations(ID)/Datastream
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest/Observations(ID)/Datastream/$ref
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest/Observations(ID)/FeatureOfInterest
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest/Observations(ID)/FeatureOfInterest/$ref
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest/Observations/$ref
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest?$expand=Observations
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest?$expand=Observations/Datastream
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest?$expand=Observations/Datastream,Observations/FeatureOfInterest
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest?$expand=Observations/FeatureOfInterest
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest?$select=description
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest?$select=encodingType
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest?$select=feature
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest?$select=name
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest?$select=name,description
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest?$select=name,description,encodingType
+GET /v4/v1.1/Observations(ID)/FeatureOfInterest?$select=name,description,encodingType,feature
+GET /v4/v1.1/Observations(ID)/phenomenonTime
+GET /v4/v1.1/Observations(ID)/phenomenonTime/$value
+GET /v4/v1.1/Observations(ID)/result
+GET /v4/v1.1/Observations(ID)/result/$value
+GET /v4/v1.1/Observations(ID)/resultTime
+GET /v4/v1.1/Observations(ID)/resultTime/$value
+GET /v4/v1.1/Observations/$ref
+GET /v4/v1.1/Observations?$count=false
+GET /v4/v1.1/Observations?$count=true
+GET /v4/v1.1/Observations?$count=true&$top=1&$skip=2&$orderby=phenomenonTime asc&$filter=result gt '3'
+GET /v4/v1.1/Observations?$expand=Datastream
+GET /v4/v1.1/Observations?$expand=Datastream,FeatureOfInterest
+GET /v4/v1.1/Observations?$expand=Datastream/Observations
+GET /v4/v1.1/Observations?$expand=Datastream/ObservedProperty
+GET /v4/v1.1/Observations?$expand=Datastream/Sensor
+GET /v4/v1.1/Observations?$expand=Datastream/Thing
+GET /v4/v1.1/Observations?$expand=Datastream/Thing,Datastream/Sensor
+GET /v4/v1.1/Observations?$expand=Datastream/Thing,Datastream/Sensor,Datastream/ObservedProperty
+GET /v4/v1.1/Observations?$expand=Datastream/Thing,Datastream/Sensor,Datastream/ObservedProperty,Datastream/Observations
+GET /v4/v1.1/Observations?$expand=Datastream/Thing,Datastream/Sensor,Datastream/ObservedProperty,Datastream/Observations,FeatureOfInterest/Observations
+GET /v4/v1.1/Observations?$expand=FeatureOfInterest
+GET /v4/v1.1/Observations?$expand=FeatureOfInterest/Observations
+GET /v4/v1.1/Observations?$filter=phenomenonTime eq 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/Observations?$filter=phenomenonTime ge 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/Observations?$filter=phenomenonTime gt 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/Observations?$filter=phenomenonTime le 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/Observations?$filter=phenomenonTime lt 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/Observations?$filter=phenomenonTime ne 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/Observations?$filter=result eq '2'
+GET /v4/v1.1/Observations?$filter=result ge '2'
+GET /v4/v1.1/Observations?$filter=result gt '2'
+GET /v4/v1.1/Observations?$filter=result le '2'
+GET /v4/v1.1/Observations?$filter=result lt '2'
+GET /v4/v1.1/Observations?$filter=result ne '2'
+GET /v4/v1.1/Observations?$filter=resultTime eq 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/Observations?$filter=resultTime ge 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/Observations?$filter=resultTime gt 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/Observations?$filter=resultTime le 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/Observations?$filter=resultTime lt 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/Observations?$filter=resultTime ne 2015-03-02T00:00:00.000Z
+GET /v4/v1.1/Observations?$orderby=phenomenonTime
+GET /v4/v1.1/Observations?$orderby=phenomenonTime asc
+GET /v4/v1.1/Observations?$orderby=phenomenonTime asc,result asc
+GET /v4/v1.1/Observations?$orderby=phenomenonTime asc,result asc,resultTime asc
+GET /v4/v1.1/Observations?$orderby=phenomenonTime desc
+GET /v4/v1.1/Observations?$orderby=phenomenonTime desc,result desc
+GET /v4/v1.1/Observations?$orderby=phenomenonTime desc,result desc,resultTime desc
+GET /v4/v1.1/Observations?$orderby=phenomenonTime,result
+GET /v4/v1.1/Observations?$orderby=phenomenonTime,result,resultTime
+GET /v4/v1.1/Observations?$orderby=result
+GET /v4/v1.1/Observations?$orderby=result asc
+GET /v4/v1.1/Observations?$orderby=result desc
+GET /v4/v1.1/Observations?$orderby=resultTime
+GET /v4/v1.1/Observations?$orderby=resultTime asc
+GET /v4/v1.1/Observations?$orderby=resultTime desc
+GET /v4/v1.1/Observations?$select=phenomenonTime
+GET /v4/v1.1/Observations?$select=phenomenonTime,result
+GET /v4/v1.1/Observations?$select=phenomenonTime,result,resultTime
+GET /v4/v1.1/Observations?$select=result
+GET /v4/v1.1/Observations?$select=resultTime
+GET /v4/v1.1/Observations?$skip=1
+GET /v4/v1.1/Observations?$skip=12
+GET /v4/v1.1/Observations?$skip=2
+GET /v4/v1.1/Observations?$skip=3
+GET /v4/v1.1/Observations?$skip=4
+GET /v4/v1.1/Observations?$top=1
+GET /v4/v1.1/Observations?$top=12
+GET /v4/v1.1/Observations?$top=13
+GET /v4/v1.1/Observations?$top=2
+GET /v4/v1.1/Observations?$top=3
+GET /v4/v1.1/Observations?$top=4
+GET /v4/v1.1/Observations?$top=5
+GET /v4/v1.1/ObservedProperties
+GET /v4/v1.1/ObservedProperties(ID)
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Observations
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Observations(ID)/Datastream
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Observations(ID)/Datastream/$ref
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Observations(ID)/FeatureOfInterest
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Observations(ID)/FeatureOfInterest/$ref
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Observations/$ref
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/ObservedProperty
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/ObservedProperty/$ref
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/ObservedProperty/Datastreams
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/ObservedProperty/Datastreams/$ref
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Sensor
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Sensor/$ref
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Sensor/Datastreams
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Sensor/Datastreams/$ref
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Thing
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Thing/$ref
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Thing/Datastreams
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Thing/Datastreams/$ref
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Thing/HistoricalLocations
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Thing/HistoricalLocations/$ref
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Thing/Locations
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams(ID)/Thing/Locations/$ref
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams/$ref
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$count=false
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$count=true
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Observations
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Observations/Datastream
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Observations/FeatureOfInterest
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=ObservedProperty
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=ObservedProperty/Datastreams
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Sensor
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Sensor/Datastreams
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing,Sensor
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing,Sensor,ObservedProperty
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing,Sensor,ObservedProperty,Observations
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing/Datastreams
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams,Observations/Datastream
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams,Observations/Datastream,Observations/FeatureOfInterest
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing/HistoricalLocations
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$expand=Thing/Locations
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=description eq 'datastream+1'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=description ge 'datastream+1'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=description gt 'datastream+1'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=description le 'datastream+1'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=description lt 'datastream+1'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=description ne 'datastream+1'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=name eq 'datastream+1'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=name ge 'datastream+1'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=name gt 'datastream+1'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=name le 'datastream+1'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=name lt 'datastream+1'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=name ne 'datastream+1'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=observationType eq 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=observationType ge 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=observationType gt 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=observationType le 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=observationType lt 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$filter=observationType ne 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=description
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=description asc
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=description desc
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=name
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=name asc
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=name asc,description asc
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=name asc,description asc,observationType asc
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=name desc
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=name desc,description desc
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=name desc,description desc,observationType desc
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=name,description
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=name,description,observationType
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=observationType
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=observationType asc
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$orderby=observationType desc
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$select=description
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$select=name
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$select=name,description
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$select=name,description,unitOfMeasurement
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$select=name,description,unitOfMeasurement,observationType
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$select=observationType
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$select=unitOfMeasurement
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$skip=1
+GET /v4/v1.1/ObservedProperties(ID)/Datastreams?$top=3
+GET /v4/v1.1/ObservedProperties(ID)/definition
+GET /v4/v1.1/ObservedProperties(ID)/definition/$value
+GET /v4/v1.1/ObservedProperties(ID)/description
+GET /v4/v1.1/ObservedProperties(ID)/description/$value
+GET /v4/v1.1/ObservedProperties(ID)/name
+GET /v4/v1.1/ObservedProperties(ID)/name/$value
+GET /v4/v1.1/ObservedProperties/$ref
+GET /v4/v1.1/ObservedProperties?$count=false
+GET /v4/v1.1/ObservedProperties?$count=true
+GET /v4/v1.1/ObservedProperties?$expand=Datastreams
+GET /v4/v1.1/ObservedProperties?$expand=Datastreams/Observations
+GET /v4/v1.1/ObservedProperties?$expand=Datastreams/ObservedProperty
+GET /v4/v1.1/ObservedProperties?$expand=Datastreams/Sensor
+GET /v4/v1.1/ObservedProperties?$expand=Datastreams/Thing
+GET /v4/v1.1/ObservedProperties?$expand=Datastreams/Thing,Datastreams/Sensor
+GET /v4/v1.1/ObservedProperties?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty
+GET /v4/v1.1/ObservedProperties?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations
+GET /v4/v1.1/ObservedProperties?$filter=definition eq 'http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux'
+GET /v4/v1.1/ObservedProperties?$filter=definition ge 'http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux'
+GET /v4/v1.1/ObservedProperties?$filter=definition gt 'http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux'
+GET /v4/v1.1/ObservedProperties?$filter=definition le 'http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux'
+GET /v4/v1.1/ObservedProperties?$filter=definition lt 'http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux'
+GET /v4/v1.1/ObservedProperties?$filter=definition ne 'http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html/LuminousFlux'
+GET /v4/v1.1/ObservedProperties?$filter=description eq 'observedProperty+1'
+GET /v4/v1.1/ObservedProperties?$filter=description ge 'observedProperty+1'
+GET /v4/v1.1/ObservedProperties?$filter=description gt 'observedProperty+1'
+GET /v4/v1.1/ObservedProperties?$filter=description le 'observedProperty+1'
+GET /v4/v1.1/ObservedProperties?$filter=description lt 'observedProperty+1'
+GET /v4/v1.1/ObservedProperties?$filter=description ne 'observedProperty+1'
+GET /v4/v1.1/ObservedProperties?$filter=name eq 'Luminous+Flux'
+GET /v4/v1.1/ObservedProperties?$filter=name ge 'Luminous+Flux'
+GET /v4/v1.1/ObservedProperties?$filter=name gt 'Luminous+Flux'
+GET /v4/v1.1/ObservedProperties?$filter=name le 'Luminous+Flux'
+GET /v4/v1.1/ObservedProperties?$filter=name lt 'Luminous+Flux'
+GET /v4/v1.1/ObservedProperties?$filter=name ne 'Luminous+Flux'
+GET /v4/v1.1/ObservedProperties?$orderby=definition
+GET /v4/v1.1/ObservedProperties?$orderby=definition asc
+GET /v4/v1.1/ObservedProperties?$orderby=definition desc
+GET /v4/v1.1/ObservedProperties?$orderby=description
+GET /v4/v1.1/ObservedProperties?$orderby=description asc
+GET /v4/v1.1/ObservedProperties?$orderby=description desc
+GET /v4/v1.1/ObservedProperties?$orderby=name
+GET /v4/v1.1/ObservedProperties?$orderby=name asc
+GET /v4/v1.1/ObservedProperties?$orderby=name asc,definition asc
+GET /v4/v1.1/ObservedProperties?$orderby=name asc,definition asc,description asc
+GET /v4/v1.1/ObservedProperties?$orderby=name desc
+GET /v4/v1.1/ObservedProperties?$orderby=name desc,definition desc
+GET /v4/v1.1/ObservedProperties?$orderby=name desc,definition desc,description desc
+GET /v4/v1.1/ObservedProperties?$orderby=name,definition
+GET /v4/v1.1/ObservedProperties?$orderby=name,definition,description
+GET /v4/v1.1/ObservedProperties?$select=definition
+GET /v4/v1.1/ObservedProperties?$select=description
+GET /v4/v1.1/ObservedProperties?$select=name
+GET /v4/v1.1/ObservedProperties?$select=name,definition
+GET /v4/v1.1/ObservedProperties?$select=name,definition,description
+GET /v4/v1.1/ObservedProperties?$skip=1
+GET /v4/v1.1/ObservedProperties?$skip=12
+GET /v4/v1.1/ObservedProperties?$skip=2
+GET /v4/v1.1/ObservedProperties?$skip=3
+GET /v4/v1.1/ObservedProperties?$skip=4
+GET /v4/v1.1/ObservedProperties?$top=1
+GET /v4/v1.1/ObservedProperties?$top=12
+GET /v4/v1.1/ObservedProperties?$top=13
+GET /v4/v1.1/ObservedProperties?$top=2
+GET /v4/v1.1/ObservedProperties?$top=3
+GET /v4/v1.1/ObservedProperties?$top=4
+GET /v4/v1.1/ObservedProperties?$top=5
+GET /v4/v1.1/Sensors
+GET /v4/v1.1/Sensors(ID)
+GET /v4/v1.1/Sensors(ID)/Datastreams
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Observations
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Observations(ID)/Datastream
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Observations(ID)/Datastream/$ref
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Observations(ID)/FeatureOfInterest
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Observations(ID)/FeatureOfInterest/$ref
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Observations/$ref
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/ObservedProperty
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/ObservedProperty/$ref
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/ObservedProperty/Datastreams
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/ObservedProperty/Datastreams/$ref
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Sensor
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Sensor/$ref
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Sensor/Datastreams
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Sensor/Datastreams/$ref
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Thing
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Thing/$ref
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Thing/Datastreams
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Thing/Datastreams/$ref
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Thing/HistoricalLocations
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Thing/HistoricalLocations/$ref
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Thing/Locations
+GET /v4/v1.1/Sensors(ID)/Datastreams(ID)/Thing/Locations/$ref
+GET /v4/v1.1/Sensors(ID)/Datastreams/$ref
+GET /v4/v1.1/Sensors(ID)/Datastreams?$count=false
+GET /v4/v1.1/Sensors(ID)/Datastreams?$count=true
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Observations
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Observations/Datastream
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Observations/FeatureOfInterest
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=ObservedProperty
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=ObservedProperty/Datastreams
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Sensor
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Sensor/Datastreams
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing,Sensor
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing,Sensor,ObservedProperty
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing,Sensor,ObservedProperty,Observations
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing/Datastreams
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams,Observations/Datastream
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams,Observations/Datastream,Observations/FeatureOfInterest
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing/HistoricalLocations
+GET /v4/v1.1/Sensors(ID)/Datastreams?$expand=Thing/Locations
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=description eq 'datastream+1'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=description ge 'datastream+1'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=description gt 'datastream+1'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=description le 'datastream+1'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=description lt 'datastream+1'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=description ne 'datastream+1'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=name eq 'datastream+1'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=name ge 'datastream+1'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=name gt 'datastream+1'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=name le 'datastream+1'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=name lt 'datastream+1'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=name ne 'datastream+1'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=observationType eq 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=observationType ge 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=observationType gt 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=observationType le 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=observationType lt 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$filter=observationType ne 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=description
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=description asc
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=description desc
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=name
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=name asc
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=name asc,description asc
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=name asc,description asc,observationType asc
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=name desc
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=name desc,description desc
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=name desc,description desc,observationType desc
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=name,description
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=name,description,observationType
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=observationType
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=observationType asc
+GET /v4/v1.1/Sensors(ID)/Datastreams?$orderby=observationType desc
+GET /v4/v1.1/Sensors(ID)/Datastreams?$select=description
+GET /v4/v1.1/Sensors(ID)/Datastreams?$select=name
+GET /v4/v1.1/Sensors(ID)/Datastreams?$select=name,description
+GET /v4/v1.1/Sensors(ID)/Datastreams?$select=name,description,unitOfMeasurement
+GET /v4/v1.1/Sensors(ID)/Datastreams?$select=name,description,unitOfMeasurement,observationType
+GET /v4/v1.1/Sensors(ID)/Datastreams?$select=observationType
+GET /v4/v1.1/Sensors(ID)/Datastreams?$select=unitOfMeasurement
+GET /v4/v1.1/Sensors(ID)/Datastreams?$skip=1
+GET /v4/v1.1/Sensors(ID)/Datastreams?$top=3
+GET /v4/v1.1/Sensors(ID)/description
+GET /v4/v1.1/Sensors(ID)/description/$value
+GET /v4/v1.1/Sensors(ID)/encodingType
+GET /v4/v1.1/Sensors(ID)/encodingType/$value
+GET /v4/v1.1/Sensors(ID)/metadata
+GET /v4/v1.1/Sensors(ID)/metadata/$value
+GET /v4/v1.1/Sensors(ID)/name
+GET /v4/v1.1/Sensors(ID)/name/$value
+GET /v4/v1.1/Sensors/$ref
+GET /v4/v1.1/Sensors?$count=false
+GET /v4/v1.1/Sensors?$count=true
+GET /v4/v1.1/Sensors?$expand=Datastreams
+GET /v4/v1.1/Sensors?$expand=Datastreams/Observations
+GET /v4/v1.1/Sensors?$expand=Datastreams/ObservedProperty
+GET /v4/v1.1/Sensors?$expand=Datastreams/Sensor
+GET /v4/v1.1/Sensors?$expand=Datastreams/Thing
+GET /v4/v1.1/Sensors?$expand=Datastreams/Thing,Datastreams/Sensor
+GET /v4/v1.1/Sensors?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty
+GET /v4/v1.1/Sensors?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations
+GET /v4/v1.1/Sensors?$filter=description eq 'sensor+1'
+GET /v4/v1.1/Sensors?$filter=description ge 'sensor+1'
+GET /v4/v1.1/Sensors?$filter=description gt 'sensor+1'
+GET /v4/v1.1/Sensors?$filter=description le 'sensor+1'
+GET /v4/v1.1/Sensors?$filter=description lt 'sensor+1'
+GET /v4/v1.1/Sensors?$filter=description ne 'sensor+1'
+GET /v4/v1.1/Sensors?$filter=encodingType eq 'application/pdf'
+GET /v4/v1.1/Sensors?$filter=encodingType ge 'application/pdf'
+GET /v4/v1.1/Sensors?$filter=encodingType gt 'application/pdf'
+GET /v4/v1.1/Sensors?$filter=encodingType le 'application/pdf'
+GET /v4/v1.1/Sensors?$filter=encodingType lt 'application/pdf'
+GET /v4/v1.1/Sensors?$filter=encodingType ne 'application/pdf'
+GET /v4/v1.1/Sensors?$filter=metadata eq 'Light+flux+sensor'
+GET /v4/v1.1/Sensors?$filter=metadata ge 'Light+flux+sensor'
+GET /v4/v1.1/Sensors?$filter=metadata gt 'Light+flux+sensor'
+GET /v4/v1.1/Sensors?$filter=metadata le 'Light+flux+sensor'
+GET /v4/v1.1/Sensors?$filter=metadata lt 'Light+flux+sensor'
+GET /v4/v1.1/Sensors?$filter=metadata ne 'Light+flux+sensor'
+GET /v4/v1.1/Sensors?$filter=name eq 'sensor+1'
+GET /v4/v1.1/Sensors?$filter=name ge 'sensor+1'
+GET /v4/v1.1/Sensors?$filter=name gt 'sensor+1'
+GET /v4/v1.1/Sensors?$filter=name le 'sensor+1'
+GET /v4/v1.1/Sensors?$filter=name lt 'sensor+1'
+GET /v4/v1.1/Sensors?$filter=name ne 'sensor+1'
+GET /v4/v1.1/Sensors?$orderby=description
+GET /v4/v1.1/Sensors?$orderby=description asc
+GET /v4/v1.1/Sensors?$orderby=description desc
+GET /v4/v1.1/Sensors?$orderby=encodingType
+GET /v4/v1.1/Sensors?$orderby=encodingType asc
+GET /v4/v1.1/Sensors?$orderby=encodingType desc
+GET /v4/v1.1/Sensors?$orderby=metadata
+GET /v4/v1.1/Sensors?$orderby=metadata asc
+GET /v4/v1.1/Sensors?$orderby=metadata desc
+GET /v4/v1.1/Sensors?$orderby=name
+GET /v4/v1.1/Sensors?$orderby=name asc
+GET /v4/v1.1/Sensors?$orderby=name asc,description asc
+GET /v4/v1.1/Sensors?$orderby=name asc,description asc,encodingType asc
+GET /v4/v1.1/Sensors?$orderby=name asc,description asc,encodingType asc,metadata asc
+GET /v4/v1.1/Sensors?$orderby=name desc
+GET /v4/v1.1/Sensors?$orderby=name desc,description desc
+GET /v4/v1.1/Sensors?$orderby=name desc,description desc,encodingType desc
+GET /v4/v1.1/Sensors?$orderby=name desc,description desc,encodingType desc,metadata desc
+GET /v4/v1.1/Sensors?$orderby=name,description
+GET /v4/v1.1/Sensors?$orderby=name,description,encodingType
+GET /v4/v1.1/Sensors?$orderby=name,description,encodingType,metadata
+GET /v4/v1.1/Sensors?$select=description
+GET /v4/v1.1/Sensors?$select=encodingType
+GET /v4/v1.1/Sensors?$select=metadata
+GET /v4/v1.1/Sensors?$select=name
+GET /v4/v1.1/Sensors?$select=name,description
+GET /v4/v1.1/Sensors?$select=name,description,encodingType
+GET /v4/v1.1/Sensors?$select=name,description,encodingType,metadata
+GET /v4/v1.1/Sensors?$skip=1
+GET /v4/v1.1/Sensors?$skip=12
+GET /v4/v1.1/Sensors?$skip=2
+GET /v4/v1.1/Sensors?$skip=3
+GET /v4/v1.1/Sensors?$skip=4
+GET /v4/v1.1/Sensors?$top=1
+GET /v4/v1.1/Sensors?$top=12
+GET /v4/v1.1/Sensors?$top=13
+GET /v4/v1.1/Sensors?$top=2
+GET /v4/v1.1/Sensors?$top=3
+GET /v4/v1.1/Sensors?$top=4
+GET /v4/v1.1/Sensors?$top=5
+GET /v4/v1.1/Things
+GET /v4/v1.1/Things(ID)
+GET /v4/v1.1/Things(ID)/Datastreams
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Observations
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Observations(ID)/Datastream
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Observations(ID)/Datastream/$ref
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Observations(ID)/FeatureOfInterest
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Observations(ID)/FeatureOfInterest/$ref
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Observations/$ref
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/ObservedProperty
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/ObservedProperty/$ref
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/ObservedProperty/Datastreams
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/ObservedProperty/Datastreams/$ref
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Sensor
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Sensor/$ref
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Sensor/Datastreams
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Sensor/Datastreams/$ref
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Thing
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Thing/$ref
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Thing/Datastreams
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Thing/Datastreams/$ref
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Thing/HistoricalLocations
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Thing/HistoricalLocations/$ref
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Thing/Locations
+GET /v4/v1.1/Things(ID)/Datastreams(ID)/Thing/Locations/$ref
+GET /v4/v1.1/Things(ID)/Datastreams/$ref
+GET /v4/v1.1/Things(ID)/Datastreams?$count=false
+GET /v4/v1.1/Things(ID)/Datastreams?$count=true
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Observations
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Observations/Datastream
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Observations/FeatureOfInterest
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=ObservedProperty
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=ObservedProperty/Datastreams
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Sensor
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Sensor/Datastreams
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing,Sensor
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing,Sensor,ObservedProperty
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing,Sensor,ObservedProperty,Observations
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing/Datastreams
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams,Observations/Datastream
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Sensor/Datastreams,ObservedProperty/Datastreams,Observations/Datastream,Observations/FeatureOfInterest
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing/HistoricalLocations
+GET /v4/v1.1/Things(ID)/Datastreams?$expand=Thing/Locations
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=description eq 'datastream+1'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=description ge 'datastream+1'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=description gt 'datastream+1'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=description le 'datastream+1'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=description lt 'datastream+1'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=description ne 'datastream+1'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=name eq 'datastream+1'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=name ge 'datastream+1'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=name gt 'datastream+1'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=name le 'datastream+1'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=name lt 'datastream+1'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=name ne 'datastream+1'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=observationType eq 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=observationType ge 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=observationType gt 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=observationType le 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=observationType lt 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Things(ID)/Datastreams?$filter=observationType ne 'http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement'
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=description
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=description asc
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=description desc
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=name
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=name asc
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=name asc,description asc
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=name asc,description asc,observationType asc
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=name desc
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=name desc,description desc
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=name desc,description desc,observationType desc
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=name,description
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=name,description,observationType
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=observationType
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=observationType asc
+GET /v4/v1.1/Things(ID)/Datastreams?$orderby=observationType desc
+GET /v4/v1.1/Things(ID)/Datastreams?$select=description
+GET /v4/v1.1/Things(ID)/Datastreams?$select=name
+GET /v4/v1.1/Things(ID)/Datastreams?$select=name,description
+GET /v4/v1.1/Things(ID)/Datastreams?$select=name,description,unitOfMeasurement
+GET /v4/v1.1/Things(ID)/Datastreams?$select=name,description,unitOfMeasurement,observationType
+GET /v4/v1.1/Things(ID)/Datastreams?$select=observationType
+GET /v4/v1.1/Things(ID)/Datastreams?$select=unitOfMeasurement
+GET /v4/v1.1/Things(ID)/Datastreams?$skip=1
+GET /v4/v1.1/Things(ID)/Datastreams?$top=3
+GET /v4/v1.1/Things(ID)/HistoricalLocations
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Locations
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Locations(ID)/HistoricalLocations
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Locations(ID)/HistoricalLocations/$ref
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Locations(ID)/Things
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Locations(ID)/Things/$ref
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Locations/$ref
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Thing
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Thing/$ref
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Thing/Datastreams
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Thing/Datastreams/$ref
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Thing/HistoricalLocations
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Thing/HistoricalLocations/$ref
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Thing/Locations
+GET /v4/v1.1/Things(ID)/HistoricalLocations(ID)/Thing/Locations/$ref
+GET /v4/v1.1/Things(ID)/HistoricalLocations/$ref
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$count=false
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$count=true
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$expand=Locations
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$expand=Locations/HistoricalLocations
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$expand=Locations/Things
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$expand=Thing
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$expand=Thing,Locations
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$expand=Thing/Datastreams
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$expand=Thing/Datastreams,Thing/HistoricalLocations
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Locations/HistoricalLocations
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$expand=Thing/Datastreams,Thing/HistoricalLocations,Thing/Locations,Locations/HistoricalLocations,Locations/Things
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$expand=Thing/HistoricalLocations
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$expand=Thing/Locations
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$filter=time eq 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$filter=time ge 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$filter=time gt 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$filter=time le 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$filter=time lt 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$filter=time ne 2015-10-14T21:30:00.104Z
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$orderby=time
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$orderby=time asc
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$orderby=time desc
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$select=time
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$skip=1
+GET /v4/v1.1/Things(ID)/HistoricalLocations?$top=3
+GET /v4/v1.1/Things(ID)/Locations
+GET /v4/v1.1/Things(ID)/Locations(ID)/HistoricalLocations
+GET /v4/v1.1/Things(ID)/Locations(ID)/HistoricalLocations(ID)/Locations
+GET /v4/v1.1/Things(ID)/Locations(ID)/HistoricalLocations(ID)/Locations/$ref
+GET /v4/v1.1/Things(ID)/Locations(ID)/HistoricalLocations(ID)/Thing
+GET /v4/v1.1/Things(ID)/Locations(ID)/HistoricalLocations(ID)/Thing/$ref
+GET /v4/v1.1/Things(ID)/Locations(ID)/HistoricalLocations/$ref
+GET /v4/v1.1/Things(ID)/Locations(ID)/Things
+GET /v4/v1.1/Things(ID)/Locations(ID)/Things(ID)/Datastreams
+GET /v4/v1.1/Things(ID)/Locations(ID)/Things(ID)/Datastreams/$ref
+GET /v4/v1.1/Things(ID)/Locations(ID)/Things(ID)/HistoricalLocations
+GET /v4/v1.1/Things(ID)/Locations(ID)/Things(ID)/HistoricalLocations/$ref
+GET /v4/v1.1/Things(ID)/Locations(ID)/Things(ID)/Locations
+GET /v4/v1.1/Things(ID)/Locations(ID)/Things(ID)/Locations/$ref
+GET /v4/v1.1/Things(ID)/Locations(ID)/Things/$ref
+GET /v4/v1.1/Things(ID)/Locations/$ref
+GET /v4/v1.1/Things(ID)/Locations?$count=false
+GET /v4/v1.1/Things(ID)/Locations?$count=true
+GET /v4/v1.1/Things(ID)/Locations?$expand=HistoricalLocations
+GET /v4/v1.1/Things(ID)/Locations?$expand=HistoricalLocations,Things
+GET /v4/v1.1/Things(ID)/Locations?$expand=HistoricalLocations/Locations
+GET /v4/v1.1/Things(ID)/Locations?$expand=HistoricalLocations/Thing
+GET /v4/v1.1/Things(ID)/Locations?$expand=HistoricalLocations/Thing,HistoricalLocations/Locations
+GET /v4/v1.1/Things(ID)/Locations?$expand=HistoricalLocations/Thing,HistoricalLocations/Locations,Things/Datastreams
+GET /v4/v1.1/Things(ID)/Locations?$expand=HistoricalLocations/Thing,HistoricalLocations/Locations,Things/Datastreams,Things/HistoricalLocations
+GET /v4/v1.1/Things(ID)/Locations?$expand=HistoricalLocations/Thing,HistoricalLocations/Locations,Things/Datastreams,Things/HistoricalLocations,Things/Locations
+GET /v4/v1.1/Things(ID)/Locations?$expand=Things
+GET /v4/v1.1/Things(ID)/Locations?$expand=Things/Datastreams
+GET /v4/v1.1/Things(ID)/Locations?$expand=Things/HistoricalLocations
+GET /v4/v1.1/Things(ID)/Locations?$expand=Things/Locations
+GET /v4/v1.1/Things(ID)/Locations?$filter=description eq 'location+2'
+GET /v4/v1.1/Things(ID)/Locations?$filter=description ge 'location+2'
+GET /v4/v1.1/Things(ID)/Locations?$filter=description gt 'location+2'
+GET /v4/v1.1/Things(ID)/Locations?$filter=description le 'location+2'
+GET /v4/v1.1/Things(ID)/Locations?$filter=description lt 'location+2'
+GET /v4/v1.1/Things(ID)/Locations?$filter=description ne 'location+2'
+GET /v4/v1.1/Things(ID)/Locations?$filter=encodingType eq 'application/vnd.geo+json'
+GET /v4/v1.1/Things(ID)/Locations?$filter=encodingType ge 'application/vnd.geo+json'
+GET /v4/v1.1/Things(ID)/Locations?$filter=encodingType gt 'application/vnd.geo+json'
+GET /v4/v1.1/Things(ID)/Locations?$filter=encodingType le 'application/vnd.geo+json'
+GET /v4/v1.1/Things(ID)/Locations?$filter=encodingType lt 'application/vnd.geo+json'
+GET /v4/v1.1/Things(ID)/Locations?$filter=encodingType ne 'application/vnd.geo+json'
+GET /v4/v1.1/Things(ID)/Locations?$filter=name eq 'location+2'
+GET /v4/v1.1/Things(ID)/Locations?$filter=name ge 'location+2'
+GET /v4/v1.1/Things(ID)/Locations?$filter=name gt 'location+2'
+GET /v4/v1.1/Things(ID)/Locations?$filter=name le 'location+2'
+GET /v4/v1.1/Things(ID)/Locations?$filter=name lt 'location+2'
+GET /v4/v1.1/Things(ID)/Locations?$filter=name ne 'location+2'
+GET /v4/v1.1/Things(ID)/Locations?$orderby=description
+GET /v4/v1.1/Things(ID)/Locations?$orderby=description asc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=description desc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=encodingType
+GET /v4/v1.1/Things(ID)/Locations?$orderby=encodingType asc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=encodingType desc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=location
+GET /v4/v1.1/Things(ID)/Locations?$orderby=location asc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=location desc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=name
+GET /v4/v1.1/Things(ID)/Locations?$orderby=name asc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=name asc,description asc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=name asc,description asc,encodingType asc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=name asc,description asc,encodingType asc,location asc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=name desc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=name desc,description desc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=name desc,description desc,encodingType desc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=name desc,description desc,encodingType desc,location desc
+GET /v4/v1.1/Things(ID)/Locations?$orderby=name,description
+GET /v4/v1.1/Things(ID)/Locations?$orderby=name,description,encodingType
+GET /v4/v1.1/Things(ID)/Locations?$orderby=name,description,encodingType,location
+GET /v4/v1.1/Things(ID)/Locations?$select=description
+GET /v4/v1.1/Things(ID)/Locations?$select=encodingType
+GET /v4/v1.1/Things(ID)/Locations?$select=location
+GET /v4/v1.1/Things(ID)/Locations?$select=name
+GET /v4/v1.1/Things(ID)/Locations?$select=name,description
+GET /v4/v1.1/Things(ID)/Locations?$select=name,description,encodingType
+GET /v4/v1.1/Things(ID)/Locations?$select=name,description,encodingType,location
+GET /v4/v1.1/Things(ID)/Locations?$skip=1
+GET /v4/v1.1/Things(ID)/Locations?$top=3
+GET /v4/v1.1/Things(ID)/description
+GET /v4/v1.1/Things(ID)/description/$value
+GET /v4/v1.1/Things(ID)/name
+GET /v4/v1.1/Things(ID)/name/$value
+GET /v4/v1.1/Things/$ref
+GET /v4/v1.1/Things?$count=false
+GET /v4/v1.1/Things?$count=true
+GET /v4/v1.1/Things?$expand=Datastreams
+GET /v4/v1.1/Things?$expand=Datastreams,HistoricalLocations
+GET /v4/v1.1/Things?$expand=Datastreams,HistoricalLocations,Locations
+GET /v4/v1.1/Things?$expand=Datastreams/Observations
+GET /v4/v1.1/Things?$expand=Datastreams/ObservedProperty
+GET /v4/v1.1/Things?$expand=Datastreams/Sensor
+GET /v4/v1.1/Things?$expand=Datastreams/Thing
+GET /v4/v1.1/Things?$expand=Datastreams/Thing,Datastreams/Sensor
+GET /v4/v1.1/Things?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty
+GET /v4/v1.1/Things?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations
+GET /v4/v1.1/Things?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing
+GET /v4/v1.1/Things?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing,HistoricalLocations/Locations
+GET /v4/v1.1/Things?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing,HistoricalLocations/Locations,Locations/HistoricalLocations
+GET /v4/v1.1/Things?$expand=Datastreams/Thing,Datastreams/Sensor,Datastreams/ObservedProperty,Datastreams/Observations,HistoricalLocations/Thing,HistoricalLocations/Locations,Locations/HistoricalLocations,Locations/Things
+GET /v4/v1.1/Things?$expand=HistoricalLocations
+GET /v4/v1.1/Things?$expand=HistoricalLocations/Locations
+GET /v4/v1.1/Things?$expand=HistoricalLocations/Thing
+GET /v4/v1.1/Things?$expand=Locations
+GET /v4/v1.1/Things?$expand=Locations/HistoricalLocations
+GET /v4/v1.1/Things?$expand=Locations/Things
+GET /v4/v1.1/Things?$filter=description eq 'thing+1'
+GET /v4/v1.1/Things?$filter=description ge 'thing+1'
+GET /v4/v1.1/Things?$filter=description gt 'thing+1'
+GET /v4/v1.1/Things?$filter=description le 'thing+1'
+GET /v4/v1.1/Things?$filter=description lt 'thing+1'
+GET /v4/v1.1/Things?$filter=description ne 'thing+1'
+GET /v4/v1.1/Things?$filter=name eq 'thing+1'
+GET /v4/v1.1/Things?$filter=name ge 'thing+1'
+GET /v4/v1.1/Things?$filter=name gt 'thing+1'
+GET /v4/v1.1/Things?$filter=name le 'thing+1'
+GET /v4/v1.1/Things?$filter=name lt 'thing+1'
+GET /v4/v1.1/Things?$filter=name ne 'thing+1'
+GET /v4/v1.1/Things?$orderby=description
+GET /v4/v1.1/Things?$orderby=description asc
+GET /v4/v1.1/Things?$orderby=description desc
+GET /v4/v1.1/Things?$orderby=name
+GET /v4/v1.1/Things?$orderby=name asc
+GET /v4/v1.1/Things?$orderby=name asc,description asc
+GET /v4/v1.1/Things?$orderby=name desc
+GET /v4/v1.1/Things?$orderby=name desc,description desc
+GET /v4/v1.1/Things?$orderby=name,description
+GET /v4/v1.1/Things?$select=description
+GET /v4/v1.1/Things?$select=name
+GET /v4/v1.1/Things?$select=name,description
+GET /v4/v1.1/Things?$skip=1
+GET /v4/v1.1/Things?$skip=12
+GET /v4/v1.1/Things?$skip=2
+GET /v4/v1.1/Things?$skip=3
+GET /v4/v1.1/Things?$skip=4
+GET /v4/v1.1/Things?$top=1
+GET /v4/v1.1/Things?$top=12
+GET /v4/v1.1/Things?$top=13
+GET /v4/v1.1/Things?$top=2
+GET /v4/v1.1/Things?$top=3
+GET /v4/v1.1/Things?$top=4
+GET /v4/v1.1/Things?$top=5
+
+## POST (9)
+POST /v4/v1.1/Datastreams
+POST /v4/v1.1/Datastreams(ID)/Observations
+POST /v4/v1.1/FeaturesOfInterest
+POST /v4/v1.1/HistoricalLocations
+POST /v4/v1.1/Locations
+POST /v4/v1.1/Observations
+POST /v4/v1.1/ObservedProperties
+POST /v4/v1.1/Sensors
+POST /v4/v1.1/Things
+
+## PATCH (8)
+PATCH /v4/v1.1/Datastreams(ID)
+PATCH /v4/v1.1/FeaturesOfInterest(ID)
+PATCH /v4/v1.1/HistoricalLocations(ID)
+PATCH /v4/v1.1/Locations(ID)
+PATCH /v4/v1.1/Observations(ID)
+PATCH /v4/v1.1/ObservedProperties(ID)
+PATCH /v4/v1.1/Sensors(ID)
+PATCH /v4/v1.1/Things(ID)
+
+## DELETE (8)
+DELETE /v4/v1.1/Datastreams(ID)
+DELETE /v4/v1.1/FeaturesOfInterest(ID)
+DELETE /v4/v1.1/HistoricalLocations(ID)
+DELETE /v4/v1.1/Locations(ID)
+DELETE /v4/v1.1/Observations(ID)
+DELETE /v4/v1.1/ObservedProperties(ID)
+DELETE /v4/v1.1/Sensors(ID)
+DELETE /v4/v1.1/Things(ID)
