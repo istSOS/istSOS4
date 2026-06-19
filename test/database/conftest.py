@@ -92,7 +92,7 @@ VERSIONING_SQL = DATABASE_DIR / "istsos_schema_versioning.sql"
 
 # All roles that any of the three SQL layers can create.
 # Used as the default set to clean up during recreate_database.
-ALL_SCHEMA_ROLES = ("administrator", "testuser", "user", "guest", "sensor")
+ALL_SCHEMA_ROLES = ("administrator", "testuser", "user", "guest", "sensor", "qc")
 
 
 # ---------------------------------------------------------------------------
