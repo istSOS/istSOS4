@@ -101,6 +101,24 @@ def parse_datetime(value, column_config, tz_name):
     return parsed.isoformat()
 
 
+def parse_observation_time(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def observation_time_key(value):
+    parsed = parse_observation_time(value)
+    if parsed is None:
+        return value
+    return parsed.isoformat()
+
+
 def parse_value(value, column_config):
     if value == "":
         return -999.9, no_data_quality_mask()
@@ -132,7 +150,7 @@ def sensor_things_observations(client, text, file_config, tz_name):
     dt_column = datetime_column(file_config)
     values_config = value_columns(file_config)
     if not values_config:
-        return []
+        return [], 0
 
     datastream_ids = {}
     for column in values_config:
@@ -143,6 +161,7 @@ def sensor_things_observations(client, text, file_config, tz_name):
         datastream_ids[key] = datastream_id
 
     observations = []
+    skipped_existing = 0
     reader = csv.reader(io.StringIO(text, newline=""), sniff_dialect(text))
 
     for row in reader:
@@ -165,6 +184,16 @@ def sensor_things_observations(client, text, file_config, tz_name):
             datastream_id = datastream_ids.get(column.get("idx"))
             if datastream_id is None:
                 continue
+            if not client.update:
+                latest = client.datastream_phenomenon_time_end(datastream_id)
+                observed = parse_observation_time(phenomenon_time)
+                if (
+                    latest is not None
+                    and observed is not None
+                    and observed <= latest
+                ):
+                    skipped_existing += 1
+                    continue
             observations.append(
                 {
                     "Datastream": {"@iot.id": datastream_id},
@@ -174,7 +203,13 @@ def sensor_things_observations(client, text, file_config, tz_name):
                 }
             )
 
-    return observations
+    if skipped_existing:
+        print(
+            "  skipped rows already covered by datastream range while parsing: "
+            f"{skipped_existing}",
+            flush=True,
+        )
+    return observations, skipped_existing
 
 
 def bulk_observations_payload(observations):
@@ -227,6 +262,58 @@ def deduplicate_observations(observations):
     return deduplicated
 
 
+def filter_observations_after_datastream_range(client, observations):
+    filtered = []
+    skipped = 0
+    for observation in observations:
+        datastream_id = observation["Datastream"]["@iot.id"]
+        latest = client.datastream_phenomenon_time_end(datastream_id)
+        observed = parse_observation_time(observation.get("phenomenonTime"))
+        if latest is not None and observed is not None and observed <= latest:
+            skipped += 1
+            continue
+        filtered.append(observation)
+    return filtered, skipped
+
+
+def observations_by_datastream(observations):
+    grouped = {}
+    for observation in observations:
+        datastream_id = observation["Datastream"]["@iot.id"]
+        grouped.setdefault(datastream_id, []).append(observation)
+    return grouped
+
+
+def observation_range(observations):
+    times = [
+        parse_observation_time(observation.get("phenomenonTime"))
+        for observation in observations
+    ]
+    times = [item for item in times if item is not None]
+    if not times:
+        return None, None
+    return min(times).isoformat(), max(times).isoformat()
+
+
+def same_observation(existing, observation):
+    return (
+        existing.get("result") == observation.get("result")
+        and str(existing.get("resultQuality")) == str(observation.get("resultQuality"))
+    )
+
+
+def existing_observations_by_time(client, datastream_id, observations):
+    start, end = observation_range(observations)
+    if start is None or end is None:
+        return {}
+    existing = client.fetch_observations(datastream_id, start, end)
+    return {
+        observation_time_key(item.get("phenomenonTime")): item
+        for item in existing
+        if item.get("@iot.id") is not None
+    }
+
+
 def chunks(items, size):
     for start in range(0, len(items), size):
         yield items[start : start + size]
@@ -252,18 +339,77 @@ def post_observations_individually(client, observations, label):
     return posted, skipped
 
 
-def post_observations(client, observations, label):
+def patch_observations(client, observations, label):
+    updated = 0
+    posted = 0
+    skipped = 0
+    for datastream_id, group in observations_by_datastream(observations).items():
+        existing_by_time = existing_observations_by_time(
+            client, datastream_id, group
+        )
+        missing = []
+        for observation in group:
+            existing = existing_by_time.get(
+                observation_time_key(observation.get("phenomenonTime"))
+            )
+            if existing is None:
+                missing.append(observation)
+                continue
+            if same_observation(existing, observation):
+                skipped += 1
+                continue
+            client.patch_observation(existing["@iot.id"], observation)
+            updated += 1
+
+        missing_posted, missing_skipped, missing_updated = post_observations(
+            client, missing, label, apply_range_filter=False
+        )
+        posted += missing_posted
+        skipped += missing_skipped
+        updated += missing_updated
+
+    if updated:
+        print(f"  PATCH /Observations {label}: updated {updated}", flush=True)
+    if skipped:
+        print(f"  skipped unchanged existing observations: {skipped}", flush=True)
+    return posted, skipped, updated
+
+
+def post_observations(client, observations, label, apply_range_filter=True):
     posted = 0
     skipped_duplicates = 0
-    if len(observations) > 5:
-        bulk_observations = deduplicate_observations(observations)
-        duplicate_count = len(observations) - len(bulk_observations)
-        if duplicate_count:
-            skipped_duplicates += duplicate_count
+    updated = 0
+    if not observations:
+        return posted, skipped_duplicates, updated
+
+    original_count = len(observations)
+    observations = deduplicate_observations(observations)
+    duplicate_count = original_count - len(observations)
+    if duplicate_count:
+        skipped_duplicates += duplicate_count
+        print(
+            f"  skipped duplicate parsed observations: {duplicate_count}",
+            flush=True,
+        )
+    if client.update and apply_range_filter:
+        return patch_observations(client, observations, label)
+
+    if apply_range_filter:
+        observations, skipped_existing = filter_observations_after_datastream_range(
+            client, observations
+        )
+        skipped_duplicates += skipped_existing
+        if skipped_existing:
             print(
-                f"  skipped duplicate bulk observations: {duplicate_count}",
+                f"  skipped observations already covered by datastream range: "
+                f"{skipped_existing}",
                 flush=True,
             )
+        if not observations:
+            return posted, skipped_duplicates, updated
+
+    if len(observations) > 5:
+        bulk_observations = observations
         batches = list(chunks(bulk_observations, BULK_OBSERVATION_BATCH_SIZE))
         for batch_index, batch in enumerate(batches, start=1):
             try:
@@ -284,6 +430,7 @@ def post_observations(client, observations, label):
                 )
                 posted += fallback_posted
                 skipped_duplicates += fallback_skipped
+                client.fetch_datastreams()
                 if fallback_skipped:
                     print(
                         f"  skipped existing observations: "
@@ -293,22 +440,24 @@ def post_observations(client, observations, label):
                 continue
 
             posted += len(batch)
+            client.record_observation_times(batch)
             print(
                 f"  POST /BulkObservations {label} "
                 f"batch {batch_index}/{len(batches)} "
                 f"{len(batch)} observations -> {response.status_code}",
                 flush=True,
             )
-        return posted, skipped_duplicates
+        return posted, skipped_duplicates, updated
 
     fallback_posted, fallback_skipped = post_observations_individually(
         client, observations, label
     )
     posted += fallback_posted
     skipped_duplicates += fallback_skipped
+    client.record_observation_times(observations)
     if fallback_skipped:
         print(
             f"  skipped existing observations: {fallback_skipped}",
             flush=True,
         )
-    return posted, skipped_duplicates
+    return posted, skipped_duplicates, updated

@@ -1,5 +1,7 @@
 import json
 import time
+from datetime import datetime
+from urllib.parse import quote
 
 from .config import require_value
 from .dependencies import import_requests
@@ -9,6 +11,31 @@ from .observations import bulk_observations_payload
 
 class DryRunResponse:
     status_code = 201
+
+
+def parse_timestamp(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def phenomenon_time_end(value):
+    if not value:
+        return None
+    if isinstance(value, dict):
+        value = value.get("end") or value.get("upper") or value.get("to")
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        value = value[1]
+    if not isinstance(value, str):
+        return parse_timestamp(value)
+    if "/" in value:
+        value = value.rsplit("/", 1)[1]
+    return parse_timestamp(value)
 
 
 def is_duplicate_observation_error(status_code, text):
@@ -23,16 +50,18 @@ def is_duplicate_observation_error(status_code, text):
 
 
 class IstsosClient:
-    def __init__(self, base_url, username, password, dry_run=False):
+    def __init__(self, base_url, username, password, dry_run=False, update=False):
         self.requests = import_requests()
         self.base_url = base_url.rstrip("/")
         self.username = username
         self.password = password
         self.dry_run = dry_run
+        self.update = update
         self.access_token = None
         self.refresh_token = None
         self.expires_at = 0
         self.datastreams_by_name = None
+        self.datastreams_by_id = None
 
     def url(self, path):
         return f"{self.base_url}/{path.lstrip('/')}"
@@ -171,6 +200,7 @@ class IstsosClient:
             datastreams.extend(items)
 
         by_name = {}
+        by_id = {}
         duplicates = set()
         for datastream in datastreams:
             if not isinstance(datastream, dict):
@@ -182,12 +212,14 @@ class IstsosClient:
             if name in by_name:
                 duplicates.add(name)
             by_name[name] = datastream_id
+            by_id[datastream_id] = datastream
 
         if duplicates:
             names = ", ".join(sorted(duplicates))
             raise RuntimeError(f"Duplicate datastream names in istSOS: {names}")
 
         self.datastreams_by_name = by_name
+        self.datastreams_by_id = by_id
         print(f"Datastreams loaded: {len(by_name)}", flush=True)
         return by_name
 
@@ -214,6 +246,83 @@ class IstsosClient:
                 f"Available datastreams: {available}{suffix}"
             )
         return datastreams[name]
+
+    def datastream_phenomenon_time_end(self, datastream_id):
+        self.ensure_datastreams()
+        datastream = (self.datastreams_by_id or {}).get(datastream_id)
+        if not datastream:
+            return None
+        return phenomenon_time_end(datastream.get("phenomenonTime"))
+
+    def record_observation_times(self, observations):
+        self.ensure_datastreams()
+        if self.datastreams_by_id is None:
+            return
+        for observation in observations:
+            datastream_id = observation["Datastream"]["@iot.id"]
+            observed = parse_timestamp(observation.get("phenomenonTime"))
+            if observed is None:
+                continue
+            datastream = self.datastreams_by_id.get(datastream_id)
+            if datastream is None:
+                continue
+            current = phenomenon_time_end(datastream.get("phenomenonTime"))
+            if current is None or observed > current:
+                datastream["phenomenonTime"] = (
+                    f"{datastream.get('phenomenonTime', '').split('/')[0]}"
+                    f"/{observation['phenomenonTime']}"
+                    if datastream.get("phenomenonTime")
+                    else observation["phenomenonTime"]
+                )
+
+    def observation_filter(self, datastream_id, start, end):
+        parts = [f"Datastream/@iot.id eq {datastream_id}"]
+        if start:
+            parts.append(f"phenomenonTime ge {start}")
+        if end:
+            parts.append(f"phenomenonTime le {end}")
+        return " and ".join(parts)
+
+    def fetch_observations(self, datastream_id, start, end):
+        query_filter = quote(
+            self.observation_filter(datastream_id, start, end), safe=":/@."
+        )
+        select = quote("@iot.id,phenomenonTime,result,resultQuality", safe="@.,")
+        next_page = (
+            f"/Observations?$filter={query_filter}"
+            f"&$select={select}&$top=1000"
+        )
+        observations = []
+        while next_page:
+            url = (
+                next_page
+                if next_page.startswith(("http://", "https://"))
+                else self.url(next_page)
+            )
+            print(f"GET {url}", flush=True)
+            data = self.get_json(next_page)
+            if isinstance(data, list):
+                items = data
+                next_page = None
+            elif isinstance(data, dict):
+                items = (
+                    data.get("value")
+                    or data.get("data")
+                    or data.get("observations")
+                    or []
+                )
+                next_page = (
+                    data.get("@iot.nextLink")
+                    or data.get("nextLink")
+                    or data.get("next")
+                )
+            else:
+                items = []
+                next_page = None
+            if not isinstance(items, list):
+                raise RuntimeError("Observations response did not contain a list")
+            observations.extend(items)
+        return observations
 
     def post_observation(self, observation):
         print(f"POST {self.url('/Observations')}", flush=True)
@@ -249,6 +358,41 @@ class IstsosClient:
                 )
             raise RuntimeError(
                 "Observation POST failed: "
+                f"status={response.status_code}, body={text}"
+            )
+        return response
+
+    def patch_observation(self, observation_id, observation):
+        path = f"/Observations({observation_id})"
+        payload = {
+            "result": observation["result"],
+            "resultQuality": observation["resultQuality"],
+        }
+        print(f"PATCH {self.url(path)}", flush=True)
+        if self.dry_run:
+            print(json.dumps(payload, ensure_ascii=False, indent=2), flush=True)
+            print("DRY RUN: PATCH disabled", flush=True)
+            return DryRunResponse()
+
+        self.ensure_token()
+        response = self.requests.patch(
+            self.url(path),
+            json=payload,
+            headers=self.authorized_headers(),
+            timeout=(5, 30),
+        )
+        if response.status_code == 401:
+            self.refresh()
+            response = self.requests.patch(
+                self.url(path),
+                json=payload,
+                headers=self.authorized_headers(),
+                timeout=(5, 30),
+            )
+        if response.status_code not in (200, 204):
+            text = response.text[:500]
+            raise RuntimeError(
+                "Observation PATCH failed: "
                 f"status={response.status_code}, body={text}"
             )
         return response
@@ -298,4 +442,5 @@ def build_istsos_client(config):
     username = require_value(config, "istsos_username")
     password = require_value(config, "istsos_password")
     dry_run = bool(config.get("dry_run", False))
-    return IstsosClient(url, username, password, dry_run=dry_run)
+    update = bool(config.get("update", False))
+    return IstsosClient(url, username, password, dry_run=dry_run, update=update)

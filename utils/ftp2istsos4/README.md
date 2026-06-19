@@ -31,6 +31,7 @@ pip install -r requirements.txt
 istsos_url: "http://localhost:8018/istsos4/v1.1"
 istsos_username: "sensor1"
 istsos_password: "sensor"
+update: false
 dry_run: true
 ```
 
@@ -162,6 +163,7 @@ Top-level configuration keys:
 | `istsos_url` | yes | Base URL of the istSOS API, for example `http://localhost:8018/istsos4/v1.1`. |
 | `istsos_username` | yes | istSOS username. |
 | `istsos_password` | yes | istSOS password. |
+| `update` | no | If `true`, existing observations in the parsed time window are patched. If `false`, observations already covered by the Datastream `phenomenonTime` range are skipped. Default: `false`. |
 | `dry_run` | no | If `true`, observations are printed but not posted. FTP files are not moved. Default: `false`. |
 | `log_file` | no | Main rotating log file. Default: `logs/ftp2istsos4.log`. |
 | `log_level` | no | Python logging level. Default: `INFO`. |
@@ -345,10 +347,19 @@ source log path.
 
 Logs rotate according to `log_max_bytes` and `log_backup_count`.
 
-## Duplicate Observations
+## Existing Observations
 
-The script treats duplicate observations as non-fatal when the istSOS API
-returns a duplicate-observation error. Duplicates are counted as skipped in the
+By default, `update: false`, the script uses each Datastream `phenomenonTime`
+range from `/Datastreams` to skip observations that are already covered by the
+datastream. This avoids repeatedly posting the same values from moving-window
+files.
+
+With `update: true`, the script queries existing `/Observations` in the parsed
+time window. Existing observations are patched when the result or quality
+changed, unchanged observations are skipped, and missing observations are posted.
+
+Duplicate observations are still treated as non-fatal when the istSOS API
+returns a duplicate-observation error. They are counted as skipped in the
 summary.
 
 For more than five observations, the script uses `/BulkObservations`. If a bulk

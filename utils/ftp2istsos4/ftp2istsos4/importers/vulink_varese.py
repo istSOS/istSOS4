@@ -66,6 +66,7 @@ def file_config_for_member(member, files_config):
 
 def post_vulink_varese_zip(client, zip_buffer, files_config, suffixes, tz_name):
     posted = 0
+    updated = 0
     skipped_duplicates = 0
     with zipfile.ZipFile(zip_buffer, "r") as zip_file:
         all_members = [
@@ -90,19 +91,25 @@ def post_vulink_varese_zip(client, zip_buffer, files_config, suffixes, tz_name):
 
             print(f"  parse {member}", flush=True)
             text = read_text_from_zip(zip_file, member)
-            observations = sensor_things_observations(
+            observations, skipped_existing = sensor_things_observations(
                 client, text, file_config, tz_name
             )
             print(f"  observations parsed: {len(observations)}", flush=True)
-            member_posted, member_skipped = post_observations(
-                client, observations, member
-            )
+            if observations:
+                member_posted, member_skipped, member_updated = (
+                    post_observations(client, observations, member)
+                )
+            else:
+                member_posted = 0
+                member_skipped = 0
+                member_updated = 0
             posted += member_posted
-            skipped_duplicates += member_skipped
+            updated += member_updated
+            skipped_duplicates += member_skipped + skipped_existing
 
-    if posted == 0 and skipped_duplicates == 0:
-        raise ValueError("Zip produced 0 posted observations")
-    return posted, skipped_duplicates
+    if posted == 0 and updated == 0 and skipped_duplicates == 0:
+        raise ValueError("Zip produced 0 posted or updated observations")
+    return posted, skipped_duplicates, updated
 
 
 def process_vulink_varese(item, client):
@@ -141,7 +148,7 @@ def process_vulink_varese(item, client):
 
         try:
             zip_buffer = download_ftp_file(item, zip_name)
-            posted, skipped_duplicates = post_vulink_varese_zip(
+            posted, skipped_duplicates, updated = post_vulink_varese_zip(
                 client, zip_buffer, files_config, suffixes, tz_name
             )
         except Exception as exc:
@@ -166,6 +173,7 @@ def process_vulink_varese(item, client):
             continue
 
         result["posted"] += posted
+        result["updated"] += updated
         result["skipped_duplicates"] += skipped_duplicates
         if client.dry_run:
             source_log(
