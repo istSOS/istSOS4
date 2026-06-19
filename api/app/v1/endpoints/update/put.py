@@ -37,6 +37,7 @@ import json
 
 from app.utils.utils import validate_payload_keys, validate_required_keys
 from app.v1.endpoints.functions import set_role
+import asyncpg
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import Request, status
 from fastapi.responses import JSONResponse, Response
@@ -184,6 +185,16 @@ async def handle_put_replace(
                 "code": 401,
                 "type": "error",
                 "message": "Insufficient privileges.",
+            },
+        )
+    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
+        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "code": 503,
+                "type": "error",
+                "message": "Database temporarily unavailable",
             },
         )
     except Exception as e:

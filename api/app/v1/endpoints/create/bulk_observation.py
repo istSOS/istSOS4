@@ -17,6 +17,7 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.utils.utils import safe_parse_datetime
 from app.v1.endpoints.functions import set_role
+import asyncpg
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
@@ -164,6 +165,16 @@ async def bulk_observations(
                                 "message": "Insufficient privileges.",
                             },
                         )
+                    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
+                        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
+                        return JSONResponse(
+                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            content={
+                                "code": 503,
+                                "type": "error",
+                                "message": "Database temporarily unavailable",
+                            },
+                        )
                     except Exception as e:
                         if current_user is not None:
                             await conn.execute("RESET ROLE;")
@@ -180,6 +191,16 @@ async def bulk_observations(
                     await conn.execute("RESET ROLE;")
         return Response(status_code=status.HTTP_201_CREATED)
 
+    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
+        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "code": 503,
+                "type": "error",
+                "message": "Database temporarily unavailable",
+            },
+        )
     except Exception as e:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
