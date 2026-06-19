@@ -59,7 +59,7 @@ class Thing:
         if response.status_code == 200:
             r = response.json()
             if r["value"]:
-                print(f"Thing {self.name} già esistente!")
+                print(f"Thing {self.name} already exists!")
                 return r["value"][0]["@iot.id"]
 
         # Endpoint per creare una Thing
@@ -144,7 +144,7 @@ class Datastream:
         if response.status_code == 200:
             r = response.json()
             if r["value"]:
-                print(f"Datastream {self.name} già esistente!")
+                print(f"Datastream {self.name} already exists!")
                 return r["value"][0]["@iot.id"]
 
         # Endpoint per creare un Datastream
@@ -205,7 +205,7 @@ class Sensor:
         if response.status_code == 200:
             r = response.json()
             if r["value"]:
-                print(f"Sensor {self.name} già esistente!")
+                print(f"Sensor {self.name} already exists!")
                 return r["value"][0]["@iot.id"]
         # Endpoint per creare un Sensor
         url = f"{server_url}/Sensors"
@@ -261,7 +261,7 @@ class ObservedProperty:
         if response.status_code == 200:
             r = response.json()
             if r["value"]:
-                print(f"ObservedProperty {self.name} già esistente!")
+                print(f"ObservedProperty {self.name} already exists!")
                 return r["value"][0]["@iot.id"]
 
         # Endpoint per creare una ObservedProperty
@@ -322,7 +322,7 @@ class Location:
         if response.status_code == 200:
             r = response.json()
             if r["value"]:
-                print(f"Location {self.name} già esistente!")
+                print(f"Location {self.name} already exists!")
                 return r["value"][0]["@iot.id"]
 
         # Endpoint per creare una Location
@@ -397,7 +397,7 @@ class Network:
         if response.status_code == 200:
             r = response.json()
             if r["value"]:
-                print(f"Network {self.name} già esistente!")
+                print(f"Network {self.name} already exists!")
                 return r["value"][0]["@iot.id"]
 
         # Endpoint per creare una Network
