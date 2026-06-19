@@ -19,6 +19,8 @@ Expected MQTT payload:
 timestamp,value1,value2,value3,...
 ```
 
+The default payload separator is comma.
+
 Example:
 
 ```text
@@ -37,10 +39,20 @@ value2 -> datastream 2
 value3 -> datastream 3
 ```
 
+Use `skip` as a mapping entry to ignore a value while keeping positions aligned:
+
+```text
+value1 -> DatastreamA
+value2 -> DatastreamB
+value3 -> ignored
+value4 -> ignored
+value5 -> DatastreamC
+```
+
 If a message has more values than configured datastreams, the extra values are
-ignored. Blank, `null`, `none`, `nan`, `na`, and `n/a` values are skipped.
-Non-numeric strings such as `error` are skipped with a warning, and the rest of
-the message continues.
+ignored. Blank, `null`, `none`, `nan`, `na`, and `n/a` values are inserted as
+`result=-999` with `resultQuality="00"`. Non-numeric strings such as `error`
+are skipped with a warning, and the rest of the message continues.
 
 ## Configuration
 
@@ -75,6 +87,7 @@ mqtt:
   tls_insecure: false
   keepalive: 60
   qos: 0
+  payload_separator: ","
   reconnect_delay_sec: 10
   queue_maxsize: 1000
   topics: []
@@ -90,6 +103,9 @@ mapping:
   path/to/topic:
     - DatastreamA
     - DatastreamB
+    - skip
+    - skip
+    - DatastreamC
 ```
 
 `mqtt.host` / `mqtt.port`: MQTT broker address.
@@ -100,8 +116,14 @@ instances connect to the same broker.
 `mqtt.topics`: optional subscription list. If empty or omitted, the app
 subscribes to every key in `mapping`.
 
+`mqtt.payload_separator`: separator used to split MQTT payload fields. Default
+is `","`. Quote the value in YAML, for example `";"` or `"|"`.
+
 `mapping`: topic-to-datastream mapping. The datastream order must match the
 order of values in the MQTT payload after the timestamp.
+
+Use `skip` in `mapping` to consume and ignore a value without resolving or
+inserting a datastream. The keyword is case-insensitive.
 
 `dry_run`: when `true`, the app connects to MQTT, parses messages, and logs the
 Observations it would create without logging in to istSOS4 or inserting data.
@@ -124,7 +146,8 @@ result
 resultQuality
 ```
 
-`resultQuality` is set to `"11"` by default.
+`resultQuality` is set to `"11"` by default. Null-like values are inserted as
+`result=-999` with `resultQuality="00"`.
 
 Datastream IDs are cached after the first successful lookup.
 

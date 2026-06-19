@@ -17,6 +17,10 @@ import yaml
 LOGGER = logging.getLogger("mqtt2istsos")
 CONFIG_PATH_ENV = "MQTT2ISTSOS_CONFIG"
 NULL_VALUES = {"", "null", "none", "nan", "na", "n/a"}
+NULL_RESULT_VALUE = -999
+NULL_RESULT_QUALITY = "00"
+DEFAULT_RESULT_QUALITY = "11"
+SKIP_DATASTREAM_NAMES = {"skip"}
 SUCCESS_LEVEL = 35
 NOTICE_LEVEL = 60
 RESET = "\033[0m"
@@ -74,6 +78,7 @@ class Config:
     mqtt_tls: bool
     mqtt_tls_insecure: bool
     mqtt_topics: list[str]
+    payload_separator: str
     reconnect_delay_sec: float
     queue_maxsize: int
 
@@ -142,6 +147,15 @@ def clean_text(value: Any) -> str | None:
     return text or None
 
 
+def parse_payload_separator(value: Any) -> str:
+    if value is None:
+        return ","
+    separator = str(value)
+    if separator == "":
+        raise RuntimeError("Set mqtt.payload_separator to a non-empty string")
+    return separator
+
+
 def required_text(
     values: dict[str, Any], key: str, section: str, dry_run: bool = False
 ) -> str:
@@ -195,6 +209,9 @@ def load_config() -> Config:
         mqtt_tls=as_bool(mqtt.get("tls"), False),
         mqtt_tls_insecure=as_bool(mqtt.get("tls_insecure"), False),
         mqtt_topics=topics,
+        payload_separator=parse_payload_separator(
+            mqtt.get("payload_separator")
+        ),
         reconnect_delay_sec=float(mqtt.get("reconnect_delay_sec", 10.0)),
         queue_maxsize=int(mqtt.get("queue_maxsize", 1000)),
         istsos_url=required_text(istsos, "url", "istsos", dry_run),
@@ -249,10 +266,16 @@ def datastreams_for_topic(
     return None
 
 
-def parse_payload(payload: bytes) -> tuple[list[str], str]:
-    parts = [part.strip() for part in payload.decode("utf-8").split(",")]
+def parse_payload(
+    payload: bytes, separator: str = ","
+) -> tuple[list[str], str]:
+    parts = [
+        part.strip() for part in payload.decode("utf-8").split(separator)
+    ]
     if len(parts) < 2:
-        raise ValueError("Expected payload: timestamp,value1,value2,...")
+        raise ValueError(
+            f"Expected payload: timestamp{separator}value1{separator}value2..."
+        )
 
     timestamp, *values = parts
     datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
@@ -269,6 +292,10 @@ def is_null_value(value: Any) -> bool:
     if isinstance(value, float) and math.isnan(value):
         return True
     return str(value).strip().lower() in NULL_VALUES
+
+
+def is_skip_datastream(name: str) -> bool:
+    return name.strip().lower() in SKIP_DATASTREAM_NAMES
 
 
 def normalize_result(value: Any) -> Any | None:
@@ -292,13 +319,14 @@ def build_observation(
     phenomenon_time: str,
     result_time: str,
     result: Any,
+    result_quality: str = DEFAULT_RESULT_QUALITY,
 ) -> dict[str, Any]:
     return {
         "Datastream": datastream,
         "phenomenonTime": phenomenon_time,
         "resultTime": result_time,
         "result": result,
-        "resultQuality": "11",
+        "resultQuality": result_quality,
     }
 
 
@@ -317,7 +345,9 @@ class Processor:
             return
 
         try:
-            values, phenomenon_time = parse_payload(message.payload)
+            values, phenomenon_time = parse_payload(
+                message.payload, self.config.payload_separator
+            )
         except Exception:
             LOGGER.exception(
                 "Could not parse MQTT payload on %s", message.topic
@@ -343,16 +373,29 @@ class Processor:
             )
 
         for datastream_name, raw_value in zip(datastreams, values):
-            result = normalize_result(raw_value)
-            if result is None:
-                if not is_null_value(raw_value):
+            if is_skip_datastream(datastream_name):
+                skipped += 1
+                LOGGER.debug(
+                    "Skipping mapped value on %s because datastream name is %r",
+                    message.topic,
+                    datastream_name,
+                )
+                continue
+
+            if is_null_value(raw_value):
+                result = NULL_RESULT_VALUE
+                result_quality = NULL_RESULT_QUALITY
+            else:
+                result = normalize_result(raw_value)
+                result_quality = DEFAULT_RESULT_QUALITY
+                if result is None:
                     LOGGER.warning(
                         "Skipping %s: invalid numeric value %r",
                         datastream_name,
                         raw_value,
                     )
-                skipped += 1
-                continue
+                    skipped += 1
+                    continue
 
             if self.config.dry_run:
                 observation = build_observation(
@@ -360,6 +403,7 @@ class Processor:
                     phenomenon_time,
                     result_time,
                     result,
+                    result_quality,
                 )
                 LOGGER.info("DRY_RUN %s -> %s", datastream_name, observation)
                 inserted += 1
@@ -378,6 +422,7 @@ class Processor:
                 phenomenon_time,
                 result_time,
                 result,
+                result_quality,
             )
 
             try:
