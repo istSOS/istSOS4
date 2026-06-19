@@ -20,6 +20,7 @@ import asyncpg
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
+from app.v1.endpoints.error_response import error_response
 
 from .functions import insert_datastream_entity, set_commit
 
@@ -121,43 +122,15 @@ async def create_datastream(
         )
     except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
         # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={
-                "code": 503,
-                "type": "error",
-                "message": "Database temporarily unavailable",
-            },
-        )
+        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
     except ValueError as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": "Referenced entity does not exist.",
-            },
-        )
+        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
     except Exception:
         # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "code": 500,
-                "type": "error",
-                "message": "Internal server error",
-            },
-        )
+        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
 
 
 PAYLOAD_EXAMPLE_THING = {
@@ -232,43 +205,15 @@ async def create_datastream_for_thing(
         )
     except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
         # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={
-                "code": 503,
-                "type": "error",
-                "message": "Database temporarily unavailable",
-            },
-        )
+        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
     except ValueError as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": "Referenced entity does not exist.",
-            },
-        )
+        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
     except Exception:
         # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "code": 500,
-                "type": "error",
-                "message": "Internal server error",
-            },
-        )
+        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
 
 
 PAYLOAD_EXAMPLE_SENSOR = {
@@ -346,43 +291,15 @@ async def create_datastream_for_sensor(
         )
     except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
         # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={
-                "code": 503,
-                "type": "error",
-                "message": "Database temporarily unavailable",
-            },
-        )
+        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
     except ValueError as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": "Referenced entity does not exist.",
-            },
-        )
+        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
     except Exception:
         # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "code": 500,
-                "type": "error",
-                "message": "Internal server error",
-            },
-        )
+        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
 
 
 PAYLOAD_EXAMPLE_OBSERVED_PROPERTY = {
@@ -460,40 +377,12 @@ async def create_datastream_for_observed_property(
         )
     except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
         # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={
-                "code": 503,
-                "type": "error",
-                "message": "Database temporarily unavailable",
-            },
-        )
+        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
     except ValueError as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": "Referenced entity does not exist.",
-            },
-        )
+        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
     except Exception:
         # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "code": 500,
-                "type": "error",
-                "message": "Internal server error",
-            },
-        )
+        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
