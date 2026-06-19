@@ -563,3 +563,148 @@ def _compute_collection_extent(
 
     return pystac.Extent(spatial=spatial_extent, temporal=temporal_extent)
 
+
+# Collection builder
+def _build_collection(
+    thing: HarvestedThing,
+    items: list[pystac.Item],
+    config: Settings,
+) -> pystac.Collection:
+    """
+    Build a pystac.Collection for one Thing with its pre-built Items.
+
+    The Collection extent is computed bottom-up from the Items -- STAC
+    Collection extents are envelopes over member Items, not independently
+    specified fields.
+    """
+    collection_id = f"thing-{thing.id}"
+    extent = _compute_collection_extent(thing, items)
+    keywords = _extract_collection_keywords(thing)
+
+    op_defs: list[str] = []
+    unit_symbols: list[str] = []
+    for ds in thing.datastreams:
+        op = ds.get("observed_property")
+        if op and op.get("definition") is not None:
+            op_defs.append(str(op["definition"]))
+        uom = ds.get("unit_of_measurement")
+        if uom and uom.get("symbol"):
+            unit_symbols.append(uom["symbol"])
+
+    extra_fields: dict = {
+        "thing_id": thing.id,
+        "thing_properties": thing.properties,
+        "summaries": {
+            "observed_property_definitions": list(dict.fromkeys(op_defs)),
+            "unit_symbols": list(dict.fromkeys(unit_symbols)),
+        },
+    }
+
+    thing_props = thing.properties or {}
+    if thing_props.get("license"):
+        extra_fields["license"] = thing_props["license"]
+    if thing_props.get("providers"):
+        extra_fields["providers"] = thing_props["providers"]
+
+    collection = pystac.Collection(
+        id=collection_id,
+        description=thing.description or f"STAC Collection for SensorThings Thing: {thing.name}",
+        extent=extent,
+        title=thing.name or None,
+        extra_fields=extra_fields,
+    )
+
+    if keywords:
+        collection.extra_fields["keywords"] = keywords
+
+    # Round-trip link back to the STA Thing entity
+    thing_href = f"{HOSTNAME}{SUBPATH}{VERSION}/Things({thing.id})"
+    collection.add_link(
+        pystac.Link(
+            rel="sta_thing",
+            target=thing_href,
+            media_type=pystac.MediaType.JSON,
+            title=f"STA Thing: {thing.name}",
+        )
+    )
+
+    for item in items:
+        collection.add_item(item)
+
+    return collection
+
+
+# Public interface
+def build_stac_catalog(catalog: HarvestedCatalog, config: Settings) -> dict:
+    """
+    Build a complete STAC 1.0 Catalog from a HarvestedCatalog and return it
+    as a plain dict, with every Collection and Item embedded as children.
+
+    Constructs:
+      - One pystac.Catalog (root)
+      - One pystac.Collection per Thing
+      - One pystac.Item per Datastream (skipping those without a usable
+        phenomenon_time)
+      - 3 pystac.Assets per Item (observations_json, observations_csv,
+        datastream)
+
+    Calls pystac.normalize_hrefs() once, before serialization, to populate
+    all self/root/parent/child link hrefs across the whole tree in one pass.
+
+    This is called exactly once per harvest cycle, by scheduler.py. It does
+    not touch the cache, Postgres, or Redis. api.py never calls this
+    function directly -- it only reads the dict this function returns,
+    already written to the cache by scheduler.py.
+
+    Returns:
+        dict -- pystac.Catalog.to_dict() output, fully JSON-serializable,
+        with child Collections and their Items embedded.
+    """
+    stac_root_href = f"{HOSTNAME}{SUBPATH}{VERSION}/connector/stac"
+
+    root_catalog = pystac.Catalog(
+        id="istsos-connector-catalog",
+        description=(
+            f"istSOS4 deployment: {catalog.thing_count} Things, "
+            f"harvested at {catalog.harvested_at}."
+        ),
+        catalog_type=pystac.CatalogType.SELF_CONTAINED,
+    )
+
+    skipped_items = 0
+    for thing in catalog.things:
+        items: list[pystac.Item] = []
+        for ds in thing.datastreams:
+            item = _build_item(thing, ds, f"thing-{thing.id}", config)
+            if item is not None:
+                items.append(item)
+            else:
+                skipped_items += 1
+
+        if not items and thing.datastreams:
+            logger.warning(
+                "Thing %s (%s): all %d Datastreams were skipped -- "
+                "Collection will have no Items",
+                thing.id, thing.name, len(thing.datastreams),
+            )
+
+        collection = _build_collection(thing, items, config)
+        root_catalog.add_child(collection)
+
+    root_catalog.normalize_hrefs(stac_root_href)
+
+    logger.info(
+        "STAC transform complete: %d Collections, %d Items skipped",
+        catalog.thing_count, skipped_items,
+    )
+
+    root_dict = root_catalog.to_dict(include_self_link=True)
+    root_dict["collections"] = []
+    for child in root_catalog.get_children():
+        collection_dict = child.to_dict(include_self_link=True)
+        collection_dict["items"] = [
+            item.to_dict(include_self_link=True) for item in child.get_items()
+        ]
+        root_dict["collections"].append(collection_dict)
+
+    return root_dict
