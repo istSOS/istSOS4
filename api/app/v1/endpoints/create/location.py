@@ -94,8 +94,6 @@ async def create_location(
                     connection, payload, commit_id
                 )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"location": header},
@@ -162,8 +160,6 @@ async def create_location_for_thing(
                     connection, payload, commit_id
                 )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"location": header},

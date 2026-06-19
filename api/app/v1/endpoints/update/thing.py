@@ -75,8 +75,6 @@ async def update_thing(
                     await set_role(connection, current_user)
 
                 if not await check_id_exists(connection, "Thing", thing_id):
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
                     return JSONResponse(
                         status_code=status.HTTP_404_NOT_FOUND,
                         content={
@@ -87,8 +85,6 @@ async def update_thing(
                     )
 
                 if not payload:
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
                     return Response(status_code=status.HTTP_200_OK)
 
                 validate_payload_keys(payload, ALLOWED_KEYS)
@@ -103,8 +99,6 @@ async def update_thing(
 
                 await update_thing_entity(connection, thing_id, payload)
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
     except InsufficientPrivilegeError:
