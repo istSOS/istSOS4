@@ -1,5 +1,5 @@
 """
-test_c03_filtering.py -- OGC SensorThings API v1.1 Filtering Extension (c03):
+test_query_options.py -- OGC SensorThings API v1.1 Filtering Extension (c03):
 SYSTEM QUERY OPTIONS + combinations + edge cases.
 
 Conformance class ``conf/request-data`` (OGC 18-088, Annex A.2.1): $orderby,

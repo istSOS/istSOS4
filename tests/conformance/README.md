@@ -1,21 +1,31 @@
 # OGC SensorThings API v1.1 — Conformance Test Suite (istSOS4)
 
 Black-box HTTP conformance tests for istSOS4's STA v1.1 endpoint, covering the
-three core conformance classes:
+three core conformance classes **plus the Data Array extension** — **four** marked
+classes, organized into per-class subfolders (**19 test files, 394 tests**):
 
-| Marker | Class | File(s) | Owner |
+| Marker | Class | Folder / files | Owner |
 |---|---|---|---|
-| `c01` | Sensing Core | `test_c01_sensing_core.py` | c01-sensing-core |
-| `c02` | Create-Update-Delete | `test_c02_cud.py`, `test_c02_jsonpatch.py` | c02-cud |
-| `c03` | Filtering Extension | `test_c03_filtering.py`, `test_c03_filter_logic_arith.py`, `test_c03_filter_string.py`, `test_c03_filter_datetime.py`, `test_c03_filter_geo.py` | c03-filtering |
+| `c01` | Sensing Core | `c01/` — service_root, read_entities, navigation, properties, refs, errors (**203**) | c01-sensing-core |
+| `c02` | Create-Update-Delete | `c02/` — create, deep_insert, update_patch, update_put, delete, validation, jsonpatch (**62**) | c02-cud |
+| `c03` | Filtering Extension | `c03/` — query_options, filter_logic_arith, filter_string, filter_datetime, filter_geo (**120**) | c03-filtering |
+| `data_array` | Data Array extension | `data_array/test_data_array.py` (**9**) | dataarray-author |
 
 Each file is owned by a single author agent (no cross-writing). Tests are marked
-per-test with `@pytest.mark.c01/c02/c03`, so the split needs no `pytest.ini`
-change. The `seed` fixture loads `entitiesDefault.json` exactly; gap analysis is
-in `docs/COVERAGE_MATRIX.md` (sets A/B/C) and `docs/ENGINE_REQUESTS.txt` (set A).
+per-test with `@pytest.mark.c01/c02/c03/data_array`.
 
-The authoritative scope/checklist is **`docs/CONFORMANCE_PLAN.md`** — read it first.
-Shared scaffolding (`conftest.py`, `client.py`, `sample_data.py`, `pytest.ini`)
+The shared scaffolding (`conftest.py`, `client.py`, `sample_data.py`, `pytest.ini`)
+stays in the suite **root** (`tests/conformance/`); the per-class subfolders
+inherit the root fixtures. `pytest.ini` sets **`--import-mode=importlib`** (so
+identically-named helpers across subfolders never collide and no `__init__.py`
+packaging is required) and **`norecursedirs = .venv __pycache__ .pytest_cache`**
+(keeps collection out of the virtualenv/caches).
+
+The `seed` fixture loads `tests/docs/entitiesDefault.json` exactly; gap analysis is
+in `tests/docs/COVERAGE_MATRIX.md` (sets A/B/C) and `tests/docs/ENGINE_REQUESTS.txt`
+(set A). The authoritative scope/checklist is **`tests/docs/CONFORMANCE_PLAN.md`** —
+read it first. Full results live in `CONFORMANCE_REPORT.md` (this folder); the
+error-handling refactor plan is `tests/docs/REFRACTOR_PLAN.md`. Shared scaffolding
 is owned by the conformance lead; test files are owned per the table above.
 
 ## Install
@@ -37,12 +47,16 @@ The istSOS4 API must be running. Default target:
 ```bash
 PYBIN=tests/conformance/.venv/bin/python
 
-# one class at a time
-$PYBIN -m pytest tests/conformance -m c01
-$PYBIN -m pytest tests/conformance -m c02
-$PYBIN -m pytest tests/conformance -m c03
+# one class at a time (four classes)
+$PYBIN -m pytest tests/conformance -m c01          # 203 passed
+$PYBIN -m pytest tests/conformance -m c02          # 62 passed
+$PYBIN -m pytest tests/conformance -m c03          # 120 passed
+$PYBIN -m pytest tests/conformance -m data_array   # 9 passed
 
-# whole suite, in parallel (isolation must hold)
+# or a single subfolder
+$PYBIN -m pytest tests/conformance/c01
+
+# whole suite, in parallel (isolation must hold) -> 394 passed
 $PYBIN -m pytest tests/conformance -n auto
 
 # point at another deployment

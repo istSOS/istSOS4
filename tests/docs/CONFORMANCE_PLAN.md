@@ -62,30 +62,42 @@ in v1.1, a `serverSettings` object including the `conformance` array.
 
 ## Repository / test layout (created by the LEAD before agents start)
 
+Tests are organized into per-class **subfolders** (19 files, 394 tests). The shared
+scaffolding stays in the suite root and is inherited by the subfolders.
+
 ```
 tests/conformance/
-├── conftest.py            # fixtures: client, base_url, seeded dataset, cleanup
-├── client.py             # thin STA client over httpx (get/post/patch/put/delete + helpers)
-├── sample_data.py        # canonical payloads + a deep-insert tree used for seeding
-├── test_c01_sensing_core.py   # owned by agent c01
-├── test_c02_cud.py            # owned by agent c02
-├── test_c03_filtering.py      # owned by agent c03
-├── pytest.ini
+├── conftest.py            # fixtures: client, base_url, seeded dataset, cleanup (LEAD, root)
+├── client.py              # thin STA client over httpx (get/post/patch/put/delete + helpers)
+├── sample_data.py         # canonical payloads + a deep-insert tree used for seeding
+├── pytest.ini             # markers + --import-mode=importlib + norecursedirs
 ├── requirements.txt       # pytest, httpx, pytest-xdist
-└── README.md
+├── README.md
+├── CONFORMANCE_REPORT.md  # full results
+├── c01/                   # agent c01: service_root, read_entities, navigation, properties, refs, errors (203)
+├── c02/                   # agent c02: create, deep_insert, update_patch, update_put, delete, validation, jsonpatch (62)
+├── c03/                   # agent c03: query_options, filter_logic_arith, filter_string, filter_datetime, filter_geo (120)
+└── data_array/            # agent dataarray: test_data_array.py (9)
 ```
 
+Conformance docs (this plan, `COVERAGE_MATRIX.md`, `ENGINE_REQUESTS.txt`,
+`REFRACTOR_PLAN.md`, `entitiesDefault.json`) live in **`tests/docs/`**.
+`pytest.ini` uses `--import-mode=importlib` (so identically-named helpers across
+subfolders don't collide; no `__init__.py` needed) and
+`norecursedirs = .venv __pycache__ .pytest_cache`.
+
 **File ownership (to allow safe parallelism — never edit another agent's file):**
-- LEAD: `conftest.py`, `client.py`, `sample_data.py`, `pytest.ini`, `requirements.txt`, `README.md`
-- c01 agent: `test_c01_sensing_core.py` only
-- c02 agent: `test_c02_cud.py` only
-- c03 agent: `test_c03_filtering.py` only
+- LEAD: root scaffolding (`conftest.py`, `client.py`, `sample_data.py`, `pytest.ini`, `requirements.txt`, `README.md`) + the docs under `tests/docs/`
+- c01 agent: `tests/conformance/c01/` only
+- c02 agent: `tests/conformance/c02/` only
+- c03 agent: `tests/conformance/c03/` only
+- dataarray agent: `tests/conformance/data_array/` only
 - api-fixer: source code of istSOS4 only (never the tests)
 
 ## Shared conventions (all test files)
 
 - **Framework:** `pytest` + `httpx.Client`. No global mutable state.
-- **Markers:** `@pytest.mark.c01` / `c02` / `c03`. Register them in `pytest.ini`.
+- **Markers:** `@pytest.mark.c01` / `c02` / `c03` / `data_array`. Registered in `pytest.ini`.
 - Each test references the requirement it covers in a docstring, e.g.
   `"""req/request-data/order — $orderby desc on phenomenonTime."""`
 - **Isolation:** c02 (create/delete) tests create their own entities and clean up in teardown.
