@@ -1,0 +1,17 @@
+services:
+  mqtt2istsos:
+    container_name: mqtt2istsos-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mqtt2istsos:dev
+    restart: unless-stopped
+    init: true
+    # Enable only if the container must reach services on the host via localhost.
+    network_mode: host
+    environment:
+      MQTT2ISTSOS_CONFIG: /app/config.yaml
+    volumes:
+      - ./:/app
+      - ./config.yaml:/app/config.yaml:ro
+    command: python mqtt2istsos.py
