@@ -62,3 +62,24 @@ def test_networks_filter_by_name(client, network_seed):
     doc = client.collection("Networks", {"$filter": f"name eq '{network_seed.net_a_name}'"})
     ids = [entity_id(n) for n in doc["value"]]
     assert ids == [network_seed.net_a_id]
+
+
+def test_network_mandatory_properties(client, network_seed):
+    """The Network mandatory property `name` is present and non-empty."""
+    doc = client.by_id("Networks", network_seed.net_a_id)
+    assert isinstance(doc.get("name"), str) and doc["name"]
+    assert doc["name"] == network_seed.net_a_name
+
+
+def test_network_name_property(client, network_seed):
+    """Property access: GET /Networks(id)/name -> {"name": <value>}."""
+    doc = client.nav(f"Networks({format_id(network_seed.net_a_id)})/name")
+    assert doc == {"name": network_seed.net_a_name}
+
+
+def test_network_name_dollar_value(client, network_seed):
+    """Raw property value: GET /Networks(id)/name/$value -> text/plain literal."""
+    r = client.get(f"Networks({format_id(network_seed.net_a_id)})/name/$value")
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("text/plain")
+    assert r.text == network_seed.net_a_name

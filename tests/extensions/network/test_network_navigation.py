@@ -92,3 +92,15 @@ def test_filter_datastreams_by_network_name(client, network_seed):
         {"$filter": f"Network/name eq '{network_seed.net_a_name}'"},
     )
     assert sorted(entity_id(d) for d in doc["value"]) == sorted(network_seed.a_ds_ids)
+
+
+def test_select_network_navigation_on_datastream(client, network_seed):
+    """$select of the Network navigation property on a Datastream returns just the
+    Network@iot.navigationLink (mirrors c03 test_select_navigation_property)."""
+    ds_id = network_seed.a_ds_ids[0]
+    doc = client.collection(
+        "Datastreams",
+        {"$filter": f"id eq {format_id(ds_id)}", "$select": "Network"},
+    )
+    assert doc["value"], "datastream not found"
+    assert set(doc["value"][0].keys()) == {"Network@iot.navigationLink"}

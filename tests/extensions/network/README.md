@@ -35,7 +35,8 @@ $PY -m pytest tests/extensions/network -q
 STA_BASE_URL=http://host:port/v4/v1.1 $PY -m pytest tests/extensions -m network
 ```
 
-Expected: **19 passed** (all green).
+Expected: **27 passed, 2 xfailed** (the 2 `xfail` are the documented route
+deviations — PUT and nav-link-POST — see below).
 
 ## Layout & isolation
 
@@ -48,7 +49,8 @@ tests/extensions/
     ├── conftest.py            # network_seed fixture (the dataset)
     ├── test_network_read.py
     ├── test_network_navigation.py
-    └── test_network_create.py
+    ├── test_network_create.py
+    └── test_network_update_delete.py
 ```
 
 - Marker: **`@pytest.mark.network`** only (never `c01/c02/c03/data_array`).
@@ -68,20 +70,30 @@ down completely:
 
 ## What is covered
 
+Coverage mirrors what conformance gives Sensor/ObservedProperty (see
+`tests/docs/NETWORK_COVERAGE_GAP.md`), scoped to Network + its Datastream relation.
+
 **Read** (`test_network_read.py`): collection GET; entity-by-id; control info
 (`@iot.id`, absolute `@iot.selfLink`, `Datastreams@iot.navigationLink`); selfLink
-resolves; `$select=name`; `$filter=name eq`.
+resolves; mandatory `name`; property access `/Networks(id)/name`; raw `$value`;
+`$select=name`; `$filter=name eq`.
 
 **Navigation** (`test_network_navigation.py`): many-to-one `/Datastreams(id)/Network`
 (+`/$ref`); one-to-many `/Networks(id)/Datastreams` (+`/$ref`); grouping is
 per-network (A vs B exact id/name sets); the Datastream exposes
-`Network@iot.navigationLink`; `$expand=Network`; relation `$filter=Network/name eq`.
+`Network@iot.navigationLink`; `$expand=Network`; relation `$filter=Network/name eq`;
+`$select=Network` (navigation-property select).
 
-**Create / mandatoriness** (`test_network_create.py`): `POST /Networks`;
-deep-insert a Thing whose Datastream carries `Network` inline; deep-insert a
-Network with nested `Datastreams`; **Network is mandatory** — a Datastream create
-without it → `400 "Missing required properties 'Network'"` (like omitting
-Sensor/ObservedProperty).
+**Create / mandatoriness** (`test_network_create.py`): `POST /Networks` (+ missing
+`name` → 400); deep-insert a Thing whose Datastream carries `Network` inline;
+deep-insert a Network with nested `Datastreams`; direct `POST /Datastreams` with a
+`Network` link; **Network is mandatory** — a Datastream create without it →
+`400 "Missing required properties 'Network'"` (like omitting Sensor/ObservedProperty).
+
+**Update / delete** (`test_network_update_delete.py`): `PATCH /Networks(id)`;
+`DELETE /Networks(id)` (+ 404 after); PATCH a Datastream to relink its `Network`.
+Plus the two route **deviations as `xfail`**: `POST /Networks(id)/Datastreams` and
+`PUT /Networks(id)` (both 405 — see below).
 
 ## Known behaviour found while writing these tests
 
@@ -96,11 +108,14 @@ Sensor/ObservedProperty).
   `POST /Datastreams` and `POST /Things(id)/Datastreams` with a `Network {@iot.id}`
   link return **201** (tested by `test_direct_post_datastream_with_network_link`),
   alongside the deep-insert paths.
-- **`POST /Networks(id)/Datastreams` → 405** (no such route): a datastream is not
-  created under the Network's navigation link. This is left as-is by design
-  (lead decision) — create a datastream with a `Network` link via `POST
-  /Datastreams` / `POST /Things(id)/Datastreams`, or via deep-insert. Not enabled
-  in this round; revisit only if full nav-link-POST parity is wanted.
+- **Two route deviations, held as `xfail`** (Plan A — not implemented this round;
+  source untouched; each `xpass`es if the route is added):
+  - `POST /Networks(id)/Datastreams` → **405** (no nav-link-POST route). Conformance
+    doesn't test this for Sensor either, so Network is already at parity with the
+    standard parents. Create via `POST /Datastreams` / `POST /Things(id)/Datastreams`
+    or deep-insert instead.
+  - `PUT /Networks(id)` → **405** (`update/network.py` is PATCH-only; full-replace
+    PUT exists only for the 8 standard STA entities).
 - With `NETWORK=1`, the Datastream representation gains a proprietary
   `Network@iot.navigationLink` (an extra relation beyond 18-088) — expected for
   this extension, and the reason these tests are **not** part of the conformance
