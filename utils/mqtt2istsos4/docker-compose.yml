@@ -1,7 +1,7 @@
 services:
   mqtt2istsos:
     container_name: mqtt2istsos
-    image: mqtt2istsos:0.1
+    image: ghcr.io/istsos/istsos4/utils/mqtt2istsos:0.1
     restart: unless-stopped
     init: true
     # Enable only if the container must reach services on the host via localhost.
