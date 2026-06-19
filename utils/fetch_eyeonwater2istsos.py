@@ -6,7 +6,7 @@ from typing import Iterable
 
 import requests
 from eyeonwater2istsos import post_eyeonwater_to_istsos4
-from xlsx2istsos import (
+from models import (
     build_istsos_url,
     get_credentials,
     load_environment,
