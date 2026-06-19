@@ -99,9 +99,12 @@ from pathlib import Path
 # --------------------------------------------------------------------------
 # The canonical compliance dataset is loaded verbatim from entitiesDefault.json.
 # --------------------------------------------------------------------------
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+# Anchored to THIS file (not cwd): sample_data.py lives in tests/conformance/,
+# so parents[1] is tests/ and the dataset sits at tests/docs/entitiesDefault.json.
+# Stays valid after test files move into c01/ c02/ … subfolders (this file does not move).
+_TESTS_DIR = Path(__file__).resolve().parents[1]
 ENTITIES_DEFAULT_PATH = Path(
-    os.environ.get("STA_SEED_FILE", _REPO_ROOT / "entitiesDefault.json")
+    os.environ.get("STA_SEED_FILE", _TESTS_DIR / "docs" / "entitiesDefault.json")
 )
 
 

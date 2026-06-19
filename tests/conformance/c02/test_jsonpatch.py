@@ -1,5 +1,5 @@
 """
-test_c02_jsonpatch.py -- JSON Patch (RFC 6902) conformance tests for c02.
+test_jsonpatch.py -- JSON Patch (RFC 6902) conformance tests for c02.
 
 Standard:   OGC 18-088 §10.3 / RFC 6902
 Requirement: req/create-update-delete/update-entity-jsonpatch
@@ -43,6 +43,8 @@ import pytest
 import sample_data
 from client import entity_id, format_id, id_from_self_link
 
+pytestmark = pytest.mark.c02
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -58,27 +60,6 @@ def _json_patch(client, url: str, ops: list):
         content=json.dumps(ops).encode(),
         headers={"content-type": _JSON_PATCH_CT},
     )
-
-
-# ---------------------------------------------------------------------------
-# Cleanup fixture
-# ---------------------------------------------------------------------------
-
-@pytest.fixture
-def cleanup(client):
-    """Collect self-link URLs; delete all on teardown (tolerate 404/errors)."""
-    links: list[str] = []
-
-    def track(*urls: str) -> None:
-        links.extend(u for u in urls if u)
-
-    yield track
-
-    for url in reversed(links):
-        try:
-            client.delete(url)
-        except Exception:
-            pass
 
 
 # ---------------------------------------------------------------------------
