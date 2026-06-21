@@ -12,7 +12,7 @@ and runs with `NETWORK=0`.
 These tests only pass against a service started with the **`NETWORK=1`** feature
 flag (so the `Network` table, `Datastream.network_id NOT NULL`, the `/Networks`
 routes and the `Network@iot.navigationLink` exist). They will fail against a
-default (`NETWORK=0`) deployment — and conversely the 399-test conformance suite
+default (`NETWORK=0`) deployment — and conversely the 405-test conformance suite
 does not run under `NETWORK=1` (its seed has no `network_id`). The two suites live
 in separate worlds by design.
 
@@ -35,8 +35,9 @@ $PY -m pytest tests/extensions/network -q
 STA_BASE_URL=http://host:port/v4/v1.1 $PY -m pytest tests/extensions -m network
 ```
 
-Expected: **27 passed, 2 xfailed** (the 2 `xfail` are the documented route
-deviations — PUT and nav-link-POST — see below).
+Expected: **30 passed, 0 xfailed** (full-replace `PUT /Networks(id)` and nav-link
+`POST /Networks(id)/Datastreams` are now implemented and covered by positive
+tests — see below).
 
 ## Layout & isolation
 
@@ -92,9 +93,11 @@ deep-insert a Network with nested `Datastreams`; direct `POST /Datastreams` with
 `400 "Missing required properties 'Network'"` (like omitting Sensor/ObservedProperty).
 
 **Update / delete** (`test_network_update_delete.py`): `PATCH /Networks(id)`;
-`DELETE /Networks(id)` (+ 404 after); PATCH a Datastream to relink its `Network`.
-Plus the two route **deviations as `xfail`**: `POST /Networks(id)/Datastreams` and
-`PUT /Networks(id)` (both 405 — see below).
+`PUT /Networks(id)` full-replace (valid body → 200/204 and the GET reflects the
+replaced `name` under the same `@iot.id`; missing mandatory `name` → 400);
+`DELETE /Networks(id)` (+ 404 after); PATCH a Datastream to relink its `Network`;
+nav-link create `POST /Networks(id)/Datastreams` (201 + `Location`, the new
+Datastream's `network_id` is the path Network — see below).
 
 ## Known behaviour found while writing these tests
 
@@ -109,14 +112,18 @@ Plus the two route **deviations as `xfail`**: `POST /Networks(id)/Datastreams` a
   `POST /Datastreams` and `POST /Things(id)/Datastreams` with a `Network {@iot.id}`
   link return **201** (tested by `test_direct_post_datastream_with_network_link`),
   alongside the deep-insert paths.
-- **Two route deviations, held as `xfail`** (Plan A — not implemented this round;
-  source untouched; each `xpass`es if the route is added):
-  - `POST /Networks(id)/Datastreams` → **405** (no nav-link-POST route). Conformance
-    doesn't test this for Sensor either, so Network is already at parity with the
-    standard parents. Create via `POST /Datastreams` / `POST /Things(id)/Datastreams`
-    or deep-insert instead.
-  - `PUT /Networks(id)` → **405** (`update/network.py` is PATCH-only; full-replace
-    PUT exists only for the 8 standard STA entities).
+- **Full-replace `PUT /Networks(id)` is implemented** and covered by positive
+  tests: a valid replacement body → **200/204** and the follow-up GET reflects the
+  replaced `name` under the same `@iot.id` (`test_put_replace_network`); a body
+  omitting the mandatory `name` → **400** (full-replace requires the mandatory
+  properties; a clean 400, not 500) (`test_put_network_missing_name`).
+- **Nav-link create `POST /Networks(id)/Datastreams` is implemented** and covered
+  by a positive test (`test_post_to_network_datastreams_navlink`): the body carries
+  `Thing`/`Sensor`/`ObservedProperty` by `@iot.id` while the **Network comes from
+  the URL** → **201 + `Location`**, and the created Datastream's `network_id` is
+  the path Network (verified via `GET /Datastreams(new)/Network`). Datastreams can
+  still also be created via `POST /Datastreams` / `POST /Things(id)/Datastreams` or
+  deep-insert.
 - With `NETWORK=1`, the Datastream representation gains a proprietary
   `Network@iot.navigationLink` (an extra relation beyond 18-088) — expected for
   this extension, and the reason these tests are **not** part of the conformance
