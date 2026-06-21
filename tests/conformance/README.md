@@ -1,22 +1,25 @@
 # OGC SensorThings API v1.1 — Conformance Test Suite (istSOS4)
 
 Black-box HTTP conformance tests for istSOS4's STA v1.1 endpoint, covering the
-three core conformance classes **plus the Data Array extension** — **four** marked
-classes, organized into per-class subfolders (**19 test files, 405 tests**):
+**three OGC 18-088 conformance classes** — three marked classes, organized into
+per-class subfolders (**18 test files, 396 tests**). `tests/conformance/` holds
+**only OGC 18-088**; FROST extensions (Data Array, Filtered Delete, Network) live
+under `tests/extensions/` (see below):
 
 | Marker | Class | Folder / files | Owner |
 |---|---|---|---|
 | `c01` | Sensing Core | `c01/` — service_root, read_entities, navigation, properties, refs, errors (**203**) | c01-sensing-core |
 | `c02` | Create-Update-Delete | `c02/` — create, deep_insert, update_patch, update_put, delete, validation, jsonpatch (**73**) | c02-cud |
 | `c03` | Filtering Extension | `c03/` — query_options, filter_logic_arith, filter_string, filter_datetime, filter_geo (**120**) | c03-filtering |
-| `data_array` | Data Array extension | `data_array/test_data_array.py` (**9**) | dataarray-author |
 
 Each file is owned by a single author agent (no cross-writing). Tests are marked
-per-test with `@pytest.mark.c01/c02/c03/data_array`.
+per-test with `@pytest.mark.c01/c02/c03`.
 
-> **Extensions** (e.g. the **Network** entity) live in a **separate** suite under
-> `tests/extensions/network/` and run with `NETWORK=1` — **not** part of this
-> 405-test total (Network: 30 passed, 0 xfailed; see that folder's README).
+> **Extensions** (FROST/proprietary, NOT 18-088) live in a **separate** tree,
+> `tests/extensions/` — **not** part of this 396-test total: `data_array` (**9**)
+> and `filtered_delete` (**7**; implemented but **deliberately not declared** in
+> `serverSettings` — a mass bulk-delete kept un-announced) under `NETWORK=0`, and
+> `network` (**30**) under `NETWORK=1` (the two configs can't run in one pass).
 
 The shared scaffolding (`conftest.py`, `client.py`, `sample_data.py`, `pytest.ini`)
 stays in the suite **root** (`tests/conformance/`); the per-class subfolders
@@ -50,16 +53,15 @@ The istSOS4 API must be running. Default target:
 ```bash
 PYBIN=tests/conformance/.venv/bin/python
 
-# one class at a time (four classes)
+# one class at a time (three 18-088 classes)
 $PYBIN -m pytest tests/conformance -m c01          # 203 passed
 $PYBIN -m pytest tests/conformance -m c02          # 73 passed
 $PYBIN -m pytest tests/conformance -m c03          # 120 passed
-$PYBIN -m pytest tests/conformance -m data_array   # 9 passed
 
 # or a single subfolder
 $PYBIN -m pytest tests/conformance/c01
 
-# whole suite, in parallel (isolation must hold) -> 405 passed
+# whole suite, in parallel (isolation must hold) -> 396 passed (18-088 only)
 $PYBIN -m pytest tests/conformance -n auto
 
 # point at another deployment

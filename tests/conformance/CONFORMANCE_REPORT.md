@@ -1,9 +1,12 @@
 # OGC SensorThings API v1.1 — Conformance Report (istSOS4)
 
-Black-box conformance suite for istSOS4's STA v1.1 endpoint, covering the three
-core conformance classes plus the Data Array extension, against everything the live
-`serverSettings.conformance` declares. Per-URI ledger + gap analysis:
-`tests/docs/COVERAGE_MATRIX.md`. Engine request set: `tests/docs/ENGINE_REQUESTS.txt`.
+Black-box conformance suite for istSOS4's STA v1.1 endpoint, covering the **three
+OGC 18-088 conformance classes** — Sensing Core (`c01`), Create-Update-Delete
+(`c02`), Filtering (`c03`). **Principle: `tests/conformance/` holds ONLY OGC 18-088
+classes.** FROST extensions (Data Array, Filtered Delete, Network) are NOT 18-088
+and live under `tests/extensions/` (see *Extensions* below). Per-URI ledger + gap
+analysis: `tests/docs/COVERAGE_MATRIX.md`. Engine request set:
+`tests/docs/ENGINE_REQUESTS.txt`.
 
 **Target:** `http://localhost:8018/v4/v1.1` (override `STA_BASE_URL`).
 **Standard:** OGC 18-088 — SensorThings API Part 1: Sensing v1.1.
@@ -15,8 +18,7 @@ core conformance classes plus the Data Array extension, against everything the l
 | `-m c01` | Sensing Core | `c01/` — service_root, read_entities, navigation, properties, refs, errors | 203 | 0 | 0 |
 | `-m c02` | Create-Update-Delete | `c02/` — create, deep_insert, update_patch, update_put, delete, validation, jsonpatch | 73 | 0 | 0 |
 | `-m c03` | Filtering Extension | `c03/` — query_options, filter_logic_arith, filter_string, filter_datetime, filter_geo | 120 | 0 | 0 |
-| `-m data_array` | Data Array extension | `data_array/test_data_array.py` | 9 | 0 | 0 |
-| **`-n auto` (all)** | | | **405** | **0** | **0** |
+| **`-n auto` (all 18-088)** | | | **396** | **0** | **0** |
 
 All green with **no `xfail`s**: `contains` (an OData-4.01 alias not in 18-088
 Table 23) is out-of-scope and is no longer tested (see register below). Parallel
@@ -29,8 +31,7 @@ PY=tests/conformance/.venv/bin/python
 $PY -m pytest tests/conformance -m c01          # 203 passed
 $PY -m pytest tests/conformance -m c02          # 73 passed
 $PY -m pytest tests/conformance -m c03          # 120 passed
-$PY -m pytest tests/conformance -m data_array   # 9 passed
-$PY -m pytest tests/conformance -n auto         # 405 passed
+$PY -m pytest tests/conformance -n auto         # 396 passed  (18-088 only)
 ```
 
 ## What changed this round
@@ -43,10 +44,11 @@ a **passing** test. Four prior `xfail`s had been justified by "class not
 declared" — that justification became false, so each was either fixed in source
 and converted to a positive test, or (for `contains`) re-justified on
 Table-23 grounds. Baseline before that round: **350 passed / 5 xfailed**, ending at
-zero xfails. The suite has since grown to **405 passed / 0 xfailed** (see *Latest
-changes* below). It is organized into per-class subfolders
-(`c01/ c02/ c03/ data_array/`) under `tests/conformance/`; the shared fixtures
-(`conftest.py`, `client.py`, `sample_data.py`) stay at the root and are inherited.
+zero xfails. The conformance suite is now **396 passed / 0 xfailed** (the Data Array
+extension, formerly counted here, has since moved to `tests/extensions/` — see
+*Extensions*). It is organized into per-class subfolders (`c01/ c02/ c03/`) under
+`tests/conformance/`; the shared fixtures (`conftest.py`, `client.py`,
+`sample_data.py`) stay at the root and are inherited.
 
 - **4 ex-`xfail`s → green positive tests** (after source fixes [A][B][C][D]):
   `substringof`, empty-set `@iot.count:0`, `geo.length` on a literal geography,
@@ -55,9 +57,10 @@ changes* below). It is organized into per-class subfolders
   traversal), `status-code`/`query-status-code` (200 valid / 400 malformed, never
   500), `historical-location-auto-creation`, and the 16 `datamodel/*/properties`
   + `datamodel/*/relations` URIs (both directions).
-- **New `data_array` class** (`data_array/test_data_array.py`, 9 tests) covering GET
-  `?$resultFormat=dataArray` (nav + collection, `$top`, `$orderby`) and POST
-  `/CreateObservations` — after a 4-part read-path fix (DA1–DA4).
+- **Data Array** (`test_data_array.py`, 9 tests) covering GET `?$resultFormat=dataArray`
+  (nav + collection, `$top`, `$orderby`) and POST `/CreateObservations` — after a
+  4-part read-path fix (DA1–DA4). *(Now an extension under `tests/extensions/data_array/`,
+  no longer part of the conformance total.)*
 
 ## API changes this round (source only; tests never weakened)
 
@@ -96,7 +99,7 @@ Two further batches landed after the round above (source + tests; tests never we
   FeatureOfInterest (regression-checked: `Datastreams(id)/Observations` and FoI
   auto-generation still 201; missing-Datastream → 400).
 
-**Net:** c02 **62 → 73**; whole suite now **405 passed / 0 xfailed** (`-n auto`).
+**Net:** c02 **62 → 73**; conformance suite **396 passed / 0 xfailed** (`-n auto`; Data Array moved to `tests/extensions/`).
 
 ## xfail register
 
@@ -139,19 +142,26 @@ array and the underlying violations were fixed in source.
   fns; math fns; geospatial + all `st_*` relations incl. **`geo.length` literal**;
   relation filters (1-/2-/multi-hop); combinations. Scoped to the seed for exact
   result-sets. No `xfail`s (`contains` removed as out-of-scope).
-- **data_array (9)** — GET `?$resultFormat=dataArray` strict spec shape (no `json`
-  wrapper, list-of-rows, real `dataArray@iot.count`) on the nav path and the
-  collection path, with `$top` and `$orderby`; POST `/CreateObservations`
-  (success + missing-result / missing-datastream validation). Created
-  observations cleaned up in teardown.
 
-## Extensions (separate suite — not part of the 405)
+*(Data Array coverage is now under §Extensions / `tests/extensions/data_array/`.)*
 
-The **Network** entity is an istSOS4 extension, gated behind `NETWORK=1` and tested by a
-**separate** suite under `tests/extensions/network/` (with its own README). It is **not**
-part of the 405-test conformance total above, which runs with `NETWORK=0`. Latest Network
-result: **30 passed, 0 xfailed** — the two former route deviations (PUT and nav-link-POST
-on `Networks`) are now implemented and covered by positive tests; see that suite's README.
+## Extensions — `tests/extensions/` (NOT OGC 18-088, NOT part of the 396)
+
+FROST/proprietary extensions live in a **separate** tree, `tests/extensions/`, with their
+own `pytest.ini`/`conftest.py`. They are NOT 18-088 and NOT counted in the 396 conformance
+total. Two run under **`NETWORK=0`** with the standard seed; one needs **`NETWORK=1`** — so
+they cannot all run in a single pass.
+
+| Extension | Marker | Location | Config | Tests |
+|---|---|---|---|---|
+| **Filtered Delete** (FROST `FilteredDelete.html`) — `DELETE /Observations?$filter` bulk delete; **implemented but deliberately NOT declared** in `serverSettings.conformance` (a mass-destructive op is kept un-announced) | `filtered_delete` | `tests/extensions/filtered_delete/` | `NETWORK=0` | **7 passed** |
+| **Data Array** (FROST `data-array/data-array`) — GET `?$resultFormat=dataArray`, POST `/CreateObservations` | `data_array` | `tests/extensions/data_array/` | `NETWORK=0` | **9 passed** |
+| **Network** — proprietary `Network` entity + its Datastream relation | `network` | `tests/extensions/network/` | `NETWORK=1` | **30 passed, 0 xfailed** |
+
+Run (NETWORK=0): `pytest tests/extensions -m data_array` → 9; `pytest tests/extensions -m filtered_delete` → 7.
+Run (NETWORK=1): `pytest tests/extensions -m network` → 30. The `data_array`/`filtered_delete`
+suites re-use the standard 18-088 seed via `tests/extensions/standard_seed.py`; `network` uses
+its own `network_seed`. See each subfolder for details.
 
 ## Methodology
 
@@ -180,9 +190,12 @@ sources; the lead alone routed violations and owns the scaffolding.
 
 - `tests/conformance/` — root scaffolding (`conftest.py`, `client.py`,
   `sample_data.py`, `pytest.ini`, `requirements.txt`, isolated `.venv`, this report,
-  `README.md`) + per-class subfolders `c01/` (6 files), `c02/` (7), `c03/` (5),
-  `data_array/` (1) — 19 test files, 405 tests. Subfolders inherit the root
-  fixtures; `--import-mode=importlib`.
+  `README.md`) + per-class subfolders `c01/` (6 files), `c02/` (7), `c03/` (5) —
+  18 test files, **396 tests** (18-088 only). Subfolders inherit the root fixtures;
+  `--import-mode=importlib`.
+- `tests/extensions/` — FROST/proprietary extensions (NOT 18-088): `data_array/` (9),
+  `filtered_delete/` (7, implemented but un-declared) under `NETWORK=0`, `network/` (30) under `NETWORK=1`; shared
+  `standard_seed.py` + `sample_data.py` + root `conftest.py`/`pytest.ini`/`client.py`.
 - `tests/docs/` — `COVERAGE_MATRIX.md`, `EXTENSIONS_ANALYSIS.md`, `ENGINE_REQUESTS.txt`,
   `entitiesDefault.json` (seed dataset).
 - `tests/docs/COVERAGE_MATRIX.md` — per-URI ledger + A/B/C/GAP matrix with adjudication.
