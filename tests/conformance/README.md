@@ -16,7 +16,7 @@ per-test with `@pytest.mark.c01/c02/c03/data_array`.
 
 > **Extensions** (e.g. the **Network** entity) live in a **separate** suite under
 > `tests/extensions/network/` and run with `NETWORK=1` — **not** part of this
-> 405-test total (Network: 27 passed, 2 xfailed; see that folder's README).
+> 405-test total (Network: 30 passed, 0 xfailed; see that folder's README).
 
 The shared scaffolding (`conftest.py`, `client.py`, `sample_data.py`, `pytest.ini`)
 stays in the suite **root** (`tests/conformance/`); the per-class subfolders
