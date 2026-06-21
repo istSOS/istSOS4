@@ -237,10 +237,15 @@ async def create_observation_for_feature_of_interest(
                 if commit_id is not None:
                     payload["commit_id"] = commit_id
 
+                # conformance req/create-update-delete/create-entity (Req 33/34):
+                # pass the URL-supplied FoI under the parameter name that
+                # insert_observation_entity actually declares (plural
+                # `features_of_interest_id`); the previous singular kwarg raised
+                # TypeError -> swallowed as HTTP 500.
                 _, header = await insert_observation_entity(
                     connection,
                     payload,
-                    feature_of_interest_id=feature_of_interest_id,
+                    features_of_interest_id=feature_of_interest_id,
                     commit_id=commit_id,
                 )
 
