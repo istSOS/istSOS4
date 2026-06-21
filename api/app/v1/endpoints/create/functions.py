@@ -475,7 +475,38 @@ async def insert_observation_entity(
             commit_id,
         )
 
-        if "FeatureOfInterest" in payload:
+        # conformance req/create-update-delete/create-entity (Table 24): a
+        # Datastream link is mandatory for an Observation. Validate it up front
+        # so that the FoI-linking branches below (which read
+        # payload["datastream_id"]) and generate_feature_of_interest cannot
+        # raise a KeyError -> HTTP 500. Missing link is a client error (400).
+        check_missing_properties(payload, ["Datastream"])
+
+        if features_of_interest_id is not None:
+            # conformance req/create-update-delete/create-entity (Req 33/34):
+            # the FoI is supplied via the URL navigation link
+            # (POST /FeaturesOfInterest(id)/Observations). Link the Observation
+            # to that FoI directly and keep the Datastream's last_foi_id
+            # consistent (mirrors the body-FeatureOfInterest-by-@iot.id path).
+            # Do NOT fall through to generate_feature_of_interest here, the URL
+            # already identifies the FoI.
+            select_query = """
+                SELECT last_foi_id
+                FROM sensorthings."Datastream"
+                WHERE id = $1::bigint;
+            """
+            last_foi_id = await connection.fetchval(
+                select_query, payload["datastream_id"]
+            )
+            if last_foi_id != features_of_interest_id:
+                await update_datastream_last_foi_id(
+                    connection,
+                    features_of_interest_id,
+                    payload["datastream_id"],
+                )
+            payload.pop("FeatureOfInterest", None)
+            payload["featuresofinterest_id"] = features_of_interest_id
+        elif "FeatureOfInterest" in payload:
             if "@iot.id" in payload["FeatureOfInterest"]:
                 features_of_interest_id = payload["FeatureOfInterest"][
                     "@iot.id"
