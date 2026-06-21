@@ -23,9 +23,12 @@ Sections 1+ keep the A/B/C/GAP analysis used to build the suite.
 > (the spec's substring predicate is `substringof`, which is implemented and tested) — is
 > **out-of-scope** and no longer tested (see §14).
 
-**Suite result:** `405 passed, 0 xfailed, 0 failed` (`-n auto`).
-Per class: c01 **203**, c02 **73**, c03 **120**, data_array **9**.
-(Baseline before this round: 350 passed / 5 xfailed.)
+**Conformance (OGC 18-088 only) suite result:** `396 passed, 0 xfailed, 0 failed` (`-n auto`).
+Per class: c01 **203**, c02 **73**, c03 **120**. (Baseline before the expansion round: 350 passed / 5 xfailed.)
+
+**FROST extensions** (NOT 18-088; separate tree `tests/extensions/`, NOT in the 396):
+`data_array` **9** + `filtered_delete` **7** (`NETWORK=0`), `network` **30** (`NETWORK=1`).
+(`filtered_delete` is implemented but **deliberately NOT declared** in `serverSettings.conformance` — a mass bulk-delete kept un-announced; Data Array stays declared.)
 
 Legend: ✔ yes · — no · ~ partial.
 
@@ -97,13 +100,14 @@ VIOLATION.
 | `create-update-delete/update-entity-put` | covered | **`test_put_replace_thing`**, **`test_put_missing_mandatory_property_thing`**, **`test_put_missing_mandatory_property_sensor`**, **`test_put_optional_property_reset`** — c02 |
 | `create-update-delete/update-entity-jsonpatch` | covered | `test_jsonpatch_*` (add/replace/copy/move/remove/test on Thing+Datastream) — c02 (jsonpatch) |
 
-### Data Array extension
+### FROST extensions (tests under `tests/extensions/`, NOT in the 18-088 396)
 
-| Declared URI | Status | Covering test(s) |
-|---|---|---|
-| `data-array/data-array` | covered | **`test_data_array_read_structure`**, `test_data_array_read_values_ds1`/`_ds2`, `test_data_array_read_top`, `test_data_array_read_orderby`, `test_data_array_collection_path`, `test_create_observations_data_array`, `test_create_observations_missing_result_component`, `test_create_observations_missing_datastream` — data_array |
+| Extension | Declared in `serverSettings.conformance`? | Status | Covering test(s) |
+|---|---|---|---|
+| `data-array/data-array` | ✔ yes | covered | 9 tests — `tests/extensions/data_array/test_data_array.py` (`test_data_array_read_structure`/`_values_ds1`/`_ds2`/`_top`/`_orderby`, `_collection_path`, `test_create_observations_*`); marker `data_array`, `NETWORK=0` |
+| Filtered Delete (`FilteredDelete.html`) | ✘ **no — deliberately un-declared** (a mass bulk-delete kept un-announced) | implemented + tested | 7 tests — `tests/extensions/filtered_delete/test_filtered_delete.py` (bulk delete+count, set==GET, phenomenonTime+observedArea recompute, no-filter→400, malformed→400, single-entity intact, no-match→0); marker `filtered_delete`, `NETWORK=0` |
 
-**Bold** = added/converted this round. Nothing declared is uncovered.
+**Bold** = added this round. The proprietary `Network` extension is gated on `NETWORK=1` in `tests/extensions/network/`.
 
 ---
 
@@ -192,7 +196,7 @@ VIOLATION.
 | **status-code: 200 on valid request** | ✔ | **c01 `test_*_returns_200`** |
 | **query-status-code: 400 on malformed `$filter`/`$orderby`/`$top`/`$skip`/unknown fn (not 500)** | ✔ | **c01 `test_*_returns_400`, `test_400_body_is_not_stacktrace`** |
 
-## 13. Data Array extension (Decl=✔ data-array/data-array)
+## 13. Data Array extension (Decl=✔ data-array/data-array) — now `tests/extensions/data_array/` (NETWORK=0, NOT in the 396)
 
 | Item | Decl | Cover |
 |---|:--:|---|
@@ -201,6 +205,20 @@ VIOLATION.
 | GET dataArray + `$top` | ✔ | **data_array `test_data_array_read_top` (api-fixed [DA3]: `$top=1`→0)** |
 | GET dataArray + `$orderby` | ✔ | **data_array `test_data_array_read_orderby` (api-fixed [DA4]: was 500)** |
 | POST `/CreateObservations` (Data Array create) | ✔ | data_array `test_create_observations_*` |
+
+## 13.1 Filtered Delete extension (implemented; **Decl=✘ deliberately NOT declared**) — `tests/extensions/filtered_delete/` (NETWORK=0, NOT in the 396)
+
+FROST "Filtered Delete": `DELETE /Observations?$filter=<expr>` bulk-deletes exactly the GET-`$filter` set; security-hardened (no-`$filter` → 400, never an unbounded delete). **Implemented and tested, but deliberately NOT advertised in `serverSettings.conformance`** — a mass-destructive op is kept un-announced.
+
+| Item | Decl | Cover |
+|---|:--:|---|
+| `DELETE /Observations?$filter` — bulk delete, 200 + `{"deleted":N}` | ✔ | filtered_delete `test_base_filtered_delete` |
+| Deleted set == `GET ?$filter` set (incl. cross-entity predicate) | ✔ | filtered_delete `test_deleted_set_equals_get_set` |
+| Per-datastream `phenomenonTime` + `observedArea` recompute after delete | ✔ | filtered_delete `test_maintenance_recompute_phenomenontime_and_observedarea` |
+| Safeguard: no `$filter` → **400** `$filter is required for collection delete` (deliberate FROST divergence) | ✔ | filtered_delete `test_no_filter_safeguard` |
+| Malformed `$filter` → **400** (never 500) | ✔ | filtered_delete `test_malformed_filter_returns_400` |
+| Single-entity `DELETE /Observations(id)` unaffected | ✔ | filtered_delete `test_single_entity_delete_still_works` |
+| No-match delete → 200 `{"deleted":0}` | ✔ | filtered_delete `test_no_match_delete_returns_zero` |
 
 ---
 
