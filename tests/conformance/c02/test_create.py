@@ -412,6 +412,366 @@ def test_post_to_navigation_link_datastream_observations(client, unique_name, cl
         cleanup(f"{client.base_url}/FeaturesOfInterest({format_id(foi_id)})")
 
 
+@pytest.mark.c02
+def test_post_to_navigation_link_thing_datastreams(client, unique_name, cleanup):
+    """req/create-update-delete/create-entity (Req 33) — POST /Things(<id>)/Datastreams.
+
+    Req 33: "If the target URL for the collection is a navigationLink, the new entity
+    is automatically linked to the entity containing the navigationLink."
+    Body must carry Sensor and ObservedProperty mandatory links (18-088 Table 24).
+    Verify the new Datastream's Thing == T (forward) and it appears in
+    Things(<id>)/Datastreams (reverse).
+    """
+    tag = unique_name("nav-t-ds")
+    tree = _create_datastream_tree(client, unique_name, cleanup)
+    t_id = tree["thing_id"]
+    s_id = tree["sensor_id"]
+    op_id = tree["op_id"]
+
+    # POST Datastream via Things nav link — Thing link comes from the URL, not the body
+    ds_payload = {
+        "name": f"{tag} Datastream",
+        "description": "nav-link datastream",
+        "unitOfMeasurement": sample_data.unit_lumen(),
+        "observationType": sample_data.OM_MEASUREMENT,
+        "Sensor": {"@iot.id": s_id},
+        "ObservedProperty": {"@iot.id": op_id},
+    }
+    resp = client.post(
+        f"Things({format_id(t_id)})/Datastreams",
+        json=ds_payload,
+    )
+
+    assert resp.status_code == 201, (
+        f"POST to Things(<id>)/Datastreams nav link must return 201, "
+        f"got {resp.status_code}: {resp.text[:300]}"
+    )
+    ds_hdr = resp.headers.get("location", "")
+    assert ds_hdr.startswith("http"), (
+        f"Location header must be absolute; got {ds_hdr!r}"
+    )
+    ds_id_new = id_from_self_link(ds_hdr)
+    cleanup(ds_hdr)
+
+    # Forward: new Datastream's Thing must == T
+    ds_entity = client.nav(ds_hdr, params={"$expand": "Thing"})
+    assert entity_id(ds_entity["Thing"]) == t_id, (
+        "Datastream created via Things nav link must link back to the parent Thing"
+    )
+
+    # Reverse: new Datastream must appear in Things(<id>)/Datastreams
+    t_ds = client.nav(f"Things({format_id(t_id)})/Datastreams")
+    ds_ids_in_thing = [entity_id(d) for d in t_ds.get("value", [])]
+    assert ds_id_new in ds_ids_in_thing, (
+        "Datastream must appear in Things(<id>)/Datastreams after POST to that nav link"
+    )
+
+
+@pytest.mark.c02
+def test_post_to_navigation_link_sensor_datastreams(client, unique_name, cleanup):
+    """req/create-update-delete/create-entity (Req 33) — POST /Sensors(<id>)/Datastreams.
+
+    Req 33: "If the target URL for the collection is a navigationLink, the new entity
+    is automatically linked to the entity containing the navigationLink."
+    Body must carry Thing and ObservedProperty mandatory links (18-088 Table 24).
+    Verify the new Datastream's Sensor == S (forward) and it appears in
+    Sensors(<id>)/Datastreams (reverse).
+    """
+    tag = unique_name("nav-s-ds")
+    tree = _create_datastream_tree(client, unique_name, cleanup)
+    t_id = tree["thing_id"]
+    s_id = tree["sensor_id"]
+    op_id = tree["op_id"]
+
+    # POST Datastream via Sensors nav link — Sensor link comes from the URL, not body
+    ds_payload = {
+        "name": f"{tag} Datastream",
+        "description": "nav-link sensor datastream",
+        "unitOfMeasurement": sample_data.unit_lumen(),
+        "observationType": sample_data.OM_MEASUREMENT,
+        "Thing": {"@iot.id": t_id},
+        "ObservedProperty": {"@iot.id": op_id},
+    }
+    resp = client.post(
+        f"Sensors({format_id(s_id)})/Datastreams",
+        json=ds_payload,
+    )
+
+    assert resp.status_code == 201, (
+        f"POST to Sensors(<id>)/Datastreams nav link must return 201, "
+        f"got {resp.status_code}: {resp.text[:300]}"
+    )
+    ds_hdr = resp.headers.get("location", "")
+    assert ds_hdr.startswith("http"), (
+        f"Location header must be absolute; got {ds_hdr!r}"
+    )
+    ds_id_new = id_from_self_link(ds_hdr)
+    cleanup(ds_hdr)
+
+    # Forward: new Datastream's Sensor must == S
+    ds_entity = client.nav(ds_hdr, params={"$expand": "Sensor"})
+    assert entity_id(ds_entity["Sensor"]) == s_id, (
+        "Datastream created via Sensors nav link must link back to the parent Sensor"
+    )
+
+    # Reverse: new Datastream must appear in Sensors(<id>)/Datastreams
+    s_ds = client.nav(f"Sensors({format_id(s_id)})/Datastreams")
+    ds_ids_in_sensor = [entity_id(d) for d in s_ds.get("value", [])]
+    assert ds_id_new in ds_ids_in_sensor, (
+        "Datastream must appear in Sensors(<id>)/Datastreams after POST to that nav link"
+    )
+
+
+@pytest.mark.c02
+def test_post_to_navigation_link_observedproperty_datastreams(client, unique_name, cleanup):
+    """req/create-update-delete/create-entity (Req 33) — POST /ObservedProperties(<id>)/Datastreams.
+
+    Req 33: "If the target URL for the collection is a navigationLink, the new entity
+    is automatically linked to the entity containing the navigationLink."
+    Body must carry Thing and Sensor mandatory links (18-088 Table 24).
+    Verify the new Datastream's ObservedProperty == O (forward) and it appears in
+    ObservedProperties(<id>)/Datastreams (reverse).
+    """
+    tag = unique_name("nav-op-ds")
+    tree = _create_datastream_tree(client, unique_name, cleanup)
+    t_id = tree["thing_id"]
+    s_id = tree["sensor_id"]
+    op_id = tree["op_id"]
+
+    # POST Datastream via ObservedProperties nav link — OP link comes from the URL
+    ds_payload = {
+        "name": f"{tag} Datastream",
+        "description": "nav-link op datastream",
+        "unitOfMeasurement": sample_data.unit_lumen(),
+        "observationType": sample_data.OM_MEASUREMENT,
+        "Thing": {"@iot.id": t_id},
+        "Sensor": {"@iot.id": s_id},
+    }
+    resp = client.post(
+        f"ObservedProperties({format_id(op_id)})/Datastreams",
+        json=ds_payload,
+    )
+
+    assert resp.status_code == 201, (
+        f"POST to ObservedProperties(<id>)/Datastreams nav link must return 201, "
+        f"got {resp.status_code}: {resp.text[:300]}"
+    )
+    ds_hdr = resp.headers.get("location", "")
+    assert ds_hdr.startswith("http"), (
+        f"Location header must be absolute; got {ds_hdr!r}"
+    )
+    ds_id_new = id_from_self_link(ds_hdr)
+    cleanup(ds_hdr)
+
+    # Forward: new Datastream's ObservedProperty must == O
+    ds_entity = client.nav(ds_hdr, params={"$expand": "ObservedProperty"})
+    assert entity_id(ds_entity["ObservedProperty"]) == op_id, (
+        "Datastream created via ObservedProperties nav link must link back to "
+        "the parent ObservedProperty"
+    )
+
+    # Reverse: new Datastream must appear in ObservedProperties(<id>)/Datastreams
+    op_ds = client.nav(f"ObservedProperties({format_id(op_id)})/Datastreams")
+    ds_ids_in_op = [entity_id(d) for d in op_ds.get("value", [])]
+    assert ds_id_new in ds_ids_in_op, (
+        "Datastream must appear in ObservedProperties(<id>)/Datastreams after POST "
+        "to that nav link"
+    )
+
+
+@pytest.mark.c02
+def test_post_to_navigation_link_location_things(client, unique_name, cleanup):
+    """req/create-update-delete/create-entity (Req 33) — POST /Locations(<id>)/Things.
+
+    Req 33: "If the target URL for the collection is a navigationLink, the new entity
+    is automatically linked to the entity containing the navigationLink."
+    Body is a valid Thing (no extra mandatory relations for Thing).
+    Verify the new Thing's Locations contains L (forward) and the new Thing appears
+    in Locations(<id>)/Things (reverse).
+    """
+    tag = unique_name("nav-loc-t")
+
+    # Create a standalone Location to use as parent nav-link host
+    loc_resp = client.create("Locations", sample_data.minimal_location(tag))
+    assert loc_resp.status_code == 201
+    loc_url = client.location_of(loc_resp)
+    l_id = id_from_self_link(loc_url)
+    cleanup(loc_url)
+
+    # POST Thing via Locations nav link — Location link comes from the URL
+    thing_payload = sample_data.minimal_thing(tag)
+    resp = client.post(
+        f"Locations({format_id(l_id)})/Things",
+        json=thing_payload,
+    )
+
+    assert resp.status_code == 201, (
+        f"POST to Locations(<id>)/Things nav link must return 201, "
+        f"got {resp.status_code}: {resp.text[:300]}"
+    )
+    thing_hdr = resp.headers.get("location", "")
+    assert thing_hdr.startswith("http"), (
+        f"Location header must be absolute; got {thing_hdr!r}"
+    )
+    new_thing_id = id_from_self_link(thing_hdr)
+    cleanup(thing_hdr)
+
+    # Forward: new Thing's Locations must contain L
+    thing_locs = client.nav(
+        f"Things({format_id(new_thing_id)})/Locations"
+    )
+    loc_ids_in_thing = [entity_id(loc) for loc in thing_locs.get("value", [])]
+    assert l_id in loc_ids_in_thing, (
+        f"New Thing's Locations must contain the parent Location (id={l_id}) "
+        f"after POST to Locations(<id>)/Things nav link; got {loc_ids_in_thing}"
+    )
+
+    # Reverse: new Thing must appear in Locations(<id>)/Things
+    loc_things = client.nav(f"Locations({format_id(l_id)})/Things")
+    thing_ids_in_loc = [entity_id(t) for t in loc_things.get("value", [])]
+    assert new_thing_id in thing_ids_in_loc, (
+        f"New Thing must appear in Locations(<id>)/Things after POST to that nav link; "
+        f"got {thing_ids_in_loc}"
+    )
+
+
+@pytest.mark.c02
+def test_post_to_navigation_link_thing_historicallocations(client, unique_name, cleanup):
+    """req/create-update-delete/create-entity (Req 33) — POST /Things(<id>)/HistoricalLocations.
+
+    Req 33: "If the target URL for the collection is a navigationLink, the new entity
+    is automatically linked to the entity containing the navigationLink."
+    A HistoricalLocation SHALL link >= 1 Location (18-088 §8.3.4); body must carry
+    Locations:[{"@iot.id": L}] and a time.
+    Verify: new HL's Thing == T (forward), new HL's Locations contains L, and the
+    new HL appears in Things(<id>)/HistoricalLocations (reverse).
+    """
+    tag = unique_name("nav-t-hl")
+
+    # Build a Thing with a Location so we have both T and L ids
+    loc_resp = client.create("Locations", sample_data.minimal_location(tag))
+    assert loc_resp.status_code == 201
+    loc_url = client.location_of(loc_resp)
+    l_id = id_from_self_link(loc_url)
+    cleanup(loc_url)
+
+    thing_resp = client.create("Things", sample_data.minimal_thing(tag))
+    assert thing_resp.status_code == 201
+    thing_url = client.location_of(thing_resp)
+    t_id = id_from_self_link(thing_url)
+    cleanup(thing_url)
+
+    # POST HistoricalLocation via Things nav link.
+    # Thing link comes from the URL; body must supply Locations (mandatory relation).
+    hl_payload = {
+        "time": "2024-01-15T12:00:00Z",
+        "Locations": [{"@iot.id": l_id}],
+    }
+    resp = client.post(
+        f"Things({format_id(t_id)})/HistoricalLocations",
+        json=hl_payload,
+    )
+
+    assert resp.status_code == 201, (
+        f"POST to Things(<id>)/HistoricalLocations nav link must return 201, "
+        f"got {resp.status_code}: {resp.text[:300]}"
+    )
+    hl_hdr = resp.headers.get("location", "")
+    assert hl_hdr.startswith("http"), (
+        f"Location header must be absolute; got {hl_hdr!r}"
+    )
+    hl_id_new = id_from_self_link(hl_hdr)
+    cleanup(hl_hdr)
+
+    # Forward (Thing): new HL's Thing must == T
+    hl_entity = client.nav(hl_hdr, params={"$expand": "Thing,Locations"})
+    assert entity_id(hl_entity["Thing"]) == t_id, (
+        "HistoricalLocation created via Things nav link must link back to the parent Thing"
+    )
+
+    # Forward (Locations): new HL's Locations must contain L
+    hl_loc_ids = [entity_id(loc) for loc in hl_entity.get("Locations", [])]
+    assert l_id in hl_loc_ids, (
+        f"HistoricalLocation must link to the supplied Location (id={l_id}); "
+        f"HL Locations: {hl_loc_ids}"
+    )
+
+    # Reverse: new HL must appear in Things(<id>)/HistoricalLocations
+    t_hls = client.nav(f"Things({format_id(t_id)})/HistoricalLocations")
+    hl_ids_in_thing = [entity_id(hl) for hl in t_hls.get("value", [])]
+    assert hl_id_new in hl_ids_in_thing, (
+        "HistoricalLocation must appear in Things(<id>)/HistoricalLocations after POST "
+        "to that nav link"
+    )
+
+
+@pytest.mark.c02
+def test_post_to_navigation_link_foi_observations(client, unique_name, cleanup):
+    """req/create-update-delete/create-entity (Req 33) — POST /FeaturesOfInterest(<id>)/Observations.
+
+    Req 33: "If the target URL for the collection is a navigationLink, the new entity
+    is automatically linked to the entity containing the navigationLink."
+    Body must carry Datastream mandatory link (18-088 Table 24).
+    Verify: new Observation's FeatureOfInterest == F (forward), new Observation's
+    Datastream == D, and the new Observation appears in
+    FeaturesOfInterest(<id>)/Observations (reverse).
+    This is a positive test asserting 201 (the POST-to-FoI-nav-link fix is in place).
+    """
+    tag = unique_name("nav-foi-obs")
+    tree = _create_datastream_tree(client, unique_name, cleanup)
+    ds_id = tree["ds_id"]
+
+    # Create a standalone FeatureOfInterest to be the nav-link host
+    foi_resp = client.create("FeaturesOfInterest", sample_data.minimal_feature_of_interest(tag))
+    assert foi_resp.status_code == 201
+    foi_url = client.location_of(foi_resp)
+    f_id = id_from_self_link(foi_url)
+    cleanup(foi_url)
+
+    # POST Observation via FeaturesOfInterest nav link — FoI link comes from the URL
+    obs_payload = {
+        "phenomenonTime": "2024-06-01T09:00:00Z",
+        "result": 42.0,
+        "Datastream": {"@iot.id": ds_id},
+    }
+    resp = client.post(
+        f"FeaturesOfInterest({format_id(f_id)})/Observations",
+        json=obs_payload,
+    )
+
+    assert resp.status_code == 201, (
+        f"POST to FeaturesOfInterest(<id>)/Observations nav link must return 201, "
+        f"got {resp.status_code}: {resp.text[:300]}"
+    )
+    obs_hdr = resp.headers.get("location", "")
+    assert obs_hdr.startswith("http"), (
+        f"Location header must be absolute; got {obs_hdr!r}"
+    )
+    obs_id_new = id_from_self_link(obs_hdr)
+    cleanup(obs_hdr)
+
+    # Forward (FeatureOfInterest): new Observation's FoI must == F
+    obs_entity = client.nav(obs_hdr, params={"$expand": "FeatureOfInterest,Datastream"})
+    assert entity_id(obs_entity["FeatureOfInterest"]) == f_id, (
+        "Observation created via FeaturesOfInterest nav link must link back to the "
+        "parent FeatureOfInterest (not an auto-generated one)"
+    )
+
+    # Forward (Datastream): new Observation's Datastream must == D
+    assert entity_id(obs_entity["Datastream"]) == ds_id, (
+        "Observation created via FeaturesOfInterest nav link must link to the "
+        "Datastream supplied in the body"
+    )
+
+    # Reverse: new Observation must appear in FeaturesOfInterest(<id>)/Observations
+    foi_obs = client.nav(f"FeaturesOfInterest({format_id(f_id)})/Observations")
+    obs_ids_in_foi = [entity_id(o) for o in foi_obs.get("value", [])]
+    assert obs_id_new in obs_ids_in_foi, (
+        "Observation must appear in FeaturesOfInterest(<id>)/Observations after POST "
+        "to that nav link"
+    )
+
+
 # ===========================================================================
 # SPECIAL – HistoricalLocation auto-creation
 #   req/create-update-delete/historical-location-auto-creation  (18-088 §10.2.2.2)
