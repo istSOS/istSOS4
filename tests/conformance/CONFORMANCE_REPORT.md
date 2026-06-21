@@ -150,8 +150,8 @@ array and the underlying violations were fixed in source.
 The **Network** entity is an istSOS4 extension, gated behind `NETWORK=1` and tested by a
 **separate** suite under `tests/extensions/network/` (with its own README). It is **not**
 part of the 405-test conformance total above, which runs with `NETWORK=0`. Latest Network
-result: **27 passed, 2 xfailed** — the two `xfail`s are documented route deviations
-(PUT and nav-link-POST on `Networks`) explained in that suite's README.
+result: **30 passed, 0 xfailed** — the two former route deviations (PUT and nav-link-POST
+on `Networks`) are now implemented and covered by positive tests; see that suite's README.
 
 ## Methodology
 
