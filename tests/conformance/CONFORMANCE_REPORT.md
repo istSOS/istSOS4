@@ -1,8 +1,8 @@
 # OGC SensorThings API v1.1 — Conformance Report (istSOS4)
 
 Black-box conformance suite for istSOS4's STA v1.1 endpoint, covering the three
-core conformance classes plus the Data Array extension. Scope:
-`tests/docs/CONFORMANCE_PLAN.md`. Per-URI ledger + gap analysis:
+core conformance classes plus the Data Array extension, against everything the live
+`serverSettings.conformance` declares. Per-URI ledger + gap analysis:
 `tests/docs/COVERAGE_MATRIX.md`. Engine request set: `tests/docs/ENGINE_REQUESTS.txt`.
 
 **Target:** `http://localhost:8018/v4/v1.1` (override `STA_BASE_URL`).
@@ -13,10 +13,10 @@ core conformance classes plus the Data Array extension. Scope:
 | Suite | Class | Files | Passed | xfail | Failed |
 |---|---|---|---:|---:|---:|
 | `-m c01` | Sensing Core | `c01/` — service_root, read_entities, navigation, properties, refs, errors | 203 | 0 | 0 |
-| `-m c02` | Create-Update-Delete | `c02/` — create, deep_insert, update_patch, update_put, delete, validation, jsonpatch | 62 | 0 | 0 |
+| `-m c02` | Create-Update-Delete | `c02/` — create, deep_insert, update_patch, update_put, delete, validation, jsonpatch | 73 | 0 | 0 |
 | `-m c03` | Filtering Extension | `c03/` — query_options, filter_logic_arith, filter_string, filter_datetime, filter_geo | 120 | 0 | 0 |
 | `-m data_array` | Data Array extension | `data_array/test_data_array.py` | 9 | 0 | 0 |
-| **`-n auto` (all)** | | | **394** | **0** | **0** |
+| **`-n auto` (all)** | | | **405** | **0** | **0** |
 
 All green with **no `xfail`s**: `contains` (an OData-4.01 alias not in 18-088
 Table 23) is out-of-scope and is no longer tested (see register below). Parallel
@@ -27,10 +27,10 @@ entities).
 ```bash
 PY=tests/conformance/.venv/bin/python
 $PY -m pytest tests/conformance -m c01          # 203 passed
-$PY -m pytest tests/conformance -m c02          # 62 passed
+$PY -m pytest tests/conformance -m c02          # 73 passed
 $PY -m pytest tests/conformance -m c03          # 120 passed
 $PY -m pytest tests/conformance -m data_array   # 9 passed
-$PY -m pytest tests/conformance -n auto         # 394 passed
+$PY -m pytest tests/conformance -n auto         # 405 passed
 ```
 
 ## What changed this round
@@ -42,8 +42,9 @@ and `data-array/data-array`. Declaring a class is a promise: every URI must have
 a **passing** test. Four prior `xfail`s had been justified by "class not
 declared" — that justification became false, so each was either fixed in source
 and converted to a positive test, or (for `contains`) re-justified on
-Table-23 grounds. Baseline before this round: **350 passed / 5 xfailed**;
-now **394 passed / 0 xfailed**. The suite is organized into per-class subfolders
+Table-23 grounds. Baseline before that round: **350 passed / 5 xfailed**, ending at
+zero xfails. The suite has since grown to **405 passed / 0 xfailed** (see *Latest
+changes* below). It is organized into per-class subfolders
 (`c01/ c02/ c03/ data_array/`) under `tests/conformance/`; the shared fixtures
 (`conftest.py`, `client.py`, `sample_data.py`) stay at the root and are inherited.
 
@@ -75,6 +76,28 @@ Reproduced via curl before/after; each tagged `# conformance: <req-id>` in sourc
 
 No regressions — every previously passing test remains green.
 
+## Latest changes (error-handling + POST-to-navigation-link)
+
+Two further batches landed after the round above (source + tests; tests never weakened):
+
+- **Error-handling hardening (P1–P4):** DB-unavailable now returns **503** (write
+  endpoints mirror the read path) instead of a misleading 400; client vs server faults
+  are split cleanly (**4xx** for bad input, **500** only for genuine internal errors,
+  never a stacktrace); a bad foreign-key / `@iot.id` reference returns **400** (not 500);
+  responses go through a shared error helper for consistent `{code,type,message}` bodies.
+- **POST-to-navigation-link create (Req 33), +6 c02 tests:** creating the child under a
+  parent nav-link is now covered for `Things(id)/Datastreams`, `Sensors(id)/Datastreams`,
+  `ObservedProperties(id)/Datastreams`, `Locations(id)/Things`,
+  `Things(id)/HistoricalLocations` (edge), and `FeaturesOfInterest(id)/Observations` —
+  each asserts 201 + `Location` and verifies the link in both directions.
+- **Fix `FeaturesOfInterest(id)/Observations` 500 → 201:** the route passed a mis-named
+  kwarg to the Observation insert (singular vs plural) and the create branch ignored the
+  URL FoI id; both fixed, so the Observation is created and linked to the URL's
+  FeatureOfInterest (regression-checked: `Datastreams(id)/Observations` and FoI
+  auto-generation still 201; missing-Datastream → 400).
+
+**Net:** c02 **62 → 73**; whole suite now **405 passed / 0 xfailed** (`-n auto`).
+
 ## xfail register
 
 **None.** The suite has zero `xfail`s.
@@ -100,8 +123,10 @@ array and the underlying violations were fixed in source.
   entities** (`req/datamodel/*/properties` + `*/relations`); **status-code (200
   valid)** and **query-status-code (400 on malformed `$filter`/`$orderby`/`$top`/
   `$skip`/unknown function — never 500)**; 404 error handling.
-- **c02 CUD (62)** — POST per collection (201 + Location); deep insert (+ status
-  code); link-to-existing via `{"@iot.id"}`; POST-to-navigation; FoI
+- **c02 CUD (73)** — POST per collection (201 + Location); deep insert (+ status
+  code); link-to-existing via `{"@iot.id"}`; **POST-to-navigation-link create (Req 33)
+  for Things/Sensors/ObservedProperties→Datastreams, Locations→Things,
+  Things→HistoricalLocations, Datastreams/FeaturesOfInterest→Observations**; FoI
   auto-generation; PATCH partial + link-change; **PUT full-replace** (replace
   semantics, missing-mandatory → 400, omitted-optional → null); **JSON Patch**
   (add/replace/copy/move/remove/test); DELETE + explicit cascade matrix;
@@ -119,6 +144,14 @@ array and the underlying violations were fixed in source.
   collection path, with `$top` and `$orderby`; POST `/CreateObservations`
   (success + missing-result / missing-datastream validation). Created
   observations cleaned up in teardown.
+
+## Extensions (separate suite — not part of the 405)
+
+The **Network** entity is an istSOS4 extension, gated behind `NETWORK=1` and tested by a
+**separate** suite under `tests/extensions/network/` (with its own README). It is **not**
+part of the 405-test conformance total above, which runs with `NETWORK=0`. Latest Network
+result: **27 passed, 2 xfailed** — the two `xfail`s are documented route deviations
+(PUT and nav-link-POST on `Networks`) explained in that suite's README.
 
 ## Methodology
 
@@ -148,10 +181,11 @@ sources; the lead alone routed violations and owns the scaffolding.
 - `tests/conformance/` — root scaffolding (`conftest.py`, `client.py`,
   `sample_data.py`, `pytest.ini`, `requirements.txt`, isolated `.venv`, this report,
   `README.md`) + per-class subfolders `c01/` (6 files), `c02/` (7), `c03/` (5),
-  `data_array/` (1) — 19 test files, 394 tests. Subfolders inherit the root
+  `data_array/` (1) — 19 test files, 405 tests. Subfolders inherit the root
   fixtures; `--import-mode=importlib`.
-- `tests/docs/` — `CONFORMANCE_PLAN.md`, `COVERAGE_MATRIX.md`, `ENGINE_REQUESTS.txt`,
+- `tests/docs/` — `COVERAGE_MATRIX.md`, `EXTENSIONS_ANALYSIS.md`, `ENGINE_REQUESTS.txt`,
   `entitiesDefault.json` (seed dataset).
 - `tests/docs/COVERAGE_MATRIX.md` — per-URI ledger + A/B/C/GAP matrix with adjudication.
-- API source fixes under `api/app/` (this round: A,B,C,D + DA1–DA4; tagged
-  `# conformance:`; uncommitted, staged for review).
+- API source fixes under `api/app/` (tagged `# conformance:`; committed): this round's
+  A,B,C,D + DA1–DA4, plus the error-handling P1–P4 batch and the
+  `FeaturesOfInterest/Observations` 500→201 fix.

@@ -70,8 +70,9 @@ down completely:
 
 ## What is covered
 
-Coverage mirrors what conformance gives Sensor/ObservedProperty (see
-`tests/docs/NETWORK_COVERAGE_GAP.md`), scoped to Network + its Datastream relation.
+Coverage mirrors what the conformance suite gives Sensor/ObservedProperty (the
+per-URI ledger is `tests/docs/COVERAGE_MATRIX.md`), scoped to Network + its
+Datastream relation.
 
 **Read** (`test_network_read.py`): collection GET; entity-by-id; control info
 (`@iot.id`, absolute `@iot.selfLink`, `Datastreams@iot.navigationLink`); selfLink
