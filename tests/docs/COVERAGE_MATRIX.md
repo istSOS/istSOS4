@@ -23,8 +23,8 @@ Sections 1+ keep the A/B/C/GAP analysis used to build the suite.
 > (the spec's substring predicate is `substringof`, which is implemented and tested) — is
 > **out-of-scope** and no longer tested (see §14).
 
-**Suite result:** `394 passed, 0 xfailed, 0 failed` (`-n auto`).
-Per class: c01 **203**, c02 **62**, c03 **120**, data_array **9**.
+**Suite result:** `405 passed, 0 xfailed, 0 failed` (`-n auto`).
+Per class: c01 **203**, c02 **73**, c03 **120**, data_array **9**.
 (Baseline before this round: 350 passed / 5 xfailed.)
 
 Legend: ✔ yes · — no · ~ partial.
@@ -169,7 +169,12 @@ VIOLATION.
 |---|:--:|---|
 | POST minimal each collection (201 + Location) | ✔ | c02 |
 | Deep insert (+ status-code) | ✔ | c02 |
-| Link-to-existing via `{"@iot.id"}` / POST-to-navigation | ✔ | c02 |
+| Link-to-existing via `{"@iot.id"}` | ✔ | c02 |
+| **POST-to-navigation-link create (Req 33): `Things(id)/Datastreams`** | ✔ | **c02 `test_post_to_navigation_link_thing_datastreams`** |
+| **`Sensors(id)/Datastreams` / `ObservedProperties(id)/Datastreams`** | ✔ | **c02 `..._sensor_datastreams` / `..._observedproperty_datastreams`** |
+| **`Locations(id)/Things` / `Things(id)/HistoricalLocations`** (edge) | ✔ | **c02 `..._location_things` / `..._thing_historicallocations`** |
+| **`FeaturesOfInterest(id)/Observations`** (fix 500→201, §15 E) | ✔ | **c02 `..._foi_observations`** |
+| `Things(id)/Locations` / `Datastreams(id)/Observations` (pre-existing) | ✔ | c02 `..._thing_locations` / `..._datastream_observations` |
 | FeatureOfInterest auto-generation | ✔ | c02 |
 | PATCH (partial merge) + link change | ✔ | c02 |
 | **PUT (full replace)** | ✔ | **c02 `test_put_*` (api-fixed [D]: was 405; was xfail). Missing mandatory → 400; omitted optional → null; id/selfLink preserved.** |
@@ -227,6 +232,8 @@ All tagged `# conformance: <req-id>` in source. Reproduced via curl before/after
 | DA2 | dataArray collection path returned 1 flat row + hardcoded `count:1` (dropped 15/16 obs) | group per datastream, emit all rows, real count | `sta2rest/visitors.py` (+`sta_parser/lexer.py`) |
 | DA3 | dataArray nav `$top=1` → 0 rows | fix off-by-one in row aggregation slice | `sta2rest/visitors.py` |
 | DA4 | dataArray + `$orderby` → 500 | fold orderby into per-group row aggregation | `sta2rest/visitors.py` |
+| E | `FeaturesOfInterest(id)/Observations` → 500 (route passed a mis-named kwarg to the Observation insert; URL FoI id ignored in the create branch) | align the kwarg + link the URL FoI in the create branch — 201 with the Observation linked to the path FoI (req/create-update-delete/create-entity) | `v1/endpoints/create/observation.py`, `v1/endpoints/create/functions.py` |
+| P1–P4 | error-handling: DB-down → 503; client/server split (4xx for bad input vs 500 internal, no stacktrace); bad FK / `@iot.id` → 400; shared error helper for `{code,type,message}` | mirror the read path on write endpoints; controlled error bodies | write endpoints under `v1/endpoints/`, `utils/` |
 
 No regressions: all previously-passing tests remain green; the 4 ex-`xfail`
 ([A][B][C][D]) are now positive green tests.

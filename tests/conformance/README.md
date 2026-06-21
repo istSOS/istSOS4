@@ -2,17 +2,21 @@
 
 Black-box HTTP conformance tests for istSOS4's STA v1.1 endpoint, covering the
 three core conformance classes **plus the Data Array extension** — **four** marked
-classes, organized into per-class subfolders (**19 test files, 394 tests**):
+classes, organized into per-class subfolders (**19 test files, 405 tests**):
 
 | Marker | Class | Folder / files | Owner |
 |---|---|---|---|
 | `c01` | Sensing Core | `c01/` — service_root, read_entities, navigation, properties, refs, errors (**203**) | c01-sensing-core |
-| `c02` | Create-Update-Delete | `c02/` — create, deep_insert, update_patch, update_put, delete, validation, jsonpatch (**62**) | c02-cud |
+| `c02` | Create-Update-Delete | `c02/` — create, deep_insert, update_patch, update_put, delete, validation, jsonpatch (**73**) | c02-cud |
 | `c03` | Filtering Extension | `c03/` — query_options, filter_logic_arith, filter_string, filter_datetime, filter_geo (**120**) | c03-filtering |
 | `data_array` | Data Array extension | `data_array/test_data_array.py` (**9**) | dataarray-author |
 
 Each file is owned by a single author agent (no cross-writing). Tests are marked
 per-test with `@pytest.mark.c01/c02/c03/data_array`.
+
+> **Extensions** (e.g. the **Network** entity) live in a **separate** suite under
+> `tests/extensions/network/` and run with `NETWORK=1` — **not** part of this
+> 405-test total (Network: 27 passed, 2 xfailed; see that folder's README).
 
 The shared scaffolding (`conftest.py`, `client.py`, `sample_data.py`, `pytest.ini`)
 stays in the suite **root** (`tests/conformance/`); the per-class subfolders
@@ -21,12 +25,11 @@ identically-named helpers across subfolders never collide and no `__init__.py`
 packaging is required) and **`norecursedirs = .venv __pycache__ .pytest_cache`**
 (keeps collection out of the virtualenv/caches).
 
-The `seed` fixture loads `tests/docs/entitiesDefault.json` exactly; gap analysis is
-in `tests/docs/COVERAGE_MATRIX.md` (sets A/B/C) and `tests/docs/ENGINE_REQUESTS.txt`
-(set A). The authoritative scope/checklist is **`tests/docs/CONFORMANCE_PLAN.md`** —
-read it first. Full results live in `CONFORMANCE_REPORT.md` (this folder); the
-error-handling refactor plan is `tests/docs/REFRACTOR_PLAN.md`. Shared scaffolding
-is owned by the conformance lead; test files are owned per the table above.
+The `seed` fixture loads `tests/docs/entitiesDefault.json` exactly; the per-URI
+declared-vs-covered ledger (sets A/B/C) is `tests/docs/COVERAGE_MATRIX.md`, and the OGC
+TeamEngine request set (set A) is `tests/docs/ENGINE_REQUESTS.txt`. Full results live in
+`CONFORMANCE_REPORT.md` (this folder). Shared scaffolding is owned by the conformance
+lead; test files are owned per the table above.
 
 ## Install
 
@@ -49,14 +52,14 @@ PYBIN=tests/conformance/.venv/bin/python
 
 # one class at a time (four classes)
 $PYBIN -m pytest tests/conformance -m c01          # 203 passed
-$PYBIN -m pytest tests/conformance -m c02          # 62 passed
+$PYBIN -m pytest tests/conformance -m c02          # 73 passed
 $PYBIN -m pytest tests/conformance -m c03          # 120 passed
 $PYBIN -m pytest tests/conformance -m data_array   # 9 passed
 
 # or a single subfolder
 $PYBIN -m pytest tests/conformance/c01
 
-# whole suite, in parallel (isolation must hold) -> 394 passed
+# whole suite, in parallel (isolation must hold) -> 405 passed
 $PYBIN -m pytest tests/conformance -n auto
 
 # point at another deployment

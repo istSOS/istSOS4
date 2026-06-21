@@ -2,7 +2,7 @@
 conftest.py -- shared fixtures for the OGC SensorThings API v1.1 conformance
 suite. Owned by the conformance LEAD; consumed (never edited) by c01/c02/c03.
 
-Fixture contract (see tests/docs/CONFORMANCE_PLAN.md):
+Fixture contract:
   base_url    (session)  -- STA_BASE_URL env var or the project default.
   client      (session)  -- configured STAClient (helpers in client.py).
   seed        (session)  -- deep-inserts the EXACT entitiesDefault.json subtree
