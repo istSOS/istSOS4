@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Optional
+import datetime
 
 from app.db.redis_db import redis
 from app.v1.connector.utils import flatten_stac_catalog
@@ -39,6 +40,8 @@ from app.v1.connector.utils import flatten_stac_catalog
 logger = logging.getLogger(__name__)
 
 _STAC_KEY_PREFIX = "stac:*"
+STAC_AVAILABILITY = False 
+LAST_FETCH: Optional[str] = None
 
 
 def _collection_key(collection_id: str) -> str:
@@ -97,6 +100,7 @@ def write_stac_catalog(root_dict: dict) -> None:
     To prevent orphaned data, it purges old keys using `SCAN` before saving 
     the new set. Readers hitting the cache mid-write may see a temporary miss.
     """
+    global STAC_AVAILABILITY, LAST_FETCH
 
     cursor = 0
     stale_keys: list[str] = []
@@ -111,6 +115,9 @@ def write_stac_catalog(root_dict: dict) -> None:
     flat = flatten_stac_catalog(root_dict)
     for key, value in flat.items():
         redis.set(key, json.dumps(value, default=str))
+
+    STAC_AVAILABILITY = True
+    LAST_FETCH = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     logger.info(
         "STAC cache written to Redis: %d keys (1 catalog, %d collections, %d items)",

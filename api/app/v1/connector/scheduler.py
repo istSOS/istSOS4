@@ -15,12 +15,12 @@
 """
 Scheduling layer for the istSOS Metadata Connector.
 
-Immediate first run: start_scheduler() forces an immediate first fire 
+Immediate first run: start_scheduler() forces an immediate first fire
 (next_run_time=now) and then settles into the normal interval after that.
 
 Cache writes: stac and dcat are written within one cycle, or neither is.
-A failure before both writes complete leaves the previous valid cache file
-untouched on disk.
+A failure before both writes complete leaves the previous valid Redis
+cache untouched.
 
 Public interface:
     start_scheduler(pool) -> AsyncIOScheduler
@@ -35,22 +35,22 @@ import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from app.v1.connector.cache import write_dcat, write_stac
+from app.v1.connector.cache import write_stac_catalog
 from app.v1.connector.config import get_settings
 from app.v1.connector.harvester import harvest
 from app.v1.connector.stac_transformer import build_stac_catalog
 
 logger = logging.getLogger(__name__)
 
-# Arbitrary fixed key for the advisory lock. Any int64 works as long as it
-# is consistent across all istSOS workers/replicas -- it just needs to not
-# collide with advisory lock keys used elsewhere in istSOS4.
-_HARVEST_LOCK_KEY = 7264_1995_01
+_HARVEST_LOCK_KEY = 726419950_1
 
 try:
+    # Both currently not implemented
     from app.v1.connector.dcat_transformer import build_dcat_catalog
+    from app.v1.connector.cache import write_dcat_catalog
 except ImportError:
-    build_dcat_catalog = None  # dcat_transformer.py not implemented yet
+    build_dcat_catalog = None
+    write_dcat_catalog = None
 
 
 def start_scheduler(pool: asyncpg.Pool) -> AsyncIOScheduler:
@@ -71,9 +71,9 @@ def start_scheduler(pool: asyncpg.Pool) -> AsyncIOScheduler:
         scheduled_harvest_job,
         trigger=IntervalTrigger(minutes=config.HARVEST_INTERVAL_MINUTES),
         args=[pool],
-        next_run_time=datetime.now(),  # fire immediately, then settle into the interval
+        next_run_time=datetime.now(),
         id="connector_harvest_cycle",
-        max_instances=1,  # a slow cycle should never overlap itself within one worker
+        max_instances=1,
     )
     scheduler.start()
     logger.info(
@@ -89,13 +89,10 @@ async def scheduled_harvest_job(pool: asyncpg.Pool) -> None:
     write cache, release lock.
 
     If the lock is not acquired (another worker is already mid-cycle),
-    this cycle is skipped entirely, not an error, just deferred to the
-    next scheduled fire.
+    this cycle is skipped entirely.
 
     Any exception during harvest or transform is caught and logged; the
-    cycle is abandoned and the previous valid cache file is left untouched.
-    This function never raises, APScheduler should never see an
-    exception propagate out of a scheduled job.
+    cycle is abandoned and the previous valid Redis cache is left untouched.
     """
     config = get_settings()
 
@@ -122,16 +119,20 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
     Run harvest + both transforms + both cache writes, holding the
     advisory lock for the whole duration. Raises on any failure so the
     caller's except block can log and skip the cycle cleanly.
+
+    STAC is always written. DCAT is written only when dcat_transformer.py
+    has been implemented (i.e. build_dcat_catalog is not None). The two
+    writes are independent -- a future DCAT failure will not roll back the
+    STAC write, and vice versa.
     """
     catalog = await harvest(connection)
 
-    stac_dict = build_stac_catalog(catalog, config)
-    write_stac(config, stac_dict)
-    logger.info("STAC cache written: %d Collections", catalog.thing_count)
+    stac_dict = build_stac_catalog(catalog)
+    write_stac_catalog(stac_dict)
 
     if build_dcat_catalog is not None:
         dcat_dict = build_dcat_catalog(catalog, config)
-        write_dcat(config, dcat_dict)
+        write_dcat_catalog(dcat_dict)
         logger.info("DCAT cache written: %d Datasets", catalog.thing_count)
     else:
         logger.warning(
