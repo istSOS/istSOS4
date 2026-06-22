@@ -45,7 +45,7 @@ same pattern once dcat_transformer.py lands.
 """
 
 from app import HOSTNAME, SUBPATH, VERSION
-from app.v1.connector.cache import get_catalog, get_collection, get_item, STAC_AVAILABILITY, LAST_FETCH
+from app.v1.connector.cache import get_catalog, get_collection, get_item, get_stac_metadata
 from app.v1.connector.config import get_settings
 
 from fastapi import APIRouter, status, Request
@@ -86,18 +86,23 @@ def _not_found(detail: str) -> JSONResponse:
 
 @v1.get("")
 async def get_connector_root(request: Request):
-    base_url = str(request.base_url).rstrip("/")
+    current_path = request.url.path.rstrip("/")
+    base_url = f"{request.url.scheme}://{request.url.netloc}"
+    
+    meta = get_stac_metadata()
     
     return {
-        "stac_availability": STAC_AVAILABILITY,
-        "stac_url": f"{base_url}/connector/stac",
-        "dcat_availability": False,
-        "dcat_url": [
-            f"{base_url}/connector/dcat",
-            f"{base_url}/connector/dcat.ttl"
-        ],
-        "harvester_interval_minutes": cache.harvester_interval_minutes,
-        "last_fetch": LAST_FETCH,
+        "stac_availability": meta["stac_availability"],
+        "stac_url": f"{base_url}{current_path}/stac",
+        
+        "dcat_availability": False, 
+        "dcat_url": {
+            "json": f"{base_url}{current_path}/dcat",
+            "ttl": f"{base_url}{current_path}/dcat.ttl"
+        },
+        
+        "harvester_interval_minutes": cache.HARVEST_INTERVAL_MINUTES,
+        "last_fetch": meta["last_fetch"]
     }
 
 
