@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any
 import datetime
 
 from app.db.redis_db import redis
@@ -42,6 +42,17 @@ logger = logging.getLogger(__name__)
 _STAC_KEY_PREFIX = "stac:*"
 STAC_AVAILABILITY = False 
 LAST_FETCH: Optional[str] = None
+
+
+def get_stac_metadata() -> Dict[str, Any]:
+    """Helper to fetch all metadata from Redis safely with defaults."""
+    raw_avail = redis.get("stac:meta:availability")
+    raw_fetch = redis.get("stac:meta:last_fetch")
+    
+    return {
+        "stac_availability": json.loads(raw_avail) if raw_avail else False,
+        "last_fetch": raw_fetch.decode("utf-8") if raw_fetch else None,
+    }
 
 
 def _collection_key(collection_id: str) -> str:
@@ -116,8 +127,8 @@ def write_stac_catalog(root_dict: dict) -> None:
     for key, value in flat.items():
         redis.set(key, json.dumps(value, default=str))
 
-    STAC_AVAILABILITY = True
-    LAST_FETCH = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    redis.set("stac:meta:availability", json.dumps(True))
+    redis.set("stac:meta:last_fetch", datetime.datetime.now(datetime.timezone.utc).isoformat())
 
     logger.info(
         "STAC cache written to Redis: %d keys (1 catalog, %d collections, %d items)",
