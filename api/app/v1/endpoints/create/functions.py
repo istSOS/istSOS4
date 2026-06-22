@@ -258,13 +258,13 @@ async def insert_sensor_entity(connection, payload, commit_id):
 
         datastreams = payload.pop("Datastreams", [])
 
-        # req/create-update-delete/create-entity + 18-088 §8.2.5: Sensor.metadata
-        # is stored in a JSON(B) column but its type depends on encodingType
-        # (e.g. for application/pdf it is a link, i.e. a bare string). A bare
-        # scalar is not valid JSON text, so JSON-encode it here; object metadata
-        # is already serialized by create_entity, so only non-dict values need it.
-        if "metadata" in payload and not isinstance(payload["metadata"], dict):
-            payload["metadata"] = json.dumps(payload["metadata"])
+        # conformance: Sensor.metadata is a VARCHAR(255) column (NOT JSON/JSONB),
+        # so a string value (e.g. the application/pdf link "Light flux sensor")
+        # must be persisted verbatim. json.dumps()-ing it stored the surrounding
+        # quotes literally and read back as "\"Light flux sensor\"" (double
+        # encoding) instead of the raw value the reference service returns, which
+        # the OGC TEAM Engine deep-insert Sensor check flags. Object metadata is
+        # still serialized to JSON text by create_entity (handles dict values).
 
         if commit_id is not None:
             payload["commit_id"] = commit_id
@@ -654,75 +654,90 @@ async def generate_feature_of_interest(payload, connection, commit_id=None):
             payload["datastream_id"],
         )
 
-        if result:
-            (
-                location_id,
-                name,
-                description,
-                encoding_type,
-                location,
-                properties,
-                gen_foi_id,
-            ) = result[0]
-
-            if gen_foi_id is None:
-                foi_payload = {
-                    "name": name,
-                    "description": description,
-                    "encodingType": encoding_type,
-                    "feature": location,
-                    "properties": properties,
-                }
-
-                if commit_id is not None:
-                    foi_payload["commit_id"] = commit_id
-
-                foi_id, _ = await create_entity(
-                    connection, "FeaturesOfInterest", foi_payload
-                )
-
-                update_query = """
-                    UPDATE sensorthings."Location"
-                    SET "gen_foi_id" = $1::bigint
-                    WHERE id = $2::bigint;
-                """
-                await connection.execute(update_query, foi_id, location_id)
-
-                await update_datastream_last_foi_id(
-                    connection, foi_id, payload["datastream_id"]
-                )
-
-                payload["featuresofinterest_id"] = foi_id
-            else:
-                select_query = """
-                    SELECT last_foi_id
-                    FROM sensorthings."Datastream"
-                    WHERE id = $1::bigint;
-                """
-                last_foi_id = await connection.fetchval(
-                    select_query, payload["datastream_id"]
-                )
-
-                select_query = """
-                    SELECT id
-                    FROM sensorthings."Observation"
-                    WHERE "datastream_id" = $1::bigint
-                    LIMIT 1;
-                """
-                observation_ids = await connection.fetch(
-                    select_query, payload["datastream_id"]
-                )
-
-                if last_foi_id is None or not observation_ids:
-                    await update_datastream_last_foi_id(
-                        connection, gen_foi_id, payload["datastream_id"]
-                    )
-
-                payload["featuresofinterest_id"] = gen_foi_id
-        else:
+        if not result:
             raise ValueError(
                 "Can not generate foi for Thing with no locations."
             )
+
+        row = result[0]
+
+        # conformance/concurrency: the auto-FoI find-or-create must be atomic.
+        # Two Observations inserted concurrently for the same Thing/Location
+        # both read gen_foi_id IS NULL and would each create a FoI -> duplicate
+        # FeaturesOfInterest rows, or (when custom.duplicates is OFF and the
+        # unique_featuresOfInterest_name constraint exists) a UniqueViolation
+        # that surfaces as HTTP 500. Use double-checked locking: the common
+        # steady-state path (gen_foi_id already set) stays lock-free; only when
+        # the FoI does not yet exist do we re-read the Location row FOR UPDATE so
+        # exactly one transaction creates it and any waiter reuses the result.
+        if row["gen_foi_id"] is None:
+            locked = await connection.fetch(
+                query_location_from_thing_datastream + " FOR UPDATE OF l",
+                payload["datastream_id"],
+            )
+            if locked:
+                row = locked[0]
+
+        if row["gen_foi_id"] is None:
+            # We hold the Location row lock and it is still unstamped: we are the
+            # sole creator of the auto-generated FoI.
+            foi_payload = {
+                "name": row["name"],
+                "description": row["description"],
+                "encodingType": row["encodingType"],
+                "feature": row["location"],
+                "properties": row["properties"],
+            }
+
+            if commit_id is not None:
+                foi_payload["commit_id"] = commit_id
+
+            foi_id, _ = await create_entity(
+                connection, "FeaturesOfInterest", foi_payload
+            )
+
+            update_query = """
+                UPDATE sensorthings."Location"
+                SET "gen_foi_id" = $1::bigint
+                WHERE id = $2::bigint;
+            """
+            await connection.execute(update_query, foi_id, row["id"])
+
+            await update_datastream_last_foi_id(
+                connection, foi_id, payload["datastream_id"]
+            )
+
+            payload["featuresofinterest_id"] = foi_id
+        else:
+            # Reuse the existing auto-generated FoI (fast path, or a waiter that
+            # lost the create race and re-read the now-stamped gen_foi_id).
+            gen_foi_id = row["gen_foi_id"]
+
+            select_query = """
+                SELECT last_foi_id
+                FROM sensorthings."Datastream"
+                WHERE id = $1::bigint;
+            """
+            last_foi_id = await connection.fetchval(
+                select_query, payload["datastream_id"]
+            )
+
+            select_query = """
+                SELECT id
+                FROM sensorthings."Observation"
+                WHERE "datastream_id" = $1::bigint
+                LIMIT 1;
+            """
+            observation_ids = await connection.fetch(
+                select_query, payload["datastream_id"]
+            )
+
+            if last_foi_id is None or not observation_ids:
+                await update_datastream_last_foi_id(
+                    connection, gen_foi_id, payload["datastream_id"]
+                )
+
+            payload["featuresofinterest_id"] = gen_foi_id
 
 
 async def update_datastream_observedArea(conn, datastream_id, foi_id):
