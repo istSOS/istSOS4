@@ -13,99 +13,108 @@
 # limitations under the License.
 
 """
-Cache reads for the connector API layer.
+Redis cache layer for the STAC connector API.
 
-Backing store: a JSON file on disk, written once per harvest cycle by
-scheduler.py. This is a deliberate stand-in for Redis -- the interface
-shape (async, returns dict | None) matches what Harvesting-Layer-Reference.md
-specifies for the eventual Redis-backed cache.py, so swapping the backend
-later does not require touching api.py or scheduler.py's call sites.
+Uses the synchronous Redis client from `app.db.redis_db` to match the sta2rest 
+pattern. While the reader functions use `async def` to match API conventions, 
+their bodies make direct, fast blocking calls (sub-millisecond) to avoid 
+introducing a separate async client pattern.
 
-These functions never trigger a harvest. If the cache file does not exist
-yet (first boot, before the first scheduled cycle completes), they return
-None -- the API layer is responsible for turning that into a 503.
-
-Public interface:
-    get_stac(config) -> dict | None
-    get_dcat(config) -> dict | None
+Data is stored flat, allowing the API to fetch individual Catalogs, Collections, 
+or Items instantly by key without loading the entire tree. If a key is missing 
+(e.g., before the first harvest or after a deletion), these functions return 
+None, leaving the API layer to handle 404 or 503 errors.
 """
+
 
 from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 from typing import Optional
 
-from app.v1.connector.config import Settings
+from app.db.redis_db import redis
+from app.v1.connector.utils import flatten_stac_catalog
 
 logger = logging.getLogger(__name__)
 
+_STAC_KEY_PREFIX = "stac:*"
 
-def _read_json(path: Path) -> Optional[dict]:
+
+def _collection_key(collection_id: str) -> str:
+    return f"stac:collection:{collection_id}"
+
+
+def _item_key(collection_id: str, item_id: str) -> str:
+    return f"stac:item:{collection_id}:{item_id}"
+
+
+async def get_catalog() -> Optional[dict]:
     """
-    Read and parse a JSON file from disk. Returns None if the file does not
-    exist or cannot be parsed -- both are treated as "cache not ready yet"
-    rather than as errors, since the API layer's only valid response in
-    that case is a 503, not a crash.
+    Return the cached root Catalog dict (collection_ids list, no embedded
+    Collections), or None if no harvest cycle has written it yet.
     """
-    if not path.exists():
+    raw = redis.get("stac:catalog")
+    if raw is None:
         return None
-    try:
-        with path.open("r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        logger.exception("Failed to read cache file: %s", path)
+    return json.loads(raw)
+
+
+async def get_collection(collection_id: str) -> Optional[dict]:
+    """
+    Return one cached Collection dict (item_ids list, no embedded Items),
+    or None if this collection_id has never been written -- either no
+    harvest cycle has completed yet, or the Thing it was built from no
+    longer exists in the current catalog.
+    """
+    raw = redis.get(_collection_key(collection_id))
+    if raw is None:
         return None
+    return json.loads(raw)
 
 
-async def get_stac(config: Settings) -> Optional[dict]:
+async def get_item(collection_id: str, item_id: str) -> Optional[dict]:
     """
-    Return the cached STAC catalog dict, or None if the cache file has not
-    been written yet by a harvest cycle.
+    Return one cached Item dict, or None if this (collection_id, item_id)
+    pair has never been written.
 
-    Reads from disk on every call -- no in-memory caching at this layer.
+    collection_id is required, not inferred, since the cache key is
+    namespaced by collection_id.
     """
-    return _read_json(Path(config.STAC_CACHE_PATH))
+    raw = redis.get(_item_key(collection_id, item_id))
+    if raw is None:
+        return None
+    return json.loads(raw)
 
 
-async def get_dcat(config: Settings) -> Optional[dict]:
+def write_stac_catalog(root_dict: dict) -> None:
     """
-    Return the cached DCAT-AP catalog dict, or None if the cache file has
-    not been written yet by a harvest cycle.
+    Flattens and writes the STAC catalog to Redis, clearing old keys first.
 
-    Reads from disk on every call -- no in-memory caching at this layer.
+    Following the sta2rest pattern, this uses the synchronous redis client 
+    imported from app.db.redis_db. It runs safely as a background task. 
+
+    To prevent orphaned data, it purges old keys using `SCAN` before saving 
+    the new set. Readers hitting the cache mid-write may see a temporary miss.
     """
-    return _read_json(Path(config.DCAT_CACHE_PATH))
 
+    cursor = 0
+    stale_keys: list[str] = []
+    while True:
+        cursor, keys = redis.scan(cursor=cursor, match=_STAC_KEY_PREFIX)
+        stale_keys.extend(keys)
+        if cursor == 0:
+            break
+    if stale_keys:
+        redis.delete(*stale_keys)
 
-def write_stac(config: Settings, catalog: dict) -> None:
-    """
-    Write the STAC catalog dict to the cache file. Called by scheduler.py
-    once per harvest cycle, never by api.py.
+    flat = flatten_stac_catalog(root_dict)
+    for key, value in flat.items():
+        redis.set(key, json.dumps(value, default=str))
 
-    Writes to a temp file then renames over the target, so a reader never
-    observes a partially written file mid-write.
-    """
-    path = Path(config.STAC_CACHE_PATH)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    with tmp_path.open("w", encoding="utf-8") as f:
-        json.dump(catalog, f, default=str)
-    tmp_path.replace(path)
-
-
-def write_dcat(config: Settings, catalog: dict) -> None:
-    """
-    Write the DCAT-AP catalog dict to the cache file. Called by
-    scheduler.py once per harvest cycle, never by api.py.
-
-    Writes to a temp file then renames over the target, so a reader never
-    observes a partially written file mid-write.
-    """
-    path = Path(config.DCAT_CACHE_PATH)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    with tmp_path.open("w", encoding="utf-8") as f:
-        json.dump(catalog, f, default=str)
-    tmp_path.replace(path)
+    logger.info(
+        "STAC cache written to Redis: %d keys (1 catalog, %d collections, %d items)",
+        len(flat),
+        len(root_dict.get("collections", [])),
+        sum(len(c.get("items", [])) for c in root_dict.get("collections", [])),
+    )
