@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 
@@ -79,6 +80,8 @@ class Config:
     mqtt_tls_insecure: bool
     mqtt_topics: list[str]
     payload_separator: str
+    payload_date_format: str | None
+    payload_tz: str
     reconnect_delay_sec: float
     queue_maxsize: int
 
@@ -156,6 +159,15 @@ def parse_payload_separator(value: Any) -> str:
     return separator
 
 
+def parse_payload_timezone(value: Any) -> str:
+    tz_name = clean_text(value) or "UTC"
+    try:
+        ZoneInfo(tz_name)
+    except ZoneInfoNotFoundError as exc:
+        raise RuntimeError(f"Unknown mqtt.tz timezone: {tz_name}") from exc
+    return tz_name
+
+
 def required_text(
     values: dict[str, Any], key: str, section: str, dry_run: bool = False
 ) -> str:
@@ -212,6 +224,8 @@ def load_config() -> Config:
         payload_separator=parse_payload_separator(
             mqtt.get("payload_separator")
         ),
+        payload_date_format=clean_text(mqtt.get("date_format")),
+        payload_tz=parse_payload_timezone(mqtt.get("tz")),
         reconnect_delay_sec=float(mqtt.get("reconnect_delay_sec", 10.0)),
         queue_maxsize=int(mqtt.get("queue_maxsize", 1000)),
         istsos_url=required_text(istsos, "url", "istsos", dry_run),
@@ -266,8 +280,24 @@ def datastreams_for_topic(
     return None
 
 
+def parse_phenomenon_time(
+    value: str, date_format: str | None = None, tz_name: str = "UTC"
+) -> str:
+    if date_format:
+        parsed = datetime.strptime(value, date_format)
+    else:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo(tz_name))
+    return parsed.isoformat()
+
+
 def parse_payload(
-    payload: bytes, separator: str = ","
+    payload: bytes,
+    separator: str = ",",
+    date_format: str | None = None,
+    tz_name: str = "UTC",
 ) -> tuple[list[str], str]:
     parts = [
         part.strip() for part in payload.decode("utf-8").split(separator)
@@ -278,8 +308,10 @@ def parse_payload(
         )
 
     timestamp, *values = parts
-    datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-    return values, timestamp
+    phenomenon_time = parse_phenomenon_time(
+        timestamp, date_format=date_format, tz_name=tz_name
+    )
+    return values, phenomenon_time
 
 
 def now_utc_iso() -> str:
@@ -346,7 +378,10 @@ class Processor:
 
         try:
             values, phenomenon_time = parse_payload(
-                message.payload, self.config.payload_separator
+                message.payload,
+                self.config.payload_separator,
+                self.config.payload_date_format,
+                self.config.payload_tz,
             )
         except Exception:
             LOGGER.exception(
