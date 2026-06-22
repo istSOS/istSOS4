@@ -160,7 +160,7 @@ async def update_location_entity(
             if not isinstance(thing, dict) or list(thing.keys()) != [
                 "@iot.id"
             ]:
-                raise Exception(
+                raise ValueError(
                     "Invalid format: Each thing should be a dictionary with a single key '@iot.id'."
                 )
             thing_id = thing["@iot.id"]
@@ -227,7 +227,7 @@ async def update_thing_entity(connection, thing_id, payload):
             if not isinstance(location, dict) or list(location.keys()) != [
                 "@iot.id"
             ]:
-                raise Exception(
+                raise ValueError(
                     "Invalid format: Each location should be a dictionary with a single key '@iot.id'."
                 )
             location_id = location["@iot.id"]
@@ -303,7 +303,7 @@ async def update_historical_location_entity(
             if not isinstance(location, dict) or list(location.keys()) != [
                 "@iot.id"
             ]:
-                raise Exception(
+                raise ValueError(
                     "Invalid format: Each location should be a dictionary with a single key '@iot.id'."
                 )
             location_id = location["@iot.id"]
@@ -401,7 +401,11 @@ async def update_datastream_entity(connection, datastream_id, payload):
 async def update_feature_of_interest_entity(
     connection, feature_of_interest_id, payload
 ):
-    if payload["feature"]:
+    # req/create-update-delete/update-entity (18-088 §10.3): PATCH is a partial
+    # merge, so only validate/transform "feature" when the body actually
+    # supplies it. Using payload["feature"] unconditionally raised KeyError
+    # (-> 400) whenever a partial PATCH omitted the geometry.
+    if payload.get("feature"):
         validate_epsg(payload["feature"])
 
     await handle_nested_entities(
@@ -457,7 +461,7 @@ async def handle_nested_entities(
                 if not isinstance(item, dict) or list(item.keys()) != [
                     "@iot.id"
                 ]:
-                    raise Exception(
+                    raise ValueError(
                         f"Invalid format: Each item in '{key}' should be a dictionary with a single key '@iot.id'."
                     )
                 related_id = item["@iot.id"]
@@ -466,7 +470,7 @@ async def handle_nested_entities(
                 if not isinstance(related_id, int) or isinstance(
                     related_id, bool
                 ):
-                    raise Exception(
+                    raise ValueError(
                         f"'@iot.id' must be an integer, got {type(related_id).__name__}"
                     )
 

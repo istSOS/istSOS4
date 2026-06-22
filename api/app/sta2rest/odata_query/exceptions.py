@@ -168,3 +168,15 @@ class InvalidFieldException(ODataException):
     def __init__(self, field_name: str):
         self.field_name = field_name
         super().__init__(f"Invalid field: {field_name}")
+
+
+class InvalidCollectionException(ODataException):
+    """
+    Thrown when a resource path references a collection / entity set that does
+    not exist. Per 18-088 §9.2 (resource-path) this is a client error
+    (HTTP 4xx, normally 404), not a server error.
+    """
+
+    def __init__(self, name: str):
+        self.name = name
+        super().__init__(f"Invalid resource path: unknown collection '{name}'")

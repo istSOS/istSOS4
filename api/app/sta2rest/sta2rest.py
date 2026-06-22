@@ -28,6 +28,7 @@ from app import AUTHORIZATION, DEBUG, NETWORK, VERSION, VERSIONING
 from app.utils.utils import insert_navigation_link
 from dateutil.parser import isoparse
 
+from .odata_query.exceptions import InvalidCollectionException
 from .sta_parser.ast import *
 from .sta_parser.lexer import Lexer
 from .sta_parser.parser import Parser
@@ -657,6 +658,92 @@ class STA2REST:
         return query_converted
 
     @staticmethod
+    def convert_filter_to_ids_query(full_path: str) -> str:
+        """
+        Build a SQL statement that selects the DISTINCT primary-key ids of the
+        entities a GET on ``full_path`` would return, using the SAME filter
+        translator and cross-entity semi-join the GET path uses.
+
+        This deliberately reuses the very same ``$filter`` parsing
+        (Lexer/Parser -> FilterVisitor.visit_FilterNode) and the identical
+        semi-join construction found in ``NodeVisitor.visit_QueryNode``
+        (visitors.py, the ``if node.filter:`` block), so the set of ids returned
+        is EXACTLY the set ``GET <full_path>`` matches — including
+        cross-entity filters such as ``$filter=Datastream/name eq 'x'``.
+
+        Unlike the GET path it intentionally emits NO ``LIMIT``/``OFFSET``: the
+        caller (collection-level bulk delete) must operate on the complete match
+        set, not just one page. A malformed ``$filter`` makes the parser /
+        visitor raise, which the caller maps to HTTP 400 (never 500), mirroring
+        the GET error handling.
+
+        Returns:
+            str: a ``SELECT DISTINCT "<table>".id FROM ... WHERE <filter>`` SQL
+            string (literal-bound), or ``None`` when there is no filter.
+        """
+        from sqlalchemy import distinct, select
+
+        import app.models as models
+        from app.db.sqlalchemy_db import engine
+
+        path = full_path
+        query = None
+        if "?" in full_path:
+            path, query = full_path.split("?")
+
+        uri = STA2REST.parse_uri(path)
+        if not uri:
+            raise Exception("Error parsing uri")
+
+        main_entity, _ = uri["entity"]
+
+        query_ast = QueryNode(
+            None, None, None, None, None, None, None, None, None, None, False
+        )
+        if query:
+            lexer = Lexer(query)
+            tokens = lexer.tokenize()
+            parser = Parser(tokens)
+            query_ast = parser.parse()
+
+        if not query_ast.filter:
+            return None
+
+        id_attr = getattr(getattr(models, main_entity), "id")
+
+        # Reuse the GET path's $filter translator verbatim:
+        # NodeVisitor.visit_FilterNode is the SAME method read.py drives through
+        # convert_query, so the OData lexer/parser + FilterVisitor produce an
+        # identical filter clause (and identical join_relationships for
+        # cross-entity filters). A bad filter raises here -> caller returns 400.
+        visitor = NodeVisitor(main_entity)
+        filter_clause, join_relationships = visitor.visit_FilterNode(
+            query_ast.filter, main_entity
+        )
+
+        id_query = select(distinct(id_attr))
+
+        if join_relationships:
+            # Identical semi-join semantics to NodeVisitor.visit_QueryNode: a
+            # cross-entity filter must select main entities that HAVE a matching
+            # related row, without row multiplication. Build the join+filter
+            # subquery and restrict ids to it.
+            id_subquery = select(id_attr)
+            for relationship in join_relationships:
+                id_subquery = id_subquery.join(relationship)
+            id_subquery = id_subquery.where(filter_clause)
+            id_query = id_query.where(id_attr.in_(id_subquery))
+        else:
+            id_query = id_query.where(filter_clause)
+
+        return str(
+            id_query.compile(
+                dialect=engine.dialect,
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+
+    @staticmethod
     def parse_entity(entity: str):
         # Check if we have an id in the entity and match only the number
         match = re.search(r"\(\d+\)", entity)
@@ -699,9 +786,12 @@ class STA2REST:
             if index > 9:
                 single = True
         # Parse first entity
-        main_entity = STA2REST.parse_entity(parts.pop(0))
+        first_part = parts.pop(0)
+        main_entity = STA2REST.parse_entity(first_part)
         if not main_entity:
-            raise Exception("Error parsing uri: invalid entity")
+            # req/resource-path (18-088 §9.2): an unknown collection/entity is a
+            # client error (4xx/404), not a server error.
+            raise InvalidCollectionException(first_part)
 
         # Check all the entities in the uri
         entities = []
