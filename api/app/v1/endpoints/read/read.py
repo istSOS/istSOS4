@@ -273,9 +273,12 @@ async def asyncpg_stream_results(
             if value:
                 # 18-088 §9.2 Usage 5 ($value): emit the raw scalar literal as
                 # text/plain (the query already extracts it with JSON ->> so it
-                # is unquoted text). No JSON envelope / quoting is applied. If no
-                # row matches the generator yields nothing, which the caller maps
-                # to a 404.
+                # is unquoted text). No JSON envelope / quoting is applied.
+                # A row that EXISTS but whose property value is null still
+                # answers 200 with the literal `null` (OData 4.0 §11.2.3.1 /
+                # matches the reference instance); only a non-existent
+                # entity/property yields no row at all, which the caller maps to
+                # a 404. Hence yield the `null` literal instead of skipping it.
                 while True:
                     partition = await connection.fetch(
                         f"FETCH {PARTITION_CHUNK} FROM my_cursor"
@@ -283,8 +286,7 @@ async def asyncpg_stream_results(
                     if not partition:
                         break
                     raw = partition[0]["json"]
-                    if raw is not None:
-                        yield str(raw)
+                    yield "null" if raw is None else str(raw)
                 await connection.execute("CLOSE my_cursor")
                 if current_user is not None:
                     await connection.execute("RESET ROLE")

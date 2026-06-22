@@ -133,6 +133,12 @@ async def create_datastream(
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
         return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+    except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
+        # conformance: req/create-update-delete/create-entity — a payload that
+        # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
+        # related entity missing a required column) is a client error (400), not
+        # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
+        return error_response(status.HTTP_400_BAD_REQUEST, "Invalid entity: a required value is missing or not allowed.")
     except Exception:
         # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
         return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
@@ -216,6 +222,12 @@ async def create_datastream_for_thing(
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
         return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+    except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
+        # conformance: req/create-update-delete/create-entity — a payload that
+        # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
+        # related entity missing a required column) is a client error (400), not
+        # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
+        return error_response(status.HTTP_400_BAD_REQUEST, "Invalid entity: a required value is missing or not allowed.")
     except Exception:
         # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
         return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
@@ -302,6 +314,12 @@ async def create_datastream_for_sensor(
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
         return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+    except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
+        # conformance: req/create-update-delete/create-entity — a payload that
+        # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
+        # related entity missing a required column) is a client error (400), not
+        # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
+        return error_response(status.HTTP_400_BAD_REQUEST, "Invalid entity: a required value is missing or not allowed.")
     except Exception:
         # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
         return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
@@ -404,6 +422,12 @@ if NETWORK:
         except asyncpg.ForeignKeyViolationError:
             # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
             return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+        except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
+            # conformance: req/create-update-delete/create-entity — a payload that
+            # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
+            # related entity missing a required column) is a client error (400), not
+            # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
+            return error_response(status.HTTP_400_BAD_REQUEST, "Invalid entity: a required value is missing or not allowed.")
         except Exception:
             # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
             return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
@@ -490,6 +514,12 @@ async def create_datastream_for_observed_property(
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
         return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+    except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
+        # conformance: req/create-update-delete/create-entity — a payload that
+        # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
+        # related entity missing a required column) is a client error (400), not
+        # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
+        return error_response(status.HTTP_400_BAD_REQUEST, "Invalid entity: a required value is missing or not allowed.")
     except Exception:
         # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
         return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")

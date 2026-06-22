@@ -16,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 import sample_data
-from client import id_from_self_link
+from client import entity_id, format_id, id_from_self_link
 from c02.conftest import _create_datastream_tree
 
 pytestmark = pytest.mark.c02
@@ -350,3 +350,113 @@ def test_patch_link_to_nonexistent_returns_4xx(client, unique_name, cleanup):
             f"Postgres internal string {marker!r} must not appear in PATCH error "
             f"response body; body: {resp.text[:400]}"
         )
+
+
+# ===========================================================================
+# CREATE 8 – deep-insert integrity violations → 400 (not 500)
+#   req/create-update-delete/create-entity (18-088 §10.2)
+# ===========================================================================
+# A deep-insert whose nested/inline entity violates a DB integrity constraint
+# (e.g. a NOT NULL column omitted) is an INVALID request: it must be rejected
+# with a controlled 400, never crash with a 500. Regression: these
+# NotNull/Check violations used to propagate as unhandled exceptions → 500.
+
+@pytest.mark.c02
+def test_deep_insert_observation_inline_foi_missing_encodingtype_returns_400(
+    client, unique_name, cleanup
+):
+    """req/create-update-delete/create-entity — POST Observation with an inline
+    FeatureOfInterest missing the mandatory ``encodingType`` → 400, not 500."""
+    tree = _create_datastream_tree(client, unique_name, cleanup)
+
+    resp = client.create("Observations", {
+        "phenomenonTime": "2015-03-01T00:00:00Z",
+        "result": 100,
+        # inline FoI WITHOUT encodingType (NOT NULL in the schema)
+        "FeatureOfInterest": {
+            "name": f"{unique_name('foi')} station",
+            "description": "missing encodingType",
+            "feature": {"type": "Point", "coordinates": [-114.05, 51.05]},
+        },
+        "Datastream": {"@iot.id": tree["ds_id"]},
+    })
+
+    assert resp.status_code == 400, (
+        f"deep-insert with FoI missing encodingType must be 400 (not 500), "
+        f"got {resp.status_code}: {resp.text[:300]}"
+    )
+    body = resp.json()
+    assert body.get("code") == 400 and body.get("type") == "error", body
+    # no raw Postgres internals leaked in the controlled message
+    raw_lower = resp.text.lower()
+    for marker in _POSTGRES_LEAK_MARKERS:
+        assert marker.lower() not in raw_lower, (
+            f"Postgres internal {marker!r} must not leak; body: {resp.text[:300]}"
+        )
+
+
+@pytest.mark.c02
+def test_deep_insert_datastream_inline_sensor_missing_encodingtype_returns_400(
+    client, unique_name, cleanup
+):
+    """req/create-update-delete/create-entity — POST Datastream with an inline
+    Sensor missing the mandatory ``encodingType`` → 400, not 500."""
+    tag = unique_name("ds-bad-sensor")
+    t_resp = client.create("Things", sample_data.minimal_thing(tag))
+    assert t_resp.status_code == 201
+    cleanup(client.location_of(t_resp))
+    t_id = id_from_self_link(client.location_of(t_resp))
+
+    resp = client.create("Datastreams", {
+        "name": f"{tag} DS",
+        "description": "inline sensor missing encodingType",
+        "unitOfMeasurement": sample_data.unit_lumen(),
+        "observationType": sample_data.OM_MEASUREMENT,
+        "Thing": {"@iot.id": t_id},
+        # inline Sensor WITHOUT encodingType (NOT NULL in the schema)
+        "Sensor": {"name": f"{tag} sensor", "description": "no encodingType"},
+        "ObservedProperty": sample_data.minimal_observed_property(tag),
+    })
+
+    assert resp.status_code == 400, (
+        f"deep-insert with Sensor missing encodingType must be 400 (not 500), "
+        f"got {resp.status_code}: {resp.text[:300]}"
+    )
+    body = resp.json()
+    assert body.get("code") == 400 and body.get("type") == "error", body
+
+
+@pytest.mark.c02
+def test_deep_insert_observation_valid_foi_returns_201(client, unique_name, cleanup):
+    """req/create-update-delete/create-entity — a VALID deep-insert (Observation
+    with a complete inline FeatureOfInterest) still returns 201.
+
+    Guards the integrity-violation→400 fix against over-reach: well-formed
+    deep-inserts must keep succeeding.
+    """
+    tree = _create_datastream_tree(client, unique_name, cleanup)
+
+    resp = client.create("Observations", {
+        "phenomenonTime": "2015-03-02T00:00:00Z",
+        "result": 101,
+        "FeatureOfInterest": {
+            "name": f"{unique_name('foi')} station",
+            "description": "complete inline FoI",
+            "encodingType": sample_data.GEOJSON,
+            "feature": {"type": "Point", "coordinates": [-114.05, 51.05]},
+        },
+        "Datastream": {"@iot.id": tree["ds_id"]},
+    })
+
+    assert resp.status_code == 201, (
+        f"valid deep-insert Observation+FoI must be 201, got "
+        f"{resp.status_code}: {resp.text[:300]}"
+    )
+    loc_hdr = resp.headers.get("location", "")
+    assert loc_hdr.startswith("http"), f"missing Location header: {loc_hdr!r}"
+    cleanup(loc_hdr)
+    obs_id = id_from_self_link(loc_hdr)
+    foi = client.nav(
+        f"{client.base_url}/Observations({format_id(obs_id)})/FeatureOfInterest"
+    )
+    cleanup(f"{client.base_url}/FeaturesOfInterest({format_id(entity_id(foi))})")

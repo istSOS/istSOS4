@@ -314,3 +314,76 @@ def test_patch_nonexistent_observation(client):
     assert resp.status_code == 404, (
         f"PATCH on non-existent Observation must return 404, got {resp.status_code}"
     )
+
+
+# ===========================================================================
+# UPDATE 11 – PATCH with INLINE related entities is rejected with 400
+#   req/create-update-delete/update-entity (18-088 §10.3)
+# ===========================================================================
+# A PATCH may only (re)link related entities by reference ({"@iot.id": <id>}).
+# A full inline related object (no @iot.id) is an illegal update payload and
+# must be rejected with a clean 400 — NOT crash with a 500, and NOT be silently
+# accepted (200). Regression: these inline-related cases used to raise a bare
+# Exception that the handler mapped to 500.
+
+@pytest.mark.c02
+def test_patch_thing_inline_location_returns_400(client, unique_name, cleanup):
+    """req/create-update-delete/update-entity — PATCH Thing with an inline
+    Location (no @iot.id) → 400, not 500."""
+    tag = unique_name("patch-inline")
+    t_resp = client.create("Things", {
+        **sample_data.minimal_thing(tag),
+        "Locations": [sample_data.minimal_location(tag)],
+    })
+    assert t_resp.status_code == 201, t_resp.text[:200]
+    thing_url = client.location_of(t_resp)
+    cleanup(thing_url)
+    thing_id = id_from_self_link(thing_url)
+
+    resp = client.patch(
+        f"Things({format_id(thing_id)})",
+        json={"Locations": [sample_data.minimal_location(unique_name("inline"))]},
+    )
+    assert resp.status_code == 400, (
+        f"PATCH with inline Location must be 400, got {resp.status_code}: {resp.text[:200]}"
+    )
+    body = resp.json()
+    assert body.get("code") == 400 and body.get("type") == "error", body
+
+
+@pytest.mark.c02
+def test_patch_thing_inline_datastream_returns_400(client, unique_name, cleanup):
+    """req/create-update-delete/update-entity — PATCH Thing with an inline
+    Datastream (no @iot.id) → 400, not 500."""
+    tag = unique_name("patch-inline-ds")
+    t_resp = client.create("Things", sample_data.minimal_thing(tag))
+    assert t_resp.status_code == 201, t_resp.text[:200]
+    thing_url = client.location_of(t_resp)
+    cleanup(thing_url)
+    thing_id = id_from_self_link(thing_url)
+
+    resp = client.patch(
+        f"Things({format_id(thing_id)})",
+        json={"Datastreams": [{"unitOfMeasurement": sample_data.unit_lumen()}]},
+    )
+    assert resp.status_code == 400, (
+        f"PATCH with inline Datastream must be 400, got {resp.status_code}: {resp.text[:200]}"
+    )
+    body = resp.json()
+    assert body.get("code") == 400 and body.get("type") == "error", body
+
+
+@pytest.mark.c02
+def test_patch_datastream_inline_sensor_returns_400(client, unique_name, cleanup):
+    """req/create-update-delete/update-entity — PATCH Datastream with an inline
+    Sensor (no @iot.id) → 400, not 500."""
+    tree = _create_datastream_tree(client, unique_name, cleanup)
+    resp = client.patch(
+        f"Datastreams({format_id(tree['ds_id'])})",
+        json={"Sensor": sample_data.minimal_sensor(unique_name("inline-sensor"))},
+    )
+    assert resp.status_code == 400, (
+        f"PATCH with inline Sensor must be 400, got {resp.status_code}: {resp.text[:200]}"
+    )
+    body = resp.json()
+    assert body.get("code") == 400 and body.get("type") == "error", body

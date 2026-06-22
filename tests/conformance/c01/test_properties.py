@@ -186,6 +186,40 @@ class TestDollarValue:
             f"Expected raw '{seed.ds2.name}', got: {resp.text!r}"
         )
 
+    def test_null_property_dollar_value_returns_200_null(self, client, seed):
+        """req/resource-path (Usage 5) — $value of a present-but-null property
+        returns 200 with the literal ``null``, NOT 404.
+
+        18-088 §9.2 Usage 5 / OData 4.0 §11.2.3.1: 404 is reserved for a
+        non-existent entity/property; a property that EXISTS but is null still
+        answers 200. The seed Observations are posted without ``resultTime`` (see
+        entitiesDefault.json), so ``resultTime`` is null in the database.
+
+        Regression: the $value accessor used to skip a null value and yield
+        nothing, which the streaming layer mapped to a spurious 404.
+        """
+        obs_id = seed.ds1.observation_ids[0]
+
+        # Sanity: the property addressed below really is null on this entity.
+        prop = client.get(f"Observations({format_id(obs_id)})/resultTime")
+        assert prop.status_code == 200, (
+            f"GET resultTime should be 200, got {prop.status_code}"
+        )
+        assert prop.json().get("resultTime") is None, (
+            "precondition: seed Observation resultTime must be null"
+        )
+
+        resp = client.get(
+            f"Observations({format_id(obs_id)})/resultTime/$value"
+        )
+        assert resp.status_code == 200, (
+            f"$value of a null property must be 200 (not 404), got "
+            f"{resp.status_code}: {resp.text[:200]}"
+        )
+        assert resp.text.strip() == "null", (
+            f"$value of a null property must be the literal null, got {resp.text!r}"
+        )
+
 
 # ============================================================================
 # 12. Nested property + $value on a related entity
