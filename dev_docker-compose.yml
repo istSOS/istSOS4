@@ -4,6 +4,7 @@ services:
       context: ./database
       dockerfile: Dockerfile
     restart: always
+    container_name: istsos4-database
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -31,12 +32,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - istsos4-network
 
   api:
     build:
       context: ./api
       dockerfile: Dockerfile
     restart: always
+    container_name: istsos4-api
     depends_on:
       database:
         condition: service_healthy
@@ -73,17 +77,24 @@ services:
     volumes:
       - ./api/app:/code/app
     working_dir: /code
+    networks:
+      - istsos4-network
 
   redis:
     image: redis:7.4.0-alpine3.20
     restart: always
+    container_name: istsos4-redis
     volumes:
       - v-istsos4-redis-data:/data
+    networks:
+      - istsos4-network
 
   dummy_data:
     build:
       context: ./dummy_data
       dockerfile: Dockerfile
+    restart: on-failure
+    container_name: istsos4-dummy-data
     environment:
       HOSTNAME: ${HOSTNAME}
       SUBPATH: ${SUBPATH}
@@ -112,16 +123,22 @@ services:
     depends_on:
       database:
         condition: service_healthy
+    networks:
+      - istsos4-network
 
   docs:
     build:
       context: ./docs/mkdocs
       dockerfile: dockerfile
     restart: always
+    container_name: istsos4-docs
     ports:
       - 8019:8000
     volumes:
       - ./docs/mkdocs:/docs
+    networks:
+      - istsos4-network
+
 
 # You might need to run `sudo chown -R $USER schemaspy/` to fix permissions
 # schemaspy:
@@ -131,6 +148,10 @@ services:
 #   command: [ "-t", "pgsql11", "-db", "istsos", "-host", "database", "-port", "5432", "-s", "sensorthings_history", "-u", "postgres", "-p", "postgres", "-vizjs" ]
 #   depends_on:
 #     - database
+
+networks:
+  istsos4-network:
+    name: istsos4-network
 
 volumes:
   v-istsos4-database-data:

@@ -40,6 +40,7 @@ from app.v1.endpoints.delete import (
 from app.v1.endpoints.delete import (
     historical_location as delete_historical_location,
 )
+from app.v1.endpoints.delete import filtered_delete_observation
 from app.v1.endpoints.delete import location as delete_location
 from app.v1.endpoints.delete import network as delete_network
 from app.v1.endpoints.delete import observation as delete_observation
@@ -260,3 +261,4 @@ v1.include_router(delete_sensor.v1)
 v1.include_router(delete_datastream.v1)
 v1.include_router(delete_feature_of_interest.v1)
 v1.include_router(delete_observation.v1)
+v1.include_router(filtered_delete_observation.v1)

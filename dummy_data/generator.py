@@ -20,7 +20,6 @@ from datetime import datetime, time
 
 import asyncpg
 import isodate
-from asyncpg.types import Range
 
 hostname = os.getenv("HOSTNAME", "http://localhost:8018")
 subpath = os.getenv("SUBPATH", "/istsos4")
@@ -489,7 +488,8 @@ async def generate_featuresofinterest(conn, commit_id):
 
 async def insert_observations(conn, observations, commit_id):
     cols = [
-        "phenomenonTime",
+        "phenomenonTimeStart",
+        "phenomenonTimeEnd",
         "resultTime",
         "resultNumber",
         "resultType",
@@ -521,8 +521,9 @@ async def insert_observations(conn, observations, commit_id):
 
 
 async def update_datastream_phenomenon_time(conn, observations, datastream_id):
-    phenomenon_times = [record[0].lower for record in observations]
-    result_times = [record[1] for record in observations]
+    phenomenon_starts = [record[0] for record in observations]
+    phenomenon_ends = [record[1] for record in observations]
+    result_times = [record[2] for record in observations]
     update_sql = """
         UPDATE sensorthings."Datastream"
         SET "phenomenonTime" = tstzrange(
@@ -539,8 +540,8 @@ async def update_datastream_phenomenon_time(conn, observations, datastream_id):
     """
     await conn.execute(
         update_sql,
-        min(phenomenon_times),
-        max(phenomenon_times),
+        min(phenomenon_starts),
+        max(phenomenon_ends),
         min(result_times),
         max(result_times),
         datastream_id,
@@ -612,11 +613,8 @@ async def generate_observations(conn, commit_id):
 
         while phenomenonTime < (date + interval):
             phenomenonTime += frequency
-            phenomenonTimeRange = Range(
-                phenomenonTime,
-                phenomenonTime,
-                upper_inc=True,
-            )
+            phenomenonTimeStart = phenomenonTime
+            phenomenonTimeEnd = phenomenonTime
             resultTime = phenomenonTime
             resultNumber = random.randint(1, 100)
             resultType = 0
@@ -626,7 +624,8 @@ async def generate_observations(conn, commit_id):
             if commit_id is not None:
                 observations.append(
                     (
-                        phenomenonTimeRange,
+                        phenomenonTimeStart,
+                        phenomenonTimeEnd,
                         resultTime,
                         resultNumber,
                         resultType,
@@ -638,7 +637,8 @@ async def generate_observations(conn, commit_id):
             else:
                 observations.append(
                     (
-                        phenomenonTimeRange,
+                        phenomenonTimeStart,
+                        phenomenonTimeEnd,
                         resultTime,
                         resultNumber,
                         resultType,

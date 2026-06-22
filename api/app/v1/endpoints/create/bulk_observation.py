@@ -17,10 +17,12 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.utils.utils import safe_parse_datetime
 from app.v1.endpoints.functions import set_role
+import asyncpg
 from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
+from app.v1.endpoints.error_response import error_response
 
 from .functions import create_entity, set_commit, update_datastream_last_foi_id
 
@@ -112,37 +114,16 @@ async def bulk_observations(
                     data_array = observation_set.get("dataArray", [])
 
                     if not datastream_id:
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Missing 'datastream_id' in Datastream.",
-                            },
-                        )
+                        return error_response(status.HTTP_400_BAD_REQUEST, "Missing 'datastream_id' in Datastream.")
 
                     # Check that at least phenomenonTime and result are present
                     if (
                         "phenomenonTime" not in components
                         or "result" not in components
                     ):
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Missing required properties 'phenomenonTime' or 'result' in components.",
-                            },
-                        )
+                        return error_response(status.HTTP_400_BAD_REQUEST, "Missing required properties 'phenomenonTime' or 'result' in components.")
                     if "featureOfInterest" in components:
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "This method does not support 'featureOfInterest' in components. It will support in future.",
-                            },
-                        )
+                        return error_response(status.HTTP_400_BAD_REQUEST, "This method does not support 'featureOfInterest' in components. It will support in future.")
                     try:
                         foi_id = await get_foi_id(
                             datastream_id, conn, commit_id=commit_id
@@ -164,27 +145,35 @@ async def bulk_observations(
                                 "message": "Insufficient privileges.",
                             },
                         )
-                    except Exception as e:
+                    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
+                        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
+                        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
+                    except ValueError as e:
                         if current_user is not None:
                             await conn.execute("RESET ROLE;")
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": str(e),
-                            },
-                        )
+                        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
+                    except asyncpg.ForeignKeyViolationError:
+                        # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
+                        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+                    except Exception:
+                        # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
+                        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
 
                 if current_user is not None:
                     await conn.execute("RESET ROLE;")
         return Response(status_code=status.HTTP_201_CREATED)
 
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
+    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
+        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
+        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
+    except ValueError as e:
+        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
+    except asyncpg.ForeignKeyViolationError:
+        # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
+        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+    except Exception:
+        # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
+        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
 
 
 async def insertBulkObservation(
@@ -230,7 +219,8 @@ async def insertBulkObservation(
             ph_idx = 0
 
         data = []
-        ph_interval = None
+        ph_min_start = None
+        ph_max_end = None
         rt_interval = None
         for obs in payload:
             if result_time_idx > -1:
@@ -252,45 +242,21 @@ async def insertBulkObservation(
                         )
             if "/" in obs[ph_idx]:
                 ph_time = obs[ph_idx].split("/")
-                obs[ph_idx] = Range(
-                    ph_time[0],
-                    ph_time[1],
-                    upper_inc=True,
-                )
+                ph_start = safe_parse_datetime(ph_time[0])
+                ph_end = safe_parse_datetime(ph_time[1])
             else:
-                obs[ph_idx] = Range(
-                    obs[ph_idx],
-                    obs[ph_idx],
-                    upper_inc=True,
-                )
-            if ph_interval is None:
-                ph_interval = Range(
-                    obs[ph_idx].lower,
-                    obs[ph_idx].upper,
-                    upper_inc=True,
-                )
-            else:
-                if safe_parse_datetime(
-                    ph_interval.lower
-                ) > safe_parse_datetime(obs[ph_idx].lower):
-                    ph_interval = Range(
-                        obs[ph_idx].lower,
-                        ph_interval.upper,
-                        upper_inc=True,
-                    )
-                if safe_parse_datetime(
-                    ph_interval.upper
-                ) < safe_parse_datetime(obs[ph_idx].upper):
-                    ph_interval = Range(
-                        ph_interval.lower,
-                        obs[ph_idx].upper,
-                        upper_inc=True,
-                    )
-            obs[ph_idx] = Range(
-                safe_parse_datetime(obs[ph_idx].lower),
-                safe_parse_datetime(obs[ph_idx].upper),
-                upper_inc=True,
-            )
+                ph_start = safe_parse_datetime(obs[ph_idx])
+                ph_end = ph_start
+            obs[ph_idx : ph_idx + 1] = [ph_start, ph_end]
+
+            if ph_start is not None and (
+                ph_min_start is None or ph_start < ph_min_start
+            ):
+                ph_min_start = ph_start
+            if ph_end is not None and (
+                ph_max_end is None or ph_end > ph_max_end
+            ):
+                ph_max_end = ph_end
 
             default_obs = [result_type, datastream_id, foi_id]
 
@@ -298,11 +264,6 @@ async def insertBulkObservation(
                 default_obs.append(commit_id)
 
             data.append(obs + default_obs)
-        ph_interval = Range(
-            safe_parse_datetime(ph_interval.lower),
-            safe_parse_datetime(ph_interval.upper),
-            upper_inc=True,
-        )
 
         observation_types = [
             ot
@@ -315,7 +276,8 @@ async def insertBulkObservation(
             if ot != observation_type
         ]
         cols = observation_types + [
-            "phenomenonTime",
+            "phenomenonTimeStart",
+            "phenomenonTimeEnd",
             observation_type,
             "resultType",
             "datastream_id",
@@ -328,6 +290,12 @@ async def insertBulkObservation(
                 if c == "result":
                     components[idx] = observation_type
                 idx += 1
+
+            ph_components_idx = components.index("phenomenonTime")
+            components[ph_components_idx : ph_components_idx + 1] = [
+                "phenomenonTimeStart",
+                "phenomenonTimeEnd",
+            ]
 
             cols = (
                 observation_types
@@ -398,8 +366,8 @@ async def insertBulkObservation(
         """
         await conn.execute(
             update_query,
-            ph_interval.lower,
-            ph_interval.upper,
+            ph_min_start,
+            ph_max_end,
             rt_interval.lower if rt_interval else None,
             rt_interval.upper if rt_interval else None,
             datastream_id,
