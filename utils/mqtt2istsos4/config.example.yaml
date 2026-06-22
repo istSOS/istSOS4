@@ -13,6 +13,11 @@ mqtt:
   tls_insecure: false
   keepalive: 60
   qos: 0
+  payload_separator: ","
+  # Optional. Omit/empty for ISO timestamps, e.g. 2026-06-18T14:35:04Z.
+  date_format:
+  # date_format: "%Y-%m-%d %H:%M:%S"
+  tz: UTC
   reconnect_delay_sec: 10
   queue_maxsize: 1000
 

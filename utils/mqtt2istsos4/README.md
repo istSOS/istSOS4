@@ -19,7 +19,8 @@ Expected MQTT payload:
 timestamp,value1,value2,value3,...
 ```
 
-The default payload separator is comma.
+The default payload separator is comma. The default timestamp parser expects an
+ISO timestamp.
 
 Example:
 
@@ -88,6 +89,8 @@ mqtt:
   keepalive: 60
   qos: 0
   payload_separator: ","
+  date_format:
+  tz: UTC
   reconnect_delay_sec: 10
   queue_maxsize: 1000
   topics: []
@@ -118,6 +121,13 @@ subscribes to every key in `mapping`.
 
 `mqtt.payload_separator`: separator used to split MQTT payload fields. Default
 is `","`. Quote the value in YAML, for example `";"` or `"|"`.
+
+`mqtt.date_format`: optional Python `strptime` format for the timestamp field.
+Leave it empty for ISO timestamps such as `2026-06-18T14:35:04Z`. Example:
+`"%Y-%m-%d %H:%M:%S"`.
+
+`mqtt.tz`: timezone applied when the parsed timestamp has no timezone. Default
+is `UTC`. Use names such as `Europe/Rome`.
 
 `mapping`: topic-to-datastream mapping. The datastream order must match the
 order of values in the MQTT payload after the timestamp.
