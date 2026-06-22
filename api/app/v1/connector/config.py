@@ -53,24 +53,6 @@ class Settings(BaseSettings):
         ),
     )
 
-    # Cache (file-backed for now; interface is shaped to swap to Redis later)
-    STAC_CACHE_PATH: str = Field(
-        default="v1/connector/.cache/stac_catalog.json",
-        description=(
-            "Path to the JSON file holding the last successfully "
-            "transformed STAC catalog. Written by scheduler.py once per "
-            "harvest cycle, read by api.py on every request."
-        ),
-    )
-    DCAT_CACHE_PATH: str = Field(
-        default="v1/connector/.cache/dcat_catalog.json",
-        description=(
-            "Path to the JSON file holding the last successfully "
-            "transformed DCAT-AP catalog. Written by scheduler.py once "
-            "per harvest cycle, read by api.py on every request."
-        ),
-    )
-
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
