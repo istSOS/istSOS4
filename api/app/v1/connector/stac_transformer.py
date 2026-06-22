@@ -43,7 +43,6 @@ import asyncpg
 import pystac
 from app import HOSTNAME, SUBPATH, VERSION
 
-from app.v1.connector.config import Settings
 from app.v1.connector.harvester import HarvestedCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)
@@ -368,7 +367,7 @@ def _populate_item_properties(
 
 
 # Asset construction
-def _datastream_href(ds_id, config: Settings) -> str:
+def _datastream_href(ds_id) -> str:
     """
     Build the absolute STA href for a Datastream entity.
 
@@ -387,7 +386,7 @@ def _datastream_href(ds_id, config: Settings) -> str:
     return f"{HOSTNAME}{SUBPATH}{VERSION}/Datastreams({ds_id})"
 
 
-def _attach_assets(item: pystac.Item, ds: dict, config: Settings) -> None:
+def _attach_assets(item: pystac.Item, ds: dict) -> None:
     """
     Attach the standard set of Assets to item for one Datastream.
 
@@ -401,7 +400,7 @@ def _attach_assets(item: pystac.Item, ds: dict, config: Settings) -> None:
     dataset via STAC to access the full STA metadata.
     """
     ds_name = ds.get("name", "")
-    base_href = _datastream_href(ds.get("id"), config)
+    base_href = _datastream_href(ds.get("id"))
 
     item.add_asset(
         "observations_json",
@@ -448,7 +447,6 @@ def _build_item(
     thing: HarvestedThing,
     ds: dict,
     collection_id: str,
-    config: Settings,
 ) -> Optional[pystac.Item]:
     """
     Build a pystac.Item for one Datastream dict.
@@ -479,10 +477,10 @@ def _build_item(
     )
 
     _populate_item_properties(item, thing, ds)
-    _attach_assets(item, ds, config)
+    _attach_assets(item, ds)
 
     # Round-trip link back to the STA Datastream entity
-    ds_href = _datastream_href(ds.get("id"), config)
+    ds_href = _datastream_href(ds.get("id"))
     item.add_link(
         pystac.Link(
             rel="sta_datastream",
@@ -568,7 +566,6 @@ def _compute_collection_extent(
 def _build_collection(
     thing: HarvestedThing,
     items: list[pystac.Item],
-    config: Settings,
 ) -> pystac.Collection:
     """
     Build a pystac.Collection for one Thing with its pre-built Items.
@@ -635,7 +632,7 @@ def _build_collection(
 
 
 # Public interface
-def build_stac_catalog(catalog: HarvestedCatalog, config: Settings) -> dict:
+def build_stac_catalog(catalog: HarvestedCatalog) -> dict:
     """
     Build a complete STAC 1.0 Catalog from a HarvestedCatalog and return it
     as a plain dict, with every Collection and Item embedded as children.
@@ -675,7 +672,7 @@ def build_stac_catalog(catalog: HarvestedCatalog, config: Settings) -> dict:
     for thing in catalog.things:
         items: list[pystac.Item] = []
         for ds in thing.datastreams:
-            item = _build_item(thing, ds, f"thing-{thing.id}", config)
+            item = _build_item(thing, ds, f"thing-{thing.id}")
             if item is not None:
                 items.append(item)
             else:
@@ -688,7 +685,7 @@ def build_stac_catalog(catalog: HarvestedCatalog, config: Settings) -> dict:
                 thing.id, thing.name, len(thing.datastreams),
             )
 
-        collection = _build_collection(thing, items, config)
+        collection = _build_collection(thing, items)
         root_catalog.add_child(collection)
 
     root_catalog.set_self_href(f"{stac_root_href}")
