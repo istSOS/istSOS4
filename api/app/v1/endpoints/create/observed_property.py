@@ -20,9 +20,11 @@ from app.utils.utils import (
     validate_required_keys,
 )
 from app.v1.endpoints.functions import set_role
+import asyncpg
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
+from app.v1.endpoints.error_response import error_response
 
 from .functions import insert_observed_property_entity, set_commit
 
@@ -107,12 +109,20 @@ async def create_observed_property(
                 "message": "Insufficient privileges.",
             },
         )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
+        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
+        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
+    except ValueError as e:
+        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
+    except asyncpg.ForeignKeyViolationError:
+        # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
+        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+    except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
+        # conformance: req/create-update-delete/create-entity — a payload that
+        # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
+        # related entity missing a required column) is a client error (400), not
+        # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
+        return error_response(status.HTTP_400_BAD_REQUEST, "Invalid entity: a required value is missing or not allowed.")
+    except Exception:
+        # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
+        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")

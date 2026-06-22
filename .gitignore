@@ -11,4 +11,5 @@ venv/
 env/
 .codex
 launch.json
+.vscode
 .python-version

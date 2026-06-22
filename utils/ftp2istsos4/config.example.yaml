@@ -1,0 +1,71 @@
+{
+    "istsos_url": "http://localhost:8018/istsos4/v1.1",
+    "istsos_username": "example-user",
+    "istsos_password": "example-password",
+    "update": False,
+    "dry_run": True,
+    "log_file": "logs/ftp2istsos4.log",
+    "log_level": "INFO",
+    "log_max_bytes": 5242880,
+    "log_backup_count": 5,
+    "source_log_dir": "logs/sources",
+    "ftps": [
+        {
+            "type": "ufam",
+            "host": "sftp.example.org",
+            "port": 22,
+            "username": "example-sftp-user",
+            "password": "example-sftp-password",
+            "protocol": "sftp",
+            "key_path": "/home/user/.ssh/example_id_rsa",
+            "remote-dir": "/CSV",
+            "tz": "UTC",
+            "files": [
+                {
+                    "file_path": "station/measurements.csv",
+                    "columns": [
+                        {
+                            "idx": 0,
+                            "type": "datetime",
+                            "format": "%Y-%m-%d %H:%M:%S"
+                        },
+                        {
+                            "idx": 1,
+                            "type": "float",
+                            "name": "ExampleDatastream"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "vulink-varese",
+            "host": "ftp.example.org",
+            "port": 21,
+            "username": "example-ftp-user",
+            "password": "example-ftp-password",
+            "protocol": "ftp",
+            "remote-dir": "/incoming",
+            "tz": "Europe/Rome",
+            "sent_dir": "sent",
+            "error_dir": "error",
+            "files": [
+                {
+                    "filename_suffix": "Example-Meteo.txt",
+                    "columns": [
+                        {
+                            "idx": 0,
+                            "type": "datetime",
+                            "format": "%Y-%m-%dT%H:%M:%S%z"
+                        },
+                        {
+                            "idx": 1,
+                            "type": "float",
+                            "name": "ExampleAirPressure"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
