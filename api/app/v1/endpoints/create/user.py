@@ -41,6 +41,14 @@ PAYLOAD_EXAMPLE = {
     "role": "viewer",  # viewer, editor, obs_manager, sensor, custom
 }
 
+# Maps the application-layer role to its sensorthings RLS policy function.
+# Administrator is intentionally absent — admins bypass RLS by privilege.
+_POLICY_FN_MAP = {
+    "viewer":      "sensorthings.viewer_policy",
+    "editor":      "sensorthings.editor_policy",
+    "obs_manager": "sensorthings.obs_manager_policy",
+    "sensor":      "sensorthings.sensor_policy",
+}
 
 @v1.api_route(
     "/Users",
@@ -147,6 +155,9 @@ async def create_user(
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
 
+                # Capture app_role before get_db_role_for_rbac() to use
+                # for RLS policy dispatch below (fixes Issue #28).
+                app_role = payload["role"]
                 db_role = get_db_role_for_rbac(payload["role"])
 
                 await connection.execute(
@@ -163,6 +174,18 @@ async def create_user(
                         pg_quote_ident(current_user["username"]),
                     )
                 )
+
+                # Auto-create the default RLS policy for the new user.
+                # Policy functions already exist in the DB (istsos_auth.sql).
+                # Administrator role bypasses RLS by privilege, not policy.
+                policy_fn = _POLICY_FN_MAP.get(app_role)
+                if policy_fn:
+                    policyname = f"{user['username']}_default"
+                    await connection.execute(
+                        f"SELECT {policy_fn}($1, $2);",
+                        [user["username"]],
+                        policyname,
+                    )
 
         return Response(status_code=status.HTTP_201_CREATED)
 
