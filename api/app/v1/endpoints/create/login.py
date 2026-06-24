@@ -38,7 +38,7 @@ def _extract_bearer_token(authorization: str | None) -> str:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid authorization header format",
         )
-    return authorization[len(prefix) :].strip()
+    return authorization[len(prefix):].strip()
 
 
 def _ttl_from_exp(exp: int | float | str | None) -> int:
@@ -89,14 +89,7 @@ async def login(
 async def refresh_token(authorization: str | None = Header(default=None)):
     token = _extract_bearer_token(authorization)
 
-    if REDIS and redis.get(token) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has been revoked",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    if REDIS and redis.get(token) is not None:
+    if REDIS and await redis.get(token) is not None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has been revoked",
@@ -113,7 +106,7 @@ async def refresh_token(authorization: str | None = Header(default=None)):
 
     if REDIS:
         expire = payload.get("exp")
-        redis.set(token, "refreshed", ex=_ttl_from_exp(expire))
+        await redis.set(token, "refreshed", ex=_ttl_from_exp(expire))
 
     access_token, expire = create_refresh_token(payload)
 
@@ -147,7 +140,7 @@ async def logout(authorization: str | None = Header(default=None)):
 
     if REDIS:
         expire = payload.get("exp")
-        redis.set(token, "logged_out", ex=_ttl_from_exp(expire))
+        await redis.set(token, "logged_out", ex=_ttl_from_exp(expire))
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,
