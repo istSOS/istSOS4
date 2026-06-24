@@ -14,6 +14,7 @@
 
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.json import JSON
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, String, Text
@@ -36,6 +37,7 @@ class Thing(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     properties = Column(JSON)
+    phenomenon_time = Column("phenomenonTime", TSTZRANGE)
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
     location = relationship(
         "Location", secondary=Thing_Location, back_populates="thing"
