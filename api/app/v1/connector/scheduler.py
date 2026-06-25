@@ -96,8 +96,8 @@ async def scheduled_harvest_job(pool: asyncpg.Pool) -> None:
     """
     config = get_settings()
 
-    async with pool.acquire() as connection:
-        acquired = await connection.fetchval(
+    async with pool.acquire() as lock_conn:
+        acquired = await lock_conn.fetchval(
             "SELECT pg_try_advisory_lock($1)", _HARVEST_LOCK_KEY
         )
         if not acquired:
@@ -105,11 +105,12 @@ async def scheduled_harvest_job(pool: asyncpg.Pool) -> None:
             return
 
         try:
-            await _run_cycle(connection, config)
+            async with pool.acquire() as harvest_conn:
+                await _run_cycle(harvest_conn, config)
         except Exception:
             logger.exception("Harvest cycle failed -- previous cache left untouched")
         finally:
-            await connection.fetchval(
+            await lock_conn.fetchval(
                 "SELECT pg_advisory_unlock($1)", _HARVEST_LOCK_KEY
             )
 
