@@ -47,9 +47,15 @@ def flatten_stac_catalog(root_dict: dict) -> dict[str, Any]:
     """
     Flattens a nested STAC catalog dictionary into separate cache entries.
 
+    Expects the build_stac_catalog() output shape from stac_transformer.py:
+        {"catalog": {...catalog metadata, "links": [...]},
+         "collections": [{...collection metadata, "items": [...], "links": [...]}]}
+
     Extracts nested items and collections from the root tree and maps them 
     to unique cache keys. It safely tracks relationships by embedding tracking 
     lists (`item_ids` and `collection_ids`) directly inside the parent objects.
+    Navigation links on the catalog/collection/item dicts are already built
+    by stac_transformer.py and are passed through untouched here.
 
     Safe to use: safely copies data to prevent mutating the original input tree.
     Malformed inputs (e.g., missing keys or IDs) will raise a standard KeyError.
@@ -57,7 +63,7 @@ def flatten_stac_catalog(root_dict: dict) -> dict[str, Any]:
 
     flat: dict[str, Any] = {}
 
-    catalog_entry = {k: v for k, v in root_dict.items() if k != "collections"}
+    catalog_entry = dict(root_dict["catalog"])
     collection_ids: list[str] = []
 
     for collection_dict in root_dict.get("collections", []):

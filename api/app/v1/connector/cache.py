@@ -105,6 +105,11 @@ def write_stac_catalog(root_dict: dict) -> None:
     """
     Flattens and writes the STAC catalog to Redis, clearing old keys first.
 
+    root_dict is the direct output of stac_transformer.build_stac_catalog():
+    {"catalog": {...}, "collections": [...]} -- flatten_stac_catalog (utils.py)
+    unwraps "catalog" and walks each collection's "items" list to produce the
+    flat stac:catalog / stac:collection:{id} / stac:item:{cid}:{id} keys.
+
     Following the sta2rest pattern, this uses the synchronous redis client 
     imported from app.db.redis_db. It runs safely as a background task. 
 

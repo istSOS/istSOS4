@@ -20,25 +20,29 @@ main.py mounts the core STA router at {SUBPATH}{VERSION}.
 
 Pure reader: every route here reads the already-transformed catalog from
 cache.py (Redis, written once per harvest cycle by scheduler.py) and
-builds a STAC-compliant response. No route in this file touches Postgres,
-runs the harvester, or calls stac_transformer.py directly.
+serves it as a STAC-compliant response. No route in this file touches 
+Postgres, runs the harvester, or calls stac_transformer.py directly.
 
 Cache shape vs. STAC spec:
     cache.py stores three flat entity types in Redis:
-        stac:catalog              -> catalog metadata + "collection_ids" list
-        stac:collection:{id}      -> collection metadata + "item_ids" list
-        stac:item:{coll_id}:{id}  -> full Item dict
+        stac:catalog              -> catalog metadata + "collection_ids" list + "links"
+        stac:collection:{id}      -> collection metadata + "item_ids" list + "links"
+        stac:item:{coll_id}:{id}  -> full Item dict (already has "links")
 
     "collection_ids" and "item_ids" are internal tracking lists used to
     enumerate children without loading the full tree. They are NOT part of
-    the STAC spec -- a conformant STAC client navigates via the "links"
-    array (rel=child, rel=item, etc.).
+    the STAC spec and are stripped from every outgoing response.
 
-    Each route below fetches the flat cached entity, reconstructs the
-    required STAC "links" from the tracking lists, strips the tracking
-    lists from the outgoing response, and returns a fully spec-compliant
-    object. The cached dicts are never mutated in place -- responses are
-    assembled into new dicts so the deserialized objects stay clean.
+    All STAC navigation links (self, root, parent, child, item, collection)
+    are built once by stac_transformer.py at harvest time and cached
+    verbatim.
+
+    The two exceptions are the /stac/collections listing and
+    /stac/collections/{id}/items envelopes: these are synthetic wrappers
+    api.py assembles at request time (a FeatureCollection and a Collections
+    listing are not themselves cached entities), so their own top-level
+    "links" arrays are built here. The Collection and Item objects nested
+    inside those envelopes are still served with their cached links as-is.
 
 For now only /connector/stac is live. /connector/dcat will follow the
 same pattern once dcat_transformer.py lands.
@@ -127,34 +131,9 @@ async def stac_root():
                 "Try again after the next scheduled harvest cycle."
             )
 
-        collection_ids = catalog.get("collection_ids", [])
-
-        links = [
-            {
-                "rel": "self",
-                "href": _STAC_ROOT_HREF,
-                "type": "application/json",
-            },
-            {
-                "rel": "root",
-                "href": _STAC_ROOT_HREF,
-                "type": "application/json",
-            },
-        ]
-        for cid in collection_ids:
-            links.append(
-                {
-                    "rel": "child",
-                    "href": f"{_STAC_ROOT_HREF}/collections/{cid}",
-                    "type": "application/json",
-                }
-            )
-
         return {
-            k: v
-            for k, v in catalog.items()
-            if k not in ("collection_ids", "links")
-        } | {"links": links}
+            k: v for k, v in catalog.items() if k != "collection_ids"
+        }
 
     except Exception as e:
         return JSONResponse(
@@ -193,24 +172,8 @@ async def stac_collections():
                 # response. The next harvest cycle will make it consistent.
                 continue
 
-            collection_href = f"{_STAC_ROOT_HREF}/collections/{cid}"
-            links = [
-                {"rel": "self", "href": collection_href, "type": "application/json"},
-                {"rel": "root", "href": _STAC_ROOT_HREF, "type": "application/json"},
-                {"rel": "parent", "href": _STAC_ROOT_HREF, "type": "application/json"},
-            ]
-            for iid in coll.get("item_ids", []):
-                links.append(
-                    {
-                        "rel": "item",
-                        "href": f"{collection_href}/items/{iid}",
-                        "type": "application/geo+json",
-                    }
-                )
-
             collections.append(
-                {k: v for k, v in coll.items() if k not in ("item_ids", "links")}
-                | {"links": links}
+                {k: v for k, v in coll.items() if k != "item_ids"}
             )
 
         return {
@@ -244,24 +207,7 @@ async def stac_collection(collection_id: str):
         if coll is None:
             return _not_found(f"Collection '{collection_id}' not found.")
 
-        collection_href = f"{_STAC_ROOT_HREF}/collections/{collection_id}"
-        links = [
-            {"rel": "self", "href": collection_href, "type": "application/json"},
-            {"rel": "root", "href": _STAC_ROOT_HREF, "type": "application/json"},
-            {"rel": "parent", "href": _STAC_ROOT_HREF, "type": "application/json"},
-        ]
-        for iid in coll.get("item_ids", []):
-            links.append(
-                {
-                    "rel": "item",
-                    "href": f"{collection_href}/items/{iid}",
-                    "type": "application/geo+json",
-                }
-            )
-
-        return {
-            k: v for k, v in coll.items() if k not in ("item_ids", "links")
-        } | {"links": links}
+        return {k: v for k, v in coll.items() if k != "item_ids"}
 
     except Exception as e:
         return JSONResponse(
