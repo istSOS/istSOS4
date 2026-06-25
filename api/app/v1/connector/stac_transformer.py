@@ -32,11 +32,7 @@ Output shape (written to Redis by cache.py via flatten_stac_catalog):
             },
             ...
         ]
-    }
-
-No "links" arrays are written here. api.py reconstructs all STAC links at
-serve time from the tracking lists, so they always reflect the live
-_STAC_ROOT_HREF and are never stale in the cache.
+    }    
 
 Mapping decisions: docs/STA-STAC-Mapping-Reference.md
 
@@ -56,20 +52,16 @@ from app.v1.connector.harvester import HarvestedCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 
 _STAC_VERSION = "1.0.0"
 _MEDIA_JSON = "application/json"
 _MEDIA_GEOJSON = "application/geo+json"
 _MEDIA_CSV = "text/csv"
 
+STAC_ROOT_HREF = f"{HOSTNAME}{SUBPATH}{VERSION}/connector/stac"
 
-# ---------------------------------------------------------------------------
+
 # Temporal helpers
-# ---------------------------------------------------------------------------
-
 def _parse_iso(value: str) -> Optional[datetime]:
     """
     Parse an ISO 8601 string to a timezone-aware datetime, or return None.
@@ -128,23 +120,7 @@ def _parse_phenomenon_time(
     return start, end
 
 
-def _compute_item_datetime(ds: dict) -> Optional[datetime]:
-    """
-    Determine the primary datetime for a STAC Item from a Datastream dict.
-
-    Returns end for closed streams, start for live (open-ended) streams,
-    None when phenomenon_time is absent or unparseable (Item will be skipped).
-    """
-    start, end = _parse_phenomenon_time(ds.get("phenomenon_time"))
-    if start is None:
-        return None
-    return end if end is not None else start
-
-
-# ---------------------------------------------------------------------------
 # Spatial helpers
-# ---------------------------------------------------------------------------
-
 def _extract_all_coordinates(geometry: dict) -> list[list[float]]:
     """
     Recursively extract all leaf [lon, lat] coordinate pairs from a GeoJSON
@@ -226,10 +202,7 @@ def _resolve_item_geometry(
     return None, None
 
 
-# ---------------------------------------------------------------------------
 # Keyword extraction
-# ---------------------------------------------------------------------------
-
 def _extract_collection_keywords(thing: HarvestedThing) -> list[str]:
     """
     Build the deduplicated keyword list for a Collection from a Thing and
@@ -265,10 +238,7 @@ def _extract_collection_keywords(thing: HarvestedThing) -> list[str]:
     return keywords
 
 
-# ---------------------------------------------------------------------------
 # Description composer
-# ---------------------------------------------------------------------------
-
 def _compose_item_description(ds: dict, thing: HarvestedThing) -> str:
     """
     Compose the Item description from a Datastream and its parent Thing.
@@ -289,10 +259,7 @@ def _compose_item_description(ds: dict, thing: HarvestedThing) -> str:
     return " | ".join(p for p in parts if p) or ds.get("name", "")
 
 
-# ---------------------------------------------------------------------------
 # STA href reconstruction
-# ---------------------------------------------------------------------------
-
 def _datastream_href(ds_id) -> str:
     """
     Build the absolute STA href for a Datastream entity.
@@ -308,10 +275,67 @@ def _thing_href(thing_id) -> str:
     return f"{HOSTNAME}{SUBPATH}{VERSION}/Things({thing_id})"
 
 
-# ---------------------------------------------------------------------------
-# Item builder
-# ---------------------------------------------------------------------------
+# Link builders
+def _item_nav_links(item_id: str, collection_id: str) -> list[dict]:
+    """
+    Build the complete set of STAC navigation links for an Item.
 
+    Required by STAC 1.0: self, root, parent, collection.
+    The sta_datastream cross-reference is appended last as a custom rel.
+    """
+    collection_href = f"{STAC_ROOT_HREF}/collections/{collection_id}"
+    item_href = f"{collection_href}/items/{item_id}"
+    return [
+        {"rel": "self",       "href": item_href,           "type": _MEDIA_GEOJSON},
+        {"rel": "root",       "href": STAC_ROOT_HREF,      "type": _MEDIA_JSON},
+        {"rel": "parent",     "href": collection_href,     "type": _MEDIA_JSON},
+        {"rel": "collection", "href": collection_href,     "type": _MEDIA_JSON},
+    ]
+
+
+def _collection_nav_links(collection_id: str, item_ids: list[str]) -> list[dict]:
+    """
+    Build the complete set of STAC navigation links for a Collection.
+
+    Required by STAC 1.0: self, root, parent, one rel=item per Item.
+    The sta_thing cross-reference is appended by _build_collection_dict.
+    """
+    collection_href = f"{STAC_ROOT_HREF}/collections/{collection_id}"
+    links = [
+        {"rel": "self",   "href": collection_href, "type": _MEDIA_JSON},
+        {"rel": "root",   "href": STAC_ROOT_HREF,  "type": _MEDIA_JSON},
+        {"rel": "parent", "href": STAC_ROOT_HREF,  "type": _MEDIA_JSON},
+    ]
+    for iid in item_ids:
+        links.append({
+            "rel":  "item",
+            "href": f"{collection_href}/items/{iid}",
+            "type": _MEDIA_GEOJSON,
+        })
+    return links
+
+
+def _catalog_nav_links(collection_ids: list[str]) -> list[dict]:
+    """
+    Build the complete set of STAC navigation links for the root Catalog.
+
+    Required by STAC 1.0: self, root (self-referential), one rel=child per
+    Collection.
+    """
+    links = [
+        {"rel": "self", "href": STAC_ROOT_HREF, "type": _MEDIA_JSON},
+        {"rel": "root", "href": STAC_ROOT_HREF, "type": _MEDIA_JSON},
+    ]
+    for cid in collection_ids:
+        links.append({
+            "rel":  "child",
+            "href": f"{STAC_ROOT_HREF}/collections/{cid}",
+            "type": _MEDIA_JSON,
+        })
+    return links
+
+
+# Item builder
 _RESERVED_DS_PROPS = frozenset({
     "observedArea", "phenomenonTime", "resultTime",
     "created", "updated", "platform", "resolution",
@@ -331,12 +355,19 @@ def _build_item_dict(
     phenomenon_time -- a STAC Item without datetime is invalid.
     Items with null geometry are emitted (geometry:null is valid GeoJSON).
 
-    No "links" array is written here; api.py reconstructs links at serve
-    time from the item_id stored in the parent collection's "item_ids" list.
-    Assets reference STA endpoints via _datastream_href(), not selfLink.
+    Datetime rule (STAC 1.0 spec):
+      - Closed interval (start + end both known):  datetime = null,
+        start_datetime and end_datetime carry the interval.
+      - Open-ended / live stream (no end):         datetime = start,
+        start_datetime = start, end_datetime = null.
+      - No parseable phenomenon_time:              Item is skipped entirely.
+
+    Links: all navigation links (self, root, parent, collection) plus the
+    sta_datastream cross-reference are written here and cached verbatim.
+    api.py serves Item dicts from cache without any link injection.
     """
-    item_datetime = _compute_item_datetime(ds)
-    if item_datetime is None:
+    start, end = _parse_phenomenon_time(ds.get("phenomenon_time"))
+    if start is None:
         logger.warning(
             "Skipping Datastream %s in Thing %s: no usable phenomenon_time -- "
             "a STAC Item without datetime is invalid",
@@ -344,19 +375,29 @@ def _build_item_dict(
         )
         return None
 
-    start, end = _parse_phenomenon_time(ds.get("phenomenon_time"))
     geometry, bbox = _resolve_item_geometry(thing, ds)
     item_id = f"datastream-{ds['id']}"
 
+    # STAC 1.0: datetime must be null when start+end interval is present.
+    if end is not None:
+        item_datetime = None
+        start_dt_str = start.isoformat()
+        end_dt_str = end.isoformat()
+    else:
+        # Open-ended stream: datetime = start, end_datetime = null.
+        item_datetime = start.strftime("%Y-%m-%dT%H:%M:%SZ")
+        start_dt_str = start.isoformat()
+        end_dt_str = None
+
     properties: dict = {
-        "datetime": item_datetime.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "title": f"{thing.name} - {ds.get('name', '')}",
-        "description": _compose_item_description(ds, thing),
-        "start_datetime": start.isoformat() if start else None,
-        "end_datetime": end.isoformat() if end is not None else None,
-        "thing_id": thing.id,
-        "thing_name": thing.name,
-        "datastream_id": ds.get("id"),
+        "datetime":       item_datetime,
+        "start_datetime": start_dt_str,
+        "end_datetime":   end_dt_str,
+        "title":          f"{thing.name} - {ds.get('name', '')}",
+        "description":    _compose_item_description(ds, thing),
+        "thing_id":       thing.id,
+        "thing_name":     thing.name,
+        "datastream_id":  ds.get("id"),
     }
 
     uom = ds.get("unit_of_measurement")
@@ -416,57 +457,54 @@ def _build_item_dict(
 
     assets = {
         "observations_json": {
-            "href": f"{base_href}/Observations",
-            "type": _MEDIA_JSON,
-            "title": f"{ds_name} -- JSON observations feed",
-            "roles": ["data"],
+            "href":        f"{base_href}/Observations",
+            "type":        _MEDIA_JSON,
+            "title":       f"{ds_name} -- JSON observations feed",
+            "roles":       ["data"],
             "description": f"Live OGC SensorThings Observations feed for Datastream: {ds_name}",
         },
         "observations_csv": {
-            "href": f"{base_href}/Observations?$resultFormat=CSV",
-            "type": _MEDIA_CSV,
-            "title": f"{ds_name} -- CSV export",
-            "roles": ["data"],
+            "href":        f"{base_href}/Observations?$resultFormat=CSV",
+            "type":        _MEDIA_CSV,
+            "title":       f"{ds_name} -- CSV export",
+            "roles":       ["data"],
             "description": f"CSV bulk export of Observations for Datastream: {ds_name}",
         },
         "datastream": {
-            "href": base_href,
-            "type": _MEDIA_JSON,
-            "title": f"STA Datastream: {ds_name}",
-            "roles": ["metadata"],
+            "href":        base_href,
+            "type":        _MEDIA_JSON,
+            "title":       f"STA Datastream: {ds_name}",
+            "roles":       ["metadata"],
             "description": f"OGC SensorThings Datastream entity for: {ds_name}",
         },
     }
 
-    # sta_datastream link kept here -- it's an entity cross-reference, not
-    # a navigation link, so api.py does not reconstruct it from tracking lists.
-    links = [
+    # Navigation links built here -- served from cache as-is by api.py.
+    # sta_datastream appended after nav links as a custom cross-reference rel.
+    links = _item_nav_links(item_id, collection_id) + [
         {
-            "rel": "sta_datastream",
-            "href": base_href,
-            "type": _MEDIA_JSON,
+            "rel":   "sta_datastream",
+            "href":  base_href,
+            "type":  _MEDIA_JSON,
             "title": f"STA Datastream: {ds_name}",
         }
     ]
 
     return {
-        "type": "Feature",
-        "stac_version": _STAC_VERSION,
+        "type":            "Feature",
+        "stac_version":    _STAC_VERSION,
         "stac_extensions": [],
-        "id": item_id,
-        "geometry": geometry,
-        "bbox": bbox,
-        "properties": properties,
-        "links": links,
-        "assets": assets,
-        "collection": collection_id,
+        "id":              item_id,
+        "geometry":        geometry,
+        "bbox":            bbox,
+        "properties":      properties,
+        "links":           links,
+        "assets":          assets,
+        "collection":      collection_id,
     }
 
 
-# ---------------------------------------------------------------------------
 # Collection builder
-# ---------------------------------------------------------------------------
-
 def _build_collection_dict(
     thing: HarvestedThing,
     items: list[dict],
@@ -476,12 +514,14 @@ def _build_collection_dict(
 
     Extent is computed bottom-up from the pre-built Item dicts.
     The "item_ids" tracking list and "items" list are written here for
-    cache.py (flatten_stac_catalog reads both). api.py strips them before
-    serving and reconstructs navigation links from "item_ids" at serve time.
+    cache.py (flatten_stac_catalog reads both). api.py strips "item_ids"
+    and "items" before serving -- the full navigation links are already
+    in the cached "links" array.
 
-    The "sta_thing" cross-reference link is written here for the same reason
-    as the "sta_datastream" link on Items -- it is an entity reference, not
-    a navigation link, so it does not need reconstruction from tracking lists.
+    Temporal extent rule:
+      - collection_end is null if ANY item stream is still open (no end_datetime).
+        This correctly signals "ongoing" to STAC clients.
+      - collection_end is the maximum end_datetime only when ALL items are closed.
     """
     collection_id = f"thing-{thing.id}"
 
@@ -507,6 +547,8 @@ def _build_collection_dict(
         spatial_bbox = [-180.0, -90.0, 180.0, 90.0]
 
     # Temporal extent
+    # Pull start/end strings directly from already-built item properties --
+    # they are always ISO strings at this point (never asyncpg.Range).
     starts: list[datetime] = []
     ends: list[Optional[datetime]] = []
     for item in items:
@@ -519,10 +561,11 @@ def _build_collection_dict(
         ends.append(_parse_iso(e) if e else None)
 
     collection_start = min(starts).isoformat() if starts else None
-    collection_end = (
-        max(e for e in ends if e is not None).isoformat()
-        if ends and all(e is not None for e in ends)
-        else None
+
+    # null end = at least one stream is still open (ongoing).
+    any_open = any(e is None for e in ends)
+    collection_end = None if any_open else (
+        max(ends).isoformat() if ends else None  # type: ignore[arg-type]
     )
 
     # Summaries
@@ -539,38 +582,40 @@ def _build_collection_dict(
 
     thing_props = thing.properties or {}
 
-    # Cross-reference back to the STA Thing entity -- entity link, not
-    # navigation, so api.py does not need to reconstruct it.
-    links = [
+    item_ids = [item["id"] for item in items]
+
+    # Navigation links built here -- served from cache as-is by api.py.
+    # sta_thing appended after nav links as a custom cross-reference rel.
+    links = _collection_nav_links(collection_id, item_ids) + [
         {
-            "rel": "sta_thing",
-            "href": _thing_href(thing.id),
-            "type": _MEDIA_JSON,
+            "rel":   "sta_thing",
+            "href":  _thing_href(thing.id),
+            "type":  _MEDIA_JSON,
             "title": f"STA Thing: {thing.name}",
         }
     ]
 
     coll: dict = {
-        "type": "Collection",
+        "type":         "Collection",
         "stac_version": _STAC_VERSION,
-        "id": collection_id,
-        "title": thing.name or None,
-        "description": (
+        "id":           collection_id,
+        "title":        thing.name or None,
+        "description":  (
             thing.description
             or f"STAC Collection for SensorThings Thing: {thing.name}"
         ),
         "keywords": keywords,
         "extent": {
-            "spatial": {"bbox": [spatial_bbox]},
+            "spatial":  {"bbox": [spatial_bbox]},
             "temporal": {"interval": [[collection_start, collection_end]]},
         },
-        "links": links,
-        "license": "other",
-        "thing_id": thing.id,
+        "links":            links,
+        "license":          "other",
+        "thing_id":         thing.id,
         "thing_properties": thing.properties,
         "summaries": {
             "observed_property_definitions": list(dict.fromkeys(op_defs)),
-            "unit_symbols": list(dict.fromkeys(unit_symbols)),
+            "unit_symbols":                  list(dict.fromkeys(unit_symbols)),
         },
     }
 
@@ -580,16 +625,13 @@ def _build_collection_dict(
         coll["providers"] = thing_props["providers"]
 
     # Tracking lists consumed by cache.py / api.py -- not part of STAC spec.
-    coll["item_ids"] = [item["id"] for item in items]
+    coll["item_ids"] = item_ids
     coll["items"] = items
 
     return coll
 
 
-# ---------------------------------------------------------------------------
 # Public interface
-# ---------------------------------------------------------------------------
-
 def build_stac_catalog(catalog: HarvestedCatalog) -> dict:
     """
     Build a complete STAC 1.0 Catalog from a HarvestedCatalog and return it
@@ -597,18 +639,18 @@ def build_stac_catalog(catalog: HarvestedCatalog) -> dict:
 
     Output shape:
         {
-            "catalog": { ...metadata..., "collection_ids": [...] },
+            "catalog": { ...metadata..., "collection_ids": [...], "links": [...] },
             "collections": [
-                { ...metadata..., "item_ids": [...], "items": [...] },
+                { ...metadata..., "item_ids": [...], "items": [...], "links": [...] },
                 ...
             ]
         }
 
-    No pystac objects are created. All STAC navigation links are omitted
-    here -- api.py reconstructs them at serve time from "collection_ids" and
-    "item_ids". Only entity cross-reference links (sta_thing, sta_datastream)
-    are written, since these point to external STA URLs that api.py has no
-    basis to reconstruct.
+    All STAC navigation links are built here at transform time and stored in
+    the cache. api.py serves cached objects as-is -- it does not inject or
+    reconstruct any links. Only the FeatureCollection and /collections
+    envelope-level links in api.py are assembled at serve time (those are
+    wrappers, not cached entities).
 
     Called exactly once per harvest cycle by scheduler.py. Does not touch
     Postgres, Redis, or disk.
@@ -634,16 +676,21 @@ def build_stac_catalog(catalog: HarvestedCatalog) -> dict:
 
         collections.append(_build_collection_dict(thing, items))
 
+    collection_ids = [c["id"] for c in collections]
+
     root_catalog = {
-        "type": "Catalog",
+        "type":         "Catalog",
         "stac_version": _STAC_VERSION,
-        "id": "istsos-connector-catalog",
-        "description": (
+        "id":           "istsos-connector-catalog",
+        "description":  (
             f"istSOS4 deployment: {catalog.thing_count} Things, "
             f"harvested at {catalog.harvested_at}."
         ),
-        # Tracking list -- not part of STAC spec, consumed by api.py.
-        "collection_ids": [c["id"] for c in collections],
+        # Navigation links built here, cached verbatim, served as-is.
+        "links": _catalog_nav_links(collection_ids),
+        # Tracking list -- not part of STAC spec, consumed by api.py to
+        # enumerate children for the /stac/collections listing route.
+        "collection_ids": collection_ids,
     }
 
     logger.info(
@@ -654,6 +701,6 @@ def build_stac_catalog(catalog: HarvestedCatalog) -> dict:
     )
 
     return {
-        "catalog": root_catalog,
+        "catalog":     root_catalog,
         "collections": collections,
     }
