@@ -30,19 +30,21 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+import os
 
 import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from app.v1.connector.cache import write_stac_catalog
+from app.v1.connector.cache import write_stac_catalog, write_stac_catalog_with_networks
 from app.v1.connector.config import get_settings
-from app.v1.connector.harvester import harvest
-from app.v1.connector.stac_transformer import build_stac_catalog
+from app.v1.connector.harvester import harvest, harvest_with_networks
+from app.v1.connector.stac_transformer import build_stac_catalog, build_stac_catalog_with_networks
 
 logger = logging.getLogger(__name__)
 
 _HARVEST_LOCK_KEY = 726419950_1
+NETWORK = bool(os.getenv("NETWORK"))  # read once at startup, matches every other config constant
 
 try:
     # Both currently not implemented
@@ -126,10 +128,14 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
     writes are independent -- a future DCAT failure will not roll back the
     STAC write, and vice versa.
     """
-    catalog = await harvest(connection)
-
-    stac_dict = build_stac_catalog(catalog)
-    write_stac_catalog(stac_dict)
+    if NETWORK:
+        network_catalog = await harvest_with_networks(connection)
+        stac_dict = build_stac_catalog_with_networks(network_catalog)
+        write_stac_catalog_with_networks(stac_dict)
+    else:
+        catalog = await harvest(connection)
+        stac_dict = build_stac_catalog(catalog)
+        write_stac_catalog(stac_dict)
 
     if build_dcat_catalog is not None:
         dcat_dict = build_dcat_catalog(catalog, config)
