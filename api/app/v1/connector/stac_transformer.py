@@ -286,20 +286,20 @@ def _network_catalog_href(network_id: int) -> str:
     return f"{STAC_ROOT_HREF}/{network_id}"
 
 
-def _item_nav_links(item_id: str, collection_id: str) -> list[dict]:
+def _item_nav_links(item_id: str, collection_id: str, network_id: Optional[int] = None) -> list[dict]:
     """
     Build the complete set of STAC navigation links for an Item.
 
     Required by STAC 1.0: self, root, parent, collection.
     The sta_datastream cross-reference is appended last as a custom rel.
     """
-    collection_href = f"{STAC_ROOT_HREF}/collections/{collection_id}"
+    collection_href = f"{_collections_base_href(network_id)}/{collection_id}"
     item_href = f"{collection_href}/items/{item_id}"
     return [
-        {"rel": "self",       "href": item_href,           "type": _MEDIA_GEOJSON},
-        {"rel": "root",       "href": STAC_ROOT_HREF,      "type": _MEDIA_JSON},
-        {"rel": "parent",     "href": collection_href,     "type": _MEDIA_JSON},
-        {"rel": "collection", "href": collection_href,     "type": _MEDIA_JSON},
+        {"rel": "self",       "href": item_href,       "type": _MEDIA_GEOJSON},
+        {"rel": "root",       "href": STAC_ROOT_HREF,  "type": _MEDIA_JSON},
+        {"rel": "parent",     "href": collection_href, "type": _MEDIA_JSON},
+        {"rel": "collection", "href": collection_href, "type": _MEDIA_JSON},
     ]
 
 
