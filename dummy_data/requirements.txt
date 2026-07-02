@@ -1,4 +1,3 @@
 python-dotenv
 isodate
 asyncpg
-aiohttp
