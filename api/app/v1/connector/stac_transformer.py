@@ -48,7 +48,7 @@ from typing import Optional, Union
 
 import asyncpg
 from app import HOSTNAME, SUBPATH, VERSION
-from app.v1.connector.harvester import HarvestedCatalog, HarvestedThing
+from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +276,16 @@ def _thing_href(thing_id) -> str:
 
 
 # Link builders
+def _collections_base_href(network_id: Optional[int] = None) -> str:
+    if network_id is None:
+        return f"{STAC_ROOT_HREF}/collections"
+    return f"{STAC_ROOT_HREF}/{network_id}/collections"
+
+
+def _network_catalog_href(network_id: int) -> str:
+    return f"{STAC_ROOT_HREF}/{network_id}"
+
+
 def _item_nav_links(item_id: str, collection_id: str) -> list[dict]:
     """
     Build the complete set of STAC navigation links for an Item.
@@ -293,45 +303,53 @@ def _item_nav_links(item_id: str, collection_id: str) -> list[dict]:
     ]
 
 
-def _collection_nav_links(collection_id: str, item_ids: list[str]) -> list[dict]:
-    """
-    Build the complete set of STAC navigation links for a Collection.
-
-    Required by STAC 1.0: self, root, parent, one rel=item per Item.
-    The sta_thing cross-reference is appended by _build_collection_dict.
-    """
-    collection_href = f"{STAC_ROOT_HREF}/collections/{collection_id}"
+def _collection_nav_links(
+    collection_id: str, item_ids: list[str], network_id: Optional[int] = None
+) -> list[dict]:
+    collection_href = f"{_collections_base_href(network_id)}/{collection_id}"
+    parent_href = _network_catalog_href(network_id) if network_id is not None else STAC_ROOT_HREF
     links = [
         {"rel": "self",   "href": collection_href, "type": _MEDIA_JSON},
         {"rel": "root",   "href": STAC_ROOT_HREF,  "type": _MEDIA_JSON},
-        {"rel": "parent", "href": STAC_ROOT_HREF,  "type": _MEDIA_JSON},
+        {"rel": "parent", "href": parent_href,     "type": _MEDIA_JSON},
     ]
     for iid in item_ids:
-        links.append({
-            "rel":  "item",
-            "href": f"{collection_href}/items/{iid}",
-            "type": _MEDIA_GEOJSON,
-        })
+        links.append({"rel": "item", "href": f"{collection_href}/items/{iid}", "type": _MEDIA_GEOJSON})
     return links
 
 
-def _catalog_nav_links(collection_ids: list[str]) -> list[dict]:
+def _catalog_nav_links(
+    collection_ids: list[str], network_ids: Optional[list[int]] = None
+) -> list[dict]:
     """
-    Build the complete set of STAC navigation links for the root Catalog.
-
-    Required by STAC 1.0: self, root (self-referential), one rel=child per
-    Collection.
+    Root catalog nav links. collection_ids -> rel=child to each Collection
+    (all of them in NETWORK=0 mode, orphan-only in NETWORK=1 mode).
+    network_ids -> rel=child to each Network subcatalog, only passed in
+    NETWORK=1 mode.
     """
     links = [
         {"rel": "self", "href": STAC_ROOT_HREF, "type": _MEDIA_JSON},
         {"rel": "root", "href": STAC_ROOT_HREF, "type": _MEDIA_JSON},
     ]
+    base = _collections_base_href()
     for cid in collection_ids:
-        links.append({
-            "rel":  "child",
-            "href": f"{STAC_ROOT_HREF}/collections/{cid}",
-            "type": _MEDIA_JSON,
-        })
+        links.append({"rel": "child", "href": f"{base}/{cid}", "type": _MEDIA_JSON})
+    for nid in (network_ids or []):
+        links.append({"rel": "child", "href": _network_catalog_href(nid), "type": _MEDIA_JSON})
+    return links
+
+
+def _network_subcatalog_nav_links(network_id: int, collection_ids: list[str]) -> list[dict]:
+    """Nav links for one Network's subcatalog. Required: self, root, parent(=root), one rel=child per Collection."""
+    self_href = _network_catalog_href(network_id)
+    base = _collections_base_href(network_id)
+    links = [
+        {"rel": "self",   "href": self_href,      "type": _MEDIA_JSON},
+        {"rel": "root",   "href": STAC_ROOT_HREF, "type": _MEDIA_JSON},
+        {"rel": "parent", "href": STAC_ROOT_HREF, "type": _MEDIA_JSON},
+    ]
+    for cid in collection_ids:
+        links.append({"rel": "child", "href": f"{base}/{cid}", "type": _MEDIA_JSON})
     return links
 
 
@@ -347,6 +365,7 @@ def _build_item_dict(
     thing: HarvestedThing,
     ds: dict,
     collection_id: str,
+    network_id: Optional[int] = None,
 ) -> Optional[dict]:
     """
     Build a STAC Item as a plain dict for one Datastream.
@@ -481,7 +500,7 @@ def _build_item_dict(
 
     # Navigation links built here -- served from cache as-is by api.py.
     # sta_datastream appended after nav links as a custom cross-reference rel.
-    links = _item_nav_links(item_id, collection_id) + [
+    links = _item_nav_links(item_id, collection_id, network_id) + [
         {
             "rel":   "sta_datastream",
             "href":  base_href,
@@ -508,6 +527,7 @@ def _build_item_dict(
 def _build_collection_dict(
     thing: HarvestedThing,
     items: list[dict],
+    network_id: Optional[int] = None,
 ) -> dict:
     """
     Build a STAC Collection as a plain dict for one Thing.
@@ -586,7 +606,7 @@ def _build_collection_dict(
 
     # Navigation links built here -- served from cache as-is by api.py.
     # sta_thing appended after nav links as a custom cross-reference rel.
-    links = _collection_nav_links(collection_id, item_ids) + [
+    links = _collection_nav_links(collection_id, item_ids, network_id) + [
         {
             "rel":   "sta_thing",
             "href":  _thing_href(thing.id),
@@ -631,6 +651,30 @@ def _build_collection_dict(
     return coll
 
 
+def _build_things_collections(
+    things: list[HarvestedThing], network_id: Optional[int]
+) -> tuple[list[dict], int]:
+    """Build Collection dicts (with nested Items) for a list of Things, scoped
+    to network_id (None = orphan/unscoped). Returns (collections, skipped_items)."""
+    collections: list[dict] = []
+    skipped_items = 0
+    for thing in things:
+        items: list[dict] = []
+        for ds in thing.datastreams:
+            item = _build_item_dict(thing, ds, f"thing-{thing.id}", network_id=network_id)
+            if item is not None:
+                items.append(item)
+            else:
+                skipped_items += 1
+        if not items and thing.datastreams:
+            logger.warning(
+                "Thing %s (%s): all %d Datastreams were skipped -- Collection will have no Items",
+                thing.id, thing.name, len(thing.datastreams),
+            )
+        collections.append(_build_collection_dict(thing, items, network_id=network_id))
+    return collections, skipped_items
+
+
 # Public interface
 def build_stac_catalog(catalog: HarvestedCatalog) -> dict:
     """
@@ -655,52 +699,88 @@ def build_stac_catalog(catalog: HarvestedCatalog) -> dict:
     Called exactly once per harvest cycle by scheduler.py. Does not touch
     Postgres, Redis, or disk.
     """
-    collections: list[dict] = []
-    skipped_items = 0
-
-    for thing in catalog.things:
-        items: list[dict] = []
-        for ds in thing.datastreams:
-            item = _build_item_dict(thing, ds, f"thing-{thing.id}")
-            if item is not None:
-                items.append(item)
-            else:
-                skipped_items += 1
-
-        if not items and thing.datastreams:
-            logger.warning(
-                "Thing %s (%s): all %d Datastreams were skipped -- "
-                "Collection will have no Items",
-                thing.id, thing.name, len(thing.datastreams),
-            )
-
-        collections.append(_build_collection_dict(thing, items))
-
+    collections, skipped_items = _build_things_collections(catalog.things, network_id=None)
     collection_ids = [c["id"] for c in collections]
 
     root_catalog = {
-        "type":         "Catalog",
+        "type": "Catalog",
         "stac_version": _STAC_VERSION,
-        "id":           "istsos-connector-catalog",
-        "description":  (
-            f"istSOS4 deployment: {catalog.thing_count} Things, "
-            f"harvested at {catalog.harvested_at}."
-        ),
-        # Navigation links built here, cached verbatim, served as-is.
+        "id": "istsos-connector-catalog",
+        "description": f"istSOS4 deployment: {catalog.thing_count} Things, harvested at {catalog.harvested_at}.",
         "links": _catalog_nav_links(collection_ids),
-        # Tracking list -- not part of STAC spec, consumed by api.py to
-        # enumerate children for the /stac/collections listing route.
         "collection_ids": collection_ids,
     }
 
     logger.info(
         "STAC transform complete: %d Collections, %d Items, %d skipped",
-        len(collections),
-        sum(len(c["item_ids"]) for c in collections),
-        skipped_items,
+        len(collections), sum(len(c["item_ids"]) for c in collections), skipped_items,
+    )
+    return {"catalog": root_catalog, "collections": collections}
+
+
+def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -> dict:
+    """
+    Build the NETWORK=1 hierarchy:
+
+        Catalog (root, serves orphan scope directly)
+          Catalog (1 per Network, subcatalog)
+            Collection (1 per Thing w/ >=1 Datastream in that Network)
+              Item (1 per Datastream in that Network)
+          Collection (1 per Thing w/ >=1 orphan Datastream)
+            Item (1 per orphan Datastream)
+
+    Output shape:
+        {
+            "catalog": {...root..., "collection_ids": [...orphan...], "network_ids": [...]},
+            "collections": [...orphan collections, same shape build_stac_catalog uses...],
+            "networks": [
+                {"network_id": int, "catalog": {...subcatalog...}, "collections": [...scoped...]},
+                ...
+            ]
+        }
+    """
+    orphan_collections, skipped = _build_things_collections(network_catalog.orphan_things, network_id=None)
+    orphan_ids = [c["id"] for c in orphan_collections]
+
+    network_blocks: list[dict] = []
+    total_items = sum(len(c["item_ids"]) for c in orphan_collections)
+
+    for net in network_catalog.networks:
+        things = network_catalog.things_by_network.get(net.id, [])
+        collections, net_skipped = _build_things_collections(things, network_id=net.id)
+        skipped += net_skipped
+        collection_ids = [c["id"] for c in collections]
+        total_items += sum(len(c["item_ids"]) for c in collections)
+
+        sub_catalog = {
+            "type": "Catalog",
+            "stac_version": _STAC_VERSION,
+            "id": f"network-{net.id}",
+            "title": net.name or None,
+            "description": f"istSOS4 Network subcatalog: {net.name} ({len(collection_ids)} Things).",
+            "links": _network_subcatalog_nav_links(net.id, collection_ids),
+            "collection_ids": collection_ids,
+        }
+        network_blocks.append({"network_id": net.id, "catalog": sub_catalog, "collections": collections})
+
+    network_ids = [net.id for net in network_catalog.networks]
+    root_catalog = {
+        "type": "Catalog",
+        "stac_version": _STAC_VERSION,
+        "id": "istsos-connector-catalog",
+        "description": (
+            f"istSOS4 deployment: {len(network_ids)} Networks, harvested at "
+            f"{network_catalog.harvested_at}. Datastreams with no assigned "
+            "Network are served directly from this root."
+        ),
+        "links": _catalog_nav_links(orphan_ids, network_ids=network_ids),
+        "collection_ids": orphan_ids,
+        "network_ids": network_ids,
+    }
+
+    logger.info(
+        "STAC network transform complete: %d Networks, %d orphan Collections, %d total Items, %d skipped",
+        len(network_ids), len(orphan_collections), total_items, skipped,
     )
 
-    return {
-        "catalog":     root_catalog,
-        "collections": collections,
-    }
+    return {"catalog": root_catalog, "collections": orphan_collections, "networks": network_blocks}
