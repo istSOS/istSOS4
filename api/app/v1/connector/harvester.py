@@ -95,6 +95,31 @@ class HarvestedCatalog:
         self.thing_count = len(self.things)
 
 
+@dataclass
+class HarvestedNetwork:
+    """A Network row (id, name) -- included even with zero Datastreams."""
+    id: int
+    name: str
+
+
+@dataclass
+class HarvestedNetworkCatalog:
+    """
+    Complete harvested snapshot in NETWORK=1 mode.
+
+    orphan_things: Things with >=1 Datastream that has no assigned Network.
+    things_by_network: network_id -> Things with >=1 Datastream in that
+        Network. Every id in `networks` is present as a key, even with an
+        empty list -- that's what lets an empty Network still round-trip
+        to a browsable empty subcatalog.
+    networks: every Network row, regardless of whether it owns any Datastreams.
+    """
+    orphan_things: list[HarvestedThing]
+    things_by_network: dict[int, list[HarvestedThing]]
+    networks: list[HarvestedNetwork]
+    harvested_at: str
+
+
 # The harvest query
 _HARVEST_QUERY = """
 SELECT
@@ -136,6 +161,52 @@ LEFT JOIN sensorthings."ObservedProperty" op ON op.id = d."observedproperty_id"
 LEFT JOIN sensorthings."Sensor" s           ON s.id = d.sensor_id
 ORDER BY t.id, d.id;
 """
+
+_NETWORK_HARVEST_QUERY = """
+SELECT
+    t.id                                 AS thing_id,
+    t.name                               AS thing_name,
+    t.description                        AS thing_description,
+    t.properties                         AS thing_properties,
+    l.id                                 AS loc_id,
+    l.name                               AS loc_name,
+    l.description                        AS loc_description,
+    l."encodingType"                     AS loc_encoding_type,
+    ST_AsGeoJSON(l.location)::json       AS location_geometry,
+    l.properties                         AS loc_properties,
+    d.id                                 AS ds_id,
+    d.name                               AS ds_name,
+    d.description                        AS ds_description,
+    d."unitOfMeasurement"                AS uom,
+    d."observationType"                  AS observation_type,
+    ST_AsGeoJSON(d."observedArea")::json AS observed_area,
+    d."phenomenonTime"                   AS phenomenon_time,
+    d."resultTime"                       AS result_time,
+    d.properties                         AS ds_properties,
+    d.network_id                         AS network_id,
+    n.name                               AS network_name,
+    op.id                                AS op_id,
+    op.name                              AS op_name,
+    op.description                       AS op_description,
+    op.definition                        AS op_definition,
+    op.properties                        AS op_properties,
+    s.id                                 AS sensor_id,
+    s.name                               AS sensor_name,
+    s.description                        AS sensor_description,
+    s."encodingType"                     AS sensor_encoding_type,
+    s.metadata                           AS sensor_metadata,
+    s.properties                         AS sensor_properties
+FROM sensorthings."Thing" t
+LEFT JOIN sensorthings."Thing_Location" tl  ON tl.thing_id = t.id
+LEFT JOIN sensorthings."Location" l         ON l.id = tl.location_id
+LEFT JOIN sensorthings."Datastream" d       ON d.thing_id = t.id
+LEFT JOIN sensorthings."Network" n          ON n.id = d.network_id
+LEFT JOIN sensorthings."ObservedProperty" op ON op.id = d."observedproperty_id"
+LEFT JOIN sensorthings."Sensor" s           ON s.id = d.sensor_id
+ORDER BY t.id, d.id;
+"""
+
+_NETWORK_LIST_QUERY = 'SELECT id, name FROM sensorthings."Network" ORDER BY id;'
 
 
 # Row-level normalisation helpers
@@ -275,6 +346,8 @@ def _parse_datastream(row: asyncpg.Record, thing_id: int) -> Optional[dict]:
         "unit_of_measurement": _parse_unit_of_measurement(row["uom"]),
         "observed_property": _parse_observed_property(row, thing_id, ds_id),
         "sensor": _parse_sensor(row, thing_id, ds_id),
+        "network_id": row.get("network_id"),
+        "network_name": row.get("network_name"),
     }
 
 
@@ -314,6 +387,61 @@ def _parse_location(row: asyncpg.Record, thing_id: int) -> Optional[dict]:
     }
 
 
+# Thing accumulator
+def _new_thing_from_row(row: asyncpg.Record, thing_id: int) -> HarvestedThing:
+    name = row["thing_name"] or ""
+    if not name:
+        logger.warning("Thing %s missing name, using empty string", thing_id)
+    return HarvestedThing(
+        id=thing_id,
+        name=name,
+        description=row["thing_description"],
+        properties=_coerce_json(row["thing_properties"]),
+        locations=[],
+        datastreams=[],
+    )
+
+
+class _ThingAccumulator:
+    """
+    Incrementally builds a thing_id -> HarvestedThing map for one scope
+    bucket (the unscoped view, the orphan-Datastream view, or one
+    Network's view), deduplicating Locations and Datastreams by their own
+    id -- the Thing x Location x Datastream cross join repeats both across
+    rows within a Thing.
+    """
+
+    def __init__(self) -> None:
+        self._things: dict[int, HarvestedThing] = {}
+        self._seen_locations: dict[int, set] = {}
+        self._seen_datastreams: dict[int, set] = {}
+
+    def add(
+        self,
+        row: asyncpg.Record,
+        thing_id: int,
+        location: Optional[dict],
+        datastream: Optional[dict],
+    ) -> None:
+        thing = self._things.get(thing_id)
+        if thing is None:
+            thing = _new_thing_from_row(row, thing_id)
+            self._things[thing_id] = thing
+            self._seen_locations[thing_id] = set()
+            self._seen_datastreams[thing_id] = set()
+
+        if location is not None and location["id"] not in self._seen_locations[thing_id]:
+            self._seen_locations[thing_id].add(location["id"])
+            thing.locations.append(location)
+
+        if datastream is not None and datastream["id"] not in self._seen_datastreams[thing_id]:
+            self._seen_datastreams[thing_id].add(datastream["id"])
+            thing.datastreams.append(datastream)
+
+    def things(self) -> list[HarvestedThing]:
+        return list(self._things.values())
+
+
 # Row grouping (at "Row grouping" in the reference doc)
 def _build_catalog(rows: list[asyncpg.Record]) -> HarvestedCatalog:
     """
@@ -330,9 +458,46 @@ def _build_catalog(rows: list[asyncpg.Record]) -> HarvestedCatalog:
     Things with no Datastreams (ds_id NULL on every row for that Thing)
     end up with an empty datastreams list. Same rule for Locations.
     """
-    things_by_id: dict[int, HarvestedThing] = {}
-    seen_location_ids: dict[int, set] = {}
-    seen_datastream_ids: dict[int, set] = {}
+    acc = _ThingAccumulator()
+    for row in rows:
+        thing_id = row["thing_id"]
+        if thing_id is None:
+            logger.warning("Skipping row with NULL thing_id: %s", dict(row))
+            continue
+        acc.add(row, thing_id, _parse_location(row, thing_id), _parse_datastream(row, thing_id))
+
+    things = acc.things()
+    if not things:
+        logger.warning("Harvest query returned no Things")
+
+    return HarvestedCatalog(
+        things=things,
+        harvested_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    )
+
+
+def _build_network_catalog(
+    rows: list[asyncpg.Record],
+    networks: list[HarvestedNetwork],
+) -> HarvestedNetworkCatalog:
+    """
+    Groups the same flat rows into two disjoint scopes in one pass, keyed
+    off the Datastream's network_id rather than the Thing:
+
+      - orphan scope:     Datastreams with network_id IS NULL, grouped by Thing.
+      - per-Network scope: Datastreams with network_id set, grouped by
+                            (network_id, Thing).
+
+    A Thing with zero Datastreams at all contributes to neither scope --
+    there's no Datastream to anchor it to a scope. A Thing with both
+    orphan and networked Datastreams appears in both places, each time
+    carrying only the Datastreams that belong there. No Datastream is
+    ever placed in more than one bucket, since network_id is fixed per
+    Datastream row. Locations are attached wherever the Thing appears
+    (Locations aren't Datastream-scoped).
+    """
+    orphan_acc = _ThingAccumulator()
+    network_accs: dict[int, _ThingAccumulator] = {}
 
     for row in rows:
         thing_id = row["thing_id"]
@@ -340,40 +505,29 @@ def _build_catalog(rows: list[asyncpg.Record]) -> HarvestedCatalog:
             logger.warning("Skipping row with NULL thing_id: %s", dict(row))
             continue
 
-        thing = things_by_id.get(thing_id)
-        if thing is None:
-            name = row["thing_name"] or ""
-            if not name:
-                logger.warning("Thing %s missing name, using empty string", thing_id)
-            thing = HarvestedThing(
-                id=thing_id,
-                name=name,
-                description=row["thing_description"],
-                properties=_coerce_json(row["thing_properties"]),
-                locations=[],
-                datastreams=[],
-            )
-            things_by_id[thing_id] = thing
-            seen_location_ids[thing_id] = set()
-            seen_datastream_ids[thing_id] = set()
+        datastream = _parse_datastream(row, thing_id)
+        if datastream is None:
+            continue  # Thing has no Datastreams at all -- nowhere for it to go.
 
         location = _parse_location(row, thing_id)
-        if location is not None and location["id"] not in seen_location_ids[thing_id]:
-            seen_location_ids[thing_id].add(location["id"])
-            thing.locations.append(location)
+        network_id = datastream.get("network_id")
 
-        datastream = _parse_datastream(row, thing_id)
-        if datastream is not None and datastream["id"] not in seen_datastream_ids[thing_id]:
-            seen_datastream_ids[thing_id].add(datastream["id"])
-            thing.datastreams.append(datastream)
+        if network_id is None:
+            orphan_acc.add(row, thing_id, location, datastream)
+        else:
+            network_accs.setdefault(network_id, _ThingAccumulator()).add(
+                row, thing_id, location, datastream
+            )
 
-    things = list(things_by_id.values())
+    things_by_network = {
+        net.id: network_accs[net.id].things() if net.id in network_accs else []
+        for net in networks
+    }
 
-    if not things:
-        logger.warning("Harvest query returned no Things")
-
-    return HarvestedCatalog(
-        things=things,
+    return HarvestedNetworkCatalog(
+        orphan_things=orphan_acc.things(),
+        things_by_network=things_by_network,
+        networks=networks,
         harvested_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
 
@@ -410,4 +564,34 @@ async def harvest(pool: asyncpg.Pool) -> HarvestedCatalog:
         catalog.thing_count, total_datastreams, elapsed,
     )
 
+    return catalog
+
+
+async def harvest_with_networks(pool: asyncpg.Pool) -> HarvestedNetworkCatalog:
+    """
+    Run the network-scoped harvest (main JOIN + Network list) and return a
+    HarvestedNetworkCatalog. Same contract as harvest(): pure read, raises
+    HarvesterQueryError on failure, no Redis/transformer calls.
+    """
+    logger.info("Starting network-scoped harvest")
+    start = time.monotonic()
+
+    try:
+        rows = await pool.fetch(_NETWORK_HARVEST_QUERY)
+        network_rows = await pool.fetch(_NETWORK_LIST_QUERY)
+    except Exception as exc:
+        raise HarvesterQueryError(f"Network harvest query failed: {exc}") from exc
+
+    networks = [HarvestedNetwork(id=r["id"], name=r["name"] or "") for r in network_rows]
+    catalog = _build_network_catalog(rows, networks)
+
+    elapsed = time.monotonic() - start
+    orphan_ds = sum(len(t.datastreams) for t in catalog.orphan_things)
+    networked_ds = sum(len(t.datastreams) for ts in catalog.things_by_network.values() for t in ts)
+
+    logger.info(
+        "Network harvest complete: %d Networks, %d orphan Datastreams, "
+        "%d networked Datastreams, elapsed=%.3fs",
+        len(networks), orphan_ds, networked_ds, elapsed,
+    )
     return catalog
