@@ -11,3 +11,6 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.17
 python-dateutil==2.9.0.post0
 sly==0.5
+pydantic-settings
+apscheduler
+pystac
