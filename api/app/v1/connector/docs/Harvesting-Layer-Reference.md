@@ -55,6 +55,8 @@ SELECT
     d."phenomenonTime"              AS phenomenon_time,
     d."resultTime"                  AS result_time,
     d.properties                    AS ds_properties,
+    d.network_id                    AS network_id,
+    n.name                          AS network_name,
     op.id                           AS op_id,
     op.name                         AS op_name,
     op.description                  AS op_description,
@@ -70,14 +72,25 @@ FROM sensorthings."Thing" t
 LEFT JOIN sensorthings."Thing_Location" tl  ON tl.thing_id = t.id
 LEFT JOIN sensorthings."Location" l         ON l.id = tl.location_id
 LEFT JOIN sensorthings."Datastream" d       ON d.thing_id = t.id
+LEFT JOIN sensorthings."Network" n          ON n.id = d.network_id
 LEFT JOIN sensorthings."ObservedProperty" op ON op.id = d."observedproperty_id"
 LEFT JOIN sensorthings."Sensor" s           ON s.id = d.sensor_id
 ORDER BY t.id, d.id;
 ```
 
-This query runs against the live tables directly, on every scheduled cycle.`ST_AsGeoJSON(l.location)::json` casts the PostGIS geometry column to a parsed GeoJSON dict rather than raw WKB bytes, so asyncpg returns it as a Python dict directly.
+`d.network_id` is nullable (datastreams generated under `NETWORK=0`, or created before a network was assigned, come back `NULL`), and the `LEFT JOIN` on `Network` handles that the same way the existing `Location` join already handles Things with no location.
 
-**Row grouping.** The query returns one flat row per (Thing, Datastream) pair. A Thing with three Datastreams produces three rows, all with identical Thing columns. `_build_catalog()` groups rows by `thing_id` using a dict keyed on `thing_id`, building up the `locations` and `datastreams` lists incrementally. Things with no Datastreams (all Thing columns present, all Datastream columns NULL) are included with an empty `datastreams` list.
+NETWORK is read once at startup like every other config constant, changing it requires a container restart, not a live toggle.
+
+You do need one more query, though, a small one, separate from the main join:
+
+```sql
+SELECT id, name FROM sensorthings."Network";
+```
+
+Reason: the main JOIN only surfaces a network if it currently owns at least one datastream. Your root catalog's `links` array needs to list every network as a `subcatalog-N` child regardless of whether it has data yet, so a freshly created empty network still shows up as a browsable (empty) subcatalog. Cheap query, table has ~2-3 rows, no reason to skip it.
+
+**Row grouping changes.** Right now `_build_catalog()` does one pass, grouping flat rows by `thing_id`. That stays exactly as-is for the unscoped view. You now need a second grouping pass over the same rows, keyed by `(network_id, thing_id)`, skipping rows where `network_id IS NULL`, to build the per-network scoped view. Same source rows, two different dicts built from them, no second trip to Postgres.
 
 ---
 
