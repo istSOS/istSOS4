@@ -37,7 +37,53 @@ The advisory lock exists to stop multiple istSOS workers or replicas, each runni
 
 ## The harvest query
 
-One asyncpg `fetch()` call returns everything both transformers need:
+We will have to first check if the NETWORK env var is 0 or 1 and then based on that perform the respective queries
+
+NETWORK is read once at startup like every other config constant, changing it requires a container restart, not a live toggle.
+
+### If NETWORK is 0 and thus it is disabled
+
+```sql
+SELECT
+    t.id                            AS thing_id,
+    t.name                          AS thing_name,
+    t.description                   AS thing_description,
+    t.properties                    AS thing_properties,
+    ST_AsGeoJSON(l.location)::json  AS location_geometry,
+    d.id                            AS ds_id,
+    d.name                          AS ds_name,
+    d.description                   AS ds_description,
+    d."unitOfMeasurement"           AS uom,
+    d."observationType"             AS observation_type,
+    d."observedArea"                AS observed_area,
+    d."phenomenonTime"              AS phenomenon_time,
+    d."resultTime"                  AS result_time,
+    d.properties                    AS ds_properties,
+    op.id                           AS op_id,
+    op.name                         AS op_name,
+    op.description                  AS op_description,
+    op.definition                   AS op_definition,
+    op.properties                   AS op_properties,
+    s.id                            AS sensor_id,
+    s.name                          AS sensor_name,
+    s.description                   AS sensor_description,
+    s."encodingType"                AS sensor_encoding_type,
+    s.metadata                      AS sensor_metadata,
+    s.properties                    AS sensor_properties
+FROM sensorthings."Thing" t
+LEFT JOIN sensorthings."Thing_Location" tl  ON tl.thing_id = t.id
+LEFT JOIN sensorthings."Location" l         ON l.id = tl.location_id
+LEFT JOIN sensorthings."Datastream" d       ON d.thing_id = t.id
+LEFT JOIN sensorthings."ObservedProperty" op ON op.id = d."observedproperty_id"
+LEFT JOIN sensorthings."Sensor" s           ON s.id = d.sensor_id
+ORDER BY t.id, d.id;
+```
+
+This query runs against the live tables directly, on every scheduled cycle.`ST_AsGeoJSON(l.location)::json` casts the PostGIS geometry column to a parsed GeoJSON dict rather than raw WKB bytes, so asyncpg returns it as a Python dict directly.
+
+**Row grouping.** The query returns one flat row per (Thing, Datastream) pair. A Thing with three Datastreams produces three rows, all with identical Thing columns. `_build_catalog()` groups rows by `thing_id` using a dict keyed on `thing_id`, building up the `locations` and `datastreams` lists incrementally. Things with no Datastreams (all Thing columns present, all Datastream columns NULL) are included with an empty `datastreams` list.
+
+### And if it's 1, or enabled
 
 ```sql
 SELECT
@@ -79,8 +125,6 @@ ORDER BY t.id, d.id;
 ```
 
 `d.network_id` is nullable (datastreams generated under `NETWORK=0`, or created before a network was assigned, come back `NULL`), and the `LEFT JOIN` on `Network` handles that the same way the existing `Location` join already handles Things with no location.
-
-NETWORK is read once at startup like every other config constant, changing it requires a container restart, not a live toggle.
 
 You do need one more query, though, a small one, separate from the main join:
 
