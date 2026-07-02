@@ -35,6 +35,7 @@ from sqlalchemy import (
     Text,
     cast,
 )
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm.relationships import RelationshipProperty
@@ -76,6 +77,7 @@ SELECT_MAPPING = {
     "resultTime": "result_time",
     "resultQuality": "result_quality",
     "validTime": "valid_time",
+    "systemTimeValidity": "system_time_validity",
 }
 
 
@@ -228,7 +230,7 @@ class FilterVisitor(visitor.NodeVisitor):
             raise ex.InvalidFieldException(node.name)
 
     @staticmethod
-    def _relationship_attribute(model, segment):
+    def resolve_relationship_attribute(model, segment):
         """Resolve an OGC navigation property name to a relationship attribute.
 
         The navigation name is mapped to the internal (singular, lower-case)
@@ -253,7 +255,7 @@ class FilterVisitor(visitor.NodeVisitor):
         return None
 
     @staticmethod
-    def _resolve_path_column(model, segments):
+    def resolve_path_column(model, segments):
         """Resolve a column on `model`, with an optional trailing JSON path.
 
         `segments[0]` is the column; any further segments index into it as a
@@ -290,7 +292,9 @@ class FilterVisitor(visitor.NodeVisitor):
         model = globals()[self.root_model]
         index = 0
         while index < len(segments) - 1:
-            rel_attr = self._relationship_attribute(model, segments[index])
+            rel_attr = self.resolve_relationship_attribute(
+                model, segments[index]
+            )
             if rel_attr is None:
                 break
             self.join_relationships.append(rel_attr)
@@ -299,7 +303,7 @@ class FilterVisitor(visitor.NodeVisitor):
 
         # Remaining segments are a column on the reached entity plus an optional
         # JSON sub-path.
-        return self._resolve_path_column(model, segments[index:])
+        return self.resolve_path_column(model, segments[index:])
 
     def visit_BinOp(self, node: ast.BinOp) -> Any:
         left = self.visit(node.left)
@@ -342,18 +346,34 @@ class FilterVisitor(visitor.NodeVisitor):
         right = self.visit(node.right)
         op = self.visit(node.comparator)
 
-        if (
-            isinstance(node.left, ast.Identifier)
-            and "systemTimeValidity" in left.name
-        ):
-            if getattr(op, "__name__", "") == "eq":
+        if getattr(left, "name", None) == "systemTimeValidity":
+            op_name = getattr(op, "__name__", "")
+            if op_name in {"eq", "ne"}:
                 if isinstance(right, list):
                     right = functions.func.tstzrange(
                         functions.func.timestamptz(right[0]),
                         functions.func.timestamptz(right[1]),
                     )
-                    return left.op("&&")(right)
-                return left.op("@>")(functions.func.timestamptz(right))
+                    expression = left.op("&&")(right)
+                else:
+                    expression = left.op("@>")(
+                        functions.func.timestamptz(right)
+                    )
+                if op_name == "ne":
+                    return operator.invert(expression)
+                return expression
+
+            if isinstance(right, list):
+                raise ex.ArgumentTypeException(
+                    "systemTimeValidity",
+                    "datetime",
+                    "list",
+                )
+
+            raise ex.ArgumentTypeException(
+                "systemTimeValidity",
+                "eq/ne or lower(systemTimeValidity)/upper(systemTimeValidity)",
+            )
 
         if isinstance(node.left, ast.Attribute) and not isinstance(
             node.right, ast.Attribute
@@ -414,6 +434,56 @@ class FilterVisitor(visitor.NodeVisitor):
             raise ex.UnsupportedFunctionException(node.func.name)
 
         return handler(*node.args)
+
+    ####################################################################################
+    # Date/time range functions
+    ####################################################################################
+
+    def func_lower(self, field: ast._Node) -> ClauseElement:
+        column = self.visit(field)
+        table_name = getattr(getattr(column, "table", None), "name", None)
+
+        if (
+            getattr(column, "name", None) == "phenomenonTimeStart"
+            and table_name in {"Observation", "Observation_traveltime"}
+        ):
+            return column
+        if (
+            getattr(column, "name", None) == "resultTime"
+            and table_name in {"Observation", "Observation_traveltime"}
+        ):
+            return column
+        if isinstance(getattr(column, "type", None), TSTZRANGE):
+            return functions.func.lower(column)
+
+        raise ex.ArgumentTypeException(
+            "lower",
+            "datetime range field",
+            getattr(column, "name", type(column).__name__),
+        )
+
+    def func_upper(self, field: ast._Node) -> ClauseElement:
+        column = self.visit(field)
+        table_name = getattr(getattr(column, "table", None), "name", None)
+
+        if (
+            getattr(column, "name", None) == "phenomenonTimeStart"
+            and table_name in {"Observation", "Observation_traveltime"}
+        ):
+            return column.table.c["phenomenonTimeEnd"]
+        if (
+            getattr(column, "name", None) == "resultTime"
+            and table_name in {"Observation", "Observation_traveltime"}
+        ):
+            return column
+        if isinstance(getattr(column, "type", None), TSTZRANGE):
+            return functions.func.upper(column)
+
+        raise ex.ArgumentTypeException(
+            "upper",
+            "datetime range field",
+            getattr(column, "name", type(column).__name__),
+        )
 
     ####################################################################################
     # String Functions
