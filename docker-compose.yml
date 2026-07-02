@@ -33,7 +33,7 @@ services:
       - istsos4-network
 
   api:
-    image: ghcr.io/istsos/istsos4/api:1.19
+    image: ghcr.io/istsos/istsos4/api:1.21
     restart: always
     container_name: istsos4-api
     depends_on:
