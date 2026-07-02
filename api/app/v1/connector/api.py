@@ -48,8 +48,11 @@ For now only /connector/stac is live. /connector/dcat will follow the
 same pattern once dcat_transformer.py lands.
 """
 
+from typing import Optional
+
 from app import HOSTNAME, SUBPATH, VERSION
-from app.v1.connector.cache import get_catalog, get_collection, get_item, get_stac_metadata
+from app.v1.connector.cache import get_catalog, get_collection, get_item, get_stac_metadata, get_network_catalog, get_network_collection, get_network_item
+
 from app.v1.connector.config import get_settings
 
 from fastapi import APIRouter, status, Request
@@ -86,6 +89,40 @@ def _not_found(detail: str) -> JSONResponse:
             "message": detail,
         },
     )
+
+
+async def _collection_envelope(coll: Optional[dict], collection_id: str):
+    if coll is None:
+        return _not_found(f"Collection '{collection_id}' not found.")
+    return {k: v for k, v in coll.items() if k != "item_ids"}
+
+
+async def _items_envelope(coll: Optional[dict], collection_id: str, collection_href: str, item_fetch):
+    if coll is None:
+        return _not_found(f"Collection '{collection_id}' not found.")
+    items = []
+    for iid in coll.get("item_ids", []):
+        item = await item_fetch(iid)
+        if item is not None:
+            items.append(item)
+    return {
+        "type": "FeatureCollection",
+        "features": items,
+        "links": [
+            {"rel": "self", "href": f"{collection_href}/items", "type": "application/geo+json"},
+            {"rel": "collection", "href": collection_href, "type": "application/json"},
+            {"rel": "root", "href": _STAC_ROOT_HREF, "type": "application/json"},
+        ],
+    }
+
+
+async def _item_envelope(coll: Optional[dict], collection_id: str, item_id: str, item_fetch):
+    if coll is None:
+        return _not_found(f"Collection '{collection_id}' not found.")
+    item = await item_fetch(item_id)
+    if item is None:
+        return _not_found(f"Item '{item_id}' not found in collection '{collection_id}'.")
+    return item
 
 
 @v1.get("")
@@ -131,9 +168,7 @@ async def stac_root():
                 "Try again after the next scheduled harvest cycle."
             )
 
-        return {
-            k: v for k, v in catalog.items() if k != "collection_ids"
-        }
+        return {k: v for k, v in catalog.items() if k not in ("collection_ids", "network_ids")}
 
     except Exception as e:
         return JSONResponse(
@@ -203,17 +238,9 @@ async def stac_collections():
 )
 async def stac_collection(collection_id: str):
     try:
-        coll = await get_collection(collection_id)
-        if coll is None:
-            return _not_found(f"Collection '{collection_id}' not found.")
-
-        return {k: v for k, v in coll.items() if k != "item_ids"}
-
+        return await _collection_envelope(await get_collection(collection_id), collection_id)
     except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
 
 
 @v1.api_route(
@@ -230,45 +257,10 @@ async def stac_collection(collection_id: str):
 async def stac_items(collection_id: str):
     try:
         coll = await get_collection(collection_id)
-        if coll is None:
-            return _not_found(f"Collection '{collection_id}' not found.")
-
-        item_ids = coll.get("item_ids", [])
-        items = []
-        for iid in item_ids:
-            item = await get_item(collection_id, iid)
-            if item is None:
-                # Transient mid-write miss: skip.
-                continue
-            items.append(item)
-
         collection_href = f"{_STAC_ROOT_HREF}/collections/{collection_id}"
-        return {
-            "type": "FeatureCollection",
-            "features": items,
-            "links": [
-                {
-                    "rel": "self",
-                    "href": f"{collection_href}/items",
-                    "type": "application/geo+json",
-                },
-                {
-                    "rel": "collection",
-                    "href": collection_href,
-                    "type": "application/json",
-                },
-                {
-                    "rel": "root",
-                    "href": _STAC_ROOT_HREF,
-                    "type": "application/json",
-                },
-            ],
-        }
+        return await _items_envelope(coll, collection_id, collection_href, item_fetch=lambda iid: get_item(collection_id, iid))
     except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
 
 
 @v1.api_route(
@@ -282,19 +274,61 @@ async def stac_items(collection_id: str):
 async def stac_item(collection_id: str, item_id: str):
     try:
         coll = await get_collection(collection_id)
-        if coll is None:
-            return _not_found(f"Collection '{collection_id}' not found.")
-
-        item = await get_item(collection_id, item_id)
-        if item is None:
-            return _not_found(
-                f"Item '{item_id}' not found in collection '{collection_id}'."
-            )
-
-        return item
-
+        return await _item_envelope(coll, collection_id, item_id, item_fetch=lambda iid: get_item(collection_id, iid))
     except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+
+
+# Network paths
+@v1.api_route(
+    "/stac/{network_id}", methods=["GET"], tags=["STAC"],
+    summary="STAC Network subcatalog",
+    description=(
+        "Cached STAC 1.0 subcatalog for one Network -- only populated when "
+        "NETWORK is enabled. Lists every Thing with >=1 Datastream in this "
+        "Network; present even if empty."
+    ),
+    status_code=status.HTTP_200_OK,
+)
+async def stac_network_root(network_id: int):
+    try:
+        net_catalog = await get_network_catalog(network_id)
+        if net_catalog is None:
+            return _not_found(f"Network '{network_id}' not found.")
+        return {k: v for k, v in net_catalog.items() if k != "collection_ids"}
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+
+
+@v1.api_route("/stac/{network_id}/collections/{collection_id}", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
+async def stac_network_collection(network_id: int, collection_id: str):
+    try:
+        coll = await get_network_collection(network_id, collection_id)
+        return await _collection_envelope(coll, collection_id)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+
+
+@v1.api_route("/stac/{network_id}/collections/{collection_id}/items", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
+async def stac_network_items(network_id: int, collection_id: str):
+    try:
+        coll = await get_network_collection(network_id, collection_id)
+        collection_href = f"{_STAC_ROOT_HREF}/{network_id}/collections/{collection_id}"
+        return await _items_envelope(
+            coll, collection_id, collection_href,
+            item_fetch=lambda iid: get_network_item(network_id, collection_id, iid),
         )
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+
+
+@v1.api_route("/stac/{network_id}/collections/{collection_id}/items/{item_id}", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
+async def stac_network_item(network_id: int, collection_id: str, item_id: str):
+    try:
+        coll = await get_network_collection(network_id, collection_id)
+        return await _item_envelope(
+            coll, collection_id, item_id,
+            item_fetch=lambda iid: get_network_item(network_id, collection_id, iid),
+        )
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
