@@ -2,7 +2,8 @@
     "istsos_url": "http://localhost:8018/istsos4/v1.1",
     "istsos_username": "example-user",
     "istsos_password": "example-password",
-    "update": False,
+    "observation_mode": "append",
+    "overwrite_observations": False,
     "dry_run": True,
     "log_file": "logs/ftp2istsos4.log",
     "log_level": "INFO",
@@ -20,6 +21,8 @@
             "key_path": "/home/user/.ssh/example_id_rsa",
             "remote-dir": "/CSV",
             "tz": "UTC",
+            "observation_mode": "append",
+            "overwrite_observations": False,
             "files": [
                 {
                     "file_path": "station/measurements.csv",
@@ -49,6 +52,8 @@
             "tz": "Europe/Rome",
             "sent_dir": "sent",
             "error_dir": "error",
+            "observation_mode": "append",
+            "overwrite_observations": False,
             "files": [
                 {
                     "filename_suffix": "Example-Meteo.txt",
