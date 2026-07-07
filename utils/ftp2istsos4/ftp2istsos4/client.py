@@ -3,7 +3,11 @@ import time
 from datetime import datetime
 from urllib.parse import quote
 
-from .config import require_value
+from .config import (
+    observation_mode,
+    overwrite_observations_enabled,
+    require_value,
+)
 from .dependencies import import_requests
 from .errors import DuplicateObservationError
 from .observations import bulk_observations_payload
@@ -50,13 +54,22 @@ def is_duplicate_observation_error(status_code, text):
 
 
 class IstsosClient:
-    def __init__(self, base_url, username, password, dry_run=False, update=False):
+    def __init__(
+        self,
+        base_url,
+        username,
+        password,
+        dry_run=False,
+        update=False,
+        mode="append",
+    ):
         self.requests = import_requests()
         self.base_url = base_url.rstrip("/")
         self.username = username
         self.password = password
         self.dry_run = dry_run
         self.update = update
+        self.observation_mode = mode
         self.access_token = None
         self.refresh_token = None
         self.expires_at = 0
@@ -442,5 +455,8 @@ def build_istsos_client(config):
     username = require_value(config, "istsos_username")
     password = require_value(config, "istsos_password")
     dry_run = bool(config.get("dry_run", False))
-    update = bool(config.get("update", False))
-    return IstsosClient(url, username, password, dry_run=dry_run, update=update)
+    update = overwrite_observations_enabled(config)
+    mode = observation_mode(config)
+    return IstsosClient(
+        url, username, password, dry_run=dry_run, update=update, mode=mode
+    )

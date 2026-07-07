@@ -1,7 +1,7 @@
 import csv
 import io
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from .errors import DuplicateObservationError
@@ -117,6 +117,8 @@ def observation_time_key(value):
     parsed = parse_observation_time(value)
     if parsed is None:
         return value
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc)
     return parsed.isoformat()
 
 
@@ -318,6 +320,22 @@ def existing_observations_by_time(client, datastream_id, observations):
     }
 
 
+def filter_observations_missing_from_time_window(client, observations):
+    filtered = []
+    skipped = 0
+    for datastream_id, group in observations_by_datastream(observations).items():
+        existing_by_time = existing_observations_by_time(
+            client, datastream_id, group
+        )
+        for observation in group:
+            key = observation_time_key(observation.get("phenomenonTime"))
+            if key in existing_by_time:
+                skipped += 1
+                continue
+            filtered.append(observation)
+    return filtered, skipped
+
+
 def chunks(items, size):
     for start in range(0, len(items), size):
         yield items[start : start + size]
@@ -399,14 +417,26 @@ def post_observations(client, observations, label, apply_range_filter=True):
         return patch_observations(client, observations, label)
 
     if apply_range_filter:
-        observations, skipped_existing = filter_observations_after_datastream_range(
-            client, observations
-        )
+        if getattr(client, "observation_mode", "append") == "backfill":
+            observations, skipped_existing = (
+                filter_observations_missing_from_time_window(
+                    client, observations
+                )
+            )
+            skipped_message = (
+                "skipped existing observations found in parsed time window"
+            )
+        else:
+            observations, skipped_existing = (
+                filter_observations_after_datastream_range(client, observations)
+            )
+            skipped_message = (
+                "skipped observations already covered by datastream range"
+            )
         skipped_duplicates += skipped_existing
         if skipped_existing:
             print(
-                f"  skipped observations already covered by datastream range: "
-                f"{skipped_existing}",
+                f"  {skipped_message}: {skipped_existing}",
                 flush=True,
             )
         if not observations:

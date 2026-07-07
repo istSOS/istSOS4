@@ -31,7 +31,8 @@ pip install -r requirements.txt
 istsos_url: "http://localhost:8018/istsos4/v1.1"
 istsos_username: "sensor1"
 istsos_password: "sensor"
-update: false
+observation_mode: append
+overwrite_observations: false
 dry_run: true
 ```
 
@@ -163,7 +164,9 @@ Top-level configuration keys:
 | `istsos_url` | yes | Base URL of the istSOS API, for example `http://localhost:8018/istsos4/v1.1`. |
 | `istsos_username` | yes | istSOS username. |
 | `istsos_password` | yes | istSOS password. |
-| `update` | no | If `true`, existing observations in the parsed time window are patched. If `false`, observations already covered by the Datastream `phenomenonTime` range are skipped. Default: `false`. |
+| `observation_mode` | no | Existing-observation lookup mode: `append` or `backfill`. Default: `append`. |
+| `overwrite_observations` | no | If `true`, existing observations in the parsed time window are patched when values changed. Default: `false`. |
+| `update` | no | Deprecated alias for `overwrite_observations`. |
 | `dry_run` | no | If `true`, observations are printed but not posted. FTP files are not moved. Default: `false`. |
 | `log_file` | no | Main rotating log file. Default: `logs/ftp2istsos4.log`. |
 | `log_level` | no | Python logging level. Default: `INFO`. |
@@ -185,6 +188,8 @@ Common source keys inside `ftps`:
 | `remote-dir` | no | Remote directory. `remote_dir` is also accepted. Default: `.`. |
 | `timeout` | no | FTP/SFTP timeout in seconds. Default: `30`. |
 | `tz` | no | Time zone used for datetimes without timezone info. Default: `UTC`. |
+| `observation_mode` | no | Per-source override for the top-level observation mode. |
+| `overwrite_observations` | no | Per-source override for the top-level overwrite mode. |
 
 For SFTP, you can authenticate with a private key:
 
@@ -349,14 +354,23 @@ Logs rotate according to `log_max_bytes` and `log_backup_count`.
 
 ## Existing Observations
 
-By default, `update: false`, the script uses each Datastream `phenomenonTime`
+By default, `observation_mode: append` uses each Datastream `phenomenonTime`
 range from `/Datastreams` to skip observations that are already covered by the
-datastream. This avoids repeatedly posting the same values from moving-window
-files.
+datastream. This is fast and works best for files that arrive in order.
 
-With `update: true`, the script queries existing `/Observations` in the parsed
-time window. Existing observations are patched when the result or quality
-changed, unchanged observations are skipped, and missing observations are posted.
+With `observation_mode: backfill`, the script queries existing `/Observations`
+in the parsed time window, skips observations whose `Datastream` and
+`phenomenonTime` already exist, and bulk-posts only missing observations. This
+is useful for filling historical gaps without changing existing observations.
+
+With `overwrite_observations: true`, the script patches existing observations
+when the result or quality changed, skips unchanged observations, and posts
+missing observations. This overwrite flag is separate from `observation_mode`.
+
+`observation_mode` and `overwrite_observations` can be set at the top level or
+inside one source in `ftps`. A source-level value overrides the top-level value.
+The older `update` key is still accepted as an alias for
+`overwrite_observations`.
 
 Duplicate observations are still treated as non-fatal when the istSOS API
 returns a duplicate-observation error. They are counted as skipped in the

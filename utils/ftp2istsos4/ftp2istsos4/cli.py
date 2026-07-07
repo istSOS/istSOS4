@@ -2,7 +2,11 @@ import argparse
 import logging
 
 from .client import build_istsos_client
-from .config import load_config
+from .config import (
+    load_config,
+    observation_mode,
+    overwrite_observations_enabled,
+)
 from .importers.common import import_result_details
 from .importers.ufam import process_ufam
 from .importers.vulink_varese import process_vulink_varese
@@ -81,6 +85,11 @@ def build_ready_istsos_client(config):
     return istSOS
 
 
+def set_source_observation_policy(config, item, client):
+    client.update = overwrite_observations_enabled(config, item)
+    client.observation_mode = observation_mode(config, item)
+
+
 def main():
     parser = build_parser()
     args = parser.parse_args()
@@ -111,10 +120,12 @@ def main():
                 if item.get("type") == "ufam":
                     if istSOS is None:
                         istSOS = build_ready_istsos_client(config)
+                    set_source_observation_policy(config, item, istSOS)
                     result = process_ufam(item, istSOS)
                 elif item.get("type") == "vulink-varese":
                     if istSOS is None:
                         istSOS = build_ready_istsos_client(config)
+                    set_source_observation_policy(config, item, istSOS)
                     result = process_vulink_varese(item, istSOS)
 
                 if result is not None:
