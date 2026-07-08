@@ -60,6 +60,9 @@ ODATA_FUNCTIONS = {
     "now": 0,
     "mindatetime": 0,
     "maxdatetime": 0,
+    # Date/time range functions
+    "lower": 1,
+    "upper": 1,
     # Math functions
     "round": 1,
     "floor": 1,

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from app import VERSIONING
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.dialects.postgresql.json import JSON
@@ -51,6 +52,8 @@ class Observation(Base):
     result_quality = Column("resultQuality", JSON)
     valid_time = Column("validTime", TSTZRANGE)
     parameters = Column(JSON)
+    if VERSIONING:
+        system_time_validity = Column("systemTimeValidity", TSTZRANGE)
     featuresofinterest_id = Column(
         Integer,
         ForeignKey(f"{SCHEMA_NAME}.FeaturesOfInterest.id"),

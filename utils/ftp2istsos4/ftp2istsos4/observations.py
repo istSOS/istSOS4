@@ -1,5 +1,6 @@
 import csv
 import io
+import math
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -126,9 +127,12 @@ def parse_value(value, column_config):
     column_type = column_config.get("type")
     if column_type == "float":
         try:
-            return float(value), raw_data_quality_mask()
+            result = float(value)
         except ValueError:
             return -999.9, no_data_quality_mask()
+        if not math.isfinite(result):
+            return -999.9, no_data_quality_mask()
+        return result, raw_data_quality_mask()
     if column_type == "int":
         try:
             return int(value), raw_data_quality_mask()
