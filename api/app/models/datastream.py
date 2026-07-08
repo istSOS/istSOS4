@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from app import VERSIONING
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from geoalchemy2 import Geometry
 from sqlalchemy.dialects.postgresql.json import JSON
@@ -50,6 +51,8 @@ class Datastream(Base):
     phenomenon_time = Column("phenomenonTime", TSTZRANGE)
     result_time = Column("resultTime", TSTZRANGE)
     properties = Column(JSON)
+    if VERSIONING:
+        system_time_validity = Column("systemTimeValidity", TSTZRANGE)
     thing_id = Column(
         Integer,
         ForeignKey(f"{SCHEMA_NAME}.Thing.id"),

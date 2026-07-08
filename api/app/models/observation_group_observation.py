@@ -13,8 +13,15 @@
 # limitations under the License.
 
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
-from sqlalchemy.sql.schema import Column, ForeignKey, Table
+from sqlalchemy.sql.schema import (
+    Column,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Table,
+    UniqueConstraint,
+)
 from sqlalchemy.sql.sqltypes import Integer
+from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 
 ObservationGroup_Observation = Table(
     "ObservationGroup_Observation",
@@ -25,11 +32,18 @@ ObservationGroup_Observation = Table(
         ForeignKey(f"{SCHEMA_NAME}.ObservationGroup.id"),
         primary_key=True,
     ),
-    Column(
-        "observation_id",
-        Integer,
-        ForeignKey(f"{SCHEMA_NAME}.Observation.id"),
-        primary_key=True,
+    Column("observation_id", Integer, primary_key=True),
+    Column("phenomenonTime", TIMESTAMP, primary_key=True),
+    ForeignKeyConstraint(
+        ["observation_id", "phenomenonTime"],
+        [
+            f"{SCHEMA_NAME}.Observation.id",
+            f"{SCHEMA_NAME}.Observation.phenomenonTimeStart",
+        ],
     ),
     schema=SCHEMA_NAME,
+    table_args__=(
+        UniqueConstraint("id", "phenomenonTimeStart"),
+        {"schema": SCHEMA_NAME},
+    ),
 )

@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from app import VERSIONING
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from geoalchemy2 import Geometry
 from sqlalchemy.dialects.postgresql.json import JSON
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, String, Text
@@ -39,6 +41,8 @@ class Location(Base):
     encoding_type = Column("encodingType", String(100), nullable=False)
     location = Column(Geometry, nullable=False)
     properties = Column(JSON)
+    if VERSIONING:
+        system_time_validity = Column("systemTimeValidity", TSTZRANGE)
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
     thing = relationship(
         "Thing", secondary=Thing_Location, back_populates="location"
