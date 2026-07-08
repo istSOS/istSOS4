@@ -6,16 +6,16 @@ from pathlib import Path
 
 import pandas as pd
 from models import (
-    build_istsos_url,
     Datastream,
-    get_credentials,
     Location,
-    load_environment,
-    login,
     Network,
     ObservedProperty,
     Sensor,
     Thing,
+    build_istsos_url,
+    get_credentials,
+    load_environment,
+    login,
 )
 
 UOM_MAPPING = {
@@ -25,7 +25,16 @@ UOM_MAPPING = {
     "%": "Percentage",
     "g": "Gram",
     "m": "Meter",
+    "m³/s": "Cubic meter per second",
+    "m asl": "Meter above sea level",
+    "mAh": "Milliampere hour",
+    "mg/L": "Milligram per liter",
+    "ppm": "Parts per million",
+    "μg/L": "Microgram per liter",
+    "m/s²": "Meter per second squared",
+    "°": "Degree",
 }
+
 
 def normalize_header(value):
     if pd.isna(value):
@@ -149,6 +158,7 @@ def read_configuration(xlsx_path, sheet_name):
 
     return things
 
+
 def require_field(procedure, key):
     value = clean_value(procedure.get(key))
     if value is None:
@@ -214,6 +224,11 @@ def create_entities(procedure, server_url, token):
         "modelNumber": model_number,
         "brand": procedure.get("brand"),
         "type": procedure.get("type"),
+        "serialNumber": procedure.get("serial_number"),
+        "transmissionSerialNumber": procedure.get(
+            "transmission_serial_number"
+        ),
+        "cableLength": procedure.get("cable_length"),
     }
     sensor_properties = {
         key: value
@@ -238,7 +253,7 @@ def create_entities(procedure, server_url, token):
         procedure.get("observed_property_description")
     )
     observed_property_definitions = split_values(
-        procedure.get("observed_property_definition")
+        require_field(procedure, "observed_property_definition")
     )
     datastream_names = split_values(procedure.get("datastream_name"))
     datastream_descriptions = split_values(
@@ -267,12 +282,16 @@ def create_entities(procedure, server_url, token):
         for index, observed_property_id in enumerate(observed_property_ids):
             uom = get_list_value(uoms, index)
 
+            constraints = [
+                parse_json_value(procedure.get(f"constraint_{i}"))
+                for i in range(1, 4)
+            ]
+            constraints = [c for c in constraints if c is not None]
+
             properties = {
                 "samplingFrequency": procedure.get("sampling_frequency"),
                 "acquisitionFrequency": procedure.get("acquisition_frequency"),
-                "constraint_1": procedure.get("constraint_1"),
-                "constraint_2": procedure.get("constraint_2"),
-                "constraint_3": procedure.get("constraint_3"),
+                "constraints": constraints or None,
             }
 
             properties = {
@@ -303,10 +322,8 @@ def create_entities(procedure, server_url, token):
                 unit_of_measurement={
                     "name": UOM_MAPPING.get(uom, uom),
                     "symbol": uom,
-                    "definition": "",
                 },
                 properties=properties,
-                # phenomenon_time=require_field(procedure, "datastream_begin"),
                 phenomenon_time=procedure.get("datastream_begin"),
                 network_id=network_id,
                 thing_id=thing_id,
