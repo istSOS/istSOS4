@@ -34,11 +34,7 @@ services:
       - istsos4-network
 
   api:
-<<<<<<< HEAD
     image: ghcr.io/istsos/istsos4/api:0.2_staplus
-=======
-    image: ghcr.io/istsos/istsos4/api:1.21
->>>>>>> origin/main
     restart: always
     container_name: istsos4-api
     depends_on:
