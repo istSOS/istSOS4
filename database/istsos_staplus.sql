@@ -420,7 +420,7 @@ BEGIN
             REFERENCES sensorthings."ObservationGroup"(id) ON DELETE CASCADE,
 
         "observation_id" BIGINT NOT NULL
-            REFERENCES sensorthings."Observation"(id) ON DELETE CASCADE,
+            REFERENCES sensorthings."Observation"(id, "phenomenonTime") ON DELETE CASCADE,
 
         CONSTRAINT observationgroup_observation_unique UNIQUE ("observationgroup_id", "observation_id")
         );
@@ -459,11 +459,11 @@ BEGIN
         "properties" jsonb DEFAULT NULL,
 
         "subject_id" BIGINT NOT NULL
-            REFERENCES sensorthings."Observation"(id)
+            REFERENCES sensorthings."Observation"(id, "phenomenonTime")
             ON DELETE CASCADE,
 
         "object_id" BIGINT
-            REFERENCES sensorthings."Observation"(id)
+            REFERENCES sensorthings."Observation"(id, "phenomenonTime")
             ON DELETE SET NULL,
 
         "externalResource" TEXT
