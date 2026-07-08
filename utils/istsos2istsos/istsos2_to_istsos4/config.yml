@@ -1,0 +1,107 @@
+istsos:
+  continue_on_error: true
+
+  imports:
+    #################################
+    # SOSRAW - step_days: 14
+    #################################
+
+    - name: sosraw_step_14
+      enabled: true
+      service: sosraw
+      step_days: 14
+      procedures_istsos2:
+        - "V_LUMI"
+        - "IT_LUMI"
+        - "W_LUMI"
+        - "T_LUMI"
+        - "H_LUMI"
+        - "P_BIA"
+        - "P_COL"
+        - "P_GRA"
+        - "P_SONV"
+      procedures_istsos4:
+        - "BT_LUMI"
+        - "IT_LUMI"
+        - "L_LUMI"
+        - "Ta_LUMI"
+        - "RH_LUMI"
+        - "Praw_BIA"
+        - "Praw_COL"
+        - "Praw_GRA"
+        - "Praw_SONV"
+
+    #################################
+    # SOSRAW - step_days: 1
+    #################################
+
+    - name: sosraw_step_1
+      enabled: true
+      service: sosraw
+      step_days: 1
+      procedures_istsos2:
+        - "P_LUMI"
+        - "P_MEN"
+      procedures_istsos4:
+        - "Praw_LUMI"
+        - "Praw_MEN"
+
+    # #################################
+    # # SOSRAW - step_days: 0.5
+    # #################################
+
+    - name: sosraw_step_0_5
+      enabled: true
+      service: sosraw
+      step_days: 0.5
+      procedures_istsos2:
+        - "A_LUG_MOR"
+      procedures_istsos4:
+        - "WL_LUG_MOR"
+
+    # #################################
+    # # SOS - step_days: 7
+    # #################################
+
+    - name: sos_step_7
+      enabled: true
+      service: sos
+      step_days: 7
+      procedures_istsos2:
+        - "P_PON"
+        - "Q_LAV_MEN"
+      procedures_istsos4:
+        - "P_PON"
+        - "Q_LAV_MEN"
+
+    # #################################
+    # # SOS - step_days: 14
+    # #################################
+
+    - name: sos_step_14
+      enabled: true
+      service: sos
+      step_days: 14
+      procedures_istsos2:
+        - "Q_LAV_RSV"
+        - "Q_SCA_LUG"
+      procedures_istsos4:
+        - "Q_LAV_RSV"
+        - "Q_SCA_LUG"
+
+    # #################################
+    # # EXT - step_days: 7
+    # #################################
+
+    - name: ext_step_7
+      enabled: true
+      service: ext
+      step_days: 7
+      procedures_istsos2:
+        - "Q_UFAM_BRE_LOD"
+        - "Q_UFAM_CAS_PRE"
+        - "Q_UFAM_TIC_POL"
+      procedures_istsos4:
+        - "Q_BRE_LOD"
+        - "Q_CAS_PREG"
+        - "Q_TIC_POL"
