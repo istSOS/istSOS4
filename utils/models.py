@@ -154,7 +154,7 @@ class Thing:
         response = requests.post(url, headers=headers, data=data)
 
         if response.status_code == 201:
-            print(f"Thing {self.name} creata con successo!")
+            print(f"Thing {self.name} Successfully created!")
             url = f"{server_url}/Things?$filter=name eq '{self.name}'"
             response = requests.get(
                 url, headers={"Authorization": f"Bearer {token}"}
@@ -358,7 +358,7 @@ class ObservedProperty:
         response = requests.post(url, headers=headers, data=data)
 
         if response.status_code == 201:
-            print(f"ObservedProperty {self.name} creata con successo!")
+            print(f"ObservedProperty {self.name} Successfully created!")
             safe_name = escape_odata_string(self.name)
             url = f"{server_url}/ObservedProperties?$filter=name eq '{safe_name}'"
             response = requests.get(
@@ -418,7 +418,7 @@ class Location:
         response = requests.post(url, headers=headers, data=data)
 
         if response.status_code == 201:
-            print(f"Location {self.name} creata con successo!")
+            print(f"Location {self.name} Successfully created!")
             url = f"{server_url}/Locations?$filter=name eq '{self.name}'"
             response = requests.get(
                 url,
@@ -492,7 +492,7 @@ class Network:
         response = requests.post(url, headers=headers, data=data)
 
         if response.status_code == 201:
-            print(f"Network {self.name} creata con successo!")
+            print(f"Network {self.name} Successfully created!")
             url = f"{server_url}/Networks?$filter=name eq '{self.name}'"
             response = requests.get(
                 url, headers={"Authorization": f"Bearer {token}"}
