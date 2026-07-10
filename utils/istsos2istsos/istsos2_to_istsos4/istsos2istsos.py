@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from datetime import datetime, timedelta
@@ -16,9 +17,10 @@ if str(SHARED_DIR) not in sys.path:
 
 from client import IstSOS2Client, IstSOS4Client, parse_result_value
 
-
 HERE = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = HERE / "config.yml"
+
+logger = logging.getLogger(__name__)
 
 
 def load_env(path: Path = HERE / ".env") -> None:
@@ -45,6 +47,23 @@ def required_env(name: str) -> str:
     if not value:
         raise ValueError(f"Missing required environment variable: {name}")
     return value
+
+
+def parse_bool(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def is_nodata(
+    result: Any, nodata_value: float, tolerance: float = 1e-9
+) -> bool:
+    """True if a result equals the no-data sentinel (numeric, tolerant compare)."""
+    if result is None:
+        return False
+    try:
+        number = float(result)
+    except (TypeError, ValueError):
+        return False
+    return abs(number - nodata_value) <= tolerance
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
@@ -96,9 +115,13 @@ def validate_import_job(job: dict[str, Any]) -> None:
     source_procedures = job["procedures_istsos2"]
     target_procedures = job["procedures_istsos4"]
     if not isinstance(source_procedures, list):
-        raise ValueError(f"'procedures_istsos2' must be a list in job '{name}'")
+        raise ValueError(
+            f"'procedures_istsos2' must be a list in job '{name}'"
+        )
     if not isinstance(target_procedures, list):
-        raise ValueError(f"'procedures_istsos4' must be a list in job '{name}'")
+        raise ValueError(
+            f"'procedures_istsos4' must be a list in job '{name}'"
+        )
     if len(source_procedures) != len(target_procedures):
         raise ValueError(
             f"Config mismatch in job '{name}': procedures_istsos2 has "
@@ -108,7 +131,9 @@ def validate_import_job(job: dict[str, Any]) -> None:
     try:
         step_days = float(job["step_days"])
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"'step_days' must be a number in job '{name}'") from exc
+        raise ValueError(
+            f"'step_days' must be a number in job '{name}'"
+        ) from exc
     if step_days <= 0:
         raise ValueError(f"'step_days' must be greater than 0 in job '{name}'")
 
@@ -126,7 +151,9 @@ def procedure_metadata(
     )
     interval = time_output.get("constraint", {}).get("interval", [])
     if len(interval) < 2 or not interval[0] or not interval[1]:
-        raise ValueError(f"Missing time interval for istSOS2 procedure: {procedure}")
+        raise ValueError(
+            f"Missing time interval for istSOS2 procedure: {procedure}"
+        )
 
     observed_property = next(
         (output for output in outputs if output.get("name") != "Time"),
@@ -166,7 +193,8 @@ def import_procedure(
     source_procedure: str,
     target_procedure: str,
     step: timedelta,
-) -> int:
+    nodata_value: float | None,
+) -> tuple[int, int]:
     target_id = target.get_datastream_id(target_procedure)
     start, end, observed_property = procedure_metadata(
         source,
@@ -174,6 +202,7 @@ def import_procedure(
         source_procedure,
     )
     inserted_total = 0
+    skipped_nodata_total = 0
     for window_start, window_end in iter_time_windows(start, end, step):
         start_text = format_istsos2_datetime(window_start)
         end_text = format_istsos2_datetime(window_end)
@@ -184,45 +213,79 @@ def import_procedure(
             start_text,
             end_text,
         )
-        inserted = target.post_data_array(target_id, build_data_array(values))
+        data_array = build_data_array(values)
+        if nodata_value is not None:
+            kept = [
+                row
+                for row in data_array
+                if not is_nodata(row[0], nodata_value)
+            ]
+            skipped_nodata_total += len(data_array) - len(kept)
+            data_array = kept
+        inserted = target.post_data_array(target_id, data_array)
         inserted_total += inserted
-        print(
-            f"{source_procedure} -> {target_procedure}: inserted {inserted} "
-            f"observations from {start_text} to {end_text}"
+        logger.info(
+            "%s -> %s: inserted %d observations from %s to %s",
+            source_procedure,
+            target_procedure,
+            inserted,
+            start_text,
+            end_text,
         )
-    return inserted_total
+    return inserted_total, skipped_nodata_total
 
 
 def run_job(
     job: dict[str, Any],
     source: IstSOS2Client,
     target: IstSOS4Client,
-) -> int:
+    nodata_value: float | None,
+) -> tuple[int, int]:
     validate_import_job(job)
     service = job["service"]
     step = timedelta(days=float(job["step_days"]))
     inserted = 0
+    skipped_nodata = 0
     for source_procedure, target_procedure in zip(
         job["procedures_istsos2"],
         job["procedures_istsos4"],
     ):
-        inserted += import_procedure(
+        proc_inserted, proc_skipped_nodata = import_procedure(
             source,
             target,
             service,
             source_procedure,
             target_procedure,
             step,
+            nodata_value,
         )
-    return inserted
+        inserted += proc_inserted
+        skipped_nodata += proc_skipped_nodata
+    return inserted, skipped_nodata
 
 
 def run_all_imports() -> None:
     load_env()
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
     config = load_config()
     jobs = config.get("imports", [])
     if not jobs:
         raise ValueError(f"No imports configured in {DEFAULT_CONFIG_PATH}")
+
+    import_nodata = parse_bool(os.getenv("IMPORT_NODATA", "true"))
+    nodata_value: float | None = None
+    if not import_nodata:
+        raw_nodata = os.getenv("NODATA_VALUE", "-999.9").strip()
+        try:
+            nodata_value = float(raw_nodata)
+        except ValueError as exc:
+            raise ValueError(
+                f"NODATA_VALUE must be a number: {raw_nodata}"
+            ) from exc
 
     source = IstSOS2Client(
         required_env("ISTSOS2_URL"),
@@ -236,28 +299,41 @@ def run_all_imports() -> None:
     )
     continue_on_error = bool(config.get("continue_on_error", False))
     completed = failed = skipped = inserted_total = 0
+    skipped_nodata_total = 0
+
+    if nodata_value is not None:
+        logger.info(
+            "Discarding no-data observations equal to %s", nodata_value
+        )
 
     for job in jobs:
         name = job.get("name", "unnamed_job")
         if not job.get("enabled", False):
             skipped += 1
-            print(f"Skipping disabled job '{name}'")
+            logger.info("Skipping disabled job '%s'", name)
             continue
         try:
-            print(f"Starting job '{name}'")
-            inserted_total += run_job(job, source, target)
+            logger.info("Starting job '%s'", name)
+            job_inserted, job_skipped_nodata = run_job(
+                job, source, target, nodata_value
+            )
+            inserted_total += job_inserted
+            skipped_nodata_total += job_skipped_nodata
             completed += 1
-            print(f"Completed job '{name}'")
+            logger.info("Completed job '%s'", name)
         except Exception as exc:
             failed += 1
-            print(f"ERROR in job '{name}': {exc}")
+            logger.error("job '%s' failed: %s", name, exc)
             if not continue_on_error:
                 raise
 
-    print(
+    summary = (
         f"Completed: jobs={len(jobs)}, completed={completed}, failed={failed}, "
         f"skipped={skipped}, observations={inserted_total}"
     )
+    if skipped_nodata_total:
+        summary += f", no-data discarded={skipped_nodata_total}"
+    logger.info(summary)
 
 
 if __name__ == "__main__":

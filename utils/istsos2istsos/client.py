@@ -3,15 +3,37 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import datetime, timezone
 from typing import Any, Iterator
 
 import requests
 
+logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 30
-MAX_BULK_SIZE = 2000
+
+
+ASYNCPG_MAX_ARGS = 32767
+SERVER_ROW_OVERHEAD = 8
+BULK_SAFETY = 0.9
+
+OVERSIZE_STATUS_CODES = frozenset({413, 500})
+
+OBSERVATION_COMPONENTS = [
+    "result",
+    "phenomenonTime",
+    "resultTime",
+    "resultQuality",
+]
+
+
+def max_rows_per_bulk(component_count: int) -> int:
+    """Largest row count per request that stays under asyncpg's parameter limit."""
+    fields_per_row = component_count + SERVER_ROW_OVERHEAD
+    usable = int(ASYNCPG_MAX_ARGS * BULK_SAFETY)
+    return max(1, usable // fields_per_row)
 
 
 def format_entity_id(entity_id: Any) -> str:
@@ -126,6 +148,7 @@ class IstSOS4Client:
         self.expires_at: datetime | None = None
 
     def login(self) -> None:
+        """Full re-authentication with credentials (recovers from a dead token)."""
         response = self.session.post(
             f"{self.base_url}/Login",
             data={
@@ -136,31 +159,79 @@ class IstSOS4Client:
             timeout=self.timeout,
         )
         self.raise_for_status(response, "Login failed")
-        payload = response.json()
+        self._apply_token(response.json())
+
+    def refresh(self) -> None:
+        """Rotate the token while it is still valid, without resending creds.
+
+        /Refresh decodes the current bearer token, so it only works before the
+        token expires; on an expired/revoked token it returns 4xx. When REDIS is
+        enabled the server also revokes the *old* token here, so we must adopt
+        the returned token and never reuse the previous one.
+        """
+        response = self.session.post(
+            f"{self.base_url}/Refresh",
+            headers={"Authorization": f"Bearer {self.access_token}"},
+            timeout=self.timeout,
+        )
+        self.raise_for_status(response, "Refresh failed")
+        self._apply_token(response.json())
+
+    def _apply_token(self, payload: dict[str, Any]) -> None:
         self.access_token = payload["access_token"]
-        expires_in = payload.get("expires_in")
+        self.expires_at = self._parse_expiry(payload.get("expires_in"))
+
+    @staticmethod
+    def _parse_expiry(expires_in: Any) -> datetime | None:
+        """Interpret the server's "expires_in" field.
+
+        This server puts an ABSOLUTE expiry epoch in "expires_in"
+        (int(expire.timestamp())), not the OAuth-standard seconds-until-expiry.
+        We tell the two apart by magnitude so a short-lived token is no longer
+        mistaken for a duration and double-counted: a value already in epoch
+        range is absolute; a small value is treated as a duration from now.
+        """
         if expires_in is None:
-            self.expires_at = None
-            return
-        expires = int(expires_in)
-        if expires < int(time.time()) + 86400:
-            expires += int(time.time())
-        self.expires_at = datetime.fromtimestamp(expires, timezone.utc)
+            return None
+        try:
+            value = int(expires_in)
+        except (TypeError, ValueError):
+            return None
+        epoch_threshold = (
+            1_000_000_000  # ~2001; real durations never reach this
+        )
+        if value < epoch_threshold:
+            value += int(time.time())
+        return datetime.fromtimestamp(value, timezone.utc)
 
     def ensure_token(self) -> None:
-        refresh_at = (
-            self.expires_at.timestamp() - self.refresh_margin_seconds
-            if self.expires_at
-            else None
-        )
-        if not self.access_token or (
-            refresh_at is not None and time.time() >= refresh_at
-        ):
+        if self.access_token is None:
             self.login()
+            return
+        if self.expires_at is None:
+            return
+        now = time.time()
+        expiry = self.expires_at.timestamp()
+        if now >= expiry:
+            # Already dead: /Refresh would 400, so re-authenticate outright.
+            self.login()
+        elif now >= expiry - self.refresh_margin_seconds:
+            # Still valid but inside the margin: rotate proactively, and fall
+            # back to a full login if the refresh is rejected for any reason.
+            logger.debug("access token near expiry, refreshing")
+            try:
+                self.refresh()
+            except requests.HTTPError:
+                logger.debug("refresh rejected, falling back to full login")
+                self.login()
 
-    def request(self, method: str, path: str, **kwargs: Any) -> requests.Response:
-        url = path if path.startswith(("http://", "https://")) else (
-            f"{self.base_url}/{path.lstrip('/')}"
+    def request(
+        self, method: str, path: str, **kwargs: Any
+    ) -> requests.Response:
+        url = (
+            path
+            if path.startswith(("http://", "https://"))
+            else (f"{self.base_url}/{path.lstrip('/')}")
         )
         kwargs.setdefault("timeout", self.timeout)
         supplied_headers = kwargs.pop("headers", {})
@@ -171,6 +242,7 @@ class IstSOS4Client:
         }
         response = self.session.request(method, url, headers=headers, **kwargs)
         if response.status_code == 401:
+            logger.debug("401 on %s %s, re-authenticating", method, url)
             self.login()
             headers["Authorization"] = f"Bearer {self.access_token}"
             response = self.session.request(
@@ -282,29 +354,64 @@ class IstSOS4Client:
         datastream_id: Any,
         data_array: list[list[Any]],
     ) -> int:
+        if not data_array:
+            return 0
+        batch_limit = max_rows_per_bulk(len(OBSERVATION_COMPONENTS))
         inserted = 0
-        for offset in range(0, len(data_array), MAX_BULK_SIZE):
-            batch = data_array[offset : offset + MAX_BULK_SIZE]
-            payload = [
-                {
-                    "Datastream": {"@iot.id": datastream_id},
-                    "components": [
-                        "result",
-                        "phenomenonTime",
-                        "resultTime",
-                        "resultQuality",
-                    ],
-                    "dataArray": batch,
-                }
-            ]
-            self.request(
-                "POST",
-                "/BulkObservations",
-                headers={"Content-type": "application/json"},
-                data=json.dumps(payload),
-            )
-            inserted += len(batch)
+        for offset in range(0, len(data_array), batch_limit):
+            batch = data_array[offset : offset + batch_limit]
+            inserted += self._post_bulk_batch(datastream_id, batch)
         return inserted
+
+    def _post_bulk_batch(
+        self,
+        datastream_id: Any,
+        batch: list[list[Any]],
+    ) -> int:
+        """Post one batch; halve and retry if the server rejects it for size.
+
+        This is insurance against the per-row column count changing on the
+        server side. On an oversize rejection (413/500) we split the batch and
+        retry each half, down to a single row. A single-row failure is treated
+        as a real error (bad data, auth, missing datastream, ...) and re-raised.
+        """
+        try:
+            self._send_bulk_observations(datastream_id, batch)
+            return len(batch)
+        except requests.HTTPError as exc:
+            status = (
+                exc.response.status_code if exc.response is not None else None
+            )
+            if len(batch) > 1 and status in OVERSIZE_STATUS_CODES:
+                logger.warning(
+                    "bulk of %d rows rejected (status=%s), splitting and retrying",
+                    len(batch),
+                    status,
+                )
+                middle = len(batch) // 2
+                return self._post_bulk_batch(
+                    datastream_id, batch[:middle]
+                ) + self._post_bulk_batch(datastream_id, batch[middle:])
+            raise
+
+    def _send_bulk_observations(
+        self,
+        datastream_id: Any,
+        batch: list[list[Any]],
+    ) -> None:
+        payload = [
+            {
+                "Datastream": {"@iot.id": datastream_id},
+                "components": OBSERVATION_COMPONENTS,
+                "dataArray": batch,
+            }
+        ]
+        self.request(
+            "POST",
+            "/BulkObservations",
+            headers={"Content-type": "application/json"},
+            data=json.dumps(payload),
+        )
 
     @staticmethod
     def raise_for_status(
