@@ -2,22 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from datetime import date, datetime, timedelta, timezone
-from itertools import groupby
+from itertools import islice
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Iterator
 
 SHARED_DIR = Path(__file__).resolve().parent.parent
 if str(SHARED_DIR) not in sys.path:
     sys.path.insert(0, str(SHARED_DIR))
 
-from client import IstSOS4Client
+from client import OBSERVATION_COMPONENTS, IstSOS4Client, max_rows_per_bulk
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_BATCH_SIZE = 2000
-MAX_BATCH_SIZE = 2000
+
+logger = logging.getLogger(__name__)
 
 
 def load_env(path: Path = HERE / ".env") -> None:
@@ -48,6 +49,10 @@ def required_env(name: str) -> str:
     return value
 
 
+def parse_bool(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def parse_optional_timestamp(name: str) -> datetime | None:
     value = os.getenv(name, "").strip()
     if not value:
@@ -61,6 +66,31 @@ def parse_optional_timestamp(name: str) -> datetime | None:
     if parsed.tzinfo is None:
         raise ValueError(f"{name} must include a timezone: {value}")
     return parsed.astimezone(timezone.utc)
+
+
+def is_nodata(
+    result: Any, nodata_value: float, tolerance: float = 1e-9
+) -> bool:
+    """True if a result equals the no-data sentinel (numeric, tolerant compare)."""
+    if result is None:
+        return False
+    try:
+        number = float(result)
+    except (TypeError, ValueError):
+        return False
+    return abs(number - nodata_value) <= tolerance
+
+
+def chunked(
+    iterable: Iterable[dict[str, Any]], size: int
+) -> Iterator[list[dict[str, Any]]]:
+    """Yield successive lists of at most `size` items from a stream."""
+    iterator = iter(iterable)
+    while True:
+        chunk = list(islice(iterator, size))
+        if not chunk:
+            return
+        yield chunk
 
 
 def index_datastreams(
@@ -84,38 +114,52 @@ def copy_datastream_observations(
     target_datastream: dict[str, Any],
     start: str | None,
     end: str | None,
-    batch_size: int,
-) -> tuple[int, int]:
+    import_nodata: bool,
+    nodata_value: float | None,
+    chunk_size: int,
+) -> tuple[int, int, int]:
     copied = 0
-    skipped = 0
+    skipped_existing = 0
+    skipped_nodata = 0
     observations = source.get_observations(
         source_datastream["@iot.id"], start, end
     )
-    daily_groups = groupby(
-        observations,
-        key=lambda observation: phenomenon_time_day(
-            observation["phenomenonTime"]
-        ),
-    )
-    for day, daily_group in daily_groups:
-        daily_observations = list(daily_group)
-        day_start, day_end = utc_day_interval(day)
+    # Process one insert's worth of observations at a time. For each block we run
+    # a single anti-duplicate query over the block's day span, then send what is
+    # missing as one bulk request.
+    for block in chunked(observations, chunk_size):
+        days = [
+            phenomenon_time_day(observation["phenomenonTime"])
+            for observation in block
+        ]
+        block_start, _ = utc_day_interval(min(days))
+        _, block_end = utc_day_interval(max(days))
         existing_times = set(
             target.get_observation_times(
-                target_datastream["@iot.id"], day_start, day_end
+                target_datastream["@iot.id"], block_start, block_end
             )
         )
         pending = [
             observation
-            for observation in daily_observations
+            for observation in block
             if observation["phenomenonTime"] not in existing_times
         ]
-        for offset in range(0, len(pending), batch_size):
-            bulk = pending[offset : offset + batch_size]
-            target.post_observations(target_datastream["@iot.id"], bulk)
-            copied += len(bulk)
-        skipped += len(daily_observations) - len(pending)
-    return copied, skipped
+        skipped_existing += len(block) - len(pending)
+
+        if not import_nodata and nodata_value is not None:
+            to_send = [
+                observation
+                for observation in pending
+                if not is_nodata(observation.get("result"), nodata_value)
+            ]
+            skipped_nodata += len(pending) - len(to_send)
+        else:
+            to_send = pending
+
+        if to_send:
+            target.post_observations(target_datastream["@iot.id"], to_send)
+            copied += len(to_send)
+    return copied, skipped_existing, skipped_nodata
 
 
 def phenomenon_time_day(value: str) -> date:
@@ -138,6 +182,11 @@ def utc_day_interval(day: date) -> tuple[str, str]:
 
 def run() -> None:
     load_env()
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
     start_dt = parse_optional_timestamp("TIMESTAMP_START_FROM")
     end_dt = parse_optional_timestamp("TIMESTAMP_END_FROM")
     if start_dt and end_dt and start_dt > end_dt:
@@ -145,14 +194,16 @@ def run() -> None:
             "TIMESTAMP_START_FROM must not be after TIMESTAMP_END_FROM"
         )
 
-    batch_size = int(os.getenv("BATCH_SIZE", str(DEFAULT_BATCH_SIZE)))
-    if batch_size <= 0:
-        raise ValueError("BATCH_SIZE must be greater than zero")
-    if batch_size > MAX_BATCH_SIZE:
-        raise ValueError(
-            f"BATCH_SIZE must not exceed {MAX_BATCH_SIZE}; larger batches "
-            "exceed the asyncpg bind-parameter limit"
-        )
+    import_nodata = parse_bool(os.getenv("IMPORT_NODATA", "true"))
+    nodata_value: float | None = None
+    if not import_nodata:
+        raw_nodata = os.getenv("NODATA_VALUE", "-999.9").strip()
+        try:
+            nodata_value = float(raw_nodata)
+        except ValueError as exc:
+            raise ValueError(
+                f"NODATA_VALUE must be a number: {raw_nodata}"
+            ) from exc
 
     source = IstSOS4Client(
         required_env("ISTSOS4_FROM_URL"),
@@ -192,8 +243,8 @@ def run() -> None:
     )
     missing = sorted(set(source_datastreams) - set(target_datastreams))
     if missing:
-        print(
-            "Skipping datastreams not found in target: " + ", ".join(missing)
+        logger.warning(
+            "Skipping datastreams not found in target: %s", ", ".join(missing)
         )
         source_datastreams = {
             name: datastream
@@ -203,28 +254,48 @@ def run() -> None:
 
     start = start_dt.isoformat().replace("+00:00", "Z") if start_dt else None
     end = end_dt.isoformat().replace("+00:00", "Z") if end_dt else None
+    chunk_size = max_rows_per_bulk(len(OBSERVATION_COMPONENTS))
     total = 0
-    total_skipped = 0
+    total_skipped_existing = 0
+    total_skipped_nodata = 0
     interval = f"from {start or 'the beginning'} to {end or 'the end'}"
-    print(f"Copying {len(source_datastreams)} datastreams {interval}")
+    logger.info(
+        "Copying %d datastreams %s in blocks of up to %d observations",
+        len(source_datastreams),
+        interval,
+        chunk_size,
+    )
+    if not import_nodata:
+        logger.info(
+            "Discarding no-data observations equal to %s", nodata_value
+        )
     for name, source_datastream in source_datastreams.items():
-        count, skipped = copy_datastream_observations(
+        count, skipped_existing, skipped_nodata = copy_datastream_observations(
             source,
             target,
             source_datastream,
             target_datastreams[name],
             start,
             end,
-            batch_size,
+            import_nodata,
+            nodata_value,
+            chunk_size,
         )
         total += count
-        total_skipped += skipped
-        print(
-            f"{name}: copied {count}, skipped {skipped} existing observations"
+        total_skipped_existing += skipped_existing
+        total_skipped_nodata += skipped_nodata
+        message = (
+            f"{name}: copied {count}, skipped {skipped_existing} existing"
         )
-    print(
-        f"Completed: copied {total}, skipped {total_skipped} existing observations"
+        if skipped_nodata:
+            message += f", {skipped_nodata} no-data"
+        logger.info(message)
+    summary = (
+        f"Completed: copied {total}, skipped {total_skipped_existing} existing"
     )
+    if total_skipped_nodata:
+        summary += f", {total_skipped_nodata} no-data"
+    logger.info(summary)
 
 
 if __name__ == "__main__":

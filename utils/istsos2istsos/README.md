@@ -42,7 +42,15 @@ ISTSOS2_PASSWORD=source-password
 ISTSOS4_URL=http://localhost:8019/v4/v1.1
 ISTSOS4_USER=target-user
 ISTSOS4_PASSWORD=target-password
+
+IMPORT_NODATA=true
+NODATA_VALUE=-999.9
 ```
+
+`IMPORT_NODATA` decide se importare anche le osservazioni "no data": `true`
+(default) le importa, `false` le scarta. `NODATA_VALUE` è il valore sentinella
+da scartare (default `-999.9`, confrontato numericamente) e viene considerato
+solo quando `IMPORT_NODATA=false`.
 
 Il file `istsos2_to_istsos4/config.yml` definisce i job. Le procedure nelle due
 liste vengono associate per posizione:
@@ -62,7 +70,10 @@ istsos:
 ```
 
 `step_days` determina l'intervallo temporale letto da istSOS2 per ogni
-richiesta. L'invio a istSOS4 viene comunque suddiviso in bulk sicuri.
+richiesta e va tarato sulla frequenza del dato (valori piccoli per procedure ad
+alta frequenza, più ampi per quelle rade). È indipendente dalla scrittura: il
+client suddivide comunque l'invio a istSOS4 in lotti che restano sotto il limite
+di parametri del database di destinazione.
 
 ### Build
 
@@ -112,7 +123,8 @@ ISTSOS4_TO_USER=target-user
 ISTSOS4_TO_PASSWORD=target-password
 NETWORK_TO=
 
-BATCH_SIZE=2000
+IMPORT_NODATA=true
+NODATA_VALUE=-999.9
 ```
 
 I filtri sono opzionali:
@@ -122,11 +134,19 @@ I filtri sono opzionali:
 - `TIMESTAMP_START_FROM`: limite iniziale ISO 8601 incluso;
 - `TIMESTAMP_END_FROM`: limite finale ISO 8601 incluso;
 - `NETWORK_TO`: network nella quale cercare i datastream di destinazione;
-- `BATCH_SIZE`: limite tecnico, massimo `2000`.
+- `IMPORT_NODATA`: `true` (default) importa anche le osservazioni "no data",
+  `false` le scarta;
+- `NODATA_VALUE`: valore sentinella da scartare (default `-999.9`, confronto
+  numerico), considerato solo quando `IMPORT_NODATA=false`.
+
+L'invio a istSOS4 non richiede configurazione: il client suddivide
+automaticamente ogni bulk in richieste che restano sotto il limite di parametri
+del database di destinazione.
 
 Se i timestamp sono vuoti vengono lette tutte le osservazioni. La migrazione
-raggruppa i dati per giorno UTC e salta i `phenomenonTime` già presenti nella
-destinazione.
+elabora le osservazioni a blocchi grandi quanto una singola insert ed esegue,
+per ogni blocco, una sola query anti-duplicati che salta i `phenomenonTime` già
+presenti nella destinazione.
 
 ### Build
 
@@ -145,6 +165,14 @@ docker run --rm \
   --env-file istsos4_to_istsos4/.env \
   istsos4-to-istsos4:local
 ```
+
+## Log
+
+Entrambe le utility usano il modulo `logging` con timestamp e livello. La
+verbosità si regola con la variabile `LOG_LEVEL` (`DEBUG`, `INFO` di default,
+`WARNING`, `ERROR`). A livello `DEBUG` vengono mostrati anche i dettagli delle
+richieste HTTP e gli eventi di autenticazione (refresh del token, re-login dopo
+un `401`, suddivisione di un bulk troppo grande).
 
 ## Networking
 
