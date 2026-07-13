@@ -87,7 +87,6 @@ async def update_thing(
                     await set_role(connection, current_user)
 
                 if not await check_id_exists(connection, "Thing", thing_id):
-                    if current_user is not None:
                     return error_response(status.HTTP_404_NOT_FOUND, "Thing not found.")
 
                 # req/create-update-delete/update-entity-jsonpatch: resolve an
