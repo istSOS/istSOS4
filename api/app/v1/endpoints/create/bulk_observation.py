@@ -149,7 +149,6 @@ async def bulk_observations(
                         # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
                         return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
                     except ValueError as e:
-                        if current_user is not None:
                         return error_response(status.HTTP_400_BAD_REQUEST, str(e))
                     except asyncpg.ForeignKeyViolationError:
                         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
