@@ -24,7 +24,7 @@ import isodate
 hostname = os.getenv("HOSTNAME", "http://localhost:8018")
 subpath = os.getenv("SUBPATH", "/istsos4")
 version = os.getenv("VERSION", "/v1.1")
-versioning = int(os.getenv("VERSIONING"), 0)
+versioning = int(os.getenv("VERSIONING", 0))
 pg_db = os.getenv("POSTGRES_DB", "istsos")
 pg_user = os.getenv("ISTSOS_ADMIN", "admin")
 pg_password = os.getenv("ISTSOS_ADMIN_PASSWORD", "admin")
@@ -606,8 +606,8 @@ async def generate_observations(conn, commit_id):
         None
     """
 
-    observations = []
     for j in range(1, n_things * n_observed_properties + 1):
+        observations = []
         phenomenonTime = date
         check_date = date
 
@@ -654,11 +654,11 @@ async def generate_observations(conn, commit_id):
                 check_date = phenomenonTime
                 observations = []
 
-    if observations:
-        await insert_observations(conn, observations, commit_id)
-        await update_datastream_phenomenon_time(
-            conn, observations, datastream_id
-        )
+        if observations:
+            await insert_observations(conn, observations, commit_id)
+            await update_datastream_phenomenon_time(
+                conn, observations, datastream_id
+            )
 
     await update_datastream_observed_area(conn)
 
@@ -737,7 +737,10 @@ async def delete_data():
         async with pool.acquire() as conn:
             try:
                 if authorization:
-                    await conn.execute('DELETE FROM sensorthings."User"')
+                    await conn.execute(
+                        'DELETE FROM sensorthings."User" WHERE username != $1',
+                        pg_user,
+                    )
                 if versioning or authorization:
                     await conn.execute('DELETE FROM sensorthings."Commit"')
 
