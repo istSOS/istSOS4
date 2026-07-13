@@ -86,7 +86,6 @@ async def update_observation(
                 if not await check_id_exists(
                     connection, "Observation", observation_id
                 ):
-                    if current_user is not None:
                     return error_response(status.HTTP_404_NOT_FOUND, "Observation not found.")
 
                 # req/create-update-delete/update-entity-jsonpatch: resolve an
