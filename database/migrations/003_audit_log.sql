@@ -83,24 +83,37 @@ BEGIN
         -- 3. Privilege setup — runs as session superuser (after RESET ROLE)
         --    following the istsos_auth.sql lines 398-444 pattern.
         --
-        --    Append-only enforcement:
-        --      - Revoke UPDATE and DELETE from every application role so the
-        --        audit trail cannot be altered once written.
-        --      - Grant INSERT to "user" and "sensor" so the application can
-        --        record events without elevated privileges.
-        --    The "administrator" role inherits ALL PRIVILEGES from the
-        --    GRANT ALL ... TO "administrator" that ran at schema init time;
-        --    we explicitly revoke UPDATE/DELETE from it too so even admin
-        --    application code cannot mutate past log rows.
+        --    Append-only enforcement: revoke UPDATE and DELETE from every
+        --    application role that exists in this installation.  Each role
+        --    is checked against pg_roles before the REVOKE so the migration
+        --    is safe on environments where some roles were never created
+        --    (e.g. 'qc' is only present when AUTHORIZATION was active at
+        --    first boot).
         -- ----------------------------------------------------------------
-        REVOKE UPDATE, DELETE ON sensorthings."AuditLog" FROM "administrator";
-        REVOKE UPDATE, DELETE ON sensorthings."AuditLog" FROM "user";
-        REVOKE UPDATE, DELETE ON sensorthings."AuditLog" FROM "sensor";
-        REVOKE UPDATE, DELETE ON sensorthings."AuditLog" FROM "guest";
-        REVOKE UPDATE, DELETE ON sensorthings."AuditLog" FROM "qc";
+        DO $$
+        DECLARE
+            r TEXT;
+        BEGIN
+            FOREACH r IN ARRAY ARRAY['administrator', 'user', 'sensor', 'guest', 'qc']
+            LOOP
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+                    EXECUTE format(
+                        'REVOKE UPDATE, DELETE ON sensorthings."AuditLog" FROM %I', r
+                    );
+                END IF;
+            END LOOP;
 
-        GRANT INSERT ON sensorthings."AuditLog" TO "user";
-        GRANT INSERT ON sensorthings."AuditLog" TO "sensor";
+            -- Grant INSERT to roles that should be able to write audit events.
+            FOREACH r IN ARRAY ARRAY['user', 'sensor']
+            LOOP
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+                    EXECUTE format(
+                        'GRANT INSERT ON sensorthings."AuditLog" TO %I', r
+                    );
+                END IF;
+            END LOOP;
+        END $$;
 
     END IF;
 END $BODY$;
+
