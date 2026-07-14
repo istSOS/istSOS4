@@ -142,6 +142,7 @@ def procedure_metadata(
     source: IstSOS2Client,
     service: str,
     procedure: str,
+    observed_property_name: str,
 ) -> tuple[datetime, datetime, str]:
     details = source.get_procedure(service, procedure)
     outputs = details.get("outputs", [])
@@ -156,12 +157,17 @@ def procedure_metadata(
         )
 
     observed_property = next(
-        (output for output in outputs if output.get("name") != "Time"),
+        (
+            output
+            for output in outputs
+            if output.get("name") == observed_property_name
+        ),
         None,
     )
     if not observed_property or not observed_property.get("definition"):
         raise ValueError(
-            f"Missing observed property for istSOS2 procedure: {procedure}"
+            f"Observed property '{observed_property_name}' not found for "
+            f"istSOS2 procedure: {procedure}"
         )
     return (
         parse_istsos2_datetime(interval[0]),
@@ -194,13 +200,30 @@ def import_procedure(
     target_procedure: str,
     step: timedelta,
     nodata_value: float | None,
+    window_start: datetime | None,
+    window_end: datetime | None,
 ) -> tuple[int, int]:
     target_id = target.get_datastream_id(target_procedure)
+    procedure, observed_property_name = source_procedure.split(".", 1)
     start, end, observed_property = procedure_metadata(
         source,
         service,
-        source_procedure,
+        procedure,
+        observed_property_name,
     )
+    # Clamp the procedure's data interval to the configured time window.
+    if window_start is not None:
+        start = max(start, window_start)
+    if window_end is not None:
+        end = min(end, window_end)
+    if start >= end:
+        logger.info(
+            "%s -> %s: no overlap between procedure interval and "
+            "configured time window, skipping",
+            source_procedure,
+            target_procedure,
+        )
+        return 0, 0
     inserted_total = 0
     skipped_nodata_total = 0
     for window_start, window_end in iter_time_windows(start, end, step):
@@ -208,7 +231,7 @@ def import_procedure(
         end_text = format_istsos2_datetime(window_end)
         values = source.get_observation_values(
             service,
-            source_procedure,
+            procedure,
             observed_property,
             start_text,
             end_text,
@@ -244,6 +267,8 @@ def run_job(
     validate_import_job(job)
     service = job["service"]
     step = timedelta(days=float(job["step_days"]))
+    window_start = job.get("start_date")
+    window_end = job.get("end_date")
     inserted = 0
     skipped_nodata = 0
     for source_procedure, target_procedure in zip(
@@ -258,6 +283,8 @@ def run_job(
             target_procedure,
             step,
             nodata_value,
+            window_start,
+            window_end,
         )
         inserted += proc_inserted
         skipped_nodata += proc_skipped_nodata

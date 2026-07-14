@@ -3,105 +3,244 @@ istsos:
 
   imports:
     #################################
-    # SOSRAW - step_days: 14
+    # chain - step_days: 14
     #################################
 
-    - name: sosraw_step_14
+    - name: chain_step_14
       enabled: true
-      service: sosraw
+      service: figinoagg
       step_days: 14
+      start_date: 2026-02-06T09:10:00.000000Z
+      end_date: 2026-04-29T07:10:00.000000Z
       procedures_istsos2:
-        - "V_LUMI"
-        - "IT_LUMI"
-        - "W_LUMI"
-        - "T_LUMI"
-        - "H_LUMI"
-        - "P_BIA"
-        - "P_COL"
-        - "P_GRA"
-        - "P_SONV"
-      procedures_istsos4:
-        - "BT_LUMI"
-        - "IT_LUMI"
-        - "L_LUMI"
-        - "Ta_LUMI"
-        - "RH_LUMI"
-        - "Praw_BIA"
-        - "Praw_COL"
-        - "Praw_GRA"
-        - "Praw_SONV"
+        - "xt_0_4.water-temperature"
+        - "xt_0_4.tilt"
+        - "xt_0_4.acceleration"
+        - "xt_0_4.accel-temp-uncal"
+        - "xt_0_4.battery-voltage"
+        - "xt_0_4.battery-drop"
+        - "xt_3_75.water-temperature"
+        - "xt_3_75.tilt"
+        - "xt_3_75.acceleration"
+        - "xt_3_75.accel-temp-uncal"
+        - "xt_3_75.battery-voltage"
+        - "xt_3_75.battery-drop"
+        - "xt_6_5.water-temperature"
+        - "xt_6_5.tilt"
+        - "xt_6_5.acceleration"
+        - "xt_6_5.accel-temp-uncal"
+        - "xt_6_5.battery-voltage"
+        - "xt_6_5.battery-drop"
+        - "xt_10.water-temperature"
+        - "xt_10.tilt"
+        - "xt_10.acceleration"
+        - "xt_10.accel-temp-uncal"
+        - "xt_10.battery-voltage"
+        - "xt_10.battery-drop"
+        - "xt_15.water-temperature"
+        - "xt_15.tilt"
+        - "xt_15.acceleration"
+        - "xt_15.accel-temp-uncal"
+        - "xt_15.battery-voltage"
+        - "xt_15.battery-drop"
+        - "xt_17_5.water-temperature"
+        - "xt_17_5.tilt"
+        - "xt_17_5.acceleration"
+        - "xt_17_5.accel-temp-uncal"
+        - "xt_17_5.battery-voltage"
+        - "xt_17_5.battery-drop"
+        - "xt_25.water-temperature"
+        - "xt_25.tilt"
+        - "xt_25.acceleration"
+        - "xt_25.accel-temp-uncal"
+        - "xt_25.battery-voltage"
+        - "xt_25.battery-drop"
+        - "xt_30.water-temperature"
+        - "xt_30.tilt"
+        - "xt_30.acceleration"
+        - "xt_30.accel-temp-uncal"
+        - "xt_30.battery-voltage"
+        - "xt_30.battery-drop"
+        - "xt_35.water-temperature"
+        - "xt_35.tilt"
+        - "xt_35.acceleration"
+        - "xt_35.accel-temp-uncal"
+        - "xt_35.battery-voltage"
+        - "xt_35.battery-drop"
+        - "xt_40.water-temperature"
+        - "xt_40.tilt"
+        - "xt_40.acceleration"
+        - "xt_40.accel-temp-uncal"
+        - "xt_40.battery-voltage"
+        - "xt_40.battery-drop"
+        - "xt_45.water-temperature"
+        - "xt_45.tilt"
+        - "xt_45.acceleration"
+        - "xt_45.accel-temp-uncal"
+        - "xt_45.battery-voltage"
+        - "xt_45.battery-drop"
+        - "xt_50.water-temperature"
+        - "xt_50.tilt"
+        - "xt_50.acceleration"
+        - "xt_50.accel-temp-uncal"
+        - "xt_50.battery-voltage"
+        - "xt_50.battery-drop"
+        - "xt_55.water-temperature"
+        - "xt_55.tilt"
+        - "xt_55.acceleration"
+        - "xt_55.accel-temp-uncal"
+        - "xt_55.battery-voltage"
+        - "xt_55.battery-drop"
+        - "xt_60.water-temperature"
+        - "xt_60.tilt"
+        - "xt_60.acceleration"
+        - "xt_60.accel-temp-uncal"
+        - "xt_60.battery-voltage"
+        - "xt_60.battery-drop"
+        - "xt_65.water-temperature"
+        - "xt_65.tilt"
+        - "xt_65.acceleration"
+        - "xt_65.accel-temp-uncal"
+        - "xt_65.battery-voltage"
+        - "xt_65.battery-drop"
+        - "xt_70.water-temperature"
+        - "xt_70.tilt"
+        - "xt_70.acceleration"
+        - "xt_70.accel-temp-uncal"
+        - "xt_70.battery-voltage"
+        - "xt_70.battery-drop"
+        - "xt_75.water-temperature"
+        - "xt_75.tilt"
+        - "xt_75.acceleration"
+        - "xt_75.accel-temp-uncal"
+        - "xt_75.battery-voltage"
+        - "xt_75.battery-drop"
+        - "xt_80.water-temperature"
+        - "xt_80.tilt"
+        - "xt_80.acceleration"
+        - "xt_80.accel-temp-uncal"
+        - "xt_80.battery-voltage"
+        - "xt_80.battery-drop"
+        - "xt_85.water-temperature"
+        - "xt_85.tilt"
+        - "xt_85.acceleration"
+        - "xt_85.accel-temp-uncal"
+        - "xt_85.battery-voltage"
+        - "xt_85.battery-drop"
 
-    #################################
-    # SOSRAW - step_days: 1
-    #################################
-
-    - name: sosraw_step_1
-      enabled: true
-      service: sosraw
-      step_days: 1
-      procedures_istsos2:
-        - "P_LUMI"
-        - "P_MEN"
-      procedures_istsos4:
-        - "Praw_LUMI"
-        - "Praw_MEN"
-
-    # #################################
-    # # SOSRAW - step_days: 0.5
-    # #################################
-
-    - name: sosraw_step_0_5
-      enabled: true
-      service: sosraw
-      step_days: 0.5
-      procedures_istsos2:
-        - "A_LUG_MOR"
-      procedures_istsos4:
-        - "WL_LUG_MOR"
-
-    # #################################
-    # # SOS - step_days: 7
-    # #################################
-
-    - name: sos_step_7
-      enabled: true
-      service: sos
-      step_days: 7
-      procedures_istsos2:
-        - "P_PON"
-        - "Q_LAV_MEN"
-      procedures_istsos4:
-        - "P_PON"
-        - "Q_LAV_MEN"
-
-    # #################################
-    # # SOS - step_days: 14
-    # #################################
-
-    - name: sos_step_14
-      enabled: true
-      service: sos
-      step_days: 14
-      procedures_istsos2:
-        - "Q_LAV_RSV"
-        - "Q_SCA_LUG"
-      procedures_istsos4:
-        - "Q_LAV_RSV"
-        - "Q_SCA_LUG"
-
-    # #################################
-    # # EXT - step_days: 7
-    # #################################
-
-    - name: ext_step_7
-      enabled: true
-      service: ext
-      step_days: 7
-      procedures_istsos2:
-        - "Q_UFAM_BRE_LOD"
-        - "Q_UFAM_CAS_PRE"
-        - "Q_UFAM_TIC_POL"
-      procedures_istsos4:
-        - "Q_BRE_LOD"
-        - "Q_CAS_PREG"
-        - "Q_TIC_POL"
+      procedures_istsos4: [
+        "WT_xt_0_4",
+        "TILT_xt_0_4",
+        "ACC_xt_0_4",
+        "ATEMP_xt_0_4",
+        "BV_xt_0_4",
+        "BD_xt_0_4",
+        "WT_xt_3_75",
+        "TILT_xt_3_75",
+        "ACC_xt_3_75",
+        "ATEMP_xt_3_75",
+        "BV_xt_3_75",
+        "BD_xt_3_75",
+        "WT_xt_6_5",
+        "TILT_xt_6_5",
+        "ACC_xt_6_5",
+        "ATEMP_xt_6_5",
+        "BV_xt_6_5",
+        "BD_xt_6_5",
+        "WT_xt_10",
+        "TILT_xt_10",
+        "ACC_xt_10",
+        "ATEMP_xt_10",
+        "BV_xt_10",
+        "BD_xt_10",
+        "WT_xt_15",
+        "TILT_xt_15",
+        "ACC_xt_15",
+        "ATEMP_xt_15",
+        "BV_xt_15",
+        "BD_xt_15",
+        "WT_xt_17_5",
+        "TILT_xt_17_5",
+        "ACC_xt_17_5",
+        "ATEMP_xt_17_5",
+        "BV_xt_17_5",
+        "BD_xt_17_5",
+        "WT_xt_25",
+        "TILT_xt_25",
+        "ACC_xt_25",
+        "ATEMP_xt_25",
+        "BV_xt_25",
+        "BD_xt_25",
+        "WT_xt_30",
+        "TILT_xt_30",
+        "ACC_xt_30",
+        "ATEMP_xt_30",
+        "BV_xt_30",
+        "BD_xt_30",
+        "WT_xt_35",
+        "TILT_xt_35",
+        "ACC_xt_35",
+        "ATEMP_xt_35",
+        "BV_xt_35",
+        "BD_xt_35",
+        "WT_xt_40",
+        "TILT_xt_40",
+        "ACC_xt_40",
+        "ATEMP_xt_40",
+        "BV_xt_40",
+        "BD_xt_40",
+        "WT_xt_45",
+        "TILT_xt_45",
+        "ACC_xt_45",
+        "ATEMP_xt_45",
+        "BV_xt_45",
+        "BD_xt_45",
+        "WT_xt_50",
+        "TILT_xt_50",
+        "ACC_xt_50",
+        "ATEMP_xt_50",
+        "BV_xt_50",
+        "BD_xt_50",
+        "WT_xt_55",
+        "TILT_xt_55",
+        "ACC_xt_55",
+        "ATEMP_xt_55",
+        "BV_xt_55",
+        "BD_xt_55",
+        "WT_xt_60",
+        "TILT_xt_60",
+        "ACC_xt_60",
+        "ATEMP_xt_60",
+        "BV_xt_60",
+        "BD_xt_60",
+        "WT_xt_65",
+        "TILT_xt_65",
+        "ACC_xt_65",
+        "ATEMP_xt_65",
+        "BV_xt_65",
+        "BD_xt_65",
+        "WT_xt_70",
+        "TILT_xt_70",
+        "ACC_xt_70",
+        "ATEMP_xt_70",
+        "BV_xt_70",
+        "BD_xt_70",
+        "WT_xt_75",
+        "TILT_xt_75",
+        "ACC_xt_75",
+        "ATEMP_xt_75",
+        "BV_xt_75",
+        "BD_xt_75",
+        "WT_xt_80",
+        "TILT_xt_80",
+        "ACC_xt_80",
+        "ATEMP_xt_80",
+        "BV_xt_80",
+        "BD_xt_80",
+        "WT_xt_85",
+        "TILT_xt_85",
+        "ACC_xt_85",
+        "ATEMP_xt_85",
+        "BV_xt_85",
+        "BD_xt_85"
+      ]
