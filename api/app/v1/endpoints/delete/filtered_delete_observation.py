@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncpg
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.sta2rest import sta2rest
+from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.functions import set_role, update_datastream_observedArea
-import asyncpg
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import JSONResponse
-from app.v1.endpoints.error_response import error_response
 
 from .functions import update_datastream_phenomenon_time_from_foi
 
@@ -114,8 +114,7 @@ async def delete_observations_filtered(
                     await set_role(connection, current_user)
 
                 matched_ids = [
-                    row["id"]
-                    for row in await connection.fetch(ids_query)
+                    row["id"] for row in await connection.fetch(ids_query)
                 ]
 
                 if not matched_ids:

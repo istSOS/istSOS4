@@ -16,7 +16,7 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
-from fastapi import APIRouter, Body, Depends, Header, Request, status
+from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
 
 from .functions import check_id_exists, set_commit, update_network_entity
@@ -58,6 +58,7 @@ OPTIONAL_PUT_KEYS = []
     summary="Update a Network",
     description="Update a Network",
     status_code=status.HTTP_200_OK,
+    openapi_extra=request_body_openapi_example(PAYLOAD_EXAMPLE),
 )
 async def update_network(
     network_id: int,

@@ -443,15 +443,17 @@ class FilterVisitor(visitor.NodeVisitor):
         column = self.visit(field)
         table_name = getattr(getattr(column, "table", None), "name", None)
 
-        if (
-            getattr(column, "name", None) == "phenomenonTimeStart"
-            and table_name in {"Observation", "Observation_traveltime"}
-        ):
+        if getattr(
+            column, "name", None
+        ) == "phenomenonTimeStart" and table_name in {
+            "Observation",
+            "Observation_traveltime",
+        }:
             return column
-        if (
-            getattr(column, "name", None) == "resultTime"
-            and table_name in {"Observation", "Observation_traveltime"}
-        ):
+        if getattr(column, "name", None) == "resultTime" and table_name in {
+            "Observation",
+            "Observation_traveltime",
+        }:
             return column
         if isinstance(getattr(column, "type", None), TSTZRANGE):
             return functions.func.lower(column)
@@ -466,15 +468,17 @@ class FilterVisitor(visitor.NodeVisitor):
         column = self.visit(field)
         table_name = getattr(getattr(column, "table", None), "name", None)
 
-        if (
-            getattr(column, "name", None) == "phenomenonTimeStart"
-            and table_name in {"Observation", "Observation_traveltime"}
-        ):
+        if getattr(
+            column, "name", None
+        ) == "phenomenonTimeStart" and table_name in {
+            "Observation",
+            "Observation_traveltime",
+        }:
             return column.table.c["phenomenonTimeEnd"]
-        if (
-            getattr(column, "name", None) == "resultTime"
-            and table_name in {"Observation", "Observation_traveltime"}
-        ):
+        if getattr(column, "name", None) == "resultTime" and table_name in {
+            "Observation",
+            "Observation_traveltime",
+        }:
             return column
         if isinstance(getattr(column, "type", None), TSTZRANGE):
             return functions.func.upper(column)

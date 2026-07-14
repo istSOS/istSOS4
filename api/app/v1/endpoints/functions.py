@@ -15,7 +15,7 @@
 import json
 import re
 
-from app import EPSG, ST_AGGREGATE
+from app import ST_AGGREGATE
 from app.utils.utils import pg_quote_ident
 
 _PG_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")

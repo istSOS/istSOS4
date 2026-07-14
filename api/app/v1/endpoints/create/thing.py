@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncpg
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import (
@@ -19,12 +20,11 @@ from app.utils.utils import (
     validate_payload_keys,
     validate_required_keys,
 )
+from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.functions import set_role
-import asyncpg
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
-from app.v1.endpoints.error_response import error_response
 
 from .functions import insert_thing_entity, set_commit
 
@@ -68,7 +68,7 @@ REQUIRED_KEYS = ["name"]
 )
 async def create_thing(
     request: Request,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -111,21 +111,31 @@ async def create_thing(
         )
     except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
         # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
+        return error_response(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Database temporarily unavailable",
+        )
     except ValueError as e:
         return error_response(status.HTTP_400_BAD_REQUEST, str(e))
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+        return error_response(
+            status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
+        )
     except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
         # conformance: req/create-update-delete/create-entity — a payload that
         # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
         # related entity missing a required column) is a client error (400), not
         # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
-        return error_response(status.HTTP_400_BAD_REQUEST, "Invalid entity: a required value is missing or not allowed.")
+        return error_response(
+            status.HTTP_400_BAD_REQUEST,
+            "Invalid entity: a required value is missing or not allowed.",
+        )
     except Exception:
         # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
-        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
+        return error_response(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
+        )
 
 
 @v1.api_route(
@@ -139,7 +149,7 @@ async def create_thing(
 async def create_thing_for_location(
     request: Request,
     location_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -188,18 +198,28 @@ async def create_thing_for_location(
         )
     except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
         # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
+        return error_response(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Database temporarily unavailable",
+        )
     except ValueError as e:
         return error_response(status.HTTP_400_BAD_REQUEST, str(e))
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+        return error_response(
+            status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
+        )
     except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
         # conformance: req/create-update-delete/create-entity — a payload that
         # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
         # related entity missing a required column) is a client error (400), not
         # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
-        return error_response(status.HTTP_400_BAD_REQUEST, "Invalid entity: a required value is missing or not allowed.")
+        return error_response(
+            status.HTTP_400_BAD_REQUEST,
+            "Invalid entity: a required value is missing or not allowed.",
+        )
     except Exception:
         # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
-        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
+        return error_response(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
+        )
