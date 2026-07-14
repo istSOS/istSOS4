@@ -318,16 +318,18 @@ class Sensor:
 
 
 class ObservedProperty:
-    def __init__(self, name, description, definition):
+    def __init__(self, name, description, definition, properties):
         self.name = name
         self.description = description
         self.definition = definition
+        self.properties = properties
 
     def to_dict(self):
         return {
             "name": self.name,
             "description": self.description,
             "definition": self.definition,
+            "properties": self.properties,
         }
 
     def create(self, server_url, token):
