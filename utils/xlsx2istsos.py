@@ -255,6 +255,10 @@ def create_entities(procedure, server_url, token):
     observed_property_definitions = split_values(
         require_field(procedure, "observed_property_definition")
     )
+    observed_property_properties = parse_json_value(
+        procedure.get("observed_property_properties"), default=None
+    )
+
     datastream_names = split_values(procedure.get("datastream_name"))
     datastream_descriptions = split_values(
         procedure.get("datastream_description")
@@ -271,6 +275,7 @@ def create_entities(procedure, server_url, token):
             definition=parse_definition(
                 get_list_value(observed_property_definitions, index)
             ),
+            properties=observed_property_properties,
         )
         op_id = observed_property.create(server_url, token=token)
         observed_property_ids.append(op_id)
