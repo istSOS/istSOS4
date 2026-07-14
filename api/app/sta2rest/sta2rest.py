@@ -681,10 +681,9 @@ class STA2REST:
             str: a ``SELECT DISTINCT "<table>".id FROM ... WHERE <filter>`` SQL
             string (literal-bound), or ``None`` when there is no filter.
         """
-        from sqlalchemy import distinct, select
-
         import app.models as models
         from app.db.sqlalchemy_db import engine
+        from sqlalchemy import distinct, select
 
         path = full_path
         query = None

@@ -35,13 +35,13 @@ the create path, rather than introducing a parallel validator.
 
 import json
 
-from app.utils.utils import validate_payload_keys, validate_required_keys
-from app.v1.endpoints.functions import set_role
 import asyncpg
+from app.utils.utils import validate_payload_keys, validate_required_keys
+from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import Request, status
 from fastapi.responses import JSONResponse, Response
-from app.v1.endpoints.error_response import error_response
 
 from .functions import check_id_exists, set_commit
 
@@ -143,7 +143,9 @@ async def handle_put_replace(
                 ):
                     if current_user is not None:
                         await connection.execute("RESET ROLE;")
-                    return error_response(status.HTTP_404_NOT_FOUND, not_found_message)
+                    return error_response(
+                        status.HTTP_404_NOT_FOUND, not_found_message
+                    )
 
                 payload = build_put_payload(
                     payload, required_keys, optional_keys
@@ -164,9 +166,7 @@ async def handle_put_replace(
                 )
 
                 if post_update is not None:
-                    await post_update(
-                        connection, entity_id, payload, updated
-                    )
+                    await post_update(connection, entity_id, payload, updated)
 
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
@@ -183,12 +183,19 @@ async def handle_put_replace(
         )
     except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
         # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
+        return error_response(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Database temporarily unavailable",
+        )
     except ValueError as e:
         return error_response(status.HTTP_400_BAD_REQUEST, str(e))
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+        return error_response(
+            status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
+        )
     except Exception:
         # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
-        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
+        return error_response(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
+        )

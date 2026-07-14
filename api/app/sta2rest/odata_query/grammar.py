@@ -379,7 +379,7 @@ class ODataParser(Parser):
 
     @_(
         "primitive_literal", "first_member_expr", "list_expr"
-    )  # type:ignore[no-redef]
+    )  # type: ignore[no-redef]
     def common_expr(self, p):
         ":meta private:"
         return p[0]
@@ -406,7 +406,7 @@ class ODataParser(Parser):
         ":meta private:"
         return [p[0], p[4]]
 
-    @_('list_items BWS "," BWS common_expr')  # type:ignore[no-redef]
+    @_('list_items BWS "," BWS common_expr')  # type: ignore[no-redef]
     def list_items(self, p):
         ":meta private:"
         p.list_items.append(p.common_expr)
@@ -426,7 +426,7 @@ class ODataParser(Parser):
         # Therefore we follow Python syntax: a single item list has a comma at the end.
         return ast.List([p.common_expr])
 
-    @_('"(" BWS list_items BWS ")"')  # type:ignore[no-redef]
+    @_('"(" BWS list_items BWS ")"')  # type: ignore[no-redef]
     def list_expr(self, p):
         ":meta private:"
         return ast.List(p.list_items)
@@ -456,7 +456,7 @@ class ODataParser(Parser):
 
     @_(
         "entity_navigation_property single_navigation_expr"
-    )  # type:ignore[no-redef]
+    )  # type: ignore[no-redef]
     def property_path_expr(self, p):
         ":meta private:"
         if isinstance(p[1], ast.Attribute):
@@ -492,7 +492,7 @@ class ODataParser(Parser):
 
     @_(
         "entity_navigation_property collection_path_expr"
-    )  # type:ignore[no-redef]
+    )  # type: ignore[no-redef]
     def property_path_expr(self, p):
         ":meta private:"
         return ast.CollectionLambda(p[0], *p[1])
@@ -510,7 +510,7 @@ class ODataParser(Parser):
         ":meta private:"
         return (p[0], p.lambda_)
 
-    @_('ANY "(" BWS ")"')  # type:ignore[no-redef]
+    @_('ANY "(" BWS ")"')  # type: ignore[no-redef]
     def any_expr(self, p):
         ":meta private:"
         return (p[0], None)
@@ -523,12 +523,12 @@ class ODataParser(Parser):
     ####################################################################################
     # Arithmetic
     ####################################################################################
-    @_("UMINUS BWS common_expr")  # type:ignore[no-redef]
+    @_("UMINUS BWS common_expr")  # type: ignore[no-redef]
     def common_expr(self, p):
         ":meta private:"
         return ast.UnaryOp(p[0], p[2])
 
-    @_(  # type:ignore[no-redef]
+    @_(  # type: ignore[no-redef]
         "common_expr ADD common_expr",
         "common_expr SUB common_expr",
         "common_expr MUL common_expr",
@@ -542,7 +542,7 @@ class ODataParser(Parser):
     ####################################################################################
     # Comparisons
     ####################################################################################
-    @_(  # type:ignore[no-redef]
+    @_(  # type: ignore[no-redef]
         "common_expr EQ common_expr",
         "common_expr NE common_expr",
         "common_expr LT common_expr",
@@ -558,14 +558,14 @@ class ODataParser(Parser):
     ####################################################################################
     # Boolean logic
     ####################################################################################
-    @_(  # type:ignore[no-redef]
+    @_(  # type: ignore[no-redef]
         "common_expr AND common_expr", "common_expr OR common_expr"
     )
     def common_expr(self, p):
         ":meta private:"
         return ast.BoolOp(p[1], p[0], p[2])
 
-    @_("NOT common_expr")  # type:ignore[no-redef]
+    @_("NOT common_expr")  # type: ignore[no-redef]
     def common_expr(self, p):
         ":meta private:"
         return ast.UnaryOp(p[0], p.common_expr)
@@ -599,25 +599,25 @@ class ODataParser(Parser):
 
         return ast.Call(func, args)
 
-    @_('ODATA_IDENTIFIER "(" ")"')  # type:ignore[no-redef]
+    @_('ODATA_IDENTIFIER "(" ")"')  # type: ignore[no-redef]
     def common_expr(self, p):
         ":meta private:"
         args = []
         return self._function_call(p[0], args)
 
-    @_('ODATA_IDENTIFIER "(" BWS common_expr BWS ")"')  # type:ignore[no-redef]
+    @_('ODATA_IDENTIFIER "(" BWS common_expr BWS ")"')  # type: ignore[no-redef]
     def common_expr(self, p):
         ":meta private:"
         args = [p.common_expr]
         return self._function_call(p[0], args)
 
-    @_("ODATA_IDENTIFIER list_expr")  # type:ignore[no-redef]
+    @_("ODATA_IDENTIFIER list_expr")  # type: ignore[no-redef]
     def common_expr(self, p):
         ":meta private:"
         args = p[1].val
         return self._function_call(p[0], args)
 
-    @_('ODATA_IDENTIFIER "=" common_expr')  # type:ignore[no-redef]
+    @_('ODATA_IDENTIFIER "=" common_expr')  # type: ignore[no-redef]
     def named_param(self, p):
         ":meta private:"
         return ast.NamedParam(p[0], p.common_expr)
@@ -627,12 +627,12 @@ class ODataParser(Parser):
         ":meta private:"
         return [p[0], p[4]]
 
-    @_('list_named_param BWS "," BWS named_param')  # type:ignore[no-redef]
+    @_('list_named_param BWS "," BWS named_param')  # type: ignore[no-redef]
     def list_named_param(self, p):
         ":meta private:"
         return p.list_items + [p.named_param]
 
-    @_('ODATA_IDENTIFIER "(" BWS named_param BWS ")"')  # type:ignore[no-redef]
+    @_('ODATA_IDENTIFIER "(" BWS named_param BWS ")"')  # type: ignore[no-redef]
     def common_expr(self, p):
         ":meta private:"
         args = [p.named_param]
@@ -640,7 +640,7 @@ class ODataParser(Parser):
 
     @_(
         'ODATA_IDENTIFIER "(" BWS list_named_param BWS ")"'
-    )  # type:ignore[no-redef]
+    )  # type: ignore[no-redef]
     def common_expr(self, p):
         ":meta private:"
         args = p.list_named_param
@@ -663,7 +663,7 @@ class ODataParser(Parser):
         """
         pass
 
-    @_("empty")  # type:ignore[no-redef]
+    @_("empty")  # type: ignore[no-redef]
     def BWS(self, p):
         """
         'Bad Whitespace'

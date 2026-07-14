@@ -36,10 +36,10 @@ from app.v1.endpoints.delete import datastream as delete_datastream
 from app.v1.endpoints.delete import (
     feature_of_interest as delete_feature_of_interest,
 )
+from app.v1.endpoints.delete import filtered_delete_observation
 from app.v1.endpoints.delete import (
     historical_location as delete_historical_location,
 )
-from app.v1.endpoints.delete import filtered_delete_observation
 from app.v1.endpoints.delete import location as delete_location
 from app.v1.endpoints.delete import network as delete_network
 from app.v1.endpoints.delete import observation as delete_observation

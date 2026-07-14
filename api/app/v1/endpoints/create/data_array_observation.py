@@ -15,6 +15,7 @@
 import json
 from datetime import datetime
 
+import asyncpg
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import (
@@ -24,12 +25,11 @@ from app.utils.utils import (
     handle_datetime_fields,
     handle_result_field,
 )
+from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.functions import set_role
-import asyncpg
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse
-from app.v1.endpoints.error_response import error_response
 
 from .functions import (
     generate_feature_of_interest,
@@ -95,7 +95,7 @@ PAYLOAD_EXAMPLE = [
     status_code=status.HTTP_201_CREATED,
 )
 async def data_array_observation(
-    payload: list = Body(example=PAYLOAD_EXAMPLE),
+    payload: list = Body(examples=[PAYLOAD_EXAMPLE]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -130,14 +130,20 @@ async def data_array_observation(
                     data_array = observation_set.get("dataArray", [])
 
                     if not datastream_id:
-                        return error_response(status.HTTP_400_BAD_REQUEST, "Missing 'datastream_id' in Datastream.")
+                        return error_response(
+                            status.HTTP_400_BAD_REQUEST,
+                            "Missing 'datastream_id' in Datastream.",
+                        )
 
                     # Check that at least phenomenonTime and result are present
                     if (
                         "phenomenonTime" not in components
                         or "result" not in components
                     ):
-                        return error_response(status.HTTP_400_BAD_REQUEST, "Missing required properties 'phenomenonTime' or 'result' in components.")
+                        return error_response(
+                            status.HTTP_400_BAD_REQUEST,
+                            "Missing required properties 'phenomenonTime' or 'result' in components.",
+                        )
 
                     for data in data_array:
                         try:
@@ -182,9 +188,15 @@ async def data_array_observation(
                                     "message": "Insufficient privileges.",
                                 },
                             )
-                        except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
+                        except (
+                            asyncpg.PostgresConnectionError,
+                            asyncpg.TooManyConnectionsError,
+                        ):
                             # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-                            return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
+                            return error_response(
+                                status.HTTP_503_SERVICE_UNAVAILABLE,
+                                "Database temporarily unavailable",
+                            )
                         except Exception as e:
                             response_urls.append("error")
 
@@ -205,15 +217,22 @@ async def data_array_observation(
         )
     except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
         # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
+        return error_response(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Database temporarily unavailable",
+        )
     except ValueError as e:
         return error_response(status.HTTP_400_BAD_REQUEST, str(e))
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+        return error_response(
+            status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
+        )
     except Exception:
         # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
-        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
+        return error_response(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
+        )
 
 
 async def insertDataArrayObservation(

@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncpg
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
-from app.v1.endpoints.functions import set_role
-import asyncpg
-from asyncpg.exceptions import InsufficientPrivilegeError
-from fastapi import APIRouter, Body, Depends, Header, Request, status
-from fastapi.responses import JSONResponse, Response
 from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.functions import set_role
+from asyncpg.exceptions import InsufficientPrivilegeError
+from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi.responses import JSONResponse, Response
 
 from .functions import check_id_exists, set_commit, update_location_entity
 from .json_patch import apply_json_patch_to_entity, normalize_patch_body
@@ -86,7 +86,9 @@ async def update_location(
                 ):
                     if current_user is not None:
                         await connection.execute("RESET ROLE;")
-                    return error_response(status.HTTP_404_NOT_FOUND, "Location not found.")
+                    return error_response(
+                        status.HTTP_404_NOT_FOUND, "Location not found."
+                    )
 
                 # req/create-update-delete/update-entity-jsonpatch: resolve an
                 # RFC 6902 array body into a merge dict; dict bodies pass through.
@@ -130,15 +132,22 @@ async def update_location(
         )
     except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
         # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable")
+        return error_response(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Database temporarily unavailable",
+        )
     except ValueError as e:
         return error_response(status.HTTP_400_BAD_REQUEST, str(e))
     except asyncpg.ForeignKeyViolationError:
         # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return error_response(status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist.")
+        return error_response(
+            status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
+        )
     except Exception:
         # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
-        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
+        return error_response(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
+        )
 
 
 # conformance: req/create-update-delete/update-entity-put — mandatory Location
