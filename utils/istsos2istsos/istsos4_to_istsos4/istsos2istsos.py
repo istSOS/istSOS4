@@ -53,6 +53,29 @@ def parse_bool(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def parse_names(name: str) -> list[str]:
+    return [
+        value.strip()
+        for value in os.getenv(name, "").split(",")
+        if value.strip()
+    ]
+
+
+def datastream_name_mapping() -> dict[str, str]:
+    source_names = parse_names("DATASTREAMS_FROM")
+    target_names = parse_names("DATASTREAMS_TO")
+    if not target_names:
+        return {name: name for name in source_names}
+    if len(source_names) != len(target_names):
+        raise ValueError(
+            "DATASTREAMS_FROM and DATASTREAMS_TO must contain the same "
+            "number of names"
+        )
+    if len(source_names) != len(set(source_names)):
+        raise ValueError("DATASTREAMS_FROM contains duplicate names")
+    return dict(zip(source_names, target_names))
+
+
 def parse_optional_timestamp(name: str) -> datetime | None:
     value = os.getenv(name, "").strip()
     if not value:
@@ -217,39 +240,46 @@ def run() -> None:
     )
     network_from = os.getenv("NETWORK_FROM", "").strip()
     network_to = os.getenv("NETWORK_TO", "").strip()
-    procedures_from = {
-        name.strip()
-        for name in os.getenv("PROCEDURES_FROM", "").split(",")
-        if name.strip()
-    }
+    datastream_mapping = datastream_name_mapping()
+    datastreams_from = set(datastream_mapping)
 
     source_datastreams = index_datastreams(
         source.get_datastreams(network_from), "source"
     )
-    if procedures_from:
-        missing_procedures = sorted(procedures_from - set(source_datastreams))
-        if missing_procedures:
+    if datastreams_from:
+        missing_datastreams = sorted(datastreams_from - set(source_datastreams))
+        if missing_datastreams:
             raise ValueError(
                 "Source datastreams not found: "
-                + ", ".join(missing_procedures)
+                + ", ".join(missing_datastreams)
             )
         source_datastreams = {
             name: datastream
             for name, datastream in source_datastreams.items()
-            if name in procedures_from
+            if name in datastreams_from
         }
     target_datastreams = index_datastreams(
         target.get_datastreams(network_to), "target"
     )
-    missing = sorted(set(source_datastreams) - set(target_datastreams))
+    if not datastream_mapping:
+        datastream_mapping = {name: name for name in source_datastreams}
+    missing = sorted(
+        (source_name, target_name)
+        for source_name, target_name in datastream_mapping.items()
+        if target_name not in target_datastreams
+    )
     if missing:
         logger.warning(
-            "Skipping datastreams not found in target: %s", ", ".join(missing)
+            "Skipping datastreams not found in target: %s",
+            ", ".join(
+                f"{source_name} -> {target_name}"
+                for source_name, target_name in missing
+            ),
         )
         source_datastreams = {
             name: datastream
             for name, datastream in source_datastreams.items()
-            if name in target_datastreams
+            if datastream_mapping[name] in target_datastreams
         }
 
     start = start_dt.isoformat().replace("+00:00", "Z") if start_dt else None
@@ -270,11 +300,12 @@ def run() -> None:
             "Discarding no-data observations equal to %s", nodata_value
         )
     for name, source_datastream in source_datastreams.items():
+        target_name = datastream_mapping[name]
         count, skipped_existing, skipped_nodata = copy_datastream_observations(
             source,
             target,
             source_datastream,
-            target_datastreams[name],
+            target_datastreams[target_name],
             start,
             end,
             import_nodata,
@@ -284,8 +315,9 @@ def run() -> None:
         total += count
         total_skipped_existing += skipped_existing
         total_skipped_nodata += skipped_nodata
+        label = name if name == target_name else f"{name} -> {target_name}"
         message = (
-            f"{name}: copied {count}, skipped {skipped_existing} existing"
+            f"{label}: copied {count}, skipped {skipped_existing} existing"
         )
         if skipped_nodata:
             message += f", {skipped_nodata} no-data"

@@ -114,7 +114,7 @@ ISTSOS4_FROM_URL=https://source.example/v1.1
 ISTSOS4_FROM_USER=source-user
 ISTSOS4_FROM_PASSWORD=source-password
 NETWORK_FROM=
-PROCEDURES_FROM=
+DATASTREAMS_FROM=
 TIMESTAMP_START_FROM=
 TIMESTAMP_END_FROM=
 
@@ -122,6 +122,7 @@ ISTSOS4_TO_URL=http://localhost:8019/v4/v1.1
 ISTSOS4_TO_USER=target-user
 ISTSOS4_TO_PASSWORD=target-password
 NETWORK_TO=
+DATASTREAMS_TO=
 
 IMPORT_NODATA=true
 NODATA_VALUE=-999.9
@@ -130,14 +131,26 @@ NODATA_VALUE=-999.9
 I filtri sono opzionali:
 
 - `NETWORK_FROM`: limita i datastream alla network sorgente;
-- `PROCEDURES_FROM`: nomi dei datastream separati da virgola;
+- `DATASTREAMS_FROM`: nomi dei datastream sorgente separati da virgola;
 - `TIMESTAMP_START_FROM`: limite iniziale ISO 8601 incluso;
 - `TIMESTAMP_END_FROM`: limite finale ISO 8601 incluso;
 - `NETWORK_TO`: network nella quale cercare i datastream di destinazione;
+- `DATASTREAMS_TO`: nomi dei datastream di destinazione separati da virgola,
+  associati per posizione a `DATASTREAMS_FROM`. Se vuoto, i nomi di
+  destinazione sono uguali a quelli sorgente;
 - `IMPORT_NODATA`: `true` (default) importa anche le osservazioni "no data",
   `false` le scarta;
 - `NODATA_VALUE`: valore sentinella da scartare (default `-999.9`, confronto
   numerico), considerato solo quando `IMPORT_NODATA=false`.
+
+Per copiare datastream con nomi diversi nelle due istanze:
+
+```dotenv
+DATASTREAMS_FROM=source_temperature,source_rain
+DATASTREAMS_TO=target_temperature,target_rain
+```
+
+Le due liste devono contenere lo stesso numero di nomi.
 
 L'invio a istSOS4 non richiede configurazione: il client suddivide
 automaticamente ogni bulk in richieste che restano sotto il limite di parametri
