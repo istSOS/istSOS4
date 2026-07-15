@@ -75,7 +75,80 @@ class CommonQueryParams:
         self.from_to = from_to
 
 
+class ObservationQueryParams(CommonQueryParams):
+
+    def __init__(
+        self,
+        skip: int = Query(
+            None,
+            alias="$skip",
+            description="The number of elements to skip from the collection",
+        ),
+        top: int = Query(
+            None, alias="$top", description="The number of elements to return"
+        ),
+        count: bool = Query(
+            None,
+            alias="$count",
+            description="Flag indicating if the total number of items in the collection should be returned.",
+        ),
+        order: str = Query(
+            None,
+            alias="$orderby",
+            description="The order in which the elements should be returned",
+        ),
+        select: str = Query(
+            None,
+            alias="$select",
+            description="The list of properties that need to be returned",
+        ),
+        expand: str = Query(
+            None,
+            alias="$expand",
+            description="The list of related queries that need to be included in the result",
+        ),
+        filter: str = Query(
+            None, alias="$filter", description="A filter query"
+        ),
+        result_format: str = Query(
+            None,
+            alias="$resultFormat",
+            description="Return observations using the Data Array result format",
+        ),
+        as_of: str = Query(
+            None,
+            alias="$as_of",
+            description="A date-time parameter to specify the exact moment for which the data is requested (ISO 8601 time string)",
+            include_in_schema=VERSIONING,
+        ),
+        from_to: str = Query(
+            None,
+            alias="$from_to",
+            description="A period parameter to specify the time interval for which the data is requested (ISO 8601 time interval)",
+            include_in_schema=VERSIONING,
+        ),
+    ):
+        super().__init__(
+            skip,
+            top,
+            count,
+            order,
+            select,
+            expand,
+            filter,
+            as_of,
+            from_to,
+        )
+        self.result_format = result_format
+
+
 def get_common_query_params(
     params: CommonQueryParams = Depends(),
 ) -> CommonQueryParams:
+    return params
+
+
+def get_observation_query_params(
+    params: ObservationQueryParams = Depends(),
+) -> ObservationQueryParams:
     return params
