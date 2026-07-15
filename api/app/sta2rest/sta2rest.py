@@ -305,7 +305,7 @@ class STA2REST:
 
     if VERSIONING or AUTHORIZATION:
         for key in DEFAULT_SELECT:
-            if key != "Commit":
+            if key not in {"Commit", "ObservationDataArray"}:
                 insert_navigation_link(
                     DEFAULT_SELECT, key, "commit_navigation_link"
                 )

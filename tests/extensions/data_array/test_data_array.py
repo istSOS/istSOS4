@@ -110,6 +110,9 @@ def test_data_array_read_structure(client, seed):
     # components: a list including at least the mandatory id/phenomenonTime/result.
     comps = group["components"]
     assert isinstance(comps, list) and comps, "components must be a non-empty list"
+    assert "commit_navigation_link" not in comps, (
+        "the default Data Array must not expose the internal commit navigation column"
+    )
     for required in ("id", "phenomenonTime", "result"):
         assert required in comps, f"components must include '{required}': {comps}"
 
