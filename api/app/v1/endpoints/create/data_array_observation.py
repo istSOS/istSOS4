@@ -39,6 +39,7 @@ from .functions import (
     set_commit,
     update_datastream_last_foi_id,
 )
+from app.v1.endpoints.functions import set_role
 
 v1 = APIRouter()
 
@@ -200,8 +201,6 @@ async def data_array_observation(
                         except Exception as e:
                             response_urls.append("error")
 
-                if current_user is not None:
-                    await conn.execute("RESET ROLE;")
         return JSONResponse(
             status_code=status.HTTP_201_CREATED, content=response_urls
         )
