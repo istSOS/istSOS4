@@ -33,6 +33,7 @@ from app.v1.endpoints.create import sensor as create_sensor
 from app.v1.endpoints.create import thing as create_thing
 from app.v1.endpoints.create import user as create_user
 from app.v1.endpoints.create import activate_user as activate_user
+from app.v1.endpoints.create import register_request as register_request
 from app.v1.endpoints.delete import datastream as delete_datastream
 from app.v1.endpoints.delete import (
     feature_of_interest as delete_feature_of_interest,
@@ -172,6 +173,7 @@ if AUTHORIZATION:
     v1.include_router(read_user.v1)
     v1.include_router(create_user.v1)
     v1.include_router(activate_user.v1)   # POST /Users/{id}/activate
+    v1.include_router(register_request.v1)  # POST /Register  (public)
     v1.include_router(update_user.v1)
     v1.include_router(update_password.v1)  # PATCH /Users/{id}/password
     v1.include_router(update_role.v1)      # PATCH /Users/{id}/role
