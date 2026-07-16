@@ -57,6 +57,32 @@ _STAC_VERSION = "1.0.0"
 _MEDIA_JSON = "application/json"
 _MEDIA_GEOJSON = "application/geo+json"
 _MEDIA_CSV = "text/csv"
+_MEDIA_CONFORMANCE = "application/json"
+
+# Collection.license fallback when neither Thing.properties["license"] nor a
+# real SPDX id is known. STAC 1.0 only sanctions an SPDX identifier, "various"
+# (multiple differing licenses across the included data), or "proprietary"
+# (all rights reserved / terms unclear, consult the provider). "proprietary"
+# is the correct default here -- we genuinely don't know this sensor data's
+# license terms, which is a different claim than "various licenses apply".
+_DEFAULT_LICENSE = "proprietary"
+
+# STAC API conformance classes this deployment satisfies. api.py exposes a
+# root Catalog + Collections + Items over plain GET routes (no item search,
+# no filter/query extension) -- so only core/features/collections are
+# claimed. pystac-client and the stac-api-validator both gate feature
+# detection on this array before calling any other route, so extend this
+# list the moment api.py grows item-search or filter support.
+_CONFORMANCE_CLASSES = [
+    "https://api.stacspec.org/v1.0.0/core",
+    "https://api.stacspec.org/v1.0.0/ogcapi-features",
+    "https://api.stacspec.org/v1.0.0/collections",
+]
+
+# Root catalog id/title. Currently a literal rather than a config value --
+# fine for one istSOS4 deployment; move to per-deployment config if this
+# connector is ever run against more than one istSOS4 instance.
+_CATALOG_ID = "istsos-connector-catalog"
 
 STAC_ROOT_HREF = f"{HOSTNAME}{SUBPATH}{VERSION}/connector/stac"
 
@@ -326,10 +352,19 @@ def _catalog_nav_links(
     (all of them in NETWORK=0 mode, orphan-only in NETWORK=1 mode).
     network_ids -> rel=child to each Network subcatalog, only passed in
     NETWORK=1 mode.
+
+    Also emits conformance/data link rels required of a STAC API landing
+    page (root Catalog doubles as the landing page here). service-desc is
+    deliberately not emitted -- it points at an OpenAPI document, and none
+    exists yet. api.py needs a matching GET /conformance route that returns
+    {"conformsTo": _CONFORMANCE_CLASSES} for the conformance href below to
+    resolve to anything.
     """
     links = [
-        {"rel": "self", "href": STAC_ROOT_HREF, "type": _MEDIA_JSON},
-        {"rel": "root", "href": STAC_ROOT_HREF, "type": _MEDIA_JSON},
+        {"rel": "self",         "href": STAC_ROOT_HREF,                     "type": _MEDIA_JSON},
+        {"rel": "root",         "href": STAC_ROOT_HREF,                     "type": _MEDIA_JSON},
+        {"rel": "conformance",  "href": f"{STAC_ROOT_HREF}/conformance",    "type": _MEDIA_CONFORMANCE},
+        {"rel": "data",         "href": _collections_base_href(),          "type": _MEDIA_JSON},
     ]
     base = _collections_base_href()
     for cid in collection_ids:
@@ -559,9 +594,14 @@ def _build_collection_dict(
     if bboxes:
         spatial_bbox = _union_bboxes(bboxes)
     else:
-        logger.warning(
+        # ERROR, not WARNING: a world bbox here is indistinguishable in the
+        # API response from a Collection that genuinely spans the globe.
+        # Nobody will notice until a map renders wrong, so this needs to be
+        # loud enough to show up in prod log monitoring, not just local runs.
+        logger.error(
             "Thing %s (%s) has no spatial metadata from Items or Locations "
-            "-- Collection will use world bbox fallback",
+            "-- Collection will use world bbox fallback [-180,-90,180,90], "
+            "which is indistinguishable from a genuinely global extent",
             thing.id, thing.name,
         )
         spatial_bbox = [-180.0, -90.0, 180.0, 90.0]
@@ -630,7 +670,7 @@ def _build_collection_dict(
             "temporal": {"interval": [[collection_start, collection_end]]},
         },
         "links":            links,
-        "license":          "other",
+        "license":          _DEFAULT_LICENSE,
         "thing_id":         thing.id,
         "thing_properties": thing.properties,
         "summaries": {
@@ -705,8 +745,9 @@ def build_stac_catalog(catalog: HarvestedCatalog) -> dict:
     root_catalog = {
         "type": "Catalog",
         "stac_version": _STAC_VERSION,
-        "id": "istsos-connector-catalog",
+        "id": _CATALOG_ID,
         "description": f"istSOS4 deployment: {catalog.thing_count} Things, harvested at {catalog.harvested_at}.",
+        "conformsTo": _CONFORMANCE_CLASSES,
         "links": _catalog_nav_links(collection_ids),
         "collection_ids": collection_ids,
     }
@@ -767,12 +808,13 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
     root_catalog = {
         "type": "Catalog",
         "stac_version": _STAC_VERSION,
-        "id": "istsos-connector-catalog",
+        "id": _CATALOG_ID,
         "description": (
             f"istSOS4 deployment: {len(network_ids)} Networks, harvested at "
             f"{network_catalog.harvested_at}. Datastreams with no assigned "
             "Network are served directly from this root."
         ),
+        "conformsTo": _CONFORMANCE_CLASSES,
         "links": _catalog_nav_links(orphan_ids, network_ids=network_ids),
         "collection_ids": orphan_ids,
         "network_ids": network_ids,
