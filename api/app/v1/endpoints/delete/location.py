@@ -80,8 +80,6 @@ async def delete_location(
                         f"Location with id {location_id} not found",
                     )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
     except InsufficientPrivilegeError:
