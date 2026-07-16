@@ -28,10 +28,16 @@ read by the APScheduler registration in istSOS's main.py.
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
+from typing import Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+_STAC_NON_SPDX_LICENSES = {"various", "proprietary"}
+_STAC_LICENSE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-+]*$")
 
 
 class Settings(BaseSettings):
@@ -50,6 +56,55 @@ class Settings(BaseSettings):
             "connector package itself."
         ),
     )
+
+    # STAC catalog identity
+    STAC_CATALOG_ID: str = Field(
+        default="istsos-connector-catalog",
+        description=(
+            "id of the root STAC Catalog. Must be unique if more than one "
+            "instance of this connector is ever aggregated by the same "
+            "STAC client (e.g. a multi-deployment eoAPI browser)."
+        ),
+    )
+    STAC_CATALOG_TITLE: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional human-readable title for the root STAC Catalog. "
+            "Falls back to no title (STAC Catalog.title is optional) when unset."
+        ),
+    )
+    STAC_DEPLOYMENT_NAME: str = Field(
+        default="istSOS4",
+        description=(
+            "Deployment name interpolated into the root Catalog's "
+            "description text, e.g. '<name> deployment: N Things...'. "
+            "Set this to something identifying (site name, org name) once "
+            "more than one deployment exists."
+        ),
+    )
+    STAC_DEFAULT_LICENSE: str = Field(
+        default="proprietary",
+        description=(
+            "Fallback Collection.license used when a Thing's own "
+            "properties carry no license. Per STAC 1.0 this must be an "
+            "SPDX identifier (e.g. 'CC-BY-4.0'), 'various', or "
+            "'proprietary' -- nothing else validates against the spec."
+        ),
+    )
+
+    @field_validator("STAC_DEFAULT_LICENSE")
+    @classmethod
+    def _validate_stac_default_license(cls, v: str) -> str:
+        if v in _STAC_NON_SPDX_LICENSES:
+            return v
+        if not _STAC_LICENSE_TOKEN_PATTERN.match(v):
+            raise ValueError(
+                f"STAC_DEFAULT_LICENSE={v!r} is not a valid STAC 1.0 license "
+                "value. Use an SPDX identifier (e.g. 'CC-BY-4.0', 'MIT'), "
+                "'various', or 'proprietary'. Free-text values like 'other' "
+                "are not spec-conformant and will misbehave in STAC clients."
+            )
+        return v
 
 
 @lru_cache(maxsize=1)

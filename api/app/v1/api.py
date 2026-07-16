@@ -202,11 +202,7 @@ if NETWORK:
     v1.include_router(update_network.v1)
     v1.include_router(delete_network.v1)
 
-# Register the connector endpoints (STAC for now; DCAT-AP follows the
-# same router once dcat_transformer.py lands). Mounted at /connector so
-# routes resolve as {SUBPATH}{VERSION}/connector/stac/... -- matches the
-# prefix decision made for the connector package, separate from the core
-# STA routers below which mount at {SUBPATH}{VERSION} directly.
+# Register the connector endpoints
 v1.include_router(connector.v1, prefix="/connector")
 
 # Register the read endpoints

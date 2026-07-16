@@ -48,6 +48,8 @@ from typing import Optional, Union
 
 import asyncpg
 from app import HOSTNAME, SUBPATH, VERSION
+from app.settings import serverSettings
+from app.v1.connector.config import get_settings
 from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)
@@ -59,30 +61,31 @@ _MEDIA_GEOJSON = "application/geo+json"
 _MEDIA_CSV = "text/csv"
 _MEDIA_CONFORMANCE = "application/json"
 
-# Collection.license fallback when neither Thing.properties["license"] nor a
-# real SPDX id is known. STAC 1.0 only sanctions an SPDX identifier, "various"
-# (multiple differing licenses across the included data), or "proprietary"
-# (all rights reserved / terms unclear, consult the provider). "proprietary"
-# is the correct default here -- we genuinely don't know this sensor data's
-# license terms, which is a different claim than "various licenses apply".
-_DEFAULT_LICENSE = "proprietary"
-
 # STAC API conformance classes this deployment satisfies. api.py exposes a
 # root Catalog + Collections + Items over plain GET routes (no item search,
 # no filter/query extension) -- so only core/features/collections are
 # claimed. pystac-client and the stac-api-validator both gate feature
 # detection on this array before calling any other route, so extend this
 # list the moment api.py grows item-search or filter support.
+#
+# This is deliberately separate from serverSettings["conformance"] in
+# app.settings: that list is the underlying SensorThings API's own
+# conformance (OGC iot_sensing 1.1 requirement classes), which is a
+# different spec surface. It is exposed on the root Catalog as
+# "sta_conformsTo" below so a client can see what the bridged STA source
+# supports, without polluting the STAC "conformsTo" array that
+# pystac-client/stac-api-validator actually gate behavior on.
 _CONFORMANCE_CLASSES = [
     "https://api.stacspec.org/v1.0.0/core",
     "https://api.stacspec.org/v1.0.0/ogcapi-features",
     "https://api.stacspec.org/v1.0.0/collections",
 ]
 
-# Root catalog id/title. Currently a literal rather than a config value --
-# fine for one istSOS4 deployment; move to per-deployment config if this
-# connector is ever run against more than one istSOS4 instance.
-_CATALOG_ID = "istsos-connector-catalog"
+# Catalog id/title, deployment name, and default license all come from
+# config.py's Settings singleton -- see STAC_CATALOG_ID, STAC_CATALOG_TITLE,
+# STAC_DEPLOYMENT_NAME, STAC_DEFAULT_LICENSE. Nothing here is a module-level
+# constant anymore; each is read via get_settings() at build time so a
+# second deployment only needs a different .env, never a code change.
 
 STAC_ROOT_HREF = f"{HOSTNAME}{SUBPATH}{VERSION}/connector/stac"
 
@@ -563,6 +566,7 @@ def _build_collection_dict(
     thing: HarvestedThing,
     items: list[dict],
     network_id: Optional[int] = None,
+    default_license: str = "proprietary",
 ) -> dict:
     """
     Build a STAC Collection as a plain dict for one Thing.
@@ -572,6 +576,13 @@ def _build_collection_dict(
     cache.py (flatten_stac_catalog reads both). api.py strips "item_ids"
     and "items" before serving -- the full navigation links are already
     in the cached "links" array.
+
+    default_license is the Settings.STAC_DEFAULT_LICENSE fallback, used
+    only when the Thing itself carries no "license" property. STAC 1.0
+    only sanctions an SPDX identifier, "various" (multiple differing
+    licenses across the included data), or "proprietary" (all rights
+    reserved / terms unclear, consult the provider) -- config.py validates
+    this at startup so an invalid value never reaches here.
 
     Temporal extent rule:
       - collection_end is null if ANY item stream is still open (no end_datetime).
@@ -670,7 +681,7 @@ def _build_collection_dict(
             "temporal": {"interval": [[collection_start, collection_end]]},
         },
         "links":            links,
-        "license":          _DEFAULT_LICENSE,
+        "license":          default_license,
         "thing_id":         thing.id,
         "thing_properties": thing.properties,
         "summaries": {
@@ -692,7 +703,9 @@ def _build_collection_dict(
 
 
 def _build_things_collections(
-    things: list[HarvestedThing], network_id: Optional[int]
+    things: list[HarvestedThing],
+    network_id: Optional[int],
+    default_license: str = "proprietary",
 ) -> tuple[list[dict], int]:
     """Build Collection dicts (with nested Items) for a list of Things, scoped
     to network_id (None = orphan/unscoped). Returns (collections, skipped_items)."""
@@ -711,7 +724,9 @@ def _build_things_collections(
                 "Thing %s (%s): all %d Datastreams were skipped -- Collection will have no Items",
                 thing.id, thing.name, len(thing.datastreams),
             )
-        collections.append(_build_collection_dict(thing, items, network_id=network_id))
+        collections.append(
+            _build_collection_dict(thing, items, network_id=network_id, default_license=default_license)
+        )
     return collections, skipped_items
 
 
@@ -739,18 +754,27 @@ def build_stac_catalog(catalog: HarvestedCatalog) -> dict:
     Called exactly once per harvest cycle by scheduler.py. Does not touch
     Postgres, Redis, or disk.
     """
-    collections, skipped_items = _build_things_collections(catalog.things, network_id=None)
+    settings = get_settings()
+    collections, skipped_items = _build_things_collections(
+        catalog.things, network_id=None, default_license=settings.STAC_DEFAULT_LICENSE
+    )
     collection_ids = [c["id"] for c in collections]
 
     root_catalog = {
         "type": "Catalog",
         "stac_version": _STAC_VERSION,
-        "id": _CATALOG_ID,
-        "description": f"istSOS4 deployment: {catalog.thing_count} Things, harvested at {catalog.harvested_at}.",
+        "id": settings.STAC_CATALOG_ID,
+        "description": (
+            f"{settings.STAC_DEPLOYMENT_NAME} deployment: {catalog.thing_count} "
+            f"Things, harvested at {catalog.harvested_at}."
+        ),
         "conformsTo": _CONFORMANCE_CLASSES,
+        "sta_conformsTo": serverSettings["conformance"],
         "links": _catalog_nav_links(collection_ids),
         "collection_ids": collection_ids,
     }
+    if settings.STAC_CATALOG_TITLE:
+        root_catalog["title"] = settings.STAC_CATALOG_TITLE
 
     logger.info(
         "STAC transform complete: %d Collections, %d Items, %d skipped",
@@ -780,7 +804,10 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
             ]
         }
     """
-    orphan_collections, skipped = _build_things_collections(network_catalog.orphan_things, network_id=None)
+    settings = get_settings()
+    orphan_collections, skipped = _build_things_collections(
+        network_catalog.orphan_things, network_id=None, default_license=settings.STAC_DEFAULT_LICENSE
+    )
     orphan_ids = [c["id"] for c in orphan_collections]
 
     network_blocks: list[dict] = []
@@ -788,7 +815,9 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
 
     for net in network_catalog.networks:
         things = network_catalog.things_by_network.get(net.id, [])
-        collections, net_skipped = _build_things_collections(things, network_id=net.id)
+        collections, net_skipped = _build_things_collections(
+            things, network_id=net.id, default_license=settings.STAC_DEFAULT_LICENSE
+        )
         skipped += net_skipped
         collection_ids = [c["id"] for c in collections]
         total_items += sum(len(c["item_ids"]) for c in collections)
@@ -808,17 +837,20 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
     root_catalog = {
         "type": "Catalog",
         "stac_version": _STAC_VERSION,
-        "id": _CATALOG_ID,
+        "id": settings.STAC_CATALOG_ID,
         "description": (
-            f"istSOS4 deployment: {len(network_ids)} Networks, harvested at "
-            f"{network_catalog.harvested_at}. Datastreams with no assigned "
+            f"{settings.STAC_DEPLOYMENT_NAME} deployment: {len(network_ids)} Networks, "
+            f"harvested at {network_catalog.harvested_at}. Datastreams with no assigned "
             "Network are served directly from this root."
         ),
         "conformsTo": _CONFORMANCE_CLASSES,
+        "sta_conformsTo": serverSettings["conformance"],
         "links": _catalog_nav_links(orphan_ids, network_ids=network_ids),
         "collection_ids": orphan_ids,
         "network_ids": network_ids,
     }
+    if settings.STAC_CATALOG_TITLE:
+        root_catalog["title"] = settings.STAC_CATALOG_TITLE
 
     logger.info(
         "STAC network transform complete: %d Networks, %d orphan Collections, %d total Items, %d skipped",
