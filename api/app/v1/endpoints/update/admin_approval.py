@@ -54,6 +54,7 @@ from asyncpg.exceptions import (
     PostgresConnectionError,
     QueryCanceledError,
     TooManyConnectionsError,
+    UndefinedObjectError,
 )
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -151,15 +152,35 @@ async def patch_policy_approval(
                 #     create one explicitly via POST /Policies.
                 #     POLICY_FN_MAP is the single source of truth —
                 #     imported from rbac_roles.py.
+                #
+                #     Architecture note: the policy function issues
+                #     CREATE POLICY ... TO <username>, which requires a
+                #     matching PostgreSQL role.  Self-registered users
+                #     (/Register) have zero DB footprint by design.
+                #
+                #     IMPORTANT: asyncpg marks the entire transaction as
+                #     aborted if *any* exception occurs inside it, even a
+                #     caught one.  We use a nested savepoint so that an
+                #     UndefinedObjectError rolls back only the inner block
+                #     and leaves the outer transaction (UPDATE + AuditLog)
+                #     in a healthy, committable state.
                 # ------------------------------------------------------
                 policy_fn = POLICY_FN_MAP.get(request.assigned_role)
                 if policy_fn:
                     policyname = f"{username}_default"
-                    await conn.execute(
-                        f"SELECT {policy_fn}($1, $2);",
-                        [username],
-                        policyname,
-                    )
+                    try:
+                        async with conn.transaction():
+                            await conn.execute(
+                                f"SELECT {policy_fn}($1, $2);",
+                                [username],
+                                policyname,
+                            )
+                    except UndefinedObjectError:
+                        logger.warning(
+                            "RLS policy skipped for '%s': no PostgreSQL role exists "
+                            "(application-layer user from /Register — zero DB footprint).",
+                            username,
+                        )
 
                 # ------------------------------------------------------
                 # 2d. Append an ADMIN_APPROVAL record to the AuditLog.
