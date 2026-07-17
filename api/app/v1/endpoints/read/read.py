@@ -329,7 +329,6 @@ async def asyncpg_stream_results(
                     raw = partition[0]["json"]
                     yield "null" if raw is None else str(raw)
                 await connection.execute("CLOSE my_cursor")
-                await connection.execute("RESET ROLE")
                 return
 
             start_json = ""
