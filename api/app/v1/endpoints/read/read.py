@@ -86,9 +86,12 @@ def __handle_root():
 
 
 async def wrapped_result_generator(first_item, result):
-    yield first_item
-    async for item in result:
-        yield item
+    try:
+        yield first_item
+        async for item in result:
+            yield item
+    finally:
+        await result.aclose()
 
 
 @v1.api_route(
@@ -168,6 +171,31 @@ async def catch_all_get(
                     "code": 404,
                     "type": "error",
                     "message": "Not Found",
+                },
+            )
+        except (
+            asyncpg.PostgresConnectionError,
+            asyncpg.TooManyConnectionsError,
+        ):
+            logger.exception(
+                "Database unavailable during initial stream fetch"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={
+                    "code": 503,
+                    "type": "error",
+                    "message": "Database temporarily unavailable",
+                },
+            )
+        except asyncpg.PostgresError:
+            logger.exception("PostgreSQL error during initial stream fetch")
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={
+                    "code": 500,
+                    "type": "error",
+                    "message": "Internal server error",
                 },
             )
         except Exception:
