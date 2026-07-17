@@ -787,20 +787,33 @@ class NodeVisitor(Visitor):
                 node.filter, self.main_entity
             )
             if join_relationships:
-                # The filter reaches into related entities. Joining them directly
-                # onto the main query would multiply its rows once per matching
-                # related row (a Thing with N Datastreams would appear N times).
-                # Use a semi-join instead: collect the matching ids in a subquery
-                # that carries the joins + filter, then restrict the main query
-                # to those ids. This yields exactly one row per main entity,
-                # matching the SensorThings "entities that have any related ..."
-                # semantics and the already-distinct count.
-                id_attr = getattr(main_entity, "id")
-                id_subquery = select(id_attr)
-                for relationship in join_relationships:
-                    id_subquery = id_subquery.join(relationship)
-                id_subquery = id_subquery.where(filter)
-                filter = id_attr.in_(id_subquery)
+                # A chain made exclusively of MANYTOONE relationships cannot
+                # multiply rows from the main entity. Keep such joins and their
+                # complete filter on the outer query. In particular, this keeps
+                # Observation.phenomenonTimeStart visible to TimescaleDB, so it
+                # can exclude chunks for filters such as Datastream/id + time.
+                direct_join_is_safe = all(
+                    relationship.property.direction.name == "MANYTOONE"
+                    for relationship in join_relationships
+                )
+
+                if direct_join_is_safe:
+                    for relationship in join_relationships:
+                        main_query = main_query.join(relationship)
+                        query_count = query_count.join(relationship)
+                        query_estimate_count = query_estimate_count.join(
+                            relationship
+                        )
+                else:
+                    # ONETOMANY and MANYTOMANY joins can multiply the main rows.
+                    # Keep the semi-join for those paths to preserve SensorThings
+                    # "entities that have any related ..." semantics.
+                    id_attr = getattr(main_entity, "id")
+                    id_subquery = select(id_attr)
+                    for relationship in join_relationships:
+                        id_subquery = id_subquery.join(relationship)
+                    id_subquery = id_subquery.where(filter)
+                    filter = id_attr.in_(id_subquery)
             main_query = main_query.filter(filter)
             query_count = query_count.filter(filter)
             query_estimate_count = query_estimate_count.filter(filter)
