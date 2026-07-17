@@ -73,10 +73,14 @@ def observation_query_params(
 ) -> dict[str, str]:
     filters = []
     if start:
-        filters.append(f"phenomenonTime ge {start}")
+        filters.append(f"phenomenonTime ge '{start}'")
     if end:
-        filters.append(f"phenomenonTime le {end}")
-    params = {"$select": select, "$orderby": "phenomenonTime"}
+        filters.append(f"phenomenonTime le '{end}'")
+    params = {
+        "$select": select,
+        "$orderby": "phenomenonTime",
+        "$top": "1000",
+    }
     if filters:
         params["$filter"] = " and ".join(filters)
     return params

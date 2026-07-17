@@ -3,15 +3,15 @@ istsos:
 
   imports:
     #################################
-    # chain - step_days: 14
+    # FIGINO
     #################################
 
-    - name: chain_step_14
-      enabled: true
+    - name: figino
+      enabled: false
       service: figinoagg
       step_days: 14
-      start_date: 2026-02-06T09:10:00.000000Z
-      end_date: 2026-04-29T07:10:00.000000Z
+      start_date:
+      end_date:
       procedures_istsos2:
         - "xt_0_4.water-temperature"
         - "xt_0_4.tilt"
@@ -127,120 +127,240 @@ istsos:
         - "xt_85.accel-temp-uncal"
         - "xt_85.battery-voltage"
         - "xt_85.battery-drop"
+      procedures_istsos4:
+        - "WT_xt_0_4"
+        - "TILT_xt_0_4"
+        - "ACC_xt_0_4"
+        - "ATEMP_xt_0_4"
+        - "BV_xt_0_4"
+        - "BD_xt_0_4"
+        - "WT_xt_3_75"
+        - "TILT_xt_3_75"
+        - "ACC_xt_3_75"
+        - "ATEMP_xt_3_75"
+        - "BV_xt_3_75"
+        - "BD_xt_3_75"
+        - "WT_xt_6_5"
+        - "TILT_xt_6_5"
+        - "ACC_xt_6_5"
+        - "ATEMP_xt_6_5"
+        - "BV_xt_6_5"
+        - "BD_xt_6_5"
+        - "WT_xt_10"
+        - "TILT_xt_10"
+        - "ACC_xt_10"
+        - "ATEMP_xt_10"
+        - "BV_xt_10"
+        - "BD_xt_10"
+        - "WT_xt_15"
+        - "TILT_xt_15"
+        - "ACC_xt_15"
+        - "ATEMP_xt_15"
+        - "BV_xt_15"
+        - "BD_xt_15"
+        - "WT_xt_17_5"
+        - "TILT_xt_17_5"
+        - "ACC_xt_17_5"
+        - "ATEMP_xt_17_5"
+        - "BV_xt_17_5"
+        - "BD_xt_17_5"
+        - "WT_xt_25"
+        - "TILT_xt_25"
+        - "ACC_xt_25"
+        - "ATEMP_xt_25"
+        - "BV_xt_25"
+        - "BD_xt_25"
+        - "WT_xt_30"
+        - "TILT_xt_30"
+        - "ACC_xt_30"
+        - "ATEMP_xt_30"
+        - "BV_xt_30"
+        - "BD_xt_30"
+        - "WT_xt_35"
+        - "TILT_xt_35"
+        - "ACC_xt_35"
+        - "ATEMP_xt_35"
+        - "BV_xt_35"
+        - "BD_xt_35"
+        - "WT_xt_40"
+        - "TILT_xt_40"
+        - "ACC_xt_40"
+        - "ATEMP_xt_40"
+        - "BV_xt_40"
+        - "BD_xt_40"
+        - "WT_xt_45"
+        - "TILT_xt_45"
+        - "ACC_xt_45"
+        - "ATEMP_xt_45"
+        - "BV_xt_45"
+        - "BD_xt_45"
+        - "WT_xt_50"
+        - "TILT_xt_50"
+        - "ACC_xt_50"
+        - "ATEMP_xt_50"
+        - "BV_xt_50"
+        - "BD_xt_50"
+        - "WT_xt_55"
+        - "TILT_xt_55"
+        - "ACC_xt_55"
+        - "ATEMP_xt_55"
+        - "BV_xt_55"
+        - "BD_xt_55"
+        - "WT_xt_60"
+        - "TILT_xt_60"
+        - "ACC_xt_60"
+        - "ATEMP_xt_60"
+        - "BV_xt_60"
+        - "BD_xt_60"
+        - "WT_xt_65"
+        - "TILT_xt_65"
+        - "ACC_xt_65"
+        - "ATEMP_xt_65"
+        - "BV_xt_65"
+        - "BD_xt_65"
+        - "WT_xt_70"
+        - "TILT_xt_70"
+        - "ACC_xt_70"
+        - "ATEMP_xt_70"
+        - "BV_xt_70"
+        - "BD_xt_70"
+        - "WT_xt_75"
+        - "TILT_xt_75"
+        - "ACC_xt_75"
+        - "ATEMP_xt_75"
+        - "BV_xt_75"
+        - "BD_xt_75"
+        - "WT_xt_80"
+        - "TILT_xt_80"
+        - "ACC_xt_80"
+        - "ATEMP_xt_80"
+        - "BV_xt_80"
+        - "BD_xt_80"
+        - "WT_xt_85"
+        - "TILT_xt_85"
+        - "ACC_xt_85"
+        - "ATEMP_xt_85"
+        - "BV_xt_85"
+        - "BD_xt_85"
 
-      procedures_istsos4: [
-        "WT_xt_0_4",
-        "TILT_xt_0_4",
-        "ACC_xt_0_4",
-        "ATEMP_xt_0_4",
-        "BV_xt_0_4",
-        "BD_xt_0_4",
-        "WT_xt_3_75",
-        "TILT_xt_3_75",
-        "ACC_xt_3_75",
-        "ATEMP_xt_3_75",
-        "BV_xt_3_75",
-        "BD_xt_3_75",
-        "WT_xt_6_5",
-        "TILT_xt_6_5",
-        "ACC_xt_6_5",
-        "ATEMP_xt_6_5",
-        "BV_xt_6_5",
-        "BD_xt_6_5",
-        "WT_xt_10",
-        "TILT_xt_10",
-        "ACC_xt_10",
-        "ATEMP_xt_10",
-        "BV_xt_10",
-        "BD_xt_10",
-        "WT_xt_15",
-        "TILT_xt_15",
-        "ACC_xt_15",
-        "ATEMP_xt_15",
-        "BV_xt_15",
-        "BD_xt_15",
-        "WT_xt_17_5",
-        "TILT_xt_17_5",
-        "ACC_xt_17_5",
-        "ATEMP_xt_17_5",
-        "BV_xt_17_5",
-        "BD_xt_17_5",
-        "WT_xt_25",
-        "TILT_xt_25",
-        "ACC_xt_25",
-        "ATEMP_xt_25",
-        "BV_xt_25",
-        "BD_xt_25",
-        "WT_xt_30",
-        "TILT_xt_30",
-        "ACC_xt_30",
-        "ATEMP_xt_30",
-        "BV_xt_30",
-        "BD_xt_30",
-        "WT_xt_35",
-        "TILT_xt_35",
-        "ACC_xt_35",
-        "ATEMP_xt_35",
-        "BV_xt_35",
-        "BD_xt_35",
-        "WT_xt_40",
-        "TILT_xt_40",
-        "ACC_xt_40",
-        "ATEMP_xt_40",
-        "BV_xt_40",
-        "BD_xt_40",
-        "WT_xt_45",
-        "TILT_xt_45",
-        "ACC_xt_45",
-        "ATEMP_xt_45",
-        "BV_xt_45",
-        "BD_xt_45",
-        "WT_xt_50",
-        "TILT_xt_50",
-        "ACC_xt_50",
-        "ATEMP_xt_50",
-        "BV_xt_50",
-        "BD_xt_50",
-        "WT_xt_55",
-        "TILT_xt_55",
-        "ACC_xt_55",
-        "ATEMP_xt_55",
-        "BV_xt_55",
-        "BD_xt_55",
-        "WT_xt_60",
-        "TILT_xt_60",
-        "ACC_xt_60",
-        "ATEMP_xt_60",
-        "BV_xt_60",
-        "BD_xt_60",
-        "WT_xt_65",
-        "TILT_xt_65",
-        "ACC_xt_65",
-        "ATEMP_xt_65",
-        "BV_xt_65",
-        "BD_xt_65",
-        "WT_xt_70",
-        "TILT_xt_70",
-        "ACC_xt_70",
-        "ATEMP_xt_70",
-        "BV_xt_70",
-        "BD_xt_70",
-        "WT_xt_75",
-        "TILT_xt_75",
-        "ACC_xt_75",
-        "ATEMP_xt_75",
-        "BV_xt_75",
-        "BD_xt_75",
-        "WT_xt_80",
-        "TILT_xt_80",
-        "ACC_xt_80",
-        "ATEMP_xt_80",
-        "BV_xt_80",
-        "BD_xt_80",
-        "WT_xt_85",
-        "TILT_xt_85",
-        "ACC_xt_85",
-        "ATEMP_xt_85",
-        "BV_xt_85",
-        "BD_xt_85"
-      ]
+    #################################
+    # SOSRAW
+    #################################
+    - name: sosraw
+      enabled: false
+      service: sosraw
+      step_days: 7
+      start_date:
+      end_date:
+      procedures_istsos2:
+        - "V_LUMI.battery-tension"
+        - "IT_LUMI.internal-temperature"
+        - "P_LUMI.air-rainfall"
+        - "W_LUMI.weigth"
+        - "T_LUMI.air-temperature"
+        - "H_LUMI.air-humidity"
+        - "P_COL.air-rainfall"
+        - "P_SONV.air-rainfall"
+        - "P_GRA.air-rainfall"
+        - "P_MEN.air-rainfall"
+        - "P_BIA.air-rainfall"
+        - "W_PON.weigth"
+        - "A_LAV_RSV.water-height"
+        - "WT_LAV_RSV.water-temperature"
+        - "V_LAV_RSV.battery-tension"
+        - "IT_LAV_RSV.temperature"
+        - "A_LAV_MEN.water-height"
+        - "WT_LAV_MEN.water-temperature"
+        - "RSSI_LAV_MEN.signal-strength"
+        - "V_LAV_MEN.battery-tension"
+        - "PW_LAV_MEN.consumption"
+        - "A_SCA_LUG.water-height"
+        - "WT_SCA_LUG.water-temperature"
+        - "RSSI_SCA_LUG.signal-strength"
+        - "V_SCA_LUG.battery-tension"
+        - "PW_SCA_LUG.consumption"
+        - "A_LUG_MOR.water-height"
+        - "WT_LUG_MOR.water-temperature"
+        - "RSSI_LUG_MOR.signal-strength"
+        - "V_LUG_MOR.battery-tension"
+        - "PW_LUG_MOR.consumption"
+        - "Q_TIC_AIR_DM.discharge"
+        - "A_CER_FAI_DM.water-height"
+        - "WT_CER_FAI_DM.water-temperature"
+      procedures_istsos4:
+        - "BT_LUMI"
+        - "IT_LUMI"
+        - "Praw_LUMI"
+        - "L_LUMI"
+        - "Ta_LUMI"
+        - "RH_LUMI"
+        - "Praw_COL"
+        - "Praw_SONV"
+        - "Praw_GRA"
+        - "Praw_MEN"
+        - "Praw_BIA"
+        - "W_PON"
+        - "WL_LAV_RSV"
+        - "WT_LAV_RSV"
+        - "BT_LAV_RSV"
+        - "IT_LAV_RSV"
+        - "WL_LAV_MEN"
+        - "WT_LAV_MEN"
+        - "RSSI_LAV_MEN"
+        - "BT_LAV_MEN"
+        - "PWC_LAV_MEN"
+        - "WL_SCA_LUG"
+        - "WT_SCA_LUG"
+        - "RSSI_SCA_LUG"
+        - "BT_SCA_LUG"
+        - "PWC_SCA_LUG"
+        - "WL_LUG_MOR"
+        - "WT_LUG_MOR"
+        - "RSSI_LUG_MOR"
+        - "BT_LUG_MOR"
+        - "PWC_LUG_MOR"
+        - "Q_TIC_AIR"
+        - "WL_CERE_FAI"
+        - "WT_CERE_FAI"
+
+    # #################################
+    # SOS
+    # #################################
+    - name: sos
+      enabled: false
+      service: sos
+      step_days: 7
+      start_date:
+      end_date:
+      procedures_istsos2:
+        - "Q_LAV_RSV.water-discharge"
+        - "Q_SCA_LUG.water-discharge"
+        - "Q_CER_FAI_DM.water-discharge"
+        - "Q_LAV_MEN.water-discharge"
+        - "P_PON.air-rainfall"
+      procedures_istsos4:
+        - "Q_LAV_RSV"
+        - "Q_SCA_LUG"
+        - "Q_CERE_FAI"
+        - "Q_LAV_MEN"
+        - "P_PON"
+
+    # #################################
+    # EXT
+    # #################################
+    - name: ext
+      enabled: false
+      service: ext
+      step_days: 7
+      start_date:
+      end_date:
+      procedures_istsos2:
+        - "Q_UFAM_CAS_PRE.river-discharge"
+        - "Q_UFAM_VED_AGN.river-discharge"
+        - "Q_UFAM_BRE_LOD.river-discharge"
+        - "Q_UFAM_TIC_POL.river-discharge"
+      procedures_istsos4:
+        - "Q_CAS_PREG"
+        - "Q_VED_AGN"
+        - "Q_BRE_LOD"
+        - "Q_TIC_POL"
