@@ -12,21 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncpg
+
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.utils.utils import safe_parse_datetime
 from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
+from asyncpg.exceptions import (
+    ForeignKeyViolationError,
+    InsufficientPrivilegeError,
+    PostgresConnectionError,
+    TooManyConnectionsError,
+)
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from .functions import create_entity, set_commit, update_datastream_last_foi_id
 
 v1 = APIRouter()
+
 
 user = Header(default=None, include_in_schema=False)
 message = Header(default=None, alias="commit-message", include_in_schema=False)
@@ -92,19 +98,9 @@ async def bulk_observations(
                 if current_user is not None:
                     await set_role(conn, current_user)
 
-                try:
-                    commit_id = await set_commit(
-                        conn, commit_message, current_user
-                    )
-                except InsufficientPrivilegeError:
-                    return JSONResponse(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        content={
-                            "code": 403,
-                            "type": "error",
-                            "message": "Insufficient privileges.",
-                        },
-                    )
+                commit_id = await set_commit(
+                    conn, commit_message, current_user
+                )
 
                 for observation_set in payload:
                     datastream_id = observation_set.get("Datastream", {}).get(
@@ -114,9 +110,8 @@ async def bulk_observations(
                     data_array = observation_set.get("dataArray", [])
 
                     if not datastream_id:
-                        return error_response(
-                            status.HTTP_400_BAD_REQUEST,
-                            "Missing 'datastream_id' in Datastream.",
+                        raise ValueError(
+                            "Missing 'datastream_id' in Datastream."
                         )
 
                     # Check that at least phenomenonTime and result are present
@@ -124,86 +119,42 @@ async def bulk_observations(
                         "phenomenonTime" not in components
                         or "result" not in components
                     ):
-                        return error_response(
-                            status.HTTP_400_BAD_REQUEST,
-                            "Missing required properties 'phenomenonTime' or 'result' in components.",
+                        raise ValueError(
+                            "Missing required properties 'phenomenonTime' or 'result' in components."
                         )
                     if "featureOfInterest" in components:
-                        return error_response(
-                            status.HTTP_400_BAD_REQUEST,
-                            "This method does not support 'featureOfInterest' in components. It will support in future.",
+                        raise ValueError(
+                            "This method does not support 'featureOfInterest' in components. It will support in future."
                         )
-                    try:
-                        foi_id = await get_foi_id(
-                            datastream_id, conn, commit_id=commit_id
-                        )
-                        await insertBulkObservation(
-                            data_array,
-                            conn,
-                            foi_id,
-                            datastream_id=datastream_id,
-                            components=components,
-                            commit_id=commit_id,
-                        )
-                    except InsufficientPrivilegeError:
-                        return JSONResponse(
-                            status_code=status.HTTP_403_FORBIDDEN,
-                            content={
-                                "code": 403,
-                                "type": "error",
-                                "message": "Insufficient privileges.",
-                            },
-                        )
-                    except (
-                        asyncpg.PostgresConnectionError,
-                        asyncpg.TooManyConnectionsError,
-                    ):
-                        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-                        return error_response(
-                            status.HTTP_503_SERVICE_UNAVAILABLE,
-                            "Database temporarily unavailable",
-                        )
-                    except ValueError as e:
-                        if current_user is not None:
-                            await conn.execute("RESET ROLE;")
-                        return error_response(
-                            status.HTTP_400_BAD_REQUEST, str(e)
-                        )
-                    except asyncpg.ForeignKeyViolationError:
-                        # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-                        return error_response(
-                            status.HTTP_400_BAD_REQUEST,
-                            "Referenced entity does not exist.",
-                        )
-                    except Exception:
-                        # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
-                        return error_response(
-                            status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            "Internal server error",
-                        )
+
+                    foi_id = await get_foi_id(
+                        datastream_id, conn, commit_id=commit_id
+                    )
+                    await insertBulkObservation(
+                        data_array,
+                        conn,
+                        foi_id,
+                        datastream_id=datastream_id,
+                        components=components,
+                        commit_id=commit_id,
+                    )
 
                 if current_user is not None:
                     await conn.execute("RESET ROLE;")
         return Response(status_code=status.HTTP_201_CREATED)
 
-    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
-        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return error_response(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Database temporarily unavailable",
-        )
+    except InsufficientPrivilegeError as e:
+        return error_response(status.HTTP_403_FORBIDDEN, str(e))
+    except TooManyConnectionsError as e:
+        return error_response(status.HTTP_429_TOO_MANY_REQUESTS, str(e))
+    except ForeignKeyViolationError as e:
+        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
     except ValueError as e:
         return error_response(status.HTTP_400_BAD_REQUEST, str(e))
-    except asyncpg.ForeignKeyViolationError:
-        # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return error_response(
-            status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
-        )
-    except Exception:
-        # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
-        return error_response(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
-        )
+    except PostgresConnectionError as e:
+        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
+    except Exception as e:
+        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e))
 
 
 async def insertBulkObservation(
