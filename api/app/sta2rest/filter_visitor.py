@@ -195,6 +195,84 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> Callable[[ClauseElement, ClauseElement], BinaryExpression]:
         return lambda a, b: a.in_(b)
 
+    @staticmethod
+    def temporal_bound(column, bound):
+        """Resolve one bound of a temporal column's storage representation."""
+        table_name = getattr(getattr(column, "table", None), "name", None)
+        column_name = getattr(column, "name", None)
+
+        if column_name == "phenomenonTimeStart" and table_name in {
+            "Observation",
+            "Observation_traveltime",
+        }:
+            if bound == "lower":
+                return column
+            return column.table.c["phenomenonTimeEnd"]
+
+        if column_name == "resultTime" and table_name in {
+            "Observation",
+            "Observation_traveltime",
+        }:
+            return column
+
+        if isinstance(getattr(column, "type", None), TSTZRANGE):
+            return getattr(functions.func, bound)(column)
+
+        raise ex.ArgumentTypeException(
+            bound,
+            "datetime range field",
+            getattr(column, "name", type(column).__name__),
+        )
+
+    @classmethod
+    def phenomenon_time_bounds(cls, column):
+        """Return normalised start/end expressions for phenomenonTime."""
+        table_name = getattr(getattr(column, "table", None), "name", None)
+        column_name = getattr(column, "name", None)
+
+        is_datastream_range = (
+            column_name == "phenomenonTime"
+            and table_name in {"Datastream", "Datastream_traveltime"}
+        )
+        is_observation_bounds = (
+            column_name == "phenomenonTimeStart"
+            and table_name in {"Observation", "Observation_traveltime"}
+        )
+
+        if is_datastream_range or is_observation_bounds:
+            return (
+                cls.temporal_bound(column, "lower"),
+                cls.temporal_bound(column, "upper"),
+            )
+
+        return None
+
+    @staticmethod
+    def compare_phenomenon_time(bounds, instant, op):
+        """Compare a temporal interval with an instant.
+
+        Equality means that the instant is contained in the closed interval.
+        Ordering comparisons require the whole interval to be on the requested
+        side of the instant: gt/ge use the start, lt/le use the end.
+        """
+        start, end = bounds
+        op_name = getattr(op, "__name__", "")
+
+        if op_name == "eq":
+            return and_(start <= instant, end >= instant)
+        if op_name == "ne":
+            return operator.invert(and_(start <= instant, end >= instant))
+        if op_name == "gt":
+            return start > instant
+        if op_name == "ge":
+            return start >= instant
+        if op_name == "lt":
+            return end < instant
+        if op_name == "le":
+            return end <= instant
+
+        return None
+
     def visit_List(self, node: ast.List) -> list:
         return [self.visit(n) for n in node.val]
 
@@ -375,6 +453,34 @@ class FilterVisitor(visitor.NodeVisitor):
                 "eq/ne or lower(systemTimeValidity)/upper(systemTimeValidity)",
             )
 
+        left_phenomenon_bounds = self.phenomenon_time_bounds(left)
+        right_phenomenon_bounds = self.phenomenon_time_bounds(right)
+
+        if left_phenomenon_bounds and isinstance(node.right, ast.Null):
+            return op(left, right)
+
+        if right_phenomenon_bounds and isinstance(node.left, ast.Null):
+            return op(left, right)
+
+        if left_phenomenon_bounds and not right_phenomenon_bounds:
+            return self.compare_phenomenon_time(
+                left_phenomenon_bounds, right, op
+            )
+
+        if right_phenomenon_bounds and not left_phenomenon_bounds:
+            reverse_op = {
+                "eq": operator.eq,
+                "ne": operator.ne,
+                "gt": operator.lt,
+                "ge": operator.le,
+                "lt": operator.gt,
+                "le": operator.ge,
+            }.get(getattr(op, "__name__", ""))
+            if reverse_op is not None:
+                return self.compare_phenomenon_time(
+                    right_phenomenon_bounds, left, reverse_op
+                )
+
         if isinstance(node.left, ast.Attribute) and not isinstance(
             node.right, ast.Attribute
         ):
@@ -440,54 +546,10 @@ class FilterVisitor(visitor.NodeVisitor):
     ####################################################################################
 
     def func_lower(self, field: ast._Node) -> ClauseElement:
-        column = self.visit(field)
-        table_name = getattr(getattr(column, "table", None), "name", None)
-
-        if getattr(
-            column, "name", None
-        ) == "phenomenonTimeStart" and table_name in {
-            "Observation",
-            "Observation_traveltime",
-        }:
-            return column
-        if getattr(column, "name", None) == "resultTime" and table_name in {
-            "Observation",
-            "Observation_traveltime",
-        }:
-            return column
-        if isinstance(getattr(column, "type", None), TSTZRANGE):
-            return functions.func.lower(column)
-
-        raise ex.ArgumentTypeException(
-            "lower",
-            "datetime range field",
-            getattr(column, "name", type(column).__name__),
-        )
+        return self.temporal_bound(self.visit(field), "lower")
 
     def func_upper(self, field: ast._Node) -> ClauseElement:
-        column = self.visit(field)
-        table_name = getattr(getattr(column, "table", None), "name", None)
-
-        if getattr(
-            column, "name", None
-        ) == "phenomenonTimeStart" and table_name in {
-            "Observation",
-            "Observation_traveltime",
-        }:
-            return column.table.c["phenomenonTimeEnd"]
-        if getattr(column, "name", None) == "resultTime" and table_name in {
-            "Observation",
-            "Observation_traveltime",
-        }:
-            return column
-        if isinstance(getattr(column, "type", None), TSTZRANGE):
-            return functions.func.upper(column)
-
-        raise ex.ArgumentTypeException(
-            "upper",
-            "datetime range field",
-            getattr(column, "name", type(column).__name__),
-        )
+        return self.temporal_bound(self.visit(field), "upper")
 
     ####################################################################################
     # String Functions
