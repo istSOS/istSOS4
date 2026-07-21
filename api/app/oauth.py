@@ -29,6 +29,7 @@ from app import (
 )
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
+from app.rbac_roles import PENDING_ROLE
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
@@ -112,43 +113,144 @@ async def get_auth_connection(username: str, password: str):
 
 
 async def authenticate_user(username: str, password: str):
-    """
-    Authenticate user using PostgreSQL's built-in authentication.
+    """Authenticate a user against the application-layer credential store.
 
-    Uses a context manager to ensure connections are properly closed
-    and includes comprehensive error handling.
-    """
-    # Step 1: Verify credentials with PostgreSQL
-    async with get_auth_connection(username, password) as auth_conn:
-        if auth_conn is None:
-            # Invalid credentials
-            return None
+    Authentication is a three-step process that fully replaces the legacy
+    pg_authid-only flow:
 
-    # Step 2: Get user role from User table (using connection pool)
+    Step 1 — Fetch the user row from sensorthings."User".
+        If the user does not exist in the table at all, return None
+        immediately.  We do NOT fall through to pg_authid for unknown users.
+
+    Step 2 — Bcrypt verify (modern path, password IS NOT NULL).
+        If the ``password`` column contains a hash we verify the supplied
+        plaintext against it using passlib/bcrypt.  The verify call is
+        dispatched to a thread pool (``asyncio.to_thread``) because bcrypt
+        is deliberately CPU-intensive blocking work that must not stall the
+        event loop.
+        • Match  → return user dict.
+        • No match → return None (wrong password).
+
+    Step 3 — pg_authid JIT fallback (legacy path, password IS NULL).
+        Accounts created before the application-layer credential migration
+        have ``password IS NULL``.  We attempt a raw asyncpg connection to
+        let PostgreSQL validate the credentials against pg_authid.
+        • Failure → return None.
+        • Success → compute a bcrypt hash and backfill it into
+          sensorthings."User".password so the *next* login goes through
+          Step 2 instead.  The backfill failure is logged but does not
+          block the current login (best-effort JIT migration).
+
+    Lazy import note
+    ----------------
+    ``pwd_context`` is imported inside the function body to avoid a
+    circular import: ``oauth.py`` → ``password_crud.py`` →
+    ``oauth.get_auth_connection`` → ``oauth.py``.
+
+    Args:
+        username: The plaintext username supplied by the login form.
+        password: The plaintext password supplied by the login form.
+
+    Returns:
+        ``{"sub": username, "role": <role>}`` on success, ``None`` on any
+        authentication failure.
+
+    Raises:
+        HTTPException 503: If the connection pool is unavailable.
+    """
+    import asyncio
+
+    # Lazy import to break the oauth ↔ password_crud circular dependency.
+    from app.db.password_crud import pwd_context
+
+    # ------------------------------------------------------------------
+    # Step 1: Fetch user row from application-layer identity store.
+    # ------------------------------------------------------------------
     pool = await get_pool()
     try:
-        async with pool.acquire() as connection:
-            query = 'SELECT role FROM sensorthings."User" WHERE username=$1'
-            row = await connection.fetchrow(query, username)
-
-            if not row:
-                # User authenticated with PostgreSQL but not in User table
-                # This indicates an inconsistent state
-                logger.warning(
-                    f"User '{username}' authenticated with PostgreSQL "
-                    "but not found in User table"
-                )
-                return None
-
-            return {"sub": username, "role": row["role"]}
-    except TypeError as e:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT id, username, role, password
+                FROM sensorthings."User"
+                WHERE username = $1
+                """,
+                username,
+            )
+    except TypeError as exc:
         logger.error(
-            f"Unexpected pool acquire error during authentication: {e}"
+            "Pool acquire error during authentication for %r: %s",
+            username,
+            exc,
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication service temporarily unavailable",
         )
+
+    if row is None:
+        # Unknown user — do not fall back to pg_authid.
+        logger.warning(
+            "Authentication attempt for unknown user %r (not in User table).",
+            username,
+        )
+        return None
+
+    stored_hash = row["password"]
+
+    # ------------------------------------------------------------------
+    # Step 2: Bcrypt-first verification (modern path).
+    # ------------------------------------------------------------------
+    if stored_hash is not None:
+        # Offload blocking CPU work to the default thread-pool executor so
+        # the async event loop is never stalled by the bcrypt computation.
+        verified = await asyncio.to_thread(
+            pwd_context.verify, password, stored_hash
+        )
+        if not verified:
+            return None
+        return {"sub": row["username"], "role": row["role"]}
+
+    # ------------------------------------------------------------------
+    # Step 3: pg_authid JIT fallback (legacy path, password IS NULL).
+    #         On success backfill the bcrypt hash for future logins.
+    # ------------------------------------------------------------------
+    async with get_auth_connection(username, password) as auth_conn:
+        if auth_conn is None:
+            # PostgreSQL rejected the credentials too.
+            return None
+
+    # pg_authid accepted the credentials — compute hash and backfill.
+    new_hash = await asyncio.to_thread(pwd_context.hash, password)
+
+    try:
+        from app import POSTGRES_PORT_WRITE
+        from app.db.asyncpg_db import get_pool_w
+
+        write_pool = (
+            await get_pool_w() if POSTGRES_PORT_WRITE else await get_pool()
+        )
+        async with write_pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE sensorthings."User"
+                SET password = $1
+                WHERE username = $2
+                """,
+                new_hash,
+                username,
+            )
+        logger.info(
+            "JIT migration: bcrypt hash backfilled for user %r.", username
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort, never block login
+        logger.error(
+            "JIT migration: failed to backfill hash for user %r: %s",
+            username,
+            exc,
+        )
+
+    return {"sub": row["username"], "role": row["role"]}
 
 
 def create_access_token(data: dict):
@@ -172,6 +274,13 @@ def decode_token(token: str):
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
+    """Decode the Bearer JWT and return the authenticated user dict.
+
+    Raises:
+        401 – token missing / invalid / revoked.
+        403 – user exists but is in the 'pending' waiting room; they must be
+              activated by an administrator before accessing any resource.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -189,7 +298,22 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         username: str = payload.get("sub")
     except InvalidTokenError:
         raise credentials_exception
+
+    # NOTE: role is intentionally fetched live from the DB on every request.
+    # This ensures role changes (via PATCH /Users/{id}/role) take effect
+    # immediately without requiring JWT rotation, eliminating stale JWT
+    # vulnerabilities.
     user = await get_user_from_db(username)
     if user is None:
         raise credentials_exception
+
+    # Pending users have authenticated successfully (their JWT is valid) but
+    # they have NO database role and are awaiting admin activation.  Block
+    # them here so they never reach any business-logic handler.
+    if user["role"] == PENDING_ROLE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account pending admin activation",
+        )
+
     return user

@@ -414,5 +414,3 @@ async def asyncpg_stream_results(
 
             await connection.execute("CLOSE my_cursor")
 
-            if current_user is not None:
-                await connection.execute("RESET ROLE")

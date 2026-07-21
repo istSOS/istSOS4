@@ -111,8 +111,6 @@ async def delete_user(
 
                 await connection.execute(f"DROP ROLE {pg_quote_ident(user)};")
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
 
