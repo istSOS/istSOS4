@@ -35,7 +35,8 @@ BEGIN
         ');
 
         INSERT INTO sensorthings."User" ("username", "role")
-        VALUES (current_setting('custom.user'), 'administrator');
+        VALUES (current_setting('custom.user'), 'administrator')
+        ON CONFLICT ("username") DO NOTHING;
 
         UPDATE sensorthings."User"
         SET "uri" = '/Users(' || id || ')'
@@ -350,12 +351,12 @@ BEGIN
         ');
 
         ALTER TABLE sensorthings."Commit"
-        ADD COLUMN "user_id" BIGINT NOT NULL REFERENCES sensorthings."User"(id) ON DELETE CASCADE;
+        ADD COLUMN IF NOT EXISTS "user_id" BIGINT NOT NULL REFERENCES sensorthings."User"(id) ON DELETE CASCADE;
 
         IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
             -- Alter the Network table to add the commit_id column
             ALTER TABLE sensorthings."Network" 
-            ADD COLUMN "commit_id" BIGINT NOT NULL 
+            ADD COLUMN IF NOT EXISTS "commit_id" BIGINT NOT NULL
             REFERENCES sensorthings."Commit"(id) ON DELETE CASCADE;
 
             -- Create an index on the commit_id column for Network table
@@ -402,7 +403,9 @@ BEGIN
         GRANT ALL PRIVILEGES ON SEQUENCE sensorthings."Commit_id_seq" TO "administrator";
 
         -- Create roles for user
-        CREATE ROLE "user";
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'user') THEN
+            CREATE ROLE "user";
+        END IF;
         GRANT USAGE ON SCHEMA sensorthings TO "user";
         GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensorthings TO "user";
         GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO "user";
@@ -414,7 +417,9 @@ BEGIN
         GRANT "user" TO "administrator" WITH ADMIN OPTION;
 
         -- Create roles for guest
-        CREATE ROLE "guest";
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'guest') THEN
+            CREATE ROLE "guest";
+        END IF;
         GRANT USAGE ON SCHEMA sensorthings TO "guest";
         GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO "guest";
         GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO "guest";
@@ -422,7 +427,9 @@ BEGIN
         GRANT "guest" TO "administrator" WITH ADMIN OPTION;
 
         -- Create roles for sensor
-        CREATE ROLE "sensor";
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sensor') THEN
+            CREATE ROLE "sensor";
+        END IF;
         GRANT USAGE ON SCHEMA sensorthings TO "sensor";
         GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO "sensor";
         GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO "sensor";
@@ -461,7 +468,7 @@ BEGIN
         -- Create policies for row level security
         DO $$ 
         DECLARE 
-            tablename TEXT;
+            table_name TEXT;
             tables TEXT[];
         BEGIN
             tables := ARRAY[
@@ -478,13 +485,21 @@ BEGIN
                 tables := tables || ARRAY['Network'];
             END IF;
 
-            FOR tablename IN SELECT unnest(tables)
+            FOR table_name IN SELECT unnest(tables)
             LOOP
-                EXECUTE format(
-                    'CREATE POLICY anonymous_%s ON sensorthings.%I FOR SELECT TO "guest" USING (true);', 
-                    tablename, 
-                    tablename
-                );
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM pg_policies
+                    WHERE schemaname = 'sensorthings'
+                    AND pg_policies.tablename = table_name
+                    AND policyname = lower('anonymous_' || table_name)
+                ) THEN
+                    EXECUTE format(
+                        'CREATE POLICY anonymous_%s ON sensorthings.%I FOR SELECT TO "guest" USING (true);',
+                        table_name,
+                        table_name
+                    );
+                END IF;
             END LOOP;
         END $$;
 
