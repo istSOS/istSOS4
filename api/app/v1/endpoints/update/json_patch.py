@@ -88,7 +88,7 @@ async def normalize_patch_body(request: Request):
 # ---------------------------------------------------------------------------
 
 
-def _parse_pointer(pointer):
+def parse_pointer(pointer):
     """Parse an RFC 6901 JSON Pointer into a list of reference tokens."""
     if pointer == "":
         return []
@@ -101,7 +101,7 @@ def _parse_pointer(pointer):
     ]
 
 
-def _list_index(array, token):
+def list_index(array, token):
     """Resolve a JSON Pointer array token to a valid existing index."""
     if token == "-" or not token.lstrip("-").isdigit():
         raise JsonPatchError(f"Invalid array index: {token!r}")
@@ -111,7 +111,7 @@ def _list_index(array, token):
     return idx
 
 
-def _get(document, tokens):
+def get(document, tokens):
     current = document
     for token in tokens:
         if isinstance(current, dict):
@@ -119,17 +119,17 @@ def _get(document, tokens):
                 raise JsonPatchError(f"Path not found: /{'/'.join(tokens)}")
             current = current[token]
         elif isinstance(current, list):
-            current = current[_list_index(current, token)]
+            current = current[list_index(current, token)]
         else:
             raise JsonPatchError(f"Path not found: /{'/'.join(tokens)}")
     return current
 
 
-def _add_tokens(document, tokens, value):
+def add_tokens(document, tokens, value):
     """RFC 6902 §4.1 add at the location addressed by ``tokens``."""
     if not tokens:
         return value  # add to "" replaces the whole document
-    parent = _get(document, tokens[:-1])
+    parent = get(document, tokens[:-1])
     last = tokens[-1]
     if isinstance(parent, dict):
         parent[last] = value
@@ -148,41 +148,41 @@ def _add_tokens(document, tokens, value):
     return document
 
 
-def _remove_tokens(document, tokens):
+def remove_tokens(document, tokens):
     """RFC 6902 §4.2 remove at the location addressed by ``tokens``."""
     if not tokens:
         raise JsonPatchError("Cannot remove the whole document")
-    parent = _get(document, tokens[:-1])
+    parent = get(document, tokens[:-1])
     last = tokens[-1]
     if isinstance(parent, dict):
         if last not in parent:
             raise JsonPatchError(f"Cannot remove missing member: {last!r}")
         del parent[last]
     elif isinstance(parent, list):
-        parent.pop(_list_index(parent, last))
+        parent.pop(list_index(parent, last))
     else:
         raise JsonPatchError("Cannot remove from a non-container")
     return document
 
 
-def _replace_tokens(document, tokens, value):
+def replace_tokens(document, tokens, value):
     """RFC 6902 §4.3 replace; the target location MUST already exist."""
     if not tokens:
         return value
-    parent = _get(document, tokens[:-1])
+    parent = get(document, tokens[:-1])
     last = tokens[-1]
     if isinstance(parent, dict):
         if last not in parent:
             raise JsonPatchError(f"Cannot replace missing member: {last!r}")
         parent[last] = value
     elif isinstance(parent, list):
-        parent[_list_index(parent, last)] = value
+        parent[list_index(parent, last)] = value
     else:
         raise JsonPatchError("Cannot replace inside a non-container")
     return document
 
 
-def _apply_operation(document, op):
+def apply_operation(document, op):
     if not isinstance(op, dict):
         raise JsonPatchError("Each JSON Patch operation must be an object")
 
@@ -191,20 +191,20 @@ def _apply_operation(document, op):
         raise JsonPatchError(f"'{name}' operation requires a 'value' member")
 
     if name == "add":
-        return _add_tokens(document, _parse_pointer(op["path"]), op["value"])
+        return add_tokens(document, parse_pointer(op["path"]), op["value"])
 
     if name == "remove":
-        return _remove_tokens(document, _parse_pointer(op["path"]))
+        return remove_tokens(document, parse_pointer(op["path"]))
 
     if name == "replace":
-        return _replace_tokens(
-            document, _parse_pointer(op["path"]), op["value"]
+        return replace_tokens(
+            document, parse_pointer(op["path"]), op["value"]
         )
 
     if name in ("move", "copy"):
-        from_tokens = _parse_pointer(op["from"])
-        path_tokens = _parse_pointer(op["path"])
-        value = _get(document, from_tokens)
+        from_tokens = parse_pointer(op["from"])
+        path_tokens = parse_pointer(op["path"])
+        value = get(document, from_tokens)
         if name == "move":
             # RFC 6902 §4.4: the "from" location MUST NOT be a proper prefix of
             # the "path" location (cannot move a value into one of its children).
@@ -212,12 +212,12 @@ def _apply_operation(document, op):
                 from_tokens
             ) < len(path_tokens):
                 raise JsonPatchError("Cannot move a value into its own child")
-            document = _remove_tokens(document, from_tokens)
-            return _add_tokens(document, path_tokens, value)
-        return _add_tokens(document, path_tokens, copy.deepcopy(value))
+            document = remove_tokens(document, from_tokens)
+            return add_tokens(document, path_tokens, value)
+        return add_tokens(document, path_tokens, copy.deepcopy(value))
 
     if name == "test":
-        actual = _get(document, _parse_pointer(op["path"]))
+        actual = get(document, parse_pointer(op["path"]))
         if actual != op["value"]:
             # RFC 6902 §4.6: a failed "test" aborts the whole patch.
             raise JsonPatchError("JSON Patch 'test' operation failed", 409)
@@ -230,7 +230,7 @@ def apply_patch(document, operations):
     """Apply a sequence of RFC 6902 operations to a copy of ``document``."""
     working = copy.deepcopy(document)
     for op in operations:
-        working = _apply_operation(working, op)
+        working = apply_operation(working, op)
     return working
 
 
@@ -239,7 +239,7 @@ def apply_patch(document, operations):
 # ---------------------------------------------------------------------------
 
 
-def _referenced_columns(operations):
+def referenced_columns(operations):
     """Top-level entity columns touched by the patch (first pointer token)."""
     columns = set()
     for op in operations:
@@ -249,7 +249,7 @@ def _referenced_columns(operations):
             pointer = op.get(key)
             if pointer is None:
                 continue
-            tokens = _parse_pointer(pointer)
+            tokens = parse_pointer(pointer)
             if not tokens:
                 raise JsonPatchError(
                     "JSON Patch targeting the whole entity ('') is not "
@@ -259,7 +259,7 @@ def _referenced_columns(operations):
     return columns
 
 
-async def _load_document(connection, entity_name, entity_id, columns):
+async def load_document(connection, entity_name, entity_id, columns):
     """Build the working JSON document from the entity's current columns.
 
     Only the columns referenced by the patch are read. JSON/JSONB columns are
@@ -309,8 +309,8 @@ async def apply_json_patch_to_entity(
         return payload
 
     operations = payload.operations
-    columns = _referenced_columns(operations)
-    document = await _load_document(
+    columns = referenced_columns(operations)
+    document = await load_document(
         connection, entity_name, entity_id, columns
     )
     patched = apply_patch(document, operations)

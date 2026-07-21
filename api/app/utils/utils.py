@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 from app import EPSG, HOSTNAME, SUBPATH, TOP_VALUE, VERSION
 from asyncpg.types import Range
 from dateutil import parser
+from app.v1.endpoints.exceptions import BadRequest
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,63}$")
 
@@ -234,7 +235,7 @@ def get_result_type_and_column(input):
 
     if result_type is not None:
         return result_type, values, columns
-    raise Exception("Cannot cast result to a valid type")
+    raise BadRequest("Cannot cast result to a valid type")
 
 
 def response2jsonfile(request, response, filename, body="", status_code=200):

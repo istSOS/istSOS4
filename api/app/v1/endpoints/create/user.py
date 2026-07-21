@@ -92,13 +92,7 @@ async def create_user(
                         },
                     )
 
-                try:
-                    payload["role"] = validate_rbac_role(payload["role"])
-                except ValueError as e:
-                    return JSONResponse(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        content={"message": str(e)},
-                    )
+                payload["role"] = validate_rbac_role(payload["role"])
 
                 if current_user is not None:
                     if current_user["role"] != "administrator":

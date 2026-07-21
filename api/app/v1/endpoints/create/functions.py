@@ -27,6 +27,7 @@ from app.utils.utils import (
 from app.v1.endpoints.functions import insert_commit
 from app.v1.endpoints.update.datastream import update_datastream_entity
 from app.v1.endpoints.update.observation import update_observation_entity
+from app.v1.endpoints.exceptions import BadRequest, Forbidden
 
 
 def normalize_geojson_geometry(value):
@@ -52,7 +53,7 @@ async def set_commit(connection, commit_message, current_user):
     if current_user and current_user["role"] == "sensor":
         if commit_message:
             await connection.execute("RESET ROLE;")
-            raise Exception("Sensor cannot provide commit message")
+            raise Forbidden("Sensor cannot provide commit message")
 
         return await connection.fetchval(
             """
@@ -64,7 +65,7 @@ async def set_commit(connection, commit_message, current_user):
 
     if not commit_message:
         await connection.execute("RESET ROLE;")
-        raise Exception("No commit message provided")
+        raise BadRequest("No commit message provided")
 
     commit = {
         "message": commit_message,
@@ -655,8 +656,21 @@ async def generate_feature_of_interest(payload, connection, commit_id=None):
         )
 
         if not result:
-            raise ValueError(
-                "Can not generate foi for Thing with no locations."
+            # Empty result has two distinct causes; the old message assumed only
+            # the second and misreported the first. Tell them apart.
+            datastream_exists = await connection.fetchval(
+                'SELECT 1 FROM sensorthings."Datastream" WHERE id = $1::bigint',
+                payload["datastream_id"],
+            )
+            if not datastream_exists:
+                raise BadRequest(
+                    f"Datastream {payload['datastream_id']} does not exist."
+                )
+            raise BadRequest(
+                "Cannot auto-generate a FeatureOfInterest: the Thing linked to "
+                f"Datastream {payload['datastream_id']} has no Location. "
+                "Provide a FeatureOfInterest explicitly or add a Location to "
+                "the Thing."
             )
 
         row = result[0]

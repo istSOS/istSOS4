@@ -17,14 +17,8 @@ from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.utils.utils import safe_parse_datetime
-from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import (
-    ForeignKeyViolationError,
-    InsufficientPrivilegeError,
-    PostgresConnectionError,
-    TooManyConnectionsError,
-)
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import Response
@@ -92,69 +86,55 @@ async def bulk_observations(
     current_user=user,
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        async with pgpool.acquire() as conn:
-            async with conn.transaction():
-                if current_user is not None:
-                    await set_role(conn, current_user)
+    async with pgpool.acquire() as conn:
+        async with conn.transaction():
+            if current_user is not None:
+                await set_role(conn, current_user)
 
-                commit_id = await set_commit(
-                    conn, commit_message, current_user
+            commit_id = await set_commit(
+                conn, commit_message, current_user
+            )
+
+            for observation_set in payload:
+                datastream_id = observation_set.get("Datastream", {}).get(
+                    "@iot.id"
+                )
+                components = observation_set.get("components", [])
+                data_array = observation_set.get("dataArray", [])
+
+                if not datastream_id:
+                    raise ValueError(
+                        "Missing 'datastream_id' in Datastream."
+                    )
+
+                # Check that at least phenomenonTime and result are present
+                if (
+                    "phenomenonTime" not in components
+                    or "result" not in components
+                ):
+                    raise ValueError(
+                        "Missing required properties 'phenomenonTime' or 'result' in components."
+                    )
+                if "featureOfInterest" in components:
+                    raise ValueError(
+                        "This method does not support 'featureOfInterest' in components. It will support in future."
+                    )
+
+                foi_id = await get_foi_id(
+                    datastream_id, conn, commit_id=commit_id
+                )
+                await insertBulkObservation(
+                    data_array,
+                    conn,
+                    foi_id,
+                    datastream_id=datastream_id,
+                    components=components,
+                    commit_id=commit_id,
                 )
 
-                for observation_set in payload:
-                    datastream_id = observation_set.get("Datastream", {}).get(
-                        "@iot.id"
-                    )
-                    components = observation_set.get("components", [])
-                    data_array = observation_set.get("dataArray", [])
-
-                    if not datastream_id:
-                        raise ValueError(
-                            "Missing 'datastream_id' in Datastream."
-                        )
-
-                    # Check that at least phenomenonTime and result are present
-                    if (
-                        "phenomenonTime" not in components
-                        or "result" not in components
-                    ):
-                        raise ValueError(
-                            "Missing required properties 'phenomenonTime' or 'result' in components."
-                        )
-                    if "featureOfInterest" in components:
-                        raise ValueError(
-                            "This method does not support 'featureOfInterest' in components. It will support in future."
-                        )
-
-                    foi_id = await get_foi_id(
-                        datastream_id, conn, commit_id=commit_id
-                    )
-                    await insertBulkObservation(
-                        data_array,
-                        conn,
-                        foi_id,
-                        datastream_id=datastream_id,
-                        components=components,
-                        commit_id=commit_id,
-                    )
-
-                if current_user is not None:
-                    await conn.execute("RESET ROLE;")
-        return Response(status_code=status.HTTP_201_CREATED)
-
-    except InsufficientPrivilegeError as e:
-        return error_response(status.HTTP_403_FORBIDDEN, str(e))
-    except TooManyConnectionsError as e:
-        return error_response(status.HTTP_429_TOO_MANY_REQUESTS, str(e))
-    except ForeignKeyViolationError as e:
-        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
-    except ValueError as e:
-        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
-    except PostgresConnectionError as e:
-        return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
-    except Exception as e:
-        return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e))
+            if current_user is not None:
+                await conn.execute("RESET ROLE;")
+    return Response(status_code=status.HTTP_201_CREATED)
 
 
 async def insertBulkObservation(
@@ -466,6 +446,18 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
 
                 return gen_foi_id
         else:
-            raise ValueError(
-                "Can not generate foi for Thing with no locations."
+            # Empty result has two distinct causes; the old message assumed only
+            # the second and misreported the first. Tell them apart.
+            datastream_exists = await conn.fetchval(
+                'SELECT 1 FROM sensorthings."Datastream" WHERE id = $1::bigint',
+                datastream_id,
+            )
+            if not datastream_exists:
+                raise BadRequest(
+                    f"Datastream {datastream_id} does not exist."
+                )
+            raise BadRequest(
+                "Cannot auto-generate a FeatureOfInterest: the Thing linked to "
+                f"Datastream {datastream_id} has no Location. Provide a "
+                "FeatureOfInterest explicitly or add a Location to the Thing."
             )

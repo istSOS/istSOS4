@@ -22,6 +22,7 @@ from app.utils.utils import (
     validate_epsg,
 )
 from app.v1.endpoints.functions import insert_commit
+from app.v1.endpoints.exceptions import BadRequest, Forbidden
 
 
 async def check_id_exists(connection, entity_name, entity_id):
@@ -40,13 +41,13 @@ async def set_commit(connection, commit_message, current_user):
     if current_user and current_user["role"] == "sensor":
         if commit_message:
             await connection.execute("RESET ROLE;")
-            raise Exception("Sensor cannot provide commit message")
+            raise Forbidden("Sensor cannot provide commit message")
 
         return None
 
     if not commit_message:
         await connection.execute("RESET ROLE;")
-        raise Exception("No commit message provided")
+        raise BadRequest("No commit message provided")
 
     commit = {
         "message": commit_message,

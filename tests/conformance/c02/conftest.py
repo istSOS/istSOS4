@@ -6,7 +6,7 @@ Root conftest fixtures (client, seed, unique_name, base_url) auto-inherit.
 
 Public API:
   cleanup   (fixture)  -- track URLs; delete in reverse order on teardown.
-  _create_datastream_tree (function) -- build a minimal Thing+Location+Sensor+
+  create_datastream_tree (function) -- build a minimal Thing+Location+Sensor+
                                          ObservedProperty+Datastream tree and
                                          register it for cleanup.  Used by tests
                                          that need a ready Datastream/Observation.
@@ -49,7 +49,7 @@ def cleanup(client):
 # +Datastream tree for tests that need a ready Datastream.
 # ---------------------------------------------------------------------------
 
-def _create_datastream_tree(client, unique_name, cleanup):
+def create_datastream_tree(client, unique_name, cleanup):
     """Create the minimal subtree required to post Observations.
 
     Returns a dict with keys: thing_id, location_id, sensor_id, op_id, ds_id,
