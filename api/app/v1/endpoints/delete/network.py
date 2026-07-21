@@ -15,11 +15,11 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Depends, Header, status
 from fastapi.responses import JSONResponse, Response
 
 from .functions import delete_entity, set_commit
+from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 
@@ -49,52 +49,37 @@ async def delete_network(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        if not network_id:
-            raise Exception("Network ID not provided")
+    if not network_id:
+        raise BadRequest("Network ID not provided")
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                await set_commit(
-                    connection,
-                    commit_message,
-                    current_user,
-                    "Network",
-                    network_id,
+            await set_commit(
+                connection,
+                commit_message,
+                current_user,
+                "Network",
+                network_id,
+            )
+
+            id_deleted = await delete_entity(
+                connection, "Network", network_id
+            )
+
+            if id_deleted is None:
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "code": 404,
+                        "type": "error",
+                        "message": f"Network with id {network_id} not found",
+                    },
                 )
 
-                id_deleted = await delete_entity(
-                    connection, "Network", network_id
-                )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
 
-                if id_deleted is None:
-                    return JSONResponse(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        content={
-                            "code": 404,
-                            "type": "error",
-                            "message": f"Network with id {network_id} not found",
-                        },
-                    )
-
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-
-        return Response(status_code=status.HTTP_200_OK)
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={
-                "code": 401,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
+    return Response(status_code=status.HTTP_200_OK)

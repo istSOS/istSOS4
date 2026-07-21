@@ -35,15 +35,14 @@ the create path, rather than introducing a parallel validator.
 
 import json
 
-import asyncpg
 from app.utils.utils import validate_payload_keys, validate_required_keys
 from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import Request, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from .functions import check_id_exists, set_commit
+from app.v1.endpoints.exceptions import BadRequest
 
 
 async def parse_put_body(request: Request) -> dict:
@@ -59,9 +58,9 @@ async def parse_put_body(request: Request) -> dict:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise Exception(f"Invalid JSON body: {exc}")
+        raise BadRequest(f"Invalid JSON body: {exc}")
     if not isinstance(data, dict):
-        raise Exception(
+        raise BadRequest(
             "PUT body must be a JSON object representing the entity."
         )
     return data
@@ -127,75 +126,47 @@ async def handle_put_replace(
     entity that maintains derived state on PATCH (e.g. Observation /
     FeatureOfInterest) keeps doing so on PUT.
     """
-    try:
-        if not entity_id:
-            raise Exception(f"{entity_db_name} ID not provided")
+    if not entity_id:
+        raise BadRequest(f"{entity_db_name} ID not provided")
 
-        payload = await parse_put_body(request)
+    payload = await parse_put_body(request)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                if not await check_id_exists(
-                    connection, entity_db_name, entity_id
-                ):
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
-                    return error_response(
-                        status.HTTP_404_NOT_FOUND, not_found_message
-                    )
-
-                payload = build_put_payload(
-                    payload, required_keys, optional_keys
-                )
-
-                validate_payload_keys(payload, allowed_keys)
-
-                commit_id = await set_commit(
-                    connection,
-                    commit_message,
-                    current_user,
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
-
-                updated = await update_entity_fn(
-                    connection, entity_id, payload
-                )
-
-                if post_update is not None:
-                    await post_update(connection, entity_id, payload, updated)
-
+            if not await check_id_exists(
+                connection, entity_db_name, entity_id
+            ):
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
+                return error_response(
+                    status.HTTP_404_NOT_FOUND, not_found_message
+                )
 
-        return Response(status_code=status.HTTP_200_OK)
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={
-                "code": 401,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
-        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return error_response(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Database temporarily unavailable",
-        )
-    except ValueError as e:
-        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
-    except asyncpg.ForeignKeyViolationError:
-        # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return error_response(
-            status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
-        )
-    except Exception:
-        # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
-        return error_response(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
-        )
+            payload = build_put_payload(
+                payload, required_keys, optional_keys
+            )
+
+            validate_payload_keys(payload, allowed_keys)
+
+            commit_id = await set_commit(
+                connection,
+                commit_message,
+                current_user,
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
+
+            updated = await update_entity_fn(
+                connection, entity_id, payload
+            )
+
+            if post_update is not None:
+                await post_update(connection, entity_id, payload, updated)
+
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+
+    return Response(status_code=status.HTTP_200_OK)

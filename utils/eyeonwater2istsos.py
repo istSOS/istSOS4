@@ -241,22 +241,22 @@ class STAClient:
         return self.get_by_filter(endpoint, filter_expr)
 
 
-def _q(value):
+def q(value):
     return str(value).replace("'", "''")
 
 
-def _first_existing(d, *keys):
+def first_existing(d, *keys):
     for key in keys:
         if isinstance(d, dict) and d.get(key) not in (None, ""):
             return d[key]
     return None
 
 
-def _extract_lat_lon(obs):
-    lat = _first_existing(
+def extract_lat_lon(obs):
+    lat = first_existing(
         obs, "lat", "latitude", "photo_latitude", "location_latitude"
     )
-    lon = _first_existing(
+    lon = first_existing(
         obs, "lon", "lng", "longitude", "photo_longitude", "location_longitude"
     )
 
@@ -264,11 +264,11 @@ def _extract_lat_lon(obs):
     gps = obs.get("gps") or {}
     geometry = obs.get("geometry") or {}
 
-    lat = lat or _first_existing(location, "lat", "latitude")
-    lon = lon or _first_existing(location, "lon", "lng", "longitude")
+    lat = lat or first_existing(location, "lat", "latitude")
+    lon = lon or first_existing(location, "lon", "lng", "longitude")
 
-    lat = lat or _first_existing(gps, "lat", "latitude")
-    lon = lon or _first_existing(gps, "lon", "lng", "longitude")
+    lat = lat or first_existing(gps, "lat", "latitude")
+    lon = lon or first_existing(gps, "lon", "lng", "longitude")
 
     if geometry.get("type") == "Point":
         coords = geometry.get("coordinates") or []
@@ -301,7 +301,7 @@ def sensor_payload(obs):
     device = obs.get("device") or {}
 
     name = (
-        _first_existing(device, "device_model", "model", "name")
+        first_existing(device, "device_model", "model", "name")
         or "unknown_eyeonwater_device"
     )
 
@@ -314,7 +314,7 @@ def sensor_payload(obs):
 
 
 def feature_of_interest_payload(obs):
-    lat, lon = _extract_lat_lon(obs)
+    lat, lon = extract_lat_lon(obs)
 
     obs_id = obs.get("id") or obs.get("uuid")
     raw_id = obs_id or f"{lat:.7f}_{lon:.7f}"
@@ -369,7 +369,7 @@ def post_eyeonwater_to_istsos4(
     client = STAClient(sta_endpoint, headers=headers)
     network = client.get_or_create(
         "Networks",
-        f"name eq '{_q(network_name)}'",
+        f"name eq '{q(network_name)}'",
         {"name": network_name},
     )
     if not network:
@@ -385,7 +385,7 @@ def post_eyeonwater_to_istsos4(
         party = party_payload(obs)
         party = client.get_or_create(
             "Parties",
-            f"authId eq '{_q(party['authId'])}'",
+            f"authId eq '{q(party['authId'])}'",
             party,
         )
         if not party:
@@ -397,7 +397,7 @@ def post_eyeonwater_to_istsos4(
         sensor = sensor_payload(obs)
         sensor = client.get_or_create(
             "Sensors",
-            f"name eq '{_q(sensor['name'])}'",
+            f"name eq '{q(sensor['name'])}'",
             sensor,
         )
         if not sensor:
@@ -409,7 +409,7 @@ def post_eyeonwater_to_istsos4(
         foi = feature_of_interest_payload(obs)
         foi = client.get_or_create(
             "FeaturesOfInterest",
-            f"name eq '{_q(foi['name'])}'",
+            f"name eq '{q(foi['name'])}'",
             foi,
         )
         if not foi:
@@ -438,7 +438,7 @@ def post_eyeonwater_to_istsos4(
 
             ds = client.get_or_create(
                 "Datastreams",
-                f"name eq '{_q(ds['name'])}'",
+                f"name eq '{q(ds['name'])}'",
                 ds,
             )
             if not ds:

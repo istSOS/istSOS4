@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncpg
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.sta2rest import sta2rest
 from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.functions import set_role, update_datastream_observedArea
-from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import JSONResponse
 
@@ -102,86 +100,61 @@ async def delete_observations_filtered(
     # and return 400 — exactly the GET contract (never 500 for a bad filter) —
     # while keeping the DB work in a separate try so that genuine internal
     # errors there still map to 500, not 400.
-    try:
-        ids_query = sta2rest.STA2REST.convert_filter_to_ids_query(full_path)
-    except Exception as e:
-        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
+    ids_query = sta2rest.STA2REST.convert_filter_to_ids_query(full_path)
 
-    try:
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                matched_ids = [
-                    row["id"] for row in await connection.fetch(ids_query)
-                ]
+            matched_ids = [
+                row["id"] for row in await connection.fetch(ids_query)
+            ]
 
-                if not matched_ids:
-                    # Empty match set is success, not an error: 200 + count 0.
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
-                    return JSONResponse(
-                        status_code=status.HTTP_200_OK,
-                        content={"deleted": 0},
-                    )
-
-                # Single bulk DELETE (NOT a per-id loop). RETURNING the
-                # datastream_id lets us recompute datastream aggregates once per
-                # DISTINCT touched datastream below.
-                deleted_rows = await connection.fetch(
-                    """
-                    DELETE FROM sensorthings."Observation"
-                    WHERE id = ANY($1::bigint[])
-                    RETURNING datastream_id;
-                    """,
-                    matched_ids,
-                )
-
-                deleted_count = len(deleted_rows)
-                touched_datastreams = {
-                    row["datastream_id"] for row in deleted_rows
-                }
-
-                # Post-delete maintenance — aggregated equivalent of the
-                # single-entity delete's per-row fix-up, run ONCE per DISTINCT
-                # touched datastream. We recompute phenomenonTime/resultTime from
-                # the REMAINING observations (FoI variant) and the observedArea.
-                # We deliberately do NOT touch FeaturesOfInterest / gen_foi_id:
-                # deleting Observations does not delete their FoI.
-                for datastream_id in touched_datastreams:
-                    await update_datastream_phenomenon_time_from_foi(
-                        connection, datastream_id
-                    )
-                    await update_datastream_observedArea(
-                        connection, datastream_id
-                    )
-
+            if not matched_ids:
+                # Empty match set is success, not an error: 200 + count 0.
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={"deleted": 0},
+                )
 
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={"deleted": deleted_count},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={
-                "code": 401,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
-        # conformance: req/request-data/status-code — DB unavailable is 503.
-        return error_response(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Database temporarily unavailable",
-        )
-    except Exception:
-        # The $filter was already validated above (bad filter -> 400). Anything
-        # reaching here is a genuine internal/DB failure -> 500, no stacktrace.
-        return error_response(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
-        )
+            # Single bulk DELETE (NOT a per-id loop). RETURNING the
+            # datastream_id lets us recompute datastream aggregates once per
+            # DISTINCT touched datastream below.
+            deleted_rows = await connection.fetch(
+                """
+                DELETE FROM sensorthings."Observation"
+                WHERE id = ANY($1::bigint[])
+                RETURNING datastream_id;
+                """,
+                matched_ids,
+            )
+
+            deleted_count = len(deleted_rows)
+            touched_datastreams = {
+                row["datastream_id"] for row in deleted_rows
+            }
+
+            # Post-delete maintenance — aggregated equivalent of the
+            # single-entity delete's per-row fix-up, run ONCE per DISTINCT
+            # touched datastream. We recompute phenomenonTime/resultTime from
+            # the REMAINING observations (FoI variant) and the observedArea.
+            # We deliberately do NOT touch FeaturesOfInterest / gen_foi_id:
+            # deleting Observations does not delete their FoI.
+            for datastream_id in touched_datastreams:
+                await update_datastream_phenomenon_time_from_foi(
+                    connection, datastream_id
+                )
+                await update_datastream_observedArea(
+                    connection, datastream_id
+                )
+
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"deleted": deleted_count},
+    )

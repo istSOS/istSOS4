@@ -15,13 +15,13 @@ from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, Response
 
 from .functions import check_id_exists, set_commit, update_network_entity
 from .json_patch import apply_json_patch_to_entity, normalize_patch_body
 from .put import handle_put_replace, request_body_openapi_example
+from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 
@@ -67,71 +67,56 @@ async def update_network(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        if not network_id:
-            raise Exception("Network ID not provided")
+    if not network_id:
+        raise BadRequest("Network ID not provided")
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                if not await check_id_exists(
-                    connection, "Network", network_id
-                ):
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
-
-                    return JSONResponse(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        content={
-                            "code": 404,
-                            "type": "error",
-                            "message": "Sensor not found.",
-                        },
-                    )
-
-                # req/create-update-delete/update-entity-jsonpatch: resolve an
-                # RFC 6902 array body into a merge dict; dict bodies pass through.
-                payload = await apply_json_patch_to_entity(
-                    connection, "Network", network_id, payload
-                )
-
-                if not payload:
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
-                    return Response(status_code=status.HTTP_200_OK)
-
-                validate_payload_keys(payload, ALLOWED_KEYS)
-
-                commit_id = await set_commit(
-                    connection,
-                    commit_message,
-                    current_user,
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
-
-                await update_network_entity(connection, network_id, payload)
-
+            if not await check_id_exists(
+                connection, "Network", network_id
+            ):
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
 
-        return Response(status_code=status.HTTP_200_OK)
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={
-                "code": 401,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "code": 404,
+                        "type": "error",
+                        "message": "Sensor not found.",
+                    },
+                )
+
+            # req/create-update-delete/update-entity-jsonpatch: resolve an
+            # RFC 6902 array body into a merge dict; dict bodies pass through.
+            payload = await apply_json_patch_to_entity(
+                connection, "Network", network_id, payload
+            )
+
+            if not payload:
+                if current_user is not None:
+                    await connection.execute("RESET ROLE;")
+                return Response(status_code=status.HTTP_200_OK)
+
+            validate_payload_keys(payload, ALLOWED_KEYS)
+
+            commit_id = await set_commit(
+                connection,
+                commit_message,
+                current_user,
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
+
+            await update_network_entity(connection, network_id, payload)
+
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+
+    return Response(status_code=status.HTTP_200_OK)
 
 
 @v1.api_route(

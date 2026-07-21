@@ -19,7 +19,7 @@ import pytest
 
 import sample_data
 from client import STAClient, entity_id, format_id, id_from_self_link
-from c02.conftest import _create_datastream_tree
+from c02.conftest import create_datastream_tree
 
 pytestmark = pytest.mark.c02
 
@@ -148,7 +148,7 @@ def test_deep_insert_nested_sensor_fields(client, unique_name, cleanup):
         "description": "observedProperty 2",
     }
 
-    def _ds(name, sensor, op):
+    def ds(name, sensor, op):
         return {
             "name": f"{tag} {name}",
             "description": name,
@@ -162,8 +162,8 @@ def test_deep_insert_nested_sensor_fields(client, unique_name, cleanup):
         **sample_data.minimal_thing(tag),
         "Locations": [sample_data.minimal_location(tag)],
         "Datastreams": [
-            _ds("ds-with", sensor_with, op_with),
-            _ds("ds-without", sensor_without, op_without),
+            ds("ds-with", sensor_with, op_with),
+            ds("ds-without", sensor_without, op_without),
         ],
     }
 
@@ -234,7 +234,7 @@ def test_foi_auto_generation(client, unique_name, cleanup):
     automatically create/link one derived from the Thing's current Location.
     """
     tag = unique_name("foi-auto")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     ds_id = tree["ds_id"]
 
     # POST Observation without FeatureOfInterest
@@ -316,7 +316,7 @@ def test_foi_auto_generation_concurrent(client, base_url, unique_name, cleanup):
     resource is the auto-FoI itself (not the Observation phenomenonTime/Datastream
     uniqueness), keeping the assertion valid whether or not duplicates are allowed.
     """
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     ds_id = tree["ds_id"]
 
     n = 12
@@ -389,7 +389,7 @@ def test_phenomenon_time_defaulting(client, unique_name, cleanup):
     resultTime shall default to null if not provided.
     """
     tag = unique_name("ptdefault")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     ds_id = tree["ds_id"]
 
     # POST Observation omitting phenomenonTime (and resultTime)
@@ -428,7 +428,7 @@ def test_phenomenon_time_defaulting(client, unique_name, cleanup):
 def test_result_time_stored_when_provided(client, unique_name, cleanup):
     """18-088 §8.3.2 — resultTime is stored when explicitly provided in POST."""
     tag = unique_name("rtset")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     ds_id = tree["ds_id"]
 
     result_time = "2023-07-01T15:30:00Z"

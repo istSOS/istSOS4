@@ -163,7 +163,7 @@ class IstSOS4Client:
             timeout=self.timeout,
         )
         self.raise_for_status(response, "Login failed")
-        self._apply_token(response.json())
+        self.apply_token(response.json())
 
     def refresh(self) -> None:
         """Rotate the token while it is still valid, without resending creds.
@@ -179,14 +179,14 @@ class IstSOS4Client:
             timeout=self.timeout,
         )
         self.raise_for_status(response, "Refresh failed")
-        self._apply_token(response.json())
+        self.apply_token(response.json())
 
-    def _apply_token(self, payload: dict[str, Any]) -> None:
+    def apply_token(self, payload: dict[str, Any]) -> None:
         self.access_token = payload["access_token"]
-        self.expires_at = self._parse_expiry(payload.get("expires_in"))
+        self.expires_at = self.parse_expiry(payload.get("expires_in"))
 
     @staticmethod
-    def _parse_expiry(expires_in: Any) -> datetime | None:
+    def parse_expiry(expires_in: Any) -> datetime | None:
         """Interpret the server's "expires_in" field.
 
         This server puts an ABSOLUTE expiry epoch in "expires_in"
@@ -364,10 +364,10 @@ class IstSOS4Client:
         inserted = 0
         for offset in range(0, len(data_array), batch_limit):
             batch = data_array[offset : offset + batch_limit]
-            inserted += self._post_bulk_batch(datastream_id, batch)
+            inserted += self.post_bulk_batch(datastream_id, batch)
         return inserted
 
-    def _post_bulk_batch(
+    def post_bulk_batch(
         self,
         datastream_id: Any,
         batch: list[list[Any]],
@@ -380,7 +380,7 @@ class IstSOS4Client:
         as a real error (bad data, auth, missing datastream, ...) and re-raised.
         """
         try:
-            self._send_bulk_observations(datastream_id, batch)
+            self.send_bulk_observations(datastream_id, batch)
             return len(batch)
         except requests.HTTPError as exc:
             status = (
@@ -393,12 +393,12 @@ class IstSOS4Client:
                     status,
                 )
                 middle = len(batch) // 2
-                return self._post_bulk_batch(
+                return self.post_bulk_batch(
                     datastream_id, batch[:middle]
-                ) + self._post_bulk_batch(datastream_id, batch[middle:])
+                ) + self.post_bulk_batch(datastream_id, batch[middle:])
             raise
 
-    def _send_bulk_observations(
+    def send_bulk_observations(
         self,
         datastream_id: Any,
         batch: list[list[Any]],

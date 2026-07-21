@@ -18,7 +18,7 @@ import pytest
 
 import sample_data
 from client import entity_id, format_id, id_from_self_link
-from c02.conftest import _create_datastream_tree
+from c02.conftest import create_datastream_tree
 
 pytestmark = pytest.mark.c02
 
@@ -127,7 +127,7 @@ class TestCreate1MinimalEntities:
     def test_post_datastream(self, client, unique_name, cleanup):
         """req/create-update-delete/create-entity — POST minimal Datastream with existing links."""
         tag = unique_name("ds")
-        tree = _create_datastream_tree(client, unique_name, cleanup)
+        tree = create_datastream_tree(client, unique_name, cleanup)
 
         # The Datastream was already created as part of the setup tree; verify it.
         ds_url = tree["ds_url"]
@@ -140,7 +140,7 @@ class TestCreate1MinimalEntities:
     def test_post_observation(self, client, unique_name, cleanup):
         """req/create-update-delete/create-entity — POST minimal Observation."""
         tag = unique_name("obs")
-        tree = _create_datastream_tree(client, unique_name, cleanup)
+        tree = create_datastream_tree(client, unique_name, cleanup)
         ds_id = tree["ds_id"]
 
         payload = sample_data.minimal_observation(tag, ds_id, result=7.5)
@@ -278,7 +278,7 @@ def test_create_observation_with_existing_foi_link(client, unique_name, cleanup)
     new one; the Observation must be navigable to the specified FoI.
     """
     tag = unique_name("obs-link")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     ds_id = tree["ds_id"]
 
     # Create a standalone FeatureOfInterest to link explicitly
@@ -371,7 +371,7 @@ def test_post_to_navigation_link_datastream_observations(client, unique_name, cl
     A POST to the Datastreams navigation link must create and link the Observation.
     """
     tag = unique_name("navobs")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     ds_id = tree["ds_id"]
 
     # POST Observation via navigation link (no Datastream key in body required)
@@ -423,7 +423,7 @@ def test_post_to_navigation_link_thing_datastreams(client, unique_name, cleanup)
     Things(<id>)/Datastreams (reverse).
     """
     tag = unique_name("nav-t-ds")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     t_id = tree["thing_id"]
     s_id = tree["sensor_id"]
     op_id = tree["op_id"]
@@ -478,7 +478,7 @@ def test_post_to_navigation_link_sensor_datastreams(client, unique_name, cleanup
     Sensors(<id>)/Datastreams (reverse).
     """
     tag = unique_name("nav-s-ds")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     t_id = tree["thing_id"]
     s_id = tree["sensor_id"]
     op_id = tree["op_id"]
@@ -533,7 +533,7 @@ def test_post_to_navigation_link_observedproperty_datastreams(client, unique_nam
     ObservedProperties(<id>)/Datastreams (reverse).
     """
     tag = unique_name("nav-op-ds")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     t_id = tree["thing_id"]
     s_id = tree["sensor_id"]
     op_id = tree["op_id"]
@@ -718,7 +718,7 @@ def test_post_to_navigation_link_foi_observations(client, unique_name, cleanup):
     This is a positive test asserting 201 (the POST-to-FoI-nav-link fix is in place).
     """
     tag = unique_name("nav-foi-obs")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     ds_id = tree["ds_id"]
 
     # Create a standalone FeatureOfInterest to be the nav-link host

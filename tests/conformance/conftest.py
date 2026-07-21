@@ -54,9 +54,9 @@ def client(base_url) -> STAClient:
 # ---------------------------------------------------------------------------
 @pytest.fixture
 def unique_name():
-    def _make(prefix: str = "conf") -> str:
+    def make(prefix: str = "conf") -> str:
         return f"{prefix}-{uuid.uuid4().hex[:12]}"
-    return _make
+    return make
 
 
 # ---------------------------------------------------------------------------
@@ -184,16 +184,16 @@ def seed(client) -> SeedData:
     #    Observations) and HistoricalLocations. Location, Sensors,
     #    ObservedProperties and the auto-generated FeatureOfInterest are
     #    independent entities -> delete explicitly. Tolerate 404s.
-    def _safe_delete(path):
+    def safe_delete(path):
         try:
             client.delete(path)
         except Exception:
             pass
 
-    _safe_delete(f"Things({format_id(thing_id)})")
-    _safe_delete(f"Locations({format_id(data.location_id)})")
+    safe_delete(f"Things({format_id(thing_id)})")
+    safe_delete(f"Locations({format_id(data.location_id)})")
     for d in datastreams:
-        _safe_delete(f"Sensors({format_id(d.sensor_id)})")
-        _safe_delete(f"ObservedProperties({format_id(d.observed_property_id)})")
+        safe_delete(f"Sensors({format_id(d.sensor_id)})")
+        safe_delete(f"ObservedProperties({format_id(d.observed_property_id)})")
     for fid in data.foi_ids:
-        _safe_delete(f"FeaturesOfInterest({format_id(fid)})")
+        safe_delete(f"FeaturesOfInterest({format_id(fid)})")
