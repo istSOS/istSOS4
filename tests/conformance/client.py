@@ -32,7 +32,7 @@ DEFAULT_BASE_URL = "http://localhost:8018/v4/v1.1"
 _SAFE_VALUE = "$()/:,'=;.-"
 
 
-def _encode_params(params) -> str:
+def encode_params(params) -> str:
     """Encode a dict or list of (k, v) pairs into a query string (no leading '?')."""
     items = params.items() if isinstance(params, dict) else params
     parts = []
@@ -116,7 +116,7 @@ class STAClient:
         else:
             full = f"{self.base_url}/{path.lstrip('/')}"
         if params:
-            qs = _encode_params(params)
+            qs = encode_params(params)
             if qs:
                 full += ("&" if "?" in full else "?") + qs
         return full

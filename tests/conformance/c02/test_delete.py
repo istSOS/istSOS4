@@ -16,7 +16,7 @@ import pytest
 
 import sample_data
 from client import entity_id, format_id, id_from_self_link
-from c02.conftest import _create_datastream_tree
+from c02.conftest import create_datastream_tree
 
 pytestmark = pytest.mark.c02
 
@@ -91,7 +91,7 @@ class TestDelete12EachType:
     def test_delete_datastream(self, client, unique_name, cleanup):
         """req/create-update-delete/delete-entity — DELETE Datastream."""
         tag = unique_name("del-ds")
-        tree = _create_datastream_tree(client, unique_name, cleanup)
+        tree = create_datastream_tree(client, unique_name, cleanup)
         ds_url = tree["ds_url"]
 
         del_resp = client.delete(ds_url)
@@ -104,7 +104,7 @@ class TestDelete12EachType:
     def test_delete_observation(self, client, unique_name, cleanup):
         """req/create-update-delete/delete-entity — DELETE Observation."""
         tag = unique_name("del-obs")
-        tree = _create_datastream_tree(client, unique_name, cleanup)
+        tree = create_datastream_tree(client, unique_name, cleanup)
         ds_id = tree["ds_id"]
 
         obs_resp = client.create(
@@ -179,7 +179,7 @@ def test_cascade_delete_datastream_removes_observations(client, unique_name, cle
     must return 404.
     """
     tag = unique_name("casc-ds")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     ds_id = tree["ds_id"]
     ds_url = tree["ds_url"]
 
@@ -232,7 +232,7 @@ def test_cascade_delete_thing_removes_datastreams_and_histlocs(client, unique_na
     Locations, Sensors, ObservedProperties are NOT cascade-deleted.
     """
     tag = unique_name("casc-thing")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     thing_url = tree["thing_url"]
     t_id = tree["thing_id"]
     ds_id = tree["ds_id"]

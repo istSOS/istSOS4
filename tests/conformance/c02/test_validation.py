@@ -17,7 +17,7 @@ import pytest
 
 import sample_data
 from client import entity_id, format_id, id_from_self_link
-from c02.conftest import _create_datastream_tree
+from c02.conftest import create_datastream_tree
 
 pytestmark = pytest.mark.c02
 
@@ -313,7 +313,7 @@ def test_patch_link_to_nonexistent_returns_4xx(client, unique_name, cleanup):
     Regression lock: mirrors the POST bad-link fix applied to PATCH paths.
     """
     # Create a real Datastream to PATCH against (provides a valid target URL).
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     ds_url = tree["ds_url"]
 
     resp = client.patch(ds_url, json={"Sensor": {"@iot.id": 999999999}})
@@ -367,7 +367,7 @@ def test_deep_insert_observation_inline_foi_missing_encodingtype_returns_400(
 ):
     """req/create-update-delete/create-entity — POST Observation with an inline
     FeatureOfInterest missing the mandatory ``encodingType`` → 400, not 500."""
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
 
     resp = client.create("Observations", {
         "phenomenonTime": "2015-03-01T00:00:00Z",
@@ -434,7 +434,7 @@ def test_deep_insert_observation_valid_foi_returns_201(client, unique_name, clea
     Guards the integrity-violation→400 fix against over-reach: well-formed
     deep-inserts must keep succeeding.
     """
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
 
     resp = client.create("Observations", {
         "phenomenonTime": "2015-03-02T00:00:00Z",

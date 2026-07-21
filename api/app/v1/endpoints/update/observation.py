@@ -12,19 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncpg
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.functions import set_role, update_datastream_observedArea
-from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Depends, Header, Request, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from .functions import check_id_exists, set_commit, update_observation_entity
 from .json_patch import apply_json_patch_to_entity, normalize_patch_body
 from .put import handle_put_replace, request_body_openapi_example
+from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 
@@ -74,163 +73,135 @@ async def update_observation(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        if not observation_id:
-            raise Exception("Observation ID not provided")
+    if not observation_id:
+        raise BadRequest("Observation ID not provided")
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                if not await check_id_exists(
-                    connection, "Observation", observation_id
-                ):
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
-                    return error_response(
-                        status.HTTP_404_NOT_FOUND, "Observation not found."
-                    )
-
-                # req/create-update-delete/update-entity-jsonpatch: resolve an
-                # RFC 6902 array body into a merge dict; dict bodies pass through.
-                payload = await apply_json_patch_to_entity(
-                    connection, "Observation", observation_id, payload
-                )
-
-                if not payload:
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
-                    return Response(status_code=status.HTTP_200_OK)
-
-                validate_payload_keys(payload, ALLOWED_KEYS)
-
-                commit_id = await set_commit(
-                    connection,
-                    commit_message,
-                    current_user,
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
-
-                updated = await update_observation_entity(
-                    connection, observation_id, payload
-                )
-
-                if updated:
-                    obs_phenomenon_start = updated["phenomenonTimeStart"]
-                    obs_phenomenon_end = updated["phenomenonTimeEnd"]
-                    obs_result_time = updated["resultTime"]
-                    datastream_id = updated["datastream_id"]
-
-                    datastream_query = """
-                        SELECT "phenomenonTime", "resultTime"
-                        FROM sensorthings."Datastream"
-                        WHERE id = $1;
-                    """
-                    datastream_times = await connection.fetchrow(
-                        datastream_query, datastream_id
-                    )
-                    datastream_phenomenon_time = datastream_times[
-                        "phenomenonTime"
-                    ]
-                    datastream_result_time = datastream_times["resultTime"]
-                    if datastream_phenomenon_time and (
-                        obs_phenomenon_start is not None
-                        and obs_phenomenon_end is not None
-                    ):
-                        obs_lower = obs_phenomenon_start
-                        obs_upper = obs_phenomenon_end
-                        datastream_lower = datastream_phenomenon_time.lower
-                        datastream_upper = datastream_phenomenon_time.upper
-                        if (
-                            obs_lower < datastream_lower
-                            or obs_upper > datastream_upper
-                        ):
-                            new_lower_bound = min(
-                                obs_lower,
-                                datastream_lower,
-                            )
-                            new_upper_bound = max(
-                                obs_upper,
-                                datastream_upper,
-                            )
-                            update_datastream_query = """
-                                UPDATE sensorthings."Datastream"
-                                SET "phenomenonTime" = tstzrange($1, $2, '[]')
-                                WHERE id = $3;
-                            """
-                            await connection.execute(
-                                update_datastream_query,
-                                new_lower_bound,
-                                new_upper_bound,
-                                datastream_id,
-                            )
-
-                    if datastream_result_time and obs_result_time:
-                        obs_rt = obs_result_time
-                        datastream_rt_lower = datastream_result_time.lower
-                        datastream_rt_upper = datastream_result_time.upper
-                        if (
-                            obs_rt < datastream_rt_lower
-                            or obs_rt > datastream_rt_upper
-                        ):
-                            new_rt_lower_bound = min(
-                                obs_rt,
-                                datastream_rt_lower,
-                            )
-                            new_rt_upper_bound = max(
-                                obs_rt,
-                                datastream_rt_upper,
-                            )
-                            update_datastream_query = """
-                                UPDATE sensorthings."Datastream"
-                                SET "resultTime" = tstzrange($1, $2, '[]')
-                                WHERE id = $3;
-                            """
-                            await connection.execute(
-                                update_datastream_query,
-                                new_rt_lower_bound,
-                                new_rt_upper_bound,
-                                datastream_id,
-                            )
-
-                if payload.get("featuresofinterest_id"):
-                    await update_datastream_observedArea(
-                        connection, datastream_id
-                    )
-
+            if not await check_id_exists(
+                connection, "Observation", observation_id
+            ):
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
+                return error_response(
+                    status.HTTP_404_NOT_FOUND, "Observation not found."
+                )
 
-        return Response(status_code=status.HTTP_200_OK)
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={
-                "code": 401,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
-        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return error_response(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Database temporarily unavailable",
-        )
-    except ValueError as e:
-        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
-    except asyncpg.ForeignKeyViolationError:
-        # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return error_response(
-            status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
-        )
-    except Exception:
-        # conformance: req/request-data/status-code — internal errors are 500, not 400 (no stacktrace)
-        return error_response(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
-        )
+            # req/create-update-delete/update-entity-jsonpatch: resolve an
+            # RFC 6902 array body into a merge dict; dict bodies pass through.
+            payload = await apply_json_patch_to_entity(
+                connection, "Observation", observation_id, payload
+            )
+
+            if not payload:
+                if current_user is not None:
+                    await connection.execute("RESET ROLE;")
+                return Response(status_code=status.HTTP_200_OK)
+
+            validate_payload_keys(payload, ALLOWED_KEYS)
+
+            commit_id = await set_commit(
+                connection,
+                commit_message,
+                current_user,
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
+
+            updated = await update_observation_entity(
+                connection, observation_id, payload
+            )
+
+            if updated:
+                obs_phenomenon_start = updated["phenomenonTimeStart"]
+                obs_phenomenon_end = updated["phenomenonTimeEnd"]
+                obs_result_time = updated["resultTime"]
+                datastream_id = updated["datastream_id"]
+
+                datastream_query = """
+                    SELECT "phenomenonTime", "resultTime"
+                    FROM sensorthings."Datastream"
+                    WHERE id = $1;
+                """
+                datastream_times = await connection.fetchrow(
+                    datastream_query, datastream_id
+                )
+                datastream_phenomenon_time = datastream_times[
+                    "phenomenonTime"
+                ]
+                datastream_result_time = datastream_times["resultTime"]
+                if datastream_phenomenon_time and (
+                    obs_phenomenon_start is not None
+                    and obs_phenomenon_end is not None
+                ):
+                    obs_lower = obs_phenomenon_start
+                    obs_upper = obs_phenomenon_end
+                    datastream_lower = datastream_phenomenon_time.lower
+                    datastream_upper = datastream_phenomenon_time.upper
+                    if (
+                        obs_lower < datastream_lower
+                        or obs_upper > datastream_upper
+                    ):
+                        new_lower_bound = min(
+                            obs_lower,
+                            datastream_lower,
+                        )
+                        new_upper_bound = max(
+                            obs_upper,
+                            datastream_upper,
+                        )
+                        update_datastream_query = """
+                            UPDATE sensorthings."Datastream"
+                            SET "phenomenonTime" = tstzrange($1, $2, '[]')
+                            WHERE id = $3;
+                        """
+                        await connection.execute(
+                            update_datastream_query,
+                            new_lower_bound,
+                            new_upper_bound,
+                            datastream_id,
+                        )
+
+                if datastream_result_time and obs_result_time:
+                    obs_rt = obs_result_time
+                    datastream_rt_lower = datastream_result_time.lower
+                    datastream_rt_upper = datastream_result_time.upper
+                    if (
+                        obs_rt < datastream_rt_lower
+                        or obs_rt > datastream_rt_upper
+                    ):
+                        new_rt_lower_bound = min(
+                            obs_rt,
+                            datastream_rt_lower,
+                        )
+                        new_rt_upper_bound = max(
+                            obs_rt,
+                            datastream_rt_upper,
+                        )
+                        update_datastream_query = """
+                            UPDATE sensorthings."Datastream"
+                            SET "resultTime" = tstzrange($1, $2, '[]')
+                            WHERE id = $3;
+                        """
+                        await connection.execute(
+                            update_datastream_query,
+                            new_rt_lower_bound,
+                            new_rt_upper_bound,
+                            datastream_id,
+                        )
+
+            if payload.get("featuresofinterest_id"):
+                await update_datastream_observedArea(
+                    connection, datastream_id
+                )
+
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+
+    return Response(status_code=status.HTTP_200_OK)
 
 
 # conformance: req/create-update-delete/update-entity-put — phenomenonTime,
@@ -243,7 +214,7 @@ REQUIRED_PUT_KEYS = ["phenomenonTime", "resultTime", "result"]
 OPTIONAL_PUT_KEYS = ["resultQuality", "validTime", "parameters"]
 
 
-async def _post_update_observation(
+async def post_update_observation(
     connection, observation_id, payload, updated
 ):
     """Re-expand the parent Datastream's phenomenonTime/resultTime/observedArea.
@@ -339,5 +310,5 @@ async def replace_observation(
         required_keys=REQUIRED_PUT_KEYS,
         optional_keys=OPTIONAL_PUT_KEYS,
         update_entity_fn=update_observation_entity,
-        post_update=_post_update_observation,
+        post_update=post_update_observation,
     )

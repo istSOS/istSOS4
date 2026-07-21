@@ -17,7 +17,7 @@ import pytest
 
 import sample_data
 from client import entity_id, format_id, id_from_self_link
-from c02.conftest import _create_datastream_tree
+from c02.conftest import create_datastream_tree
 
 pytestmark = pytest.mark.c02
 
@@ -114,7 +114,7 @@ def test_patch_observed_property(client, unique_name, cleanup):
 def test_patch_datastream(client, unique_name, cleanup):
     """req/create-update-delete/update-entity — PATCH Datastream scalar property."""
     tag = unique_name("patch-ds")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     ds_url = tree["ds_url"]
     original_ds = client.nav(ds_url)
 
@@ -132,7 +132,7 @@ def test_patch_datastream(client, unique_name, cleanup):
 def test_patch_observation(client, unique_name, cleanup):
     """req/create-update-delete/update-entity — PATCH Observation scalar property (result)."""
     tag = unique_name("patch-obs")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     ds_id = tree["ds_id"]
 
     obs_payload = sample_data.minimal_observation(tag, ds_id, result=10.0)
@@ -264,7 +264,7 @@ def test_patch_relation_relink_sensor(client, unique_name, cleanup):
     Sensor relation.
     """
     tag = unique_name("relink")
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     ds_url = tree["ds_url"]
     original_sensor_id = tree["sensor_id"]
 
@@ -377,7 +377,7 @@ def test_patch_thing_inline_datastream_returns_400(client, unique_name, cleanup)
 def test_patch_datastream_inline_sensor_returns_400(client, unique_name, cleanup):
     """req/create-update-delete/update-entity — PATCH Datastream with an inline
     Sensor (no @iot.id) → 400, not 500."""
-    tree = _create_datastream_tree(client, unique_name, cleanup)
+    tree = create_datastream_tree(client, unique_name, cleanup)
     resp = client.patch(
         f"Datastreams({format_id(tree['ds_id'])})",
         json={"Sensor": sample_data.minimal_sensor(unique_name("inline-sensor"))},

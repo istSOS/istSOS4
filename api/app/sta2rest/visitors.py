@@ -463,7 +463,7 @@ class NodeVisitor(Visitor):
             )
         return expand_queries
 
-    def _resolve_select_field(self, main_entity, field_name):
+    def resolve_select_field(self, main_entity, field_name):
         """Resolve a single $select field name to a column attribute.
 
         req/request-data/select (18-088 §9.3.3.1, Req 24): "Each selection
@@ -558,13 +558,13 @@ class NodeVisitor(Visitor):
                     field_parts = (
                         field_parts[0].split("/") if field_parts else []
                     )
-                    json_path = self._resolve_select_field(main_entity, field)
+                    json_path = self.resolve_select_field(main_entity, field)
                     for part in field_parts:
                         json_path = json_path.op("->")(part)
                     select_query.append(json_path)
                 else:
                     select_query.append(
-                        self._resolve_select_field(main_entity, field_name)
+                        self.resolve_select_field(main_entity, field_name)
                     )
 
         components = [

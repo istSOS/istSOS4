@@ -128,7 +128,7 @@ class TestQueryStatusCode:
       - $filter=bogus(name) (unknown function)
     """
 
-    def _assert_400_with_error_body(self, resp, case_label: str) -> None:
+    def assert_400_with_error_body(self, resp, case_label: str) -> None:
         """Assert status 400 and structured JSON error body."""
         assert resp.status_code == 400, (
             f"req/request-data/query-status-code: {case_label} must return 400, "
@@ -160,7 +160,7 @@ class TestQueryStatusCode:
         Malformed: $filter=name eq  (missing RHS operand — syntax error)
         """
         resp = client.get("Things", params={"$filter": "name eq"})
-        self._assert_400_with_error_body(resp, "$filter=name eq (syntax error)")
+        self.assert_400_with_error_body(resp, "$filter=name eq (syntax error)")
 
     def test_orderby_unknown_property_returns_400(self, client, seed):
         """req/request-data/query-status-code — $orderby on a nonexistent property
@@ -169,7 +169,7 @@ class TestQueryStatusCode:
         Malformed: $orderby=nosuchprop asc
         """
         resp = client.get("Things", params={"$orderby": "nosuchprop asc"})
-        self._assert_400_with_error_body(
+        self.assert_400_with_error_body(
             resp, "$orderby=nosuchprop asc (unknown property)"
         )
 
@@ -180,7 +180,7 @@ class TestQueryStatusCode:
         Malformed: $top=-5
         """
         resp = client.get("Things", params={"$top": "-5"})
-        self._assert_400_with_error_body(resp, "$top=-5 (negative value)")
+        self.assert_400_with_error_body(resp, "$top=-5 (negative value)")
 
     def test_negative_skip_returns_400(self, client, seed):
         """req/request-data/query-status-code — negative $skip returns 400 with a
@@ -189,7 +189,7 @@ class TestQueryStatusCode:
         Malformed: $skip=-1
         """
         resp = client.get("Things", params={"$skip": "-1"})
-        self._assert_400_with_error_body(resp, "$skip=-1 (negative value)")
+        self.assert_400_with_error_body(resp, "$skip=-1 (negative value)")
 
     def test_filter_unknown_function_returns_400(self, client, seed):
         """req/request-data/query-status-code — $filter with an unknown function
@@ -198,7 +198,7 @@ class TestQueryStatusCode:
         Malformed: $filter=bogus(name)
         """
         resp = client.get("Things", params={"$filter": "bogus(name)"})
-        self._assert_400_with_error_body(
+        self.assert_400_with_error_body(
             resp, "$filter=bogus(name) (unknown function)"
         )
 
