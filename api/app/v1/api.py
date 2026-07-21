@@ -32,6 +32,7 @@ from app.v1.endpoints.create import policy as create_policy
 from app.v1.endpoints.create import sensor as create_sensor
 from app.v1.endpoints.create import thing as create_thing
 from app.v1.endpoints.create import user as create_user
+from app.v1.endpoints.create import activate_user as activate_user
 from app.v1.endpoints.delete import datastream as delete_datastream
 from app.v1.endpoints.delete import (
     feature_of_interest as delete_feature_of_interest,
@@ -168,6 +169,7 @@ if AUTHORIZATION:
     v1.include_router(login.v1)
     v1.include_router(read_user.v1)
     v1.include_router(create_user.v1)
+    v1.include_router(activate_user.v1)   # POST /Users/{id}/activate
     v1.include_router(update_user.v1)
     v1.include_router(delete_user.v1)
     v1.include_router(read_policy.v1)
