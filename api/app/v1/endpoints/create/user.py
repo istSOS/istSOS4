@@ -17,6 +17,7 @@ import logging
 
 from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.db.password_crud import pwd_context
 from app.oauth import get_current_user
 from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
 from app.utils.utils import pg_quote_ident, pg_quote_literal, validate_username
@@ -41,6 +42,14 @@ PAYLOAD_EXAMPLE = {
     "role": "viewer",  # viewer, editor, obs_manager, sensor, custom
 }
 
+# Maps the application-layer role to its sensorthings RLS policy function.
+# Administrator is intentionally absent — admins bypass RLS by privilege.
+_POLICY_FN_MAP = {
+    "viewer":      "sensorthings.viewer_policy",
+    "editor":      "sensorthings.editor_policy",
+    "obs_manager": "sensorthings.obs_manager_policy",
+    "sensor":      "sensorthings.sensor_policy",
+}
 
 @v1.api_route(
     "/Users",
@@ -117,6 +126,18 @@ async def create_user(
                 """
                 user = await connection.fetchrow(query, *payload.values())
 
+                # Store the bcrypt hash of the password in the application-
+                # level User table so that the /password update endpoint and
+                # future login flows can verify credentials without touching
+                # PostgreSQL's pg_authid catalog.
+                if password:
+                    hashed_pw = pwd_context.hash(password)
+                    await connection.execute(
+                        'UPDATE sensorthings."User" SET password = $1 WHERE id = $2',
+                        hashed_pw,
+                        user["id"],
+                    )
+
                 if not payload.get("uri"):
                     query = """
                         UPDATE sensorthings."User"
@@ -141,6 +162,9 @@ async def create_user(
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
 
+                # Capture app_role before get_db_role_for_rbac() to use
+                # for RLS policy dispatch below (fixes Issue #28).
+                app_role = payload["role"]
                 db_role = get_db_role_for_rbac(payload["role"])
 
                 await connection.execute(
@@ -157,6 +181,18 @@ async def create_user(
                         pg_quote_ident(current_user["username"]),
                     )
                 )
+
+                # Auto-create the default RLS policy for the new user.
+                # Policy functions already exist in the DB (istsos_auth.sql).
+                # Administrator role bypasses RLS by privilege, not policy.
+                policy_fn = _POLICY_FN_MAP.get(app_role)
+                if policy_fn:
+                    policyname = f"{user['username']}_default"
+                    await connection.execute(
+                        f"SELECT {policy_fn}($1, $2);",
+                        [user["username"]],
+                        policyname,
+                    )
 
         return Response(status_code=status.HTTP_201_CREATED)
 
