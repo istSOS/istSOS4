@@ -53,7 +53,7 @@ class IstsosClient:
         self.client.close()
 
     # -------- auth ----------
-    def _login(self, refresh: bool = False) -> str:
+    def login(self, refresh: bool = False) -> str:
         if refresh:
             logger.info("Refreshing API token...")
             resp = self.client.post(
@@ -96,27 +96,27 @@ class IstsosClient:
         self._token_expiry = expiry
         return token
 
-    def _get_token(self) -> str:
+    def get_token(self) -> str:
         now = datetime.now(timezone.utc)
         if self._token and self._token_expiry:
             if self._token_expiry - now < timedelta(minutes=5):
-                return self._login(refresh=True)
+                return self.login(refresh=True)
             return self._token
-        return self._login(refresh=False)
+        return self.login(refresh=False)
 
-    def _auth_headers(self) -> Dict[str, str]:
+    def auth_headers(self) -> Dict[str, str]:
         return {
-            "Authorization": f"Bearer {self._get_token()}",
+            "Authorization": f"Bearer {self.get_token()}",
             "Content-Type": "application/json",
         }
 
     # -------- helpers ----------
     @staticmethod
-    def _escape_odata_literal(val: str) -> str:
+    def escape_odata_literal(val: str) -> str:
         return val.replace("'", "''")
 
     # -------- request wrapper (retry + refresh su 401) ----------
-    def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
+    def request(self, method: str, path: str, **kwargs) -> httpx.Response:
         # Se arrivano URL completi (es. @iot.nextLink), usali.
         if path.startswith("http://") or path.startswith("https://"):
             url = path
@@ -128,7 +128,7 @@ class IstsosClient:
             )
 
         headers = kwargs.pop("headers", {})
-        merged = {**self._auth_headers(), **headers}
+        merged = {**self.auth_headers(), **headers}
 
         last_exc: Optional[Exception] = None
 
@@ -148,8 +148,8 @@ class IstsosClient:
                     logger.warning(
                         "401 received, refreshing token and retrying once..."
                     )
-                    self._login(refresh=False)
-                    merged = {**self._auth_headers(), **headers}
+                    self.login(refresh=False)
+                    merged = {**self.auth_headers(), **headers}
                     resp = self.client.request(
                         method, url, headers=merged, **kwargs
                     )
@@ -227,10 +227,10 @@ class IstsosClient:
         if str(name_or_id).isdigit():
             params = {"$filter": f"id eq '{name_or_id}'"}
         else:
-            safe = self._escape_odata_literal(name_or_id)
+            safe = self.escape_odata_literal(name_or_id)
             params = {"$filter": f"name eq '{safe}'"}
 
-        resp = self._request("GET", "/Datastreams", params=params)
+        resp = self.request("GET", "/Datastreams", params=params)
         vals = resp.json().get("value", [])
         if not vals:
             logger.error("Datastream not found: %s", name_or_id)
@@ -241,13 +241,13 @@ class IstsosClient:
         if str(name_or_id).isdigit():
             return int(name_or_id)
 
-        safe = self._escape_odata_literal(name_or_id)
+        safe = self.escape_odata_literal(name_or_id)
         params = {
             "$filter": f"name eq '{safe}'",
             "$select": "@iot.id",
             "$top": 1,
         }
-        resp = self._request("GET", "/Datastreams", params=params)
+        resp = self.request("GET", "/Datastreams", params=params)
         vals = resp.json().get("value", [])
         if not vals:
             logger.error("Datastream not found by name: %s", name_or_id)
@@ -260,13 +260,13 @@ class IstsosClient:
         self, obs: dict[str, Any], ds_name: str
     ) -> httpx.Response:
         pheno_time = obs.get("phenomenonTime")
-        safe = self._escape_odata_literal(ds_name)
+        safe = self.escape_odata_literal(ds_name)
         params = {
             "$filter": f"phenomenonTime eq '{pheno_time}' and Datastream/name eq '{safe}'",
             "$select": "@iot.id",
             "$top": 1,
         }
-        return self._request("GET", "/Observations", params=params)
+        return self.request("GET", "/Observations", params=params)
 
     def insert_observation(
         self,
@@ -282,11 +282,11 @@ class IstsosClient:
             )
         if commit_message:
             headers = {"commit-message": commit_message}
-            return self._request(
+            return self.request(
                 "POST", "/Observations", json=obs, headers=headers
             )
         else:
-            return self._request("POST", "/Observations", json=obs)
+            return self.request("POST", "/Observations", json=obs)
 
     def bulk_observations(
         self, ds_id: str, obs: list[list[Any]]
@@ -307,11 +307,11 @@ class IstsosClient:
                 "dataArray": obs,
             }
         ]
-        return self._request("POST", "/BulkObservations", json=payload)
+        return self.request("POST", "/BulkObservations", json=payload)
 
     def get_datastreams(self, filter: str | None = None) -> list[dict]:
         params = {"$select": "@iot.id,name,properties"}
-        resp = self._request(
+        resp = self.request(
             "GET",
             f"/Datastreams?$filter={filter}" if filter else "/Datastreams",
             params=params,
@@ -320,7 +320,7 @@ class IstsosClient:
         v = data.get("value", [])
         while "@iot.nextLink" in data:
             logger.info("get_datastreams: paginated, fetching next page...")
-            resp = self._request("GET", data["@iot.nextLink"])
+            resp = self.request("GET", data["@iot.nextLink"])
             data = resp.json()
             v.extend(data.get("value", []))
         return v
@@ -333,12 +333,12 @@ class IstsosClient:
             if filter
             else f"/Datastreams({datastream_id})/Observations"
         )
-        resp = self._request("GET", path)
+        resp = self.request("GET", path)
         data = resp.json()
         v = data.get("value", [])
         while "@iot.nextLink" in data:
             logger.info("get_observations: paginated, fetching next page...")
-            resp = self._request("GET", data["@iot.nextLink"])
+            resp = self.request("GET", data["@iot.nextLink"])
             data = resp.json()
             v.extend(data.get("value", []))
         return v
@@ -346,8 +346,8 @@ class IstsosClient:
     def patch_observation(
         self, observation_id: str, obs_patch: dict[str, Any]
     ) -> httpx.Response:
-        merged = {**self._auth_headers(), "commit-message": "QC update"}
-        return self._request(
+        merged = {**self.auth_headers(), "commit-message": "QC update"}
+        return self.request(
             "PATCH",
             f"/Observations({observation_id})",
             json=obs_patch,
@@ -399,7 +399,7 @@ class IstsosAsyncClient:
         await self.client.aclose()
 
     # -------- auth ----------
-    async def _login(self, refresh: bool = False) -> str:
+    async def login(self, refresh: bool = False) -> str:
         if refresh:
             logger.info("Refreshing API token...")
             resp = await self.client.post(
@@ -440,29 +440,29 @@ class IstsosAsyncClient:
         self._token_expiry = expiry
         return token
 
-    async def _get_token(self) -> str:
+    async def get_token(self) -> str:
         # Evita 20 login paralleli sotto carico
         async with self._auth_lock:
             now = datetime.now(timezone.utc)
             if self._token and self._token_expiry:
                 if self._token_expiry - now < timedelta(minutes=5):
-                    return await self._login(refresh=True)
+                    return await self.login(refresh=True)
                 return self._token
-            return await self._login(refresh=False)
+            return await self.login(refresh=False)
 
-    async def _auth_headers(self) -> Dict[str, str]:
+    async def auth_headers(self) -> Dict[str, str]:
         return {
-            "Authorization": f"Bearer {await self._get_token()}",
+            "Authorization": f"Bearer {await self.get_token()}",
             "Content-Type": "application/json",
         }
 
     # -------- helpers ----------
     @staticmethod
-    def _escape_odata_literal(val: str) -> str:
+    def escape_odata_literal(val: str) -> str:
         return val.replace("'", "''")
 
     # -------- request wrapper ----------
-    async def _request(
+    async def request(
         self, method: str, path: str, **kwargs
     ) -> httpx.Response:
         # supporta URL assoluti (nextLink)
@@ -476,7 +476,7 @@ class IstsosAsyncClient:
             )
 
         headers = kwargs.pop("headers", {})
-        merged = {**(await self._auth_headers()), **headers}
+        merged = {**(await self.auth_headers()), **headers}
 
         for attempt in range(self._max_retries + 1):
             try:
@@ -498,7 +498,7 @@ class IstsosAsyncClient:
                         # forza nuovo login
                         self._token = None
                         self._token_expiry = None
-                    merged = {**(await self._auth_headers()), **headers}
+                    merged = {**(await self.auth_headers()), **headers}
                     resp = await self.client.request(
                         method, url, headers=merged, **kwargs
                     )
@@ -571,10 +571,10 @@ class IstsosAsyncClient:
         if str(name_or_id).isdigit():
             params = {"$filter": f"id eq '{name_or_id}'"}
         else:
-            safe = self._escape_odata_literal(name_or_id)
+            safe = self.escape_odata_literal(name_or_id)
             params = {"$filter": f"name eq '{safe}'"}
 
-        resp = await self._request("GET", "/Datastreams", params=params)
+        resp = await self.request("GET", "/Datastreams", params=params)
         vals = resp.json().get("value", [])
         if not vals:
             logger.error("Datastream not found: %s", name_or_id)
@@ -585,13 +585,13 @@ class IstsosAsyncClient:
         if str(name_or_id).isdigit():
             return int(name_or_id)
 
-        safe = self._escape_odata_literal(name_or_id)
+        safe = self.escape_odata_literal(name_or_id)
         params = {
             "$filter": f"name eq '{safe}'",
             "$select": "@iot.id",
             "$top": 1,
         }
-        resp = await self._request("GET", "/Datastreams", params=params)
+        resp = await self.request("GET", "/Datastreams", params=params)
         vals = resp.json().get("value", [])
         if not vals:
             logger.error("Datastream not found by name: %s", name_or_id)
@@ -604,13 +604,13 @@ class IstsosAsyncClient:
         self, obs: Dict[str, Any], ds_name: str
     ) -> httpx.Response:
         pheno_time = obs.get("phenomenonTime")
-        safe = self._escape_odata_literal(ds_name)
+        safe = self.escape_odata_literal(ds_name)
         params = {
             "$filter": f"phenomenonTime eq '{pheno_time}' and Datastream/name eq '{safe}'",
             "$select": "@iot.id",
             "$top": 1,
         }
-        return await self._request("GET", "/Observations", params=params)
+        return await self.request("GET", "/Observations", params=params)
 
     async def insert_observation(
         self,
@@ -626,11 +626,11 @@ class IstsosAsyncClient:
             )
         if commit_message:
             headers = {"commit-message": commit_message}
-            return await self._request(
+            return await self.request(
                 "POST", "/Observations", json=obs, headers=headers
             )
         else:
-            return await self._request("POST", "/Observations", json=obs)
+            return await self.request("POST", "/Observations", json=obs)
 
     async def bulk_observations(
         self, ds_id: str, obs: List[List[Any]]
@@ -651,11 +651,11 @@ class IstsosAsyncClient:
                 "dataArray": obs,
             }
         ]
-        return await self._request("POST", "/BulkObservations", json=payload)
+        return await self.request("POST", "/BulkObservations", json=payload)
 
     async def get_datastreams(self, filter: str | None = None) -> list[dict]:
         params = {"$select": "@iot.id,name,properties"}
-        resp = await self._request(
+        resp = await self.request(
             "GET",
             f"/Datastreams?$filter={filter}" if filter else "/Datastreams",
             params=params,
@@ -664,7 +664,7 @@ class IstsosAsyncClient:
         v = data.get("value", [])
         while "@iot.nextLink" in data:
             logger.info("get_datastreams: paginated, fetching next page...")
-            resp = await self._request("GET", data["@iot.nextLink"])
+            resp = await self.request("GET", data["@iot.nextLink"])
             data = resp.json()
             v.extend(data.get("value", []))
         return v
@@ -677,12 +677,12 @@ class IstsosAsyncClient:
             if filter
             else f"/Datastreams({datastream_id})/Observations"
         )
-        resp = await self._request("GET", path)
+        resp = await self.request("GET", path)
         data = resp.json()
         v = data.get("value", [])
         while "@iot.nextLink" in data:
             logger.info("get_observations: paginated, fetching next page...")
-            resp = await self._request("GET", data["@iot.nextLink"])
+            resp = await self.request("GET", data["@iot.nextLink"])
             data = resp.json()
             v.extend(data.get("value", []))
         return v
@@ -691,10 +691,10 @@ class IstsosAsyncClient:
         self, observation_id: str, obs_patch: Dict[str, Any]
     ) -> httpx.Response:
         merged = {
-            **(await self._auth_headers()),
+            **(await self.auth_headers()),
             "commit-message": "QC update",
         }
-        return await self._request(
+        return await self.request(
             "PATCH",
             f"/Observations({observation_id})",
             json=obs_patch,
