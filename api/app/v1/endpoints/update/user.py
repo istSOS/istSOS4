@@ -17,8 +17,8 @@ import json
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
-from app.utils.utils import pg_quote_ident, validate_payload_keys
+from app.rbac_roles import validate_rbac_role
+from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Body, Depends, Query, status
@@ -85,8 +85,6 @@ async def update_user(
                     )
 
                 if not payload:
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
                     return Response(status_code=status.HTTP_200_OK)
 
                 validate_payload_keys(payload, ALLOWED_KEYS)
@@ -113,26 +111,10 @@ async def update_user(
                 """
                 await connection.execute(query, user, *payload.values())
 
-                if "role" in payload and payload["role"] != previous_role:
-                    previous_db_role = get_db_role_for_rbac(previous_role)
-                    new_db_role = get_db_role_for_rbac(payload["role"])
+                # Role is updated in the UPDATE above; no PostgreSQL DDL
+                # (REVOKE/GRANT) is needed — users are application-layer
+                # entities with no individual PG login roles.
 
-                    if previous_db_role != new_db_role:
-                        await connection.execute(
-                            "REVOKE {} FROM {};".format(
-                                pg_quote_ident(previous_db_role),
-                                pg_quote_ident(user),
-                            )
-                        )
-                        await connection.execute(
-                            "GRANT {} TO {};".format(
-                                pg_quote_ident(new_db_role),
-                                pg_quote_ident(user),
-                            )
-                        )
-
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
 

@@ -29,6 +29,7 @@ from app import (
 )
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
+from app.rbac_roles import PENDING_ROLE
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
@@ -172,6 +173,13 @@ def decode_token(token: str):
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
+    """Decode the Bearer JWT and return the authenticated user dict.
+
+    Raises:
+        401 – token missing / invalid / revoked.
+        403 – user exists but is in the 'pending' waiting room; they must be
+              activated by an administrator before accessing any resource.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -189,7 +197,22 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         username: str = payload.get("sub")
     except InvalidTokenError:
         raise credentials_exception
+
+    # NOTE: role is intentionally fetched live from the DB on every request.
+    # This ensures role changes (via PATCH /Users/{id}/role) take effect
+    # immediately without requiring JWT rotation, eliminating stale JWT
+    # vulnerabilities.
     user = await get_user_from_db(username)
     if user is None:
         raise credentials_exception
+
+    # Pending users have authenticated successfully (their JWT is valid) but
+    # they have NO database role and are awaiting admin activation.  Block
+    # them here so they never reach any business-logic handler.
+    if user["role"] == PENDING_ROLE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account pending admin activation",
+        )
+
     return user

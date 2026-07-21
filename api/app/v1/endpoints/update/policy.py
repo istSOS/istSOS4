@@ -122,7 +122,6 @@ async def update_policy(
                         await connection.execute(policy_sql)
                 finally:
                     if role_switched:
-                        await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
 

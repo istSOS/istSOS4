@@ -159,7 +159,6 @@ async def create_policy(
                         )
                 finally:
                     if role_switched:
-                        await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_201_CREATED)
 
