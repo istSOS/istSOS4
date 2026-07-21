@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
-
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.utils.policy_expression import render_policy_expression
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import DuplicateObjectError, InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, status
@@ -24,7 +23,6 @@ from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
 
-_UNSAFE_POLICY_TOKENS_RE = re.compile(r";|--|/\*|\*/|\x00")
 _VALID_OPERATION_KEYS = {"select", "insert", "update", "delete"}
 
 PAYLOAD_EXAMPLE = {
@@ -185,16 +183,6 @@ async def create_policies(connection, users, policies, name):
             raise ValueError("Invalid SQL identifier")
         return '"' + value.replace('"', '""') + '"'
 
-    def validate_policy_expression(value: str) -> str:
-        if not isinstance(value, str):
-            raise ValueError("Policy condition must be a string")
-        expression = value.strip()
-        if expression == "":
-            raise ValueError("Policy condition must not be empty")
-        if _UNSAFE_POLICY_TOKENS_RE.search(expression):
-            raise ValueError("Unsafe policy condition")
-        return expression
-
     table_mapping = {
         "location": "Location",
         "thing": "Thing",
@@ -232,7 +220,7 @@ async def create_policies(connection, users, policies, name):
             safe_name = quote_identifier(
                 f"{name}_{table.lower()}_{operation_lc}"
             )
-            safe_condition = validate_policy_expression(condition)
+            safe_condition = render_policy_expression(condition)
 
             if operation_lc in {"select", "delete"}:
                 query = f"""
