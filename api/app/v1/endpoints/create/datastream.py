@@ -12,17 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncpg
 from app import AUTHORIZATION, NETWORK, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import require_json_content_type, validate_payload_keys
-from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from .functions import insert_datastream_entity, set_commit
+from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 
@@ -90,68 +88,31 @@ async def create_datastream(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        require_json_content_type(request)
+    require_json_content_type(request)
 
-        validate_payload_keys(payload, ALLOWED_KEYS)
+    validate_payload_keys(payload, ALLOWED_KEYS)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                commit_id = await set_commit(
-                    connection, commit_message, current_user
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
 
-                _, header = await insert_datastream_entity(
-                    connection, payload, commit_id=commit_id
-                )
+            _, header = await insert_datastream_entity(
+                connection, payload, commit_id=commit_id
+            )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
-        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return error_response(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Database temporarily unavailable",
-        )
-    except ValueError as e:
-        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
-    except asyncpg.ForeignKeyViolationError:
-        # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return error_response(
-            status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
-        )
-    except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
-        # conformance: req/create-update-delete/create-entity — a payload that
-        # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
-        # related entity missing a required column) is a client error (400), not
-        # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
-        return error_response(
-            status.HTTP_400_BAD_REQUEST,
-            "Invalid entity: a required value is missing or not allowed.",
-        )
-    except Exception:
-        # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
-        return error_response(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
-        )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )
 
 
 PAYLOAD_EXAMPLE_THING = {
@@ -184,73 +145,36 @@ async def create_datastream_for_thing(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        require_json_content_type(request)
+    require_json_content_type(request)
 
-        if not thing_id:
-            raise Exception("Thing ID is required.")
+    if not thing_id:
+        raise BadRequest("Thing ID is required.")
 
-        payload["Thing"] = {"@iot.id": thing_id}
+    payload["Thing"] = {"@iot.id": thing_id}
 
-        validate_payload_keys(payload, ALLOWED_KEYS)
+    validate_payload_keys(payload, ALLOWED_KEYS)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                commit_id = await set_commit(
-                    connection, commit_message, current_user
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
 
-                _, header = await insert_datastream_entity(
-                    connection, payload, thing_id=thing_id, commit_id=commit_id
-                )
+            _, header = await insert_datastream_entity(
+                connection, payload, thing_id=thing_id, commit_id=commit_id
+            )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
-        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return error_response(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Database temporarily unavailable",
-        )
-    except ValueError as e:
-        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
-    except asyncpg.ForeignKeyViolationError:
-        # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return error_response(
-            status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
-        )
-    except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
-        # conformance: req/create-update-delete/create-entity — a payload that
-        # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
-        # related entity missing a required column) is a client error (400), not
-        # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
-        return error_response(
-            status.HTTP_400_BAD_REQUEST,
-            "Invalid entity: a required value is missing or not allowed.",
-        )
-    except Exception:
-        # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
-        return error_response(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
-        )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )
 
 
 PAYLOAD_EXAMPLE_SENSOR = {
@@ -283,76 +207,39 @@ async def create_datastream_for_sensor(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        require_json_content_type(request)
+    require_json_content_type(request)
 
-        if not sensor_id:
-            raise Exception("Sensor ID is required.")
+    if not sensor_id:
+        raise BadRequest("Sensor ID is required.")
 
-        payload["Sensor"] = {"@iot.id": sensor_id}
+    payload["Sensor"] = {"@iot.id": sensor_id}
 
-        validate_payload_keys(payload, ALLOWED_KEYS)
+    validate_payload_keys(payload, ALLOWED_KEYS)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                commit_id = await set_commit(
-                    connection, commit_message, current_user
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
 
-                _, header = await insert_datastream_entity(
-                    connection,
-                    payload,
-                    sensor_id=sensor_id,
-                    commit_id=commit_id,
-                )
+            _, header = await insert_datastream_entity(
+                connection,
+                payload,
+                sensor_id=sensor_id,
+                commit_id=commit_id,
+            )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
-        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return error_response(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Database temporarily unavailable",
-        )
-    except ValueError as e:
-        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
-    except asyncpg.ForeignKeyViolationError:
-        # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return error_response(
-            status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
-        )
-    except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
-        # conformance: req/create-update-delete/create-entity — a payload that
-        # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
-        # related entity missing a required column) is a client error (400), not
-        # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
-        return error_response(
-            status.HTTP_400_BAD_REQUEST,
-            "Invalid entity: a required value is missing or not allowed.",
-        )
-    except Exception:
-        # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
-        return error_response(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
-        )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )
 
 
 # conformance: NETWORK extension — POST /Networks(id)/Datastreams creates a
@@ -395,83 +282,42 @@ if NETWORK:
         current_user=user,
         pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
     ):
-        try:
-            require_json_content_type(request)
+        require_json_content_type(request)
 
-            if not network_id:
-                raise ValueError("Network ID is required.")
+        if not network_id:
+            raise ValueError("Network ID is required.")
 
-            # The path id is the Network association; the redundant relation
-            # object is dropped inside handle_associations (network_id branch),
-            # so create_entity never sees a non-existent "Network" column.
-            payload["Network"] = {"@iot.id": network_id}
+        # The path id is the Network association; the redundant relation
+        # object is dropped inside handle_associations (network_id branch),
+        # so create_entity never sees a non-existent "Network" column.
+        payload["Network"] = {"@iot.id": network_id}
 
-            validate_payload_keys(payload, ALLOWED_KEYS)
+        validate_payload_keys(payload, ALLOWED_KEYS)
 
-            async with pool.acquire() as connection:
-                async with connection.transaction():
-                    if current_user is not None:
-                        await set_role(connection, current_user)
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                if current_user is not None:
+                    await set_role(connection, current_user)
 
-                    commit_id = await set_commit(
-                        connection, commit_message, current_user
-                    )
-                    if commit_id is not None:
-                        payload["commit_id"] = commit_id
+                commit_id = await set_commit(
+                    connection, commit_message, current_user
+                )
+                if commit_id is not None:
+                    payload["commit_id"] = commit_id
 
-                    _, header = await insert_datastream_entity(
-                        connection,
-                        payload,
-                        network_id=network_id,
-                        commit_id=commit_id,
-                    )
+                _, header = await insert_datastream_entity(
+                    connection,
+                    payload,
+                    network_id=network_id,
+                    commit_id=commit_id,
+                )
 
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
-            return Response(
-                status_code=status.HTTP_201_CREATED,
-                headers={"location": header},
-            )
-        except InsufficientPrivilegeError:
-            return JSONResponse(
-                status_code=status.HTTP_403_FORBIDDEN,
-                content={
-                    "code": 403,
-                    "type": "error",
-                    "message": "Insufficient privileges.",
-                },
-            )
-        except (
-            asyncpg.PostgresConnectionError,
-            asyncpg.TooManyConnectionsError,
-        ):
-            # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-            return error_response(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "Database temporarily unavailable",
-            )
-        except ValueError as e:
-            return error_response(status.HTTP_400_BAD_REQUEST, str(e))
-        except asyncpg.ForeignKeyViolationError:
-            # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-            return error_response(
-                status.HTTP_400_BAD_REQUEST,
-                "Referenced entity does not exist.",
-            )
-        except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
-            # conformance: req/create-update-delete/create-entity — a payload that
-            # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
-            # related entity missing a required column) is a client error (400), not
-            # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
-            return error_response(
-                status.HTTP_400_BAD_REQUEST,
-                "Invalid entity: a required value is missing or not allowed.",
-            )
-        except Exception:
-            # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
-            return error_response(
-                status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
-            )
+                if current_user is not None:
+                    await connection.execute("RESET ROLE;")
+        return Response(
+            status_code=status.HTTP_201_CREATED,
+            headers={"location": header},
+        )
 
 
 PAYLOAD_EXAMPLE_OBSERVED_PROPERTY = {
@@ -504,73 +350,36 @@ async def create_datastream_for_observed_property(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        require_json_content_type(request)
+    require_json_content_type(request)
 
-        if not observed_property_id:
-            raise Exception("Observed Property ID is required.")
+    if not observed_property_id:
+        raise BadRequest("Observed Property ID is required.")
 
-        payload["ObservedProperty"] = {"@iot.id": observed_property_id}
+    payload["ObservedProperty"] = {"@iot.id": observed_property_id}
 
-        validate_payload_keys(payload, ALLOWED_KEYS)
+    validate_payload_keys(payload, ALLOWED_KEYS)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                commit_id = await set_commit(
-                    connection, commit_message, current_user
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
 
-                _, header = await insert_datastream_entity(
-                    connection,
-                    payload,
-                    observed_property_id=observed_property_id,
-                    commit_id=commit_id,
-                )
+            _, header = await insert_datastream_entity(
+                connection,
+                payload,
+                observed_property_id=observed_property_id,
+                commit_id=commit_id,
+            )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except (asyncpg.PostgresConnectionError, asyncpg.TooManyConnectionsError):
-        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
-        return error_response(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Database temporarily unavailable",
-        )
-    except ValueError as e:
-        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
-    except asyncpg.ForeignKeyViolationError:
-        # conformance: bad @iot.id reference is a client error (400); controlled msg, no raw PG text
-        return error_response(
-            status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
-        )
-    except (asyncpg.IntegrityConstraintViolationError, asyncpg.DataError):
-        # conformance: req/create-update-delete/create-entity — a payload that
-        # violates a NOT NULL / CHECK / data constraint (e.g. a deep-inserted
-        # related entity missing a required column) is a client error (400), not
-        # a 500. UniqueViolation (409) and ForeignKey (400) are handled above.
-        return error_response(
-            status.HTTP_400_BAD_REQUEST,
-            "Invalid entity: a required value is missing or not allowed.",
-        )
-    except Exception:
-        # conformance: req/request-data/status-code - internal errors are 500, not 400 (no stacktrace)
-        return error_response(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error"
-        )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )

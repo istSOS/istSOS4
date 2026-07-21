@@ -53,7 +53,7 @@ pytestmark = pytest.mark.c02
 _JSON_PATCH_CT = "application/json-patch+json"
 
 
-def _json_patch(client, url: str, ops: list):
+def json_patch(client, url: str, ops: list):
     """Send a JSON-Patch PATCH request; return the raw httpx.Response."""
     return client.patch(
         url,
@@ -66,7 +66,7 @@ def _json_patch(client, url: str, ops: list):
 # Shared setup helpers
 # ---------------------------------------------------------------------------
 
-def _create_thing_with_props(client, unique_name, cleanup):
+def create_thing_with_props(client, unique_name, cleanup):
     """Create a fresh Thing with an empty properties bag.  Return (url, id)."""
     tag = unique_name("jp-thing")
     resp = client.create(
@@ -86,7 +86,7 @@ def _create_thing_with_props(client, unique_name, cleanup):
     return url, t_id
 
 
-def _create_datastream_tree(client, unique_name, cleanup):
+def create_datastream_tree(client, unique_name, cleanup):
     """Create Thing+Sensor+ObservedProperty+Datastream.
     Return (thing_url, ds_url, ds_id)."""
     tag = unique_name("jp-ds")
@@ -172,10 +172,10 @@ def test_jsonpatch_thing_add(client, unique_name, cleanup):
     FAILS against istSOS4 [B9] — advertised but not implemented (422).
     Route to api-fixer.
     """
-    url, _ = _create_thing_with_props(client, unique_name, cleanup)
+    url, _ = create_thing_with_props(client, unique_name, cleanup)
 
     ops = [{"op": "add", "path": "/properties", "value": {"key1": 1}}]
-    resp = _json_patch(client, url, ops)
+    resp = json_patch(client, url, ops)
 
     assert resp.status_code in (200, 204), (
         f"SPEC VIOLATION (req/create-update-delete/update-entity-jsonpatch): "
@@ -203,7 +203,7 @@ def test_jsonpatch_thing_copy_then_move(client, unique_name, cleanup):
     FAILS against istSOS4 [B9] — advertised but not implemented (422).
     Route to api-fixer.
     """
-    url, _ = _create_thing_with_props(client, unique_name, cleanup)
+    url, _ = create_thing_with_props(client, unique_name, cleanup)
 
     # Pre-condition: set properties.key1=1 via regular merge-patch PATCH
     # (content-type application/json — works today) so the JSON-Patch ops have
@@ -218,7 +218,7 @@ def test_jsonpatch_thing_copy_then_move(client, unique_name, cleanup):
         {"op": "copy", "from": "/properties/key1", "path": "/properties/keyCopy1"},
         {"op": "move", "from": "/properties/key1", "path": "/properties/key2"},
     ]
-    resp = _json_patch(client, url, ops)
+    resp = json_patch(client, url, ops)
 
     assert resp.status_code in (200, 204), (
         f"SPEC VIOLATION (req/create-update-delete/update-entity-jsonpatch): "
@@ -258,11 +258,11 @@ def test_jsonpatch_thing_replace_same_value(client, unique_name, cleanup):
     FAILS against istSOS4 [B9] — advertised but not implemented (422).
     Route to api-fixer.
     """
-    url, _ = _create_thing_with_props(client, unique_name, cleanup)
+    url, _ = create_thing_with_props(client, unique_name, cleanup)
 
     # Step 1: add whole /properties
     ops1 = [{"op": "add", "path": "/properties", "value": {"key1": 2}}]
-    r1 = _json_patch(client, url, ops1)
+    r1 = json_patch(client, url, ops1)
     assert r1.status_code in (200, 204), (
         f"SPEC VIOLATION (req/create-update-delete/update-entity-jsonpatch): "
         f"JSON-Patch 'add' /properties must return 200/204; "
@@ -276,7 +276,7 @@ def test_jsonpatch_thing_replace_same_value(client, unique_name, cleanup):
 
     # Step 2: replace with same value ("no-op")
     ops2 = [{"op": "replace", "path": "/properties/key1", "value": 2}]
-    r2 = _json_patch(client, url, ops2)
+    r2 = json_patch(client, url, ops2)
     assert r2.status_code in (200, 204), (
         f"SPEC VIOLATION (req/create-update-delete/update-entity-jsonpatch): "
         f"JSON-Patch 'replace' /properties/key1=2 must return 200/204; "
@@ -308,10 +308,10 @@ def test_jsonpatch_datastream_add(client, unique_name, cleanup):
     FAILS against istSOS4 [B9] — advertised but not implemented (422).
     Route to api-fixer.
     """
-    _, ds_url, _ = _create_datastream_tree(client, unique_name, cleanup)
+    _, ds_url, _ = create_datastream_tree(client, unique_name, cleanup)
 
     ops = [{"op": "add", "path": "/properties", "value": {"key1": 1}}]
-    resp = _json_patch(client, ds_url, ops)
+    resp = json_patch(client, ds_url, ops)
 
     assert resp.status_code in (200, 204), (
         f"SPEC VIOLATION (req/create-update-delete/update-entity-jsonpatch): "
@@ -340,7 +340,7 @@ def test_jsonpatch_datastream_copy_then_move(client, unique_name, cleanup):
     FAILS against istSOS4 [B9] — advertised but not implemented (422).
     Route to api-fixer.
     """
-    _, ds_url, _ = _create_datastream_tree(client, unique_name, cleanup)
+    _, ds_url, _ = create_datastream_tree(client, unique_name, cleanup)
 
     # Pre-condition: set properties.key1=1 via regular merge-patch
     pre = client.patch(ds_url, json={"properties": {"key1": 1}})
@@ -352,7 +352,7 @@ def test_jsonpatch_datastream_copy_then_move(client, unique_name, cleanup):
         {"op": "copy", "from": "/properties/key1", "path": "/properties/keyCopy1"},
         {"op": "move", "from": "/properties/key1", "path": "/properties/key2"},
     ]
-    resp = _json_patch(client, ds_url, ops)
+    resp = json_patch(client, ds_url, ops)
 
     assert resp.status_code in (200, 204), (
         f"SPEC VIOLATION (req/create-update-delete/update-entity-jsonpatch): "
@@ -395,7 +395,7 @@ def test_jsonpatch_thing_remove(client, unique_name, cleanup):
     FAILS against istSOS4 [B9] — advertised but not implemented (422).
     Route to api-fixer.
     """
-    url, _ = _create_thing_with_props(client, unique_name, cleanup)
+    url, _ = create_thing_with_props(client, unique_name, cleanup)
 
     # Pre-condition
     pre = client.patch(url, json={"properties": {"key0": "zero", "key1": 1}})
@@ -404,7 +404,7 @@ def test_jsonpatch_thing_remove(client, unique_name, cleanup):
     )
 
     ops = [{"op": "remove", "path": "/properties/key0"}]
-    resp = _json_patch(client, url, ops)
+    resp = json_patch(client, url, ops)
 
     assert resp.status_code in (200, 204), (
         f"SPEC VIOLATION (req/create-update-delete/update-entity-jsonpatch): "
@@ -450,7 +450,7 @@ def test_jsonpatch_thing_test_op(client, unique_name, cleanup):
     FAILS against istSOS4 [B9] — advertised but not implemented (422).
     Route to api-fixer.
     """
-    url, _ = _create_thing_with_props(client, unique_name, cleanup)
+    url, _ = create_thing_with_props(client, unique_name, cleanup)
 
     # Pre-condition: set a known value
     pre = client.patch(url, json={"properties": {"key1": 42}})
@@ -460,7 +460,7 @@ def test_jsonpatch_thing_test_op(client, unique_name, cleanup):
 
     # 'test' op: value matches → patch succeeds, entity unchanged
     ops = [{"op": "test", "path": "/properties/key1", "value": 42}]
-    resp = _json_patch(client, url, ops)
+    resp = json_patch(client, url, ops)
 
     assert resp.status_code in (200, 204), (
         f"SPEC VIOLATION (req/create-update-delete/update-entity-jsonpatch): "

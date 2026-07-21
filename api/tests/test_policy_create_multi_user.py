@@ -17,7 +17,7 @@ os.environ.setdefault("SECRET_KEY", "test_secret_key")
 import app.v1.endpoints.create.policy as create_policy_endpoint  # noqa: E402
 
 
-def _run_create_policies(users):
+def run_create_policies(users):
     """Execute create_policies and return emitted SQL statements."""
     connection = AsyncMock()
     connection.execute = AsyncMock()
@@ -38,7 +38,7 @@ def _run_create_policies(users):
 
 def test_create_policies_multi_user_targets_are_separate_roles():
     """Multiple users must be rendered as separate quoted role identifiers."""
-    statements = _run_create_policies(["alice", "bob"])
+    statements = run_create_policies(["alice", "bob"])
 
     assert len(statements) == 1
     sql = statements[0]
@@ -48,7 +48,7 @@ def test_create_policies_multi_user_targets_are_separate_roles():
 
 def test_create_policies_single_user_target_still_valid():
     """Single-user policy generation should remain unchanged and valid."""
-    statements = _run_create_policies(["alice"])
+    statements = run_create_policies(["alice"])
 
     assert len(statements) == 1
     sql = statements[0]

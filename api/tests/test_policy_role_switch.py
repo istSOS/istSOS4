@@ -18,31 +18,31 @@ import app.v1.endpoints.create.policy as create_policy_endpoint  # noqa: E402
 import app.v1.endpoints.update.policy as update_policy_endpoint  # noqa: E402
 
 
-def _mock_pgpool(connection):
+def mock_pgpool(connection):
     @asynccontextmanager
-    async def _acquire():
+    async def acquire_cm():
         yield connection
 
     class _Pool:
         def acquire(self):
-            return _acquire()
+            return acquire_cm()
 
     return _Pool()
 
 
-def _attach_transaction_cm(connection):
+def attach_transaction_cm(connection):
     @asynccontextmanager
-    async def _tx():
+    async def tx():
         yield
 
-    connection.transaction = _tx
+    connection.transaction = tx
 
 
 def test_create_policy_sets_and_resets_role_for_admin():
     connection = AsyncMock()
     connection.execute = AsyncMock()
     connection.fetchval = AsyncMock(side_effect=[0, "viewer"])
-    _attach_transaction_cm(connection)
+    attach_transaction_cm(connection)
 
     payload = {
         "users": ["alice"],
@@ -55,7 +55,7 @@ def test_create_policy_sets_and_resets_role_for_admin():
         create_policy_endpoint.create_policy(
             payload=payload,
             current_user=current_user,
-            pgpool=_mock_pgpool(connection),
+            pgpool=mock_pgpool(connection),
         )
     )
 
@@ -71,7 +71,7 @@ def test_update_policy_sets_and_resets_role_for_admin():
     connection.fetchrow = AsyncMock(
         return_value={"tablename": "Datastream", "cmd": "SELECT"}
     )
-    _attach_transaction_cm(connection)
+    attach_transaction_cm(connection)
 
     payload = {"policy": "true"}
     current_user = {"username": "admin_user", "role": "administrator"}
@@ -81,7 +81,7 @@ def test_update_policy_sets_and_resets_role_for_admin():
             policy="p1",
             payload=payload,
             current_user=current_user,
-            pgpool=_mock_pgpool(connection),
+            pgpool=mock_pgpool(connection),
         )
     )
 

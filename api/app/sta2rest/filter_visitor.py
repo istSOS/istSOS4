@@ -555,7 +555,7 @@ class FilterVisitor(visitor.NodeVisitor):
     # String Functions
     ####################################################################################
 
-    def _substr_function(
+    def substr_function(
         self, field: ast._Node, substr: ast._Node, func: str
     ) -> ClauseElement:
         identifier = self.visit(field)
@@ -580,7 +580,7 @@ class FilterVisitor(visitor.NodeVisitor):
         # .contains() machinery used by startswith/endswith. The previous code
         # swapped the operands (built "needle LIKE %haystack%"), so a valid
         # substring matched only on equality and otherwise returned [].
-        return self._substr_function(field, substr, "contains")
+        return self.substr_function(field, substr, "contains")
 
     def func_endswith(
         self, field: ast._Node, substr: ast._Node
@@ -592,9 +592,9 @@ class FilterVisitor(visitor.NodeVisitor):
             identifier = getattr(globals()[self.root_model], "result_string")
             return self.visit(field).endswith(identifier)
         if isinstance(field, ast.Identifier):
-            return self._substr_function(field, substr, "endswith")
+            return self.substr_function(field, substr, "endswith")
         if isinstance(substr, ast.Identifier):
-            return self._substr_function(substr, field, "endswith")
+            return self.substr_function(substr, field, "endswith")
 
     def func_startswith(
         self, field: ast._Node, substr: ast._Node
@@ -606,9 +606,9 @@ class FilterVisitor(visitor.NodeVisitor):
             identifier = getattr(globals()[self.root_model], "result_string")
             return self.visit(field).startswith(identifier)
         if isinstance(field, ast.Identifier):
-            return self._substr_function(field, substr, "startswith")
+            return self.substr_function(field, substr, "startswith")
         if isinstance(substr, ast.Identifier):
-            return self._substr_function(substr, field, "startswith")
+            return self.substr_function(substr, field, "startswith")
 
     def func_length(self, arg: ast._Node) -> functions.Function:
         if isinstance(arg, ast.Identifier) and arg.name == "result":
@@ -784,7 +784,7 @@ class FilterVisitor(visitor.NodeVisitor):
             WKTElement(geography.val, srid=EPSG),
         )
 
-    def _geo_argument(self, arg: ast._Node):
+    def geo_argument(self, arg: ast._Node):
         """Resolve a geospatial-function argument to a column or geometry.
 
         conformance: req/request-data/built-in-query-functions — a geo.* function
@@ -806,7 +806,7 @@ class FilterVisitor(visitor.NodeVisitor):
     def func_geolength(self, field: ast._Node) -> functions.Function:
         # conformance: req/request-data/built-in-query-functions — geo.length
         # accepts either a geometry property or a geography literal argument.
-        return functions.func.ST_Length(self._geo_argument(field))
+        return functions.func.ST_Length(self.geo_argument(field))
 
     def func_geointersects(
         self, field: ast.Identifier, geography: ast.Geography

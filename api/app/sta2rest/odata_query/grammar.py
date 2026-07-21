@@ -464,7 +464,7 @@ class ODataParser(Parser):
             # we prefer Attribute(Attribute(Id(A), 'created_by'), 'name')
             # over      Attribute(Id(A), Attribute(Id(created_by), 'name'))
             naive_attr = ast.Attribute(p[0], p[1])
-            return self._reverse_attributes(naive_attr)
+            return self.reverse_attributes(naive_attr)
         elif isinstance(p[1], ast.CollectionLambda):
             # Very similar for CollectionLambdas:
             # We prefer the CollectionLambda to define its complete owner
@@ -573,7 +573,7 @@ class ODataParser(Parser):
     ####################################################################################
     # Function calls
     ####################################################################################
-    def _function_call(self, func: ast.Identifier, args: List[ast._Node]):
+    def function_call(self, func: ast.Identifier, args: List[ast._Node]):
         ":meta private:"
 
         func_name = func.full_name()
@@ -603,19 +603,19 @@ class ODataParser(Parser):
     def common_expr(self, p):
         ":meta private:"
         args = []
-        return self._function_call(p[0], args)
+        return self.function_call(p[0], args)
 
     @_('ODATA_IDENTIFIER "(" BWS common_expr BWS ")"')  # type: ignore[no-redef]
     def common_expr(self, p):
         ":meta private:"
         args = [p.common_expr]
-        return self._function_call(p[0], args)
+        return self.function_call(p[0], args)
 
     @_("ODATA_IDENTIFIER list_expr")  # type: ignore[no-redef]
     def common_expr(self, p):
         ":meta private:"
         args = p[1].val
-        return self._function_call(p[0], args)
+        return self.function_call(p[0], args)
 
     @_('ODATA_IDENTIFIER "=" common_expr')  # type: ignore[no-redef]
     def named_param(self, p):
@@ -636,7 +636,7 @@ class ODataParser(Parser):
     def common_expr(self, p):
         ":meta private:"
         args = [p.named_param]
-        return self._function_call(p[0], args)
+        return self.function_call(p[0], args)
 
     @_(
         'ODATA_IDENTIFIER "(" BWS list_named_param BWS ")"'
@@ -644,7 +644,7 @@ class ODataParser(Parser):
     def common_expr(self, p):
         ":meta private:"
         args = p.list_named_param
-        return self._function_call(p[0], args)
+        return self.function_call(p[0], args)
 
     ####################################################################################
     # Misc
@@ -675,7 +675,7 @@ class ODataParser(Parser):
     ####################################################################################
     # Utils
     ####################################################################################
-    def _reverse_attributes(self, attr: ast.Attribute) -> ast.Attribute:
+    def reverse_attributes(self, attr: ast.Attribute) -> ast.Attribute:
         """
         Transforms an attribute like:
         ``Attribute(Id(A), Attribute(..., 'name'))``
@@ -687,7 +687,7 @@ class ODataParser(Parser):
         Returns:
             The transformed attribute.
         """
-        exploded = self._explode_attr(attr)
+        exploded = self.explode_attr(attr)
         leaf_attr = exploded.pop()
         owner: Union[ast.Identifier, ast.Attribute] = ast.Identifier(
             exploded.pop(0)
@@ -697,7 +697,7 @@ class ODataParser(Parser):
 
         return ast.Attribute(owner, leaf_attr)
 
-    def _explode_attr(self, attr: ast.Attribute) -> List[str]:
+    def explode_attr(self, attr: ast.Attribute) -> List[str]:
         """
         Splits a (possibly nested) attribute into a list of all elements, e.g.:
         ``Attribute(Id(A), Attribute(Id(B), 'name'))``
@@ -712,14 +712,14 @@ class ODataParser(Parser):
         if isinstance(attr.owner, ast.Identifier):
             exploded = [attr.owner.name]
         elif isinstance(attr.owner, ast.Attribute):
-            exploded = self._explode_attr(attr.owner)
+            exploded = self.explode_attr(attr.owner)
         else:
             raise NotImplementedError()
 
         if isinstance(attr.attr, str):
             exploded.append(attr.attr)
         elif isinstance(attr.attr, ast.Attribute):
-            exploded.extend(self._explode_attr(attr.attr))
+            exploded.extend(self.explode_attr(attr.attr))
         else:
             raise NotImplementedError
 

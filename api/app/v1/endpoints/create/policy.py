@@ -21,6 +21,7 @@ from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import DuplicateObjectError, InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, status
 from fastapi.responses import JSONResponse, Response
+from app.v1.endpoints.exceptions import BadRequest, Conflict
 
 v1 = APIRouter()
 
@@ -66,7 +67,7 @@ async def create_policy(
 ):
     try:
         if not isinstance(payload, dict):
-            raise Exception("Payload must be a dictionary.")
+            raise BadRequest("Payload must be a dictionary.")
 
         async with pgpool.acquire() as connection:
             async with connection.transaction():
@@ -101,7 +102,7 @@ async def create_policy(
                         """
                         result = await connection.fetchval(query, user)
                         if result > 0:
-                            raise Exception(
+                            raise Conflict(
                                 f"User {user} has already a policy."
                             )
 
@@ -115,7 +116,7 @@ async def create_policy(
                             permission_type != "custom"
                             and result != permission_type
                         ):
-                            raise Exception(
+                            raise BadRequest(
                                 f"User {user} has a different role than the policy type."
                             )
 
