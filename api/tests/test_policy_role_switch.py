@@ -60,8 +60,8 @@ def test_create_policy_sets_and_resets_role_for_admin():
     )
 
     sql_calls = [c.args[0] for c in connection.execute.await_args_list]
-    assert any('SET ROLE "admin_user";' in sql for sql in sql_calls)
-    assert any("RESET ROLE;" in sql for sql in sql_calls)
+    assert any('SET LOCAL ROLE "administrator";' in sql for sql in sql_calls)
+    assert not any("RESET ROLE" in sql for sql in sql_calls)
     assert response.status_code == 201
 
 
@@ -86,6 +86,6 @@ def test_update_policy_sets_and_resets_role_for_admin():
     )
 
     sql_calls = [c.args[0] for c in connection.execute.await_args_list]
-    assert any('SET ROLE "admin_user";' in sql for sql in sql_calls)
-    assert any("RESET ROLE;" in sql for sql in sql_calls)
+    assert any('SET LOCAL ROLE "administrator";' in sql for sql in sql_calls)
+    assert not any("RESET ROLE" in sql for sql in sql_calls)
     assert response.status_code == 200

@@ -19,8 +19,6 @@ from datetime import datetime, timezone
 import asyncpg
 import ujson
 from app import (
-    ANONYMOUS_VIEWER,
-    AUTHORIZATION,
     COUNT_ESTIMATE_THRESHOLD,
     COUNT_MODE,
     HOSTNAME,
@@ -31,8 +29,9 @@ from app import (
     VERSIONING,
 )
 from app.db.asyncpg_db import get_pool
+from app.db.audit_crud import AUDIT_ACTION_PUBLIC_READ, log_audit_event
 from app.db.redis_db import redis
-from app.oauth import get_current_user
+from app.oauth import get_optional_current_user
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
 from app.sta2rest.odata_query.exceptions import (
@@ -41,7 +40,7 @@ from app.sta2rest.odata_query.exceptions import (
 )
 from app.utils.utils import build_nextLink
 from app.v1.endpoints.functions import set_role
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .query_parameters import CommonQueryParams, get_common_query_params
@@ -50,12 +49,9 @@ v1 = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-user = Header(default=None, include_in_schema=False)
-
-if AUTHORIZATION and not ANONYMOUS_VIEWER:
-    from app.oauth import get_current_user
-
-    user = Depends(get_current_user)
+# Universal optional-auth dependency: authenticated users get their own role;
+# unauthenticated / invalid-token requests fall back to the guest RLS context.
+user = Depends(get_optional_current_user)
 
 
 def __handle_root():
@@ -265,11 +261,28 @@ async def asyncpg_stream_results(
     async with pgpool.acquire() as connection:
         async with connection.transaction():
             if current_user is not None:
+                # Authenticated path: switch to the user's own PostgreSQL role.
                 await set_role(connection, current_user)
             else:
-                if ANONYMOUS_VIEWER:
-                    current_user = {"username": "guest"}
-                    await set_role(connection, current_user)
+                # Unauthenticated / Path A: fall back to the guest role so the
+                # is_public RLS policies on Datastream and Observation take effect.
+                # The audit INSERT runs BEFORE SET LOCAL ROLE so it executes with
+                # the pool's application-role privileges, not the restricted guest role.
+                try:
+                    await log_audit_event(
+                        conn=connection,
+                        action_type=AUDIT_ACTION_PUBLIC_READ,
+                        actor_id=None,
+                        dataset_id=str(entity) if entity else None,
+                        payload={"path": str(full_path)},
+                    )
+                except Exception:
+                    # Audit logging is best-effort; never block the response.
+                    logger.warning(
+                        "PUBLIC_READ audit log failed for path=%r", full_path
+                    )
+                current_user = {"username": "guest"}
+                await set_role(connection, current_user)
 
             if is_count:
                 if COUNT_MODE == "LIMIT_ESTIMATE":
@@ -316,8 +329,6 @@ async def asyncpg_stream_results(
                     raw = partition[0]["json"]
                     yield "null" if raw is None else str(raw)
                 await connection.execute("CLOSE my_cursor")
-                if current_user is not None:
-                    await connection.execute("RESET ROLE")
                 return
 
             start_json = ""
@@ -414,5 +425,3 @@ async def asyncpg_stream_results(
 
             await connection.execute("CLOSE my_cursor")
 
-            if current_user is not None:
-                await connection.execute("RESET ROLE")
