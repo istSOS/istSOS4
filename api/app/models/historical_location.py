@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from app import VERSIONING
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import Integer, Text
@@ -37,6 +39,8 @@ class HistoricalLocation(Base):
         nullable=False,
     )
     commit_id = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.Commit.id"))
+    if VERSIONING:
+        system_time_validity = Column("systemTimeValidity", TSTZRANGE)
     location = relationship(
         "Location",
         secondary=Location_HistoricalLocation,

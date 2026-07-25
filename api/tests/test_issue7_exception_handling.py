@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import asyncpg
 import pytest
 from starlette.requests import Request
 
@@ -107,6 +108,76 @@ class TestIssue7ExceptionHandling:
         assert response.body.decode() == (
             '{"code":500,"type":"error","message":"Internal server error"}'
         )
+
+    async def test_catch_all_get_connection_error_returns_503(self):
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/istsos4/v1.1/Things",
+            "query_string": b"",
+            "headers": [],
+            "client": ("127.0.0.1", 1),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+        request = Request(scope)
+
+        async def broken_stream(*args, **kwargs):
+            if False:
+                yield None
+            raise asyncpg.PostgresConnectionError("connection lost")
+
+        with patch.object(
+            read_ep.sta2rest.STA2REST,
+            "convert_query",
+            return_value={
+                "main_entity": "Thing",
+                "main_query": "SELECT 1",
+                "top_value": 1,
+                "is_count": False,
+                "count_queries": [],
+                "as_of_value": None,
+                "from_to_value": False,
+                "single_result": False,
+            },
+        ), patch.object(
+            read_ep,
+            "asyncpg_stream_results",
+            side_effect=lambda *a, **k: broken_stream(),
+        ):
+            response = await read_ep.catch_all_get(
+                request=request,
+                path_name="Things",
+                current_user=None,
+                pool=MagicMock(),
+                params=None,
+            )
+
+        assert response.status_code == 503
+        assert response.body.decode() == (
+            '{"code":503,"type":"error",'
+            '"message":"Database temporarily unavailable"}'
+        )
+
+    async def test_wrapped_result_generator_closes_inner_generator(self):
+        closed = False
+
+        async def inner_generator():
+            nonlocal closed
+            try:
+                yield "second"
+                yield "third"
+            finally:
+                closed = True
+
+        inner = inner_generator()
+        wrapped = read_ep.wrapped_result_generator("first", inner)
+
+        assert await anext(wrapped) == "first"
+        assert await anext(wrapped) == "second"
+        await wrapped.aclose()
+
+        assert closed is True
 
     async def test_initialize_pool_valueerror_is_not_retried(self):
         with patch.object(

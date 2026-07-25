@@ -48,7 +48,7 @@ from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.expression import cast
 from sqlalchemy.sql.sqltypes import Integer, String, Text
 
-from .filter_visitor import FilterVisitor
+from .filter_visitor import FilterVisitor, resolve_field
 from .odata_query.grammar import ODataLexer, ODataParser
 from .sta_parser.ast import *
 from .sta_parser.visitor import Visitor
@@ -177,7 +177,9 @@ class NodeVisitor(Visitor):
         attributes, orders = [], []
         for identifier in identifiers:
             attribute_name, *_, order = identifier.split(".")
-            attributes.append([getattr(globals()[entity], attribute_name)])
+            attributes.append(
+                [resolve_field(globals()[entity], attribute_name)]
+            )
             orders.append(order)
         return attributes, orders
 
@@ -267,10 +269,11 @@ class NodeVisitor(Visitor):
                 identifiers.append("id")
 
             for identifier in identifiers:
+                sub_attr = resolve_field(sub_entity, identifier)
                 select_fields.append(
                     get_select_attr(
-                        getattr(sub_entity, identifier),
-                        getattr(sub_entity, identifier).name,
+                        sub_attr,
+                        sub_attr.name,
                         nested=True,
                     )
                 )
@@ -460,6 +463,32 @@ class NodeVisitor(Visitor):
             )
         return expand_queries
 
+    def resolve_select_field(self, main_entity, field_name):
+        """Resolve a single $select field name to a column attribute.
+
+        req/request-data/select (18-088 §9.3.3.1, Req 24): "Each selection
+        clause SHALL be a property name (including navigation property names)."
+        A navigation property in $select selects its navigation link, so map the
+        OGC navigation name (e.g. Datastreams, Sensor, FeatureOfInterest) to the
+        corresponding "<entity>_navigation_link" column on the main entity.
+
+        req/resource-path (18-088 §9.2): a property that does not exist is a
+        client error, so an unresolvable name raises InvalidFieldException
+        (mapped to a 4xx) instead of letting a raw AttributeError become a 500.
+        """
+        nav_entity = sta2rest.STA2REST.ENTITY_MAPPING.get(field_name)
+        if nav_entity is not None:
+            nav_link_name = f"{nav_entity.lower()}_navigation_link"
+            nav_link_attr = getattr(main_entity, nav_link_name, None)
+            if nav_link_attr is not None:
+                return nav_link_attr
+        try:
+            return resolve_field(main_entity, field_name)
+        except AttributeError:
+            from .odata_query.exceptions import InvalidFieldException
+
+            raise InvalidFieldException(field_name)
+
     def visit_QueryNode(self, node: QueryNode):
         """
         Visit a query node.
@@ -529,12 +558,14 @@ class NodeVisitor(Visitor):
                     field_parts = (
                         field_parts[0].split("/") if field_parts else []
                     )
-                    json_path = getattr(main_entity, field)
+                    json_path = self.resolve_select_field(main_entity, field)
                     for part in field_parts:
                         json_path = json_path.op("->")(part)
                     select_query.append(json_path)
                 else:
-                    select_query.append(getattr(main_entity, field_name))
+                    select_query.append(
+                        self.resolve_select_field(main_entity, field_name)
+                    )
 
         components = [
             sta2rest.STA2REST.REVERSE_SELECT_MAPPING.get(
@@ -740,25 +771,52 @@ class NodeVisitor(Visitor):
             main_query = select(*select_args)
 
             if result_format == "DataArray":
+                # conformance: req/data-array/data-array — order Observations by
+                # Datastream then id so the per-Datastream GROUP BY in the
+                # DataArray wrapper below aggregates every Observation of each
+                # Datastream (in id order). The previous .distinct("datastream_id")
+                # collapsed each Datastream to a single Observation, silently
+                # dropping all the others.
                 main_query = main_query.order_by(
-                    "datastream_id", getattr(main_entity, "id").desc()
-                ).distinct("datastream_id")
+                    "datastream_id", getattr(main_entity, "id")
+                )
 
         # Process filter clause if exists
         if node.filter:
             filter, join_relationships = self.visit_FilterNode(
                 node.filter, self.main_entity
             )
+            if join_relationships:
+                # A chain made exclusively of MANYTOONE relationships cannot
+                # multiply rows from the main entity. Keep such joins and their
+                # complete filter on the outer query. In particular, this keeps
+                # Observation.phenomenonTimeStart visible to TimescaleDB, so it
+                # can exclude chunks for filters such as Datastream/id + time.
+                direct_join_is_safe = all(
+                    relationship.property.direction.name == "MANYTOONE"
+                    for relationship in join_relationships
+                )
+
+                if direct_join_is_safe:
+                    for relationship in join_relationships:
+                        main_query = main_query.join(relationship)
+                        query_count = query_count.join(relationship)
+                        query_estimate_count = query_estimate_count.join(
+                            relationship
+                        )
+                else:
+                    # ONETOMANY and MANYTOMANY joins can multiply the main rows.
+                    # Keep the semi-join for those paths to preserve SensorThings
+                    # "entities that have any related ..." semantics.
+                    id_attr = getattr(main_entity, "id")
+                    id_subquery = select(id_attr)
+                    for relationship in join_relationships:
+                        id_subquery = id_subquery.join(relationship)
+                    id_subquery = id_subquery.where(filter)
+                    filter = id_attr.in_(id_subquery)
             main_query = main_query.filter(filter)
             query_count = query_count.filter(filter)
             query_estimate_count = query_estimate_count.filter(filter)
-            if join_relationships:
-                for relationship in join_relationships:
-                    main_query = main_query.join(relationship)
-                    query_count = query_count.join(relationship)
-                    query_estimate_count = query_estimate_count.join(
-                        relationship
-                    )
 
         # Process orderby clause if exists
         ordering = []
@@ -827,6 +885,18 @@ class NodeVisitor(Visitor):
                 top_value -= 1
 
         main_query = main_query.limit(top_value).offset(skip_value)
+
+        if result_format == "DataArray":
+            # conformance: req/data-array/data-array — the rows streamed by read.py
+            # are per-Datastream GROUPS, not individual Observations. The
+            # observation $top/$skip were already applied to the inner query above,
+            # and the group-row count never exceeds that limit. read.py drops a
+            # trailing "page sentinel" row whenever partition_len > top_value - 1,
+            # which at $top=1 wrongly removed the single nav-path group. Bump
+            # top_value past the bounded group-row count so groups are not
+            # truncated.
+            top_value += 1
+
         columns_to_select = []
         for column in main_query.columns:
             if column.name not in labels:
@@ -857,46 +927,56 @@ class NodeVisitor(Visitor):
             main_query = main_query.alias("main_query")
 
         if result_format == "DataArray":
+            # conformance: req/data-array/data-array — build one group object per
+            # Datastream with keys Datastream@iot.navigationLink, components,
+            # dataArray@iot.count (= number of rows in the group) and dataArray
+            # (= a list-of-rows, one inner list per Observation). Emitting the four
+            # keys as separate columns lets the uniform row_to_json() below produce
+            # the group object directly, i.e. WITHOUT a spurious "json" wrapper key.
             if not node.expand:
+                # Collection path (.../Observations): the matching Observations may
+                # span several Datastreams, so GROUP BY datastream_id and aggregate
+                # each group's rows. Was: distinct + hardcoded count literal "1" + a
+                # single flat row, which dropped every Observation but one.
+                main_query = (
+                    select(
+                        func.concat(
+                            HOSTNAME,
+                            SUBPATH,
+                            VERSION,
+                            "/Datastreams(",
+                            main_query.c.datastream_id,
+                            ")",
+                        ).label("Datastream@iot.navigationLink"),
+                        cast(components, ARRAY(String)).label("components"),
+                        func.count().label("dataArray@iot.count"),
+                        func.json_agg(
+                            func.json_build_array(*main_query.columns[:-2])
+                        ).label("dataArray"),
+                    )
+                    .select_from(main_query)
+                    .group_by(main_query.c.datastream_id)
+                    .alias("main_query")
+                )
+            else:
+                # Navigation path (.../Datastreams(id)/Observations): a single
+                # Datastream, so aggregate all of its rows into one group.
+                entity_id = self.entities[0][1]
+
                 main_query = select(
                     func.concat(
                         HOSTNAME,
                         SUBPATH,
                         VERSION,
                         "/Datastreams(",
-                        main_query.c.datastream_id,
+                        entity_id,
                         ")",
                     ).label("Datastream@iot.navigationLink"),
-                    main_query.c.components,
-                    literal("1").cast(Integer).label("dataArray@iot.count"),
-                    func.json_build_array(*main_query.columns[:-2]).label(
-                        "dataArray"
-                    ),
-                ).alias("main_query")
-            else:
-
-                entity_id = self.entities[0][1]
-
-                main_query = select(
-                    func.json_build_object(
-                        "Datastream@iot.navigationLink",
-                        func.concat(
-                            HOSTNAME,
-                            SUBPATH,
-                            VERSION,
-                            "/Datastreams(",
-                            entity_id,
-                            ")",
-                        ),
-                        "components",
-                        cast(components, ARRAY(String)),
-                        "dataArray@iot.count",
-                        func.count(),
-                        "dataArray",
-                        func.json_agg(
-                            func.json_build_array(*main_query.columns),
-                        ),
-                    ).label("json")
+                    cast(components, ARRAY(String)).label("components"),
+                    func.count().label("dataArray@iot.count"),
+                    func.json_agg(
+                        func.json_build_array(*main_query.columns),
+                    ).label("dataArray"),
                 ).alias("main_query")
 
         main_query = select(
@@ -911,10 +991,17 @@ class NodeVisitor(Visitor):
             value = None
             if isinstance(select_query[0], InstrumentedAttribute):
                 value = select_query[0].name
+                if value == "phenomenonTimeStart":
+                    value = "phenomenonTime"
             else:
                 value = select_query[0].right
+            # 18-088 §9.2 Usage 5 ($value): return the RAW value of the property
+            # as text/plain, not a JSON envelope. Use the JSON ->> operator
+            # (returns the element as text, unquoted) instead of -> (which keeps
+            # the JSON encoding, e.g. a quoted string). read.py streams this raw
+            # text with a text/plain content type.
             main_query = select(
-                main_query.c.json.op("->")(text(f"'{value}'"))
+                main_query.c.json.op("->>")(text(f"'{value}'")).label("json")
             ).select_from(main_query)
 
         main_query_str = str(
@@ -933,6 +1020,7 @@ class NodeVisitor(Visitor):
             "as_of_value": as_of_value,
             "from_to_value": from_to_value,
             "single_result": self.single_result,
+            "value": self.value,
         }
 
         if REDIS:
@@ -942,21 +1030,29 @@ class NodeVisitor(Visitor):
 
 
 def get_select_attr(attr, label, nested=False, as_of=None):
+    table_name = getattr(getattr(attr, "table", None), "name", None)
+
+    if getattr(attr, "name", None) == "phenomenonTimeStart" and table_name in (
+        "Observation",
+        "Observation_traveltime",
+    ):
+        start_bound = attr
+        end_bound = attr.table.c["phenomenonTimeEnd"]
+        return case(
+            (
+                start_bound == end_bound,
+                func.to_char(start_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+            ),
+            else_=func.to_char(start_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+            + "/"
+            + func.to_char(end_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+        ).label("phenomenonTime")
+
     if isinstance(attr.type, Geometry):
         return func.ST_AsGeoJSON(attr).cast(JSONB).label(label)
     elif isinstance(attr.type, TSTZRANGE):
         lower_bound = func.lower(attr)
         upper_bound = func.upper(attr)
-        if attr.name == "phenomenonTime" and attr.table.name == "Observation":
-            return case(
-                (
-                    lower_bound == upper_bound,
-                    func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-                ),
-                else_=func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-                + "/"
-                + func.to_char(upper_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-            ).label(label)
         if VERSIONING and attr.name == "systemTimeValidity":
             return case(
                 (
