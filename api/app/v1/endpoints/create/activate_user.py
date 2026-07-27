@@ -32,7 +32,12 @@ import logging
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.rbac_roles import PENDING_ROLE, get_db_role_for_rbac, validate_rbac_role
+from app.rbac_roles import (
+    PENDING_ROLE,
+    POLICY_FN_MAP,
+    get_db_role_for_rbac,
+    validate_rbac_role,
+)
 from app.utils.utils import pg_quote_ident
 from asyncpg.exceptions import (
     InsufficientPrivilegeError,
@@ -47,14 +52,8 @@ from fastapi.responses import JSONResponse
 v1 = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Maps each assignable RBAC role to the stored PostgreSQL RLS-policy function.
-# Must stay in sync with create/user.py's _POLICY_FN_MAP.
-_POLICY_FN_MAP = {
-    "viewer":      "sensorthings.viewer_policy",
-    "editor":      "sensorthings.editor_policy",
-    "obs_manager": "sensorthings.obs_manager_policy",
-    "sensor":      "sensorthings.sensor_policy",
-}
+# POLICY_FN_MAP is the single source of truth — imported from rbac_roles.py.
+# Do not redeclare it here; update rbac_roles.POLICY_FN_MAP instead.
 
 ACTIVATE_PAYLOAD_EXAMPLE = {
     "role": "viewer",  # one of: viewer, editor, obs_manager, sensor, custom
@@ -173,7 +172,7 @@ async def activate_user(
                 # 4d. Apply the default RLS policy for the target role.
                 #     'custom' has no default policy function; admin must
                 #     create one explicitly via POST /Policies.
-                policy_fn = _POLICY_FN_MAP.get(target_role)
+                policy_fn = POLICY_FN_MAP.get(target_role)
                 if policy_fn:
                     policyname = f"{username}_default"
                     await conn.execute(

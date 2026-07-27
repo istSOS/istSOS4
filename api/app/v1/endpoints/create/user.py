@@ -19,7 +19,7 @@ from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.db.password_crud import pwd_context
 from app.oauth import get_current_user
-from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
+from app.rbac_roles import POLICY_FN_MAP, get_db_role_for_rbac, validate_rbac_role
 from app.utils.utils import pg_quote_ident, pg_quote_literal, validate_username
 from app.v1.endpoints.functions import insert_commit, set_role
 from asyncpg.exceptions import (
@@ -42,14 +42,8 @@ PAYLOAD_EXAMPLE = {
     "role": "viewer",  # viewer, editor, obs_manager, sensor, custom
 }
 
-# Maps the application-layer role to its sensorthings RLS policy function.
-# Administrator is intentionally absent — admins bypass RLS by privilege.
-_POLICY_FN_MAP = {
-    "viewer":      "sensorthings.viewer_policy",
-    "editor":      "sensorthings.editor_policy",
-    "obs_manager": "sensorthings.obs_manager_policy",
-    "sensor":      "sensorthings.sensor_policy",
-}
+# POLICY_FN_MAP is the single source of truth — imported from rbac_roles.py.
+# Do not redeclare it here; update rbac_roles.POLICY_FN_MAP instead.
 
 @v1.api_route(
     "/Users",
@@ -185,7 +179,7 @@ async def create_user(
                 # Auto-create the default RLS policy for the new user.
                 # Policy functions already exist in the DB (istsos_auth.sql).
                 # Administrator role bypasses RLS by privilege, not policy.
-                policy_fn = _POLICY_FN_MAP.get(app_role)
+                policy_fn = POLICY_FN_MAP.get(app_role)
                 if policy_fn:
                     policyname = f"{user['username']}_default"
                     await connection.execute(
