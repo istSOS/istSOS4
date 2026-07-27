@@ -90,6 +90,7 @@ from app.v1.endpoints.update import user as update_user
 from app.v1.endpoints.update import password as update_password
 from app.v1.endpoints.update import role as update_role
 from app.v1.endpoints.update import admin_approval as admin_approval
+from app.v1.endpoints.update import admin_rejection as admin_rejection
 from fastapi import FastAPI
 
 if AUTHORIZATION:
@@ -185,6 +186,7 @@ if AUTHORIZATION:
     v1.include_router(update_password.v1)  # PATCH /Users/{id}/password
     v1.include_router(update_role.v1)      # PATCH /Users/{id}/role
     v1.include_router(admin_approval.v1)   # PATCH /Users/{id}/policy-approval
+    v1.include_router(admin_rejection.v1)  # PATCH /Users/{id}/reject
     v1.include_router(delete_user.v1)
     v1.include_router(read_policy.v1)
     v1.include_router(create_policy.v1)
