@@ -25,8 +25,8 @@ Python side using ``passlib``.
 Coverage
 --------
 * Pydantic schema validation (no DB required):
-    - Too short password → 422
-    - No uppercase letter → 422
+    - Too short password (< 8 chars) → 422
+    - No symbol → 422
     - No digit → 422
     - Valid payload passes schema
 
@@ -137,14 +137,14 @@ class TestPasswordUpdateRequestSchema:
     def test_too_short_raises_422(self):
         from pydantic import ValidationError
         with pytest.raises(ValidationError) as exc_info:
-            self._schema()(current_password="old", new_password="Short1A")
-        assert any("12 characters" in str(e["msg"]) for e in exc_info.value.errors())
+            self._schema()(current_password="old", new_password="Short1!")
+        assert any("8 characters" in str(e["msg"]) for e in exc_info.value.errors())
 
-    def test_no_uppercase_raises_422(self):
+    def test_no_symbol_raises_422(self):
         from pydantic import ValidationError
         with pytest.raises(ValidationError) as exc_info:
-            self._schema()(current_password="old", new_password="alllowercase1pass!")
-        assert any("uppercase" in str(e["msg"]) for e in exc_info.value.errors())
+            self._schema()(current_password="old", new_password="NoSymbolHere123")
+        assert any("symbol" in str(e["msg"]) for e in exc_info.value.errors())
 
     def test_no_digit_raises_422(self):
         from pydantic import ValidationError
