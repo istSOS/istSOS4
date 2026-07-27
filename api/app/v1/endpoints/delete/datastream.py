@@ -76,6 +76,4 @@ async def delete_datastream(
                     f"Datastream with id {datastream_id} not found",
                 )
 
-            if current_user is not None:
-
     return Response(status_code=status.HTTP_200_OK)

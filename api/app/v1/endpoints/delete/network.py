@@ -79,6 +79,4 @@ async def delete_network(
                     },
                 )
 
-            if current_user is not None:
-
     return Response(status_code=status.HTTP_200_OK)

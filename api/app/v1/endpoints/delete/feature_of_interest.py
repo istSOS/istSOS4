@@ -105,6 +105,4 @@ async def delete_feature_of_interest(
                     connection, ds_id
                 )
 
-            if current_user is not None:
-
     return Response(status_code=status.HTTP_200_OK)

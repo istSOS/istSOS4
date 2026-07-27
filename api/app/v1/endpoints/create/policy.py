@@ -91,74 +91,71 @@ async def create_policy(
                     await set_role(connection, current_user)
                     role_switched = True
 
-                try:
-                    permission_type = payload["permissions"].get("type")
+                permission_type = payload["permissions"].get("type")
 
-                    for user in payload["users"]:
-                        query = """
-                            SELECT COUNT(*)
-                            FROM pg_policies
-                            WHERE $1 = ANY (roles)
-                        """
-                        result = await connection.fetchval(query, user)
-                        if result > 0:
-                            raise Conflict(
-                                f"User {user} has already a policy."
-                            )
+                for user in payload["users"]:
+                    query = """
+                        SELECT COUNT(*)
+                        FROM pg_policies
+                        WHERE $1 = ANY (roles)
+                    """
+                    result = await connection.fetchval(query, user)
+                    if result > 0:
+                        raise Conflict(
+                            f"User {user} has already a policy."
+                        )
 
-                        query = """
-                            SELECT role
-                            FROM sensorthings."User"
-                            WHERE username = $1
-                        """
-                        result = await connection.fetchval(query, user)
-                        if (
-                            permission_type != "custom"
-                            and result != permission_type
-                        ):
-                            raise BadRequest(
-                                f"User {user} has a different role than the policy type."
-                            )
+                    query = """
+                        SELECT role
+                        FROM sensorthings."User"
+                        WHERE username = $1
+                    """
+                    result = await connection.fetchval(query, user)
+                    if (
+                        permission_type != "custom"
+                        and result != permission_type
+                    ):
+                        raise BadRequest(
+                            f"User {user} has a different role than the policy type."
+                        )
 
-                    if permission_type == "custom":
-                        await create_policies(
-                            connection,
-                            payload["users"],
-                            payload["permissions"]["policy"],
-                            payload["name"],
-                        )
-                    elif permission_type == "viewer":
-                        await connection.execute(
-                            "SELECT sensorthings.viewer_policy($1, $2);",
-                            payload["users"],
-                            payload["name"],
-                        )
-                    elif permission_type == "editor":
-                        await connection.execute(
-                            "SELECT sensorthings.editor_policy($1, $2);",
-                            payload["users"],
-                            payload["name"],
-                        )
-                    elif permission_type == "obs_manager":
-                        await connection.execute(
-                            "SELECT sensorthings.obs_manager_policy($1, $2);",
-                            payload["users"],
-                            payload["name"],
-                        )
-                    elif permission_type == "sensor":
-                        await connection.execute(
-                            "SELECT sensorthings.sensor_policy($1, $2);",
-                            payload["users"],
-                            payload["name"],
-                        )
-                    elif permission_type == "qc":
-                        await connection.execute(
-                            f"SELECT sensorthings.qc_policy($1, $2);",
-                            payload["users"],
-                            payload["name"],
-                        )
-                finally:
-                    if role_switched:
+                if permission_type == "custom":
+                    await create_policies(
+                        connection,
+                        payload["users"],
+                        payload["permissions"]["policy"],
+                        payload["name"],
+                    )
+                elif permission_type == "viewer":
+                    await connection.execute(
+                        "SELECT sensorthings.viewer_policy($1, $2);",
+                        payload["users"],
+                        payload["name"],
+                    )
+                elif permission_type == "editor":
+                    await connection.execute(
+                        "SELECT sensorthings.editor_policy($1, $2);",
+                        payload["users"],
+                        payload["name"],
+                    )
+                elif permission_type == "obs_manager":
+                    await connection.execute(
+                        "SELECT sensorthings.obs_manager_policy($1, $2);",
+                        payload["users"],
+                        payload["name"],
+                    )
+                elif permission_type == "sensor":
+                    await connection.execute(
+                        "SELECT sensorthings.sensor_policy($1, $2);",
+                        payload["users"],
+                        payload["name"],
+                    )
+                elif permission_type == "qc":
+                    await connection.execute(
+                        f"SELECT sensorthings.qc_policy($1, $2);",
+                        payload["users"],
+                        payload["name"],
+                    )
 
         return Response(status_code=status.HTTP_201_CREATED)
 

@@ -85,7 +85,6 @@ async def update_thing(
                 await set_role(connection, current_user)
 
             if not await check_id_exists(connection, "Thing", thing_id):
-                if current_user is not None:
                 return error_response(
                     status.HTTP_404_NOT_FOUND, "Thing not found."
                 )
@@ -98,7 +97,6 @@ async def update_thing(
             )
 
             if not payload:
-                if current_user is not None:
                 return Response(status_code=status.HTTP_200_OK)
 
             validate_payload_keys(payload, ALLOWED_KEYS)
@@ -112,8 +110,6 @@ async def update_thing(
                 payload["commit_id"] = commit_id
 
             await update_thing_entity(connection, thing_id, payload)
-
-            if current_user is not None:
 
     return Response(status_code=status.HTTP_200_OK)
 
