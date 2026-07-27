@@ -34,6 +34,7 @@ from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
+from app.utils.utils import validate_username
 from app.validators import validate_password_strength
 
 
@@ -75,6 +76,23 @@ class RestrictedRegistrationRequest(BaseModel):
     odrl_policy_id: str
     explanation: str
     contact_info: ContactInfo
+
+    @field_validator("username")
+    @classmethod
+    def username_must_be_valid(cls, v: str) -> str:
+        """Enforce the same format rule as admin-created users.
+
+        Self-registration previously accepted any string at all — the
+        admin-created-user path (create/user.py) already enforces this
+        via validate_username(); reusing it here rather than duplicating
+        the pattern keeps the two entry points from drifting apart.
+        """
+        if not validate_username(v):
+            raise ValueError(
+                "Username must be 3-63 characters long and contain only "
+                "letters, digits, and underscores."
+            )
+        return v
 
     @field_validator("password")
     @classmethod
