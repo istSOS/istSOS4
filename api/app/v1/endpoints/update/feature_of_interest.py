@@ -90,8 +90,6 @@ async def update_feature_of_interest(
             if not await check_id_exists(
                 connection, "FeaturesOfInterest", feature_of_interest_id
             ):
-                if current_user is not None:
-
                 return error_response(
                     status.HTTP_404_NOT_FOUND,
                     "Feature of Interest not found.",
@@ -107,7 +105,6 @@ async def update_feature_of_interest(
             )
 
             if not payload:
-                if current_user is not None:
                 return Response(status_code=status.HTTP_200_OK)
 
             validate_payload_keys(payload, ALLOWED_KEYS)
@@ -134,8 +131,6 @@ async def update_feature_of_interest(
                 await update_datastream_observedArea(
                     connection, ds_id, feature_of_interest_id
                 )
-
-            if current_user is not None:
 
     return Response(status_code=status.HTTP_200_OK)
 
