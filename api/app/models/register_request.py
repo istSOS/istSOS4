@@ -32,7 +32,9 @@ Design decisions
 
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+from app.validators import validate_password_strength
 
 
 class ContactInfo(BaseModel):
@@ -73,3 +75,14 @@ class RestrictedRegistrationRequest(BaseModel):
     odrl_policy_id: str
     explanation: str
     contact_info: ContactInfo
+
+    @field_validator("password")
+    @classmethod
+    def password_must_be_strong(cls, v: str) -> str:
+        """Enforce the same strength rule as password updates.
+
+        A brand-new account's initial password is not exempt from the
+        standard applied to every password after it — see
+        app.validators.validate_password_strength.
+        """
+        return validate_password_strength(v)
