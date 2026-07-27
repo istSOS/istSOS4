@@ -16,6 +16,8 @@
 
 from pydantic import BaseModel, field_validator
 
+from app.validators import validate_password_strength
+
 
 class PasswordUpdateRequest(BaseModel):
     """Request body for a local-password update.
@@ -24,7 +26,10 @@ class PasswordUpdateRequest(BaseModel):
         current_password: The user's existing PostgreSQL password, used to
             verify identity before the update is applied.
         new_password: The desired new password. Must satisfy the strength
-            rules enforced by ``validate_new_password``.
+            rules enforced by ``validate_password_strength`` — the same rule
+            applied to a brand-new account's initial password at
+            registration (see app.models.register_request), so the two
+            entry points can never silently drift apart again.
     """
 
     current_password: str
@@ -33,24 +38,4 @@ class PasswordUpdateRequest(BaseModel):
     @field_validator("new_password")
     @classmethod
     def validate_new_password(cls, v: str) -> str:
-        """Enforce minimum password strength requirements.
-
-        Rules:
-          - At least 12 characters
-          - At least 1 uppercase letter
-          - At least 1 digit
-
-        Raises:
-            ValueError: if any rule is violated (FastAPI maps this to HTTP 422).
-        """
-        if len(v) < 12:
-            raise ValueError("Password must be at least 12 characters long.")
-        if not any(c.isupper() for c in v):
-            raise ValueError(
-                "Password must contain at least one uppercase letter."
-            )
-        if not any(c.isdigit() for c in v):
-            raise ValueError(
-                "Password must contain at least one digit."
-            )
-        return v
+        return validate_password_strength(v)
