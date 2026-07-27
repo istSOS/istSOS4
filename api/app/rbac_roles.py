@@ -28,6 +28,11 @@ DB_ROLE_BY_RBAC_ROLE = {
 }
 
 # ---------------------------------------------------------------------------
+# WARNING: This static RBAC dictionary is legacy scaffolding. Data policies
+# and role grants are intended to be dynamically generated via the ODRL
+# engine. Do not extend this map for new use cases — treat it as a
+# placeholder pending that migration.
+#
 # Shared RLS policy function map.
 # Maps each assignable application role to the stored PostgreSQL policy
 # function that applies Row-Level Security rules for that role.
