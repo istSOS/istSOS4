@@ -129,22 +129,64 @@ async def register_request(request: RestrictedRegistrationRequest):
         async with write_pool.acquire() as conn:
             async with conn.transaction():
 
-                # 3a. INSERT the new User row.
-                #     role='pending'  → zero operational privileges.
-                #     status='active' → account exists and can be found by admin.
-                #     The RETURNING clause gives us the auto-assigned PK.
-                row = await conn.fetchrow(
+                # 3a. Check for an existing row with this username, locked
+                #     for the duration of the transaction so two concurrent
+                #     re-applications can't both see 'rejected' and race.
+                #
+                #     - No existing row       -> INSERT (fresh registration).
+                #     - existing, 'rejected'   -> UPDATE (re-application:
+                #       overwrite password/contact, status back to 'active',
+                #       role left untouched — still 'pending').
+                #     - existing, anything else -> 409 Conflict (unchanged
+                #       behaviour for active/pending/approved usernames).
+                existing = await conn.fetchrow(
                     """
-                    INSERT INTO sensorthings."User"
-                        (username, password, role, status, contact)
-                    VALUES
-                        ($1, $2, 'pending', 'active', $3::jsonb)
-                    RETURNING id
+                    SELECT id, status
+                    FROM sensorthings."User"
+                    WHERE username = $1
+                    FOR UPDATE
                     """,
                     request.username,
-                    hashed_password,
-                    contact_json,
                 )
+
+                if existing is not None and existing["status"] != "rejected":
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Username '{request.username}' is already taken.",
+                    )
+
+                if existing is not None:
+                    # Re-application: overwrite the previously-rejected row.
+                    row = await conn.fetchrow(
+                        """
+                        UPDATE sensorthings."User"
+                        SET password = $1,
+                            contact  = $2::jsonb,
+                            status   = 'active'
+                        WHERE id = $3
+                        RETURNING id
+                        """,
+                        hashed_password,
+                        contact_json,
+                        existing["id"],
+                    )
+                else:
+                    # 3a. INSERT the new User row.
+                    #     role='pending'  → zero operational privileges.
+                    #     status='active' → account exists and can be found by admin.
+                    #     The RETURNING clause gives us the auto-assigned PK.
+                    row = await conn.fetchrow(
+                        """
+                        INSERT INTO sensorthings."User"
+                            (username, password, role, status, contact)
+                        VALUES
+                            ($1, $2, 'pending', 'active', $3::jsonb)
+                        RETURNING id
+                        """,
+                        request.username,
+                        hashed_password,
+                        contact_json,
+                    )
                 new_user_id: int = row["id"]
 
                 # 3b. Backfill the URI column now that we have the PK.
@@ -191,7 +233,15 @@ async def register_request(request: RestrictedRegistrationRequest):
             },
         )
 
+    except HTTPException:
+        # Re-raise the 409 Conflict raised inside the transaction block
+        # without wrapping it in a 500.
+        raise
     except UniqueViolationError:
+        # Safety net for a true race: two concurrent requests for a brand
+        # new (non-existent) username can't both be caught by the
+        # SELECT ... FOR UPDATE lock above, since there's no row to lock
+        # until one of them inserts it.
         logger.warning(
             "Registration rejected: username '%s' already exists.", request.username
         )

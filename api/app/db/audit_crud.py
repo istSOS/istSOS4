@@ -41,10 +41,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Valid action_type values — must match the CHECK constraint in
-# database/migrations/003_audit_log.sql.
+# database/migrations/003_audit_log.sql and 004_admin_rejection.sql.
 AUDIT_ACTION_PUBLIC_READ = "PUBLIC_READ"
 AUDIT_ACTION_RESTRICTED_REQUEST = "RESTRICTED_REQUEST"
 AUDIT_ACTION_ADMIN_APPROVAL = "ADMIN_APPROVAL"
+AUDIT_ACTION_ADMIN_REJECTION = "ADMIN_REJECTION"
 
 
 async def log_audit_event(

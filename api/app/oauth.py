@@ -177,7 +177,7 @@ async def authenticate_user(username: str, password: str):
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT id, username, role, password
+                SELECT id, username, role, password, status
                 FROM sensorthings."User"
                 WHERE username = $1
                 """,
@@ -215,6 +215,11 @@ async def authenticate_user(username: str, password: str):
         )
         if not verified:
             return None
+        if row["status"] == "rejected":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Account application was rejected. Please re-register to apply again.",
+            )
         return {"sub": row["username"], "role": row["role"]}
 
     # ------------------------------------------------------------------
@@ -256,6 +261,11 @@ async def authenticate_user(username: str, password: str):
             exc,
         )
 
+    if row["status"] == "rejected":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account application was rejected. Please re-register to apply again.",
+        )
     return {"sub": row["username"], "role": row["role"]}
 
 
