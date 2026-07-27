@@ -82,7 +82,6 @@ async def update_location(
             if not await check_id_exists(
                 connection, "Location", location_id
             ):
-                if current_user is not None:
                 return error_response(
                     status.HTTP_404_NOT_FOUND, "Location not found."
                 )
@@ -94,7 +93,6 @@ async def update_location(
             )
 
             if not payload:
-                if current_user is not None:
                 return Response(status_code=status.HTTP_200_OK)
 
             validate_payload_keys(payload, ALLOWED_KEYS)
@@ -112,8 +110,6 @@ async def update_location(
                 location_id,
                 payload,
             )
-
-            if current_user is not None:
 
     return Response(status_code=status.HTTP_200_OK)
 

@@ -89,7 +89,6 @@ async def create_observation(
                 connection, payload, commit_id=commit_id
             )
 
-            if current_user is not None:
     return Response(
         status_code=status.HTTP_201_CREATED,
         headers={"location": header},
@@ -145,7 +144,6 @@ async def create_observation_for_datastream(
                 commit_id=commit_id,
             )
 
-            if current_user is not None:
     return Response(
         status_code=status.HTTP_201_CREATED,
         headers={"location": header},
@@ -198,7 +196,6 @@ async def create_observation_for_feature_of_interest(
                 commit_id=commit_id,
             )
 
-            if current_user is not None:
     return Response(
         status_code=status.HTTP_201_CREATED,
         headers={"location": header},

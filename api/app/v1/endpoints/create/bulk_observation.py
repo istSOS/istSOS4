@@ -132,7 +132,6 @@ async def bulk_observations(
                     commit_id=commit_id,
                 )
 
-            if current_user is not None:
     return Response(status_code=status.HTTP_201_CREATED)
 
 
