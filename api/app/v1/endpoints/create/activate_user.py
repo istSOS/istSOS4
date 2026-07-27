@@ -42,6 +42,7 @@ from asyncpg.exceptions import (
     PostgresConnectionError,
     QueryCanceledError,
     TooManyConnectionsError,
+    UndefinedObjectError,
 )
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -100,7 +101,7 @@ async def activate_user(
             # ----------------------------------------------------------
             user_row = await conn.fetchrow(
                 """
-                SELECT id, username, role
+                SELECT id, username, role, status
                 FROM sensorthings."User"
                 WHERE id = $1
                 """,
@@ -120,6 +121,22 @@ async def activate_user(
                         "message": (
                             f"User '{user_row['username']}' is not pending "
                             f"(current role: '{user_row['role']}')."
+                        )
+                    },
+                )
+
+            # Rejection is a status transition, not a role change — a
+            # rejected user still has role='pending' by design, so the
+            # guard above alone wouldn't catch this. See the identical
+            # guard in update/admin_approval.py.
+            if user_row["status"] == "rejected":
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "message": (
+                            f"User '{user_row['username']}'s registration "
+                            "was rejected and cannot be activated directly. "
+                            "They must re-apply via POST /Register first."
                         )
                     },
                 )
@@ -149,14 +166,34 @@ async def activate_user(
                 #     create one explicitly via POST /Policies.
                 #     POLICY_FN_MAP is the single source of truth — imported
                 #     from rbac_roles.py to stay in sync with create/user.py.
+                #
+                #     The policy function issues CREATE POLICY ... TO
+                #     <username>, which requires a matching PostgreSQL
+                #     role. Self-registered users (/Register) have zero
+                #     DB footprint by design, so this raises
+                #     UndefinedObjectError for them. asyncpg marks the
+                #     entire outer transaction aborted on any caught
+                #     exception inside it, so a nested savepoint is used
+                #     to isolate the failure — the outer transaction
+                #     (role UPDATE) still commits. Mirrors the identical
+                #     pattern in update/admin_approval.py.
                 policy_fn = POLICY_FN_MAP.get(target_role)
                 if policy_fn:
                     policyname = f"{username}_default"
-                    await conn.execute(
-                        f"SELECT {policy_fn}($1, $2);",
-                        [username],
-                        policyname,
-                    )
+                    try:
+                        async with conn.transaction():
+                            await conn.execute(
+                                f"SELECT {policy_fn}($1, $2);",
+                                [username],
+                                policyname,
+                            )
+                    except UndefinedObjectError:
+                        logger.warning(
+                            "RLS policy skipped for '%s': no PostgreSQL role "
+                            "exists (application-layer user from /Register "
+                            "— zero DB footprint).",
+                            username,
+                        )
 
         logger.info(
             "User '%s' (id=%d) activated to role '%s' by admin '%s'.",

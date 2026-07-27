@@ -100,13 +100,18 @@ async def patch_policy_approval(
             async with conn.transaction():
 
                 # ------------------------------------------------------
-                # 2a. Fetch the target user's username.
-                #     We need it to construct the RLS policy name and to
-                #     pass as the first argument to the policy function.
+                # 2a. Fetch the target user's username and status.
+                #     We need the username to construct the RLS policy
+                #     name and pass as the first argument to the policy
+                #     function. status is checked separately below —
+                #     rejection is a status transition, not a role
+                #     change, so a rejected user still has role='pending'
+                #     and would otherwise still match the UPDATE's
+                #     WHERE clause in step 2b.
                 # ------------------------------------------------------
                 username_row = await conn.fetchrow(
                     """
-                    SELECT username
+                    SELECT username, status
                     FROM sensorthings."User"
                     WHERE id = $1
                     """,
@@ -117,6 +122,16 @@ async def patch_policy_approval(
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
                         detail="User not found or not in pending state",
+                    )
+
+                if username_row["status"] == "rejected":
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=(
+                            "This user's registration was rejected and "
+                            "cannot be approved directly. They must "
+                            "re-apply via POST /Register first."
+                        ),
                     )
 
                 username: str = username_row["username"]
