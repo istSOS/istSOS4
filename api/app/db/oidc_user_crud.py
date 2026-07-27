@@ -35,6 +35,28 @@ from asyncpg.exceptions import UniqueViolationError
 
 logger = logging.getLogger(__name__)
 
+# Constraint name from the base sensorthings."User" table definition —
+# used to distinguish a username collision from a (provider, sub)
+# collision, since a UniqueViolationError alone doesn't say which.
+# The other unique constraint on this table is
+# "uq_user_auth_provider_sub_id" (auth_provider, external_sub_id) —
+# any UniqueViolationError NOT matching the constant below is assumed
+# to be that one and re-raised unchanged.
+_USERNAME_UNIQUE_CONSTRAINT = "User_username_key"
+
+
+class OidcUsernameCollisionError(Exception):
+    """Raised when an OIDC provider's claimed username collides with an
+    existing (unrelated) local username — i.e. the UniqueViolationError
+    came from User_username_key, not from the (provider, sub) pair.
+
+    Distinct from a plain UniqueViolationError so callers can catch this
+    specific, currently-unresolved situation without also swallowing a
+    genuine (provider, sub) collision, which has a well-defined recovery
+    path (get_user_by_provider_sub) and must keep raising the underlying
+    UniqueViolationError unchanged.
+    """
+
 
 async def get_user_by_provider_sub(
     auth_provider: str,
@@ -96,9 +118,13 @@ async def create_pending_oidc_user(
         ``auth_provider``, ``external_sub_id``.
 
     Raises:
-        UniqueViolationError: if the (auth_provider, external_sub_id) pair or
-            the username already exists (caller should treat this as a no-op /
-            return the existing record via ``get_user_by_provider_sub``).
+        OidcUsernameCollisionError: if ``username`` collides with an
+            *existing, unrelated* local username (User_username_key).
+            This is deliberately NOT auto-resolved here — see the TODO
+            below.
+        UniqueViolationError: if the (auth_provider, external_sub_id) pair
+            already exists (caller should treat this as a no-op / return
+            the existing record via ``get_user_by_provider_sub``).
         Exception: any other asyncpg / database error bubbles up.
     """
     import json as _json
@@ -108,20 +134,42 @@ async def create_pending_oidc_user(
     pool = await get_pool()
     async with pool.acquire() as conn:
         # INSERT only — no DDL, no GRANT, no CREATE ROLE.
-        row = await conn.fetchrow(
-            """
-            INSERT INTO sensorthings."User"
-                (username, contact, role, auth_provider, external_sub_id)
-            VALUES
-                ($1, $2::jsonb, $3, $4, $5)
-            RETURNING id, username, role, uri, auth_provider, external_sub_id;
-            """,
-            username,
-            contact,
-            PENDING_ROLE,   # hardcoded — never accept from caller
-            auth_provider,
-            external_sub_id,
-        )
+        try:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO sensorthings."User"
+                    (username, contact, role, auth_provider, external_sub_id)
+                VALUES
+                    ($1, $2::jsonb, $3, $4, $5)
+                RETURNING id, username, role, uri, auth_provider, external_sub_id;
+                """,
+                username,
+                contact,
+                PENDING_ROLE,   # hardcoded — never accept from caller
+                auth_provider,
+                external_sub_id,
+            )
+        except UniqueViolationError as exc:
+            if exc.constraint_name == _USERNAME_UNIQUE_CONSTRAINT:
+                # TODO(product): decide the account-linking policy before
+                # wiring up the real OIDC callback route — should a
+                # username collision here (a) link this OIDC identity to
+                # the existing local account, (b) auto-suffix a new,
+                # distinct username, or (c) require the applicant to pick
+                # a different handle? Any of these has real implications
+                # for whether the OIDC identity and the existing local
+                # account represent the same person. Deliberately left
+                # unresolved rather than silently guessed at in code with
+                # no caller to verify the choice against — see the
+                # scoping discussion this fix came out of.
+                raise OidcUsernameCollisionError(
+                    f"OIDC provisioning failed: username {username!r} "
+                    "collision detected. Account linking policy not yet "
+                    "implemented."
+                ) from exc
+            # (provider, sub) collision or anything else — unchanged
+            # contract, caller recovers via get_user_by_provider_sub.
+            raise
 
     logger.info(
         "JIT-provisioned pending OIDC user: username=%r provider=%r",
