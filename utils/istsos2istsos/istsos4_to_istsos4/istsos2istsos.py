@@ -49,6 +49,10 @@ def required_env(name: str) -> str:
     return value
 
 
+def optional_env(name: str) -> str:
+    return os.getenv(name, "").strip()
+
+
 def parse_bool(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
@@ -157,15 +161,17 @@ def copy_datastream_observations(
         ]
         block_start, _ = utc_day_interval(min(days))
         _, block_end = utc_day_interval(max(days))
-        existing_times = set(
-            target.get_observation_times(
+        existing_times = {
+            normalize_phenomenon_time(phenomenon_time)
+            for phenomenon_time in target.get_observation_times(
                 target_datastream["@iot.id"], block_start, block_end
             )
-        )
+        }
         pending = [
             observation
             for observation in block
-            if observation["phenomenonTime"] not in existing_times
+            if normalize_phenomenon_time(observation["phenomenonTime"])
+            not in existing_times
         ]
         skipped_existing += len(block) - len(pending)
 
@@ -185,13 +191,29 @@ def copy_datastream_observations(
     return copied, skipped_existing, skipped_nodata
 
 
-def phenomenon_time_day(value: str) -> date:
-    """Return the UTC day containing a phenomenon time or interval start."""
-    interval_start = value.split("/", 1)[0]
-    parsed = datetime.fromisoformat(interval_start.replace("Z", "+00:00"))
+def parse_instant(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).date()
+    return parsed.astimezone(timezone.utc)
+
+
+def normalize_phenomenon_time(value: str) -> str:
+    """Canonical form of an instant or interval, for cross-server comparison.
+
+    Two istSOS4 versions spell the same instant differently
+    ("2025-02-05T11:00:00+00:00" vs "2025-02-05T11:00:00Z"), so comparing the
+    raw strings never matches: every already-imported observation looks new and
+    gets resent, which the target rejects with a 409.
+    """
+    return "/".join(
+        parse_instant(part).isoformat() for part in value.split("/")
+    )
+
+
+def phenomenon_time_day(value: str) -> date:
+    """Return the UTC day containing a phenomenon time or interval start."""
+    return parse_instant(value.split("/", 1)[0]).date()
 
 
 def utc_day_interval(day: date) -> tuple[str, str]:
@@ -228,15 +250,16 @@ def run() -> None:
                 f"NODATA_VALUE must be a number: {raw_nodata}"
             ) from exc
 
+    # Empty user/password means the instance needs no login.
     source = IstSOS4Client(
         required_env("ISTSOS4_FROM_URL"),
-        required_env("ISTSOS4_FROM_USER"),
-        required_env("ISTSOS4_FROM_PASSWORD"),
+        optional_env("ISTSOS4_FROM_USER"),
+        optional_env("ISTSOS4_FROM_PASSWORD"),
     )
     target = IstSOS4Client(
         required_env("ISTSOS4_TO_URL"),
-        required_env("ISTSOS4_TO_USER"),
-        required_env("ISTSOS4_TO_PASSWORD"),
+        optional_env("ISTSOS4_TO_USER"),
+        optional_env("ISTSOS4_TO_PASSWORD"),
     )
     network_from = os.getenv("NETWORK_FROM", "").strip()
     network_to = os.getenv("NETWORK_TO", "").strip()
@@ -247,7 +270,9 @@ def run() -> None:
         source.get_datastreams(network_from), "source"
     )
     if datastreams_from:
-        missing_datastreams = sorted(datastreams_from - set(source_datastreams))
+        missing_datastreams = sorted(
+            datastreams_from - set(source_datastreams)
+        )
         if missing_datastreams:
             raise ValueError(
                 "Source datastreams not found: "

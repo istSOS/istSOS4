@@ -137,11 +137,12 @@ class IstSOS4Client:
     def __init__(
         self,
         base_url: str,
-        username: str,
-        password: str,
+        username: str = "",
+        password: str = "",
         timeout: int = DEFAULT_TIMEOUT,
         refresh_margin_seconds: int = 300,
     ) -> None:
+        """An empty username means the instance is open: no /Login, no bearer."""
         self.base_url = base_url.rstrip("/")
         self.username = username
         self.password = password
@@ -209,6 +210,8 @@ class IstSOS4Client:
         return datetime.fromtimestamp(value, timezone.utc)
 
     def ensure_token(self) -> None:
+        if not self.username:
+            return
         if self.access_token is None:
             self.login()
             return
@@ -240,12 +243,11 @@ class IstSOS4Client:
         kwargs.setdefault("timeout", self.timeout)
         supplied_headers = kwargs.pop("headers", {})
         self.ensure_token()
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            **supplied_headers,
-        }
+        headers = dict(supplied_headers)
+        if self.access_token:
+            headers["Authorization"] = f"Bearer {self.access_token}"
         response = self.session.request(method, url, headers=headers, **kwargs)
-        if response.status_code == 401:
+        if response.status_code == 401 and self.username:
             logger.debug("401 on %s %s, re-authenticating", method, url)
             self.login()
             headers["Authorization"] = f"Bearer {self.access_token}"
@@ -260,13 +262,17 @@ class IstSOS4Client:
         path: str,
         params: dict[str, str] | None = None,
     ) -> Iterator[dict[str, Any]]:
-        next_path: str | None = path
-        next_params = params
-        while next_path:
-            payload = self.request("GET", next_path, params=next_params).json()
-            yield from payload.get("value", [])
-            next_path = payload.get("@iot.nextLink")
-            next_params = None
+        skip = 0
+        while True:
+            query = dict(params or {})
+            if skip:
+                query["$skip"] = str(skip)
+            payload = self.request("GET", path, params=query).json()
+            rows = payload.get("value", [])
+            yield from rows
+            if not rows or not payload.get("@iot.nextLink"):
+                return
+            skip += len(rows)
 
     def get_network_id(self, network_name: str) -> Any:
         networks = list(
