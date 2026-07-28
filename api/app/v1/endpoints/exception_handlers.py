@@ -42,6 +42,8 @@ catch-all ``Exception`` handler.
 
 import logging
 
+from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.exceptions import STAError
 from asyncpg.exceptions import (
     DataError,
     ForeignKeyViolationError,
@@ -52,9 +54,6 @@ from asyncpg.exceptions import (
     UniqueViolationError,
 )
 from fastapi import FastAPI, Request, status
-
-from app.v1.endpoints.error_response import error_response
-from app.v1.endpoints.exceptions import STAError
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +71,11 @@ async def handle_insufficient_privilege(request: Request, exc: Exception):
 
 
 async def handle_unique_violation(request: Request, exc: Exception):
-    return error_response(status.HTTP_409_CONFLICT, "Entity already exists.")
+    detail = getattr(exc, "detail", None)
+    message = "Entity already exists."
+    if detail:
+        message = f"{message} {detail}"
+    return error_response(status.HTTP_409_CONFLICT, message)
 
 
 async def handle_db_unavailable(request: Request, exc: Exception):
