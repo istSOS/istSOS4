@@ -333,6 +333,8 @@ async def asyncpg_stream_results(
                     .replace("+00:00", "Z")
                 )
 
+            total_rows = 0
+
             while True:
                 partition = await connection.fetch(
                     f"FETCH {PARTITION_CHUNK} FROM my_cursor"
@@ -341,10 +343,13 @@ async def asyncpg_stream_results(
                     break
 
                 partition_len = len(partition)
+                total_rows += partition_len
                 has_rows = True
 
-                if partition_len > top - 1:
+                if total_rows >= top:
                     partition = partition[:-1]
+                    if not partition and not is_first_partition:
+                        break
 
                 if (
                     VERSIONING
@@ -373,12 +378,6 @@ async def asyncpg_stream_results(
                     if partition_len > 0 and not single_result:
                         start_json = "{"
 
-                    next_link = build_nextLink(full_path, partition_len)
-                    next_link_json = (
-                        f'"@iot.nextLink": "{next_link}",'
-                        if next_link and not single_result
-                        else ""
-                    )
                     as_of = (
                         f'"@iot.as_of": "{as_of_value}",'
                         if VERSIONING
@@ -387,7 +386,7 @@ async def asyncpg_stream_results(
                         and not from_to_value
                         else ""
                     )
-                    start_json += as_of + iot_count + next_link_json
+                    start_json += as_of + iot_count
                     start_json += (
                         '"value": ['
                         if (partition_len > 0 and not single_result)
@@ -410,7 +409,15 @@ async def asyncpg_stream_results(
                 yield "{" + iot_count + '"value": []}'
 
             if has_rows and not single_result:
-                yield "]}"
+                next_link = (
+                    build_nextLink(full_path, total_rows)
+                    if total_rows >= top
+                    else None
+                )
+                next_link_json = (
+                    f',"@iot.nextLink": "{next_link}"' if next_link else ""
+                )
+                yield "]" + next_link_json + "}"
 
             await connection.execute("CLOSE my_cursor")
 
