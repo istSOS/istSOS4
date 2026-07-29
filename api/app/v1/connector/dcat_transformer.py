@@ -63,7 +63,8 @@ from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCTERMS, FOAF, OWL, SKOS, XSD
 
 from app import HOSTNAME, SUBPATH, VERSION
-from app.v1.connector.harvester import HarvestedThing
+from app.v1.connector.config import Settings, get_settings
+from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)
 
@@ -269,3 +270,143 @@ def _add_temporal(
     g.add((period, DCAT.startDate, Literal(start.isoformat(), datatype=XSD.dateTime)))
     if end is not None:
         g.add((period, DCAT.endDate, Literal(end.isoformat(), datatype=XSD.dateTime)))
+
+
+# Keyword / description helpers
+
+def _extract_keywords(ds: dict, thing: HarvestedThing) -> list[str]:
+    """
+    Deduplicated keyword list for a Dataset. Sources, in order:
+      - ObservedProperty.name, split on ":" (dummy data uses
+        "category:subcategory:phenomenon_id" notation)
+      - Thing.name
+      - Datastream.properties["keywords"]
+    """
+    seen: set[str] = set()
+    keywords: list[str] = []
+
+    def _add(kw: str) -> None:
+        kw = kw.strip()
+        if kw and kw not in seen:
+            seen.add(kw)
+            keywords.append(kw)
+
+    op = ds.get("observed_property")
+    if op and op.get("name"):
+        for part in op["name"].split(":"):
+            _add(part)
+    _add(thing.name)
+    for kw in (ds.get("properties") or {}).get("keywords", []):
+        if isinstance(kw, str):
+            _add(kw)
+    return keywords
+
+
+def _extract_series_keywords(thing: HarvestedThing, datastreams: list[dict]) -> list[str]:
+    """Deduplicated keyword list for a DatasetSeries: Thing.name plus every
+    keyword its scope's own Datastreams would individually carry."""
+    seen: set[str] = set()
+    keywords: list[str] = []
+
+    def _add(kw: str) -> None:
+        kw = kw.strip()
+        if kw and kw not in seen:
+            seen.add(kw)
+            keywords.append(kw)
+
+    _add(thing.name)
+    for ds in datastreams:
+        for kw in _extract_keywords(ds, thing):
+            _add(kw)
+    return keywords
+
+
+def _compose_dataset_description(ds: dict, thing: HarvestedThing) -> str:
+    parts: list[str] = []
+    if ds.get("description"):
+        parts.append(ds["description"])
+    op = ds.get("observed_property")
+    if op and op.get("description"):
+        parts.append(op["description"])
+    sensor = ds.get("sensor")
+    if sensor and sensor.get("description"):
+        parts.append(sensor["description"])
+    return " | ".join(p for p in parts if p) or ds.get("name", "")
+
+
+# STA href reconstruction (duplicated from stac_transformer.py -- the
+# harvested dicts carry no self_link field by design; see harvester.py's
+# contract. Both transformers derive the same URL from the same HOSTNAME /
+# SUBPATH / VERSION constants, so there is no risk of the two disagreeing
+# even without importing one from the other.)
+
+def _datastream_href(ds_id) -> str:
+    return f"{HOSTNAME}{SUBPATH}{VERSION}/Datastreams({ds_id})"
+
+
+def _thing_href(thing_id) -> str:
+    return f"{HOSTNAME}{SUBPATH}{VERSION}/Things({thing_id})"
+
+
+# DCAT resource URI builders
+
+def _dataset_uri(ds_id) -> URIRef:
+    return URIRef(f"{DCAT_ROOT_HREF}/datasets/datastream-{ds_id}")
+
+
+def _series_uri(thing_id) -> URIRef:
+    """
+    Same URI regardless of scope -- a DatasetSeries rebuilt once per scope
+    intentionally reuses this identifier. Uniqueness is enforced by which
+    Graph the triples live in, not by suffixing the identifier.
+    """
+    return URIRef(f"{DCAT_ROOT_HREF}/series/thing-{thing_id}")
+
+
+def _distribution_uri(ds_id, kind: str) -> URIRef:
+    return URIRef(f"{DCAT_ROOT_HREF}/datasets/datastream-{ds_id}/distributions/{kind}")
+
+
+def _catalog_uri(network_id: Optional[int] = None, orphan: bool = False) -> URIRef:
+    if network_id is not None:
+        return URIRef(f"{DCAT_ROOT_HREF}/{network_id}")
+    if orphan:
+        return URIRef(f"{DCAT_ROOT_HREF}/orphan")
+    return URIRef(DCAT_ROOT_HREF)
+
+
+# Publisher agent
+
+def _add_publisher_agent(g: Graph, settings: Settings) -> Optional[URIRef]:
+    """
+    Add the foaf:Agent / org:Organization node for the publisher. Returns
+    the URIRef when DCAT_PUBLISHER_URI is set, None when only
+    DCAT_PUBLISHER_NAME is set (BNode emitted, but not returned -- a BNode
+    publisher can't be referenced across the independent per-scope graphs
+    this transformer produces, since each is cached and served separately)
+    or when DCAT_PUBLISHER_NAME itself is unset (no publisher at all).
+    """
+    if not settings.DCAT_PUBLISHER_NAME:
+        return None
+
+    if settings.DCAT_PUBLISHER_URI:
+        pub_node: Union[URIRef, BNode] = URIRef(settings.DCAT_PUBLISHER_URI)
+    else:
+        pub_node = BNode()
+        logger.warning(
+            "DCAT_PUBLISHER_URI is not set -- publisher will be a blank node "
+            "and cannot be referenced from outside this graph."
+        )
+
+    g.add((pub_node, RDF.type, FOAF.Agent))
+    g.add((pub_node, RDF.type, ORG.Organization))
+    g.add((pub_node, FOAF.name, Literal(settings.DCAT_PUBLISHER_NAME)))
+    if settings.DCAT_PUBLISHER_HOMEPAGE:
+        g.add((pub_node, FOAF.homepage, URIRef(settings.DCAT_PUBLISHER_HOMEPAGE)))
+    if settings.DCAT_PUBLISHER_MBOX:
+        mbox = settings.DCAT_PUBLISHER_MBOX
+        if not mbox.startswith("mailto:"):
+            mbox = f"mailto:{mbox}"
+        g.add((pub_node, FOAF.mbox, URIRef(mbox)))
+
+    return pub_node if isinstance(pub_node, URIRef) else None
