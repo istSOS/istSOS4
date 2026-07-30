@@ -108,6 +108,12 @@ Recommended:
 | `dct:conformsTo` | Fixed | DCAT-AP 3.0 profile URI | Hard-coded, not derived from STA conformance |
 | `foaf:homepage` | Constructed URL | absolute URL of the catalog's own Turtle endpoint | One per Catalog node, root or sub-catalog |
 
+**Catalog `dcat:dataset` flattening (deliberate).** Each scope's Catalog node asserts `dcat:dataset` twice over: once per member `DatasetSeries`, and once per individual `Dataset` belonging to any of those Series. This means `catalog dcat:dataset ?x` returns a mixed list of Series and Datasets rather than a clean single-level enumeration, a consumer has to check `rdf:type` to tell them apart.
+
+This is intentional, not an oversight, and the reasoning is about who is expected to read this graph. Generic DCAT-AP harvesters, the "data.europa.eu style" consumers this document names as the target (see Scope, above), mostly walk `dcat:dataset` straight off a Catalog and have no notion of `dcat:DatasetSeries`, it is a newer, less universally-supported class. If the Catalog only pointed at Series and not at Datasets directly, a harvester like that would see a list of unfamiliar `DatasetSeries` nodes, have no path to walk into them, and never discover any of the underlying Datasets at all. Given that the explicit design goal is harvester compatibility, flattening is the safer choice: it costs a consumer that does understand the Series/Dataset distinction a slightly noisier top-level list, in exchange for a consumer that does not understand it still finding every Dataset.
+
+The tradeoff would flip if a future consumer needed a clean two-level browse (Catalog to Series, Series to Dataset) more than it needed naive-harvester compatibility, but that is not the profile this connector is built for today.
+
 **dcat:DatasetSeries field mapping** (one node per `HarvestedThing` per scope it has at least one Dataset in)
 
 Mandatory:
