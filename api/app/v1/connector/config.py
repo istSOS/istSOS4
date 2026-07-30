@@ -34,10 +34,27 @@ from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+import logging
+ 
+logger = logging.getLogger(__name__)
 
 
 _STAC_NON_SPDX_LICENSES = {"various", "proprietary"}
 _STAC_LICENSE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-+]*$")
+
+SPDX_LICENSE_URIS: dict[str, str] = {
+    "CC-BY-4.0": "https://spdx.org/licenses/CC-BY-4.0",
+    "CC-BY-SA-4.0": "https://spdx.org/licenses/CC-BY-SA-4.0",
+    "CC-BY-NC-4.0": "https://spdx.org/licenses/CC-BY-NC-4.0",
+    "CC-BY-NC-SA-4.0": "https://spdx.org/licenses/CC-BY-NC-SA-4.0",
+    "CC0-1.0": "https://spdx.org/licenses/CC0-1.0",
+    "ODbL-1.0": "https://spdx.org/licenses/ODbL-1.0",
+    "ODC-By-1.0": "https://spdx.org/licenses/ODC-By-1.0",
+    "MIT": "https://spdx.org/licenses/MIT",
+    "Apache-2.0": "https://spdx.org/licenses/Apache-2.0",
+}
+
+_LICENSE_PLACEHOLDERS = {"other", "unknown", "none", "n/a", "na", "tbd", ""}
 
 
 class Settings(BaseSettings):
@@ -201,6 +218,54 @@ class Settings(BaseSettings):
             "if not already present."
         ),
     )
+
+    def resolve_license_uri(value: str | None, *, context: str = "") -> str | None:
+        """
+        Normalize a license value (from DCAT_DEFAULT_LICENSE or a Datastream's
+        own properties["license"]) into a URI safe to wrap in rdflib.URIRef.
+    
+        Resolution order:
+        1. None / empty / known placeholder ("other", "unknown", ...)
+            -> None. Warning logged. No dct:license triple should be emitted.
+        2. Already an absolute URI ("http://..." / "https://...")
+            -> returned unchanged.
+        3. A bare SPDX id present in SPDX_LICENSE_URIS
+            -> mapped to its canonical spdx.org URI.
+        4. Any other bare token
+            -> best-effort guess at "https://spdx.org/licenses/{token}",
+            with a warning, so an unmapped-but-valid SPDX id (or a typo)
+            is visible in logs rather than silently wrong.
+    
+        `context` is free text (e.g. "Datastream 771") purely for the log
+        message, so a bad value in production points straight at its source.
+        """
+        if not value:
+            return None
+    
+        v = value.strip()
+        suffix = f" ({context})" if context else ""
+    
+        if v.lower() in _LICENSE_PLACEHOLDERS:
+            logger.warning(
+                "Ignoring placeholder license value %r%s -- no dct:license will be emitted",
+                value, suffix,
+            )
+            return None
+    
+        if v.startswith("http://") or v.startswith("https://"):
+            return v
+    
+        if v in SPDX_LICENSE_URIS:
+            return SPDX_LICENSE_URIS[v]
+    
+        guessed = f"https://spdx.org/licenses/{v}"
+        logger.warning(
+            "License value %r%s is not an absolute URI and not in SPDX_LICENSE_URIS -- "
+            "guessing %s. Add it to SPDX_LICENSE_URIS to silence this warning.",
+            value, suffix, guessed,
+        )
+        return guessed
+
 
     @property
     def has_mandatory_dcat_fields(self) -> bool:
