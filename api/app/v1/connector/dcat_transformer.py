@@ -63,7 +63,7 @@ from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCTERMS, FOAF, OWL, SKOS, XSD
 
 from app import HOSTNAME, SUBPATH, VERSION
-from app.v1.connector.config import Settings, get_settings
+from app.v1.connector.config import Settings, get_settings, resolve_license_uri
 from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)
@@ -548,9 +548,12 @@ def _build_dataset(
         g.add((dataset_uri, DCT.publisher, publisher_node))
 
     props = ds.get("properties") or {}
-    license_val = props.get("license") or settings.DCAT_DEFAULT_LICENSE
-    if license_val:
-        g.add((dataset_uri, DCT.license, URIRef(license_val)))
+    license_uri = resolve_license_uri(
+        props.get("license") or settings.DCAT_DEFAULT_LICENSE,
+        context=f"Datastream {ds_id}",
+    )
+    if license_uri:
+        g.add((dataset_uri, DCT.license, URIRef(license_uri)))
 
     access_rights = props.get("accessRights") or settings.DCAT_DEFAULT_ACCESS_RIGHTS
     if access_rights:
@@ -569,7 +572,7 @@ def _build_dataset(
             mailto = email if email.startswith("mailto:") else f"mailto:{email}"
             g.add((vcard_node, vcard.hasEmail, URIRef(mailto)))
 
-    _add_distributions(g, dataset_uri, ds, license_val)
+    _add_distributions(g, dataset_uri, ds, license_uri)
 
     return dataset_uri, bbox, start, end
 
@@ -712,8 +715,9 @@ def _add_root_catalog_and_service(
         )))
     g.add((catalog_uri, DCT.language, Literal(lang)))
 
-    if settings.DCAT_DEFAULT_LICENSE:
-        g.add((catalog_uri, DCT.license, URIRef(settings.DCAT_DEFAULT_LICENSE)))
+    root_license_uri = resolve_license_uri(settings.DCAT_DEFAULT_LICENSE, context="root Catalog")
+    if root_license_uri:
+        g.add((catalog_uri, DCT.license, URIRef(root_license_uri)))
     if settings.DCAT_DEFAULT_ACCESS_RIGHTS:
         g.add((catalog_uri, DCT.accessRights, URIRef(settings.DCAT_DEFAULT_ACCESS_RIGHTS)))
 
@@ -751,8 +755,9 @@ def _add_sub_catalog(
     g.add((catalog_uri, DCT.language, Literal(lang)))
     g.add((catalog_uri, DCT.isPartOf, _catalog_uri()))
 
-    if settings.DCAT_DEFAULT_LICENSE:
-        g.add((catalog_uri, DCT.license, URIRef(settings.DCAT_DEFAULT_LICENSE)))
+    sub_license_uri = resolve_license_uri(settings.DCAT_DEFAULT_LICENSE, context=f"sub-catalog {identifier}")
+    if sub_license_uri:
+        g.add((catalog_uri, DCT.license, URIRef(sub_license_uri)))
     if publisher_node:
         g.add((catalog_uri, DCT.publisher, publisher_node))
 

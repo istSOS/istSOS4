@@ -56,6 +56,53 @@ SPDX_LICENSE_URIS: dict[str, str] = {
 
 _LICENSE_PLACEHOLDERS = {"other", "unknown", "none", "n/a", "na", "tbd", ""}
 
+def resolve_license_uri(value: str | None, *, context: str = "") -> str | None:
+        """
+        Normalize a license value (from DCAT_DEFAULT_LICENSE or a Datastream's
+        own properties["license"]) into a URI safe to wrap in rdflib.URIRef.
+    
+        Resolution order:
+        1. None / empty / known placeholder ("other", "unknown", ...)
+            -> None. Warning logged. No dct:license triple should be emitted.
+        2. Already an absolute URI ("http://..." / "https://...")
+            -> returned unchanged.
+        3. A bare SPDX id present in SPDX_LICENSE_URIS
+            -> mapped to its canonical spdx.org URI.
+        4. Any other bare token
+            -> best-effort guess at "https://spdx.org/licenses/{token}",
+            with a warning, so an unmapped-but-valid SPDX id (or a typo)
+            is visible in logs rather than silently wrong.
+    
+        `context` is free text (e.g. "Datastream 771") purely for the log
+        message, so a bad value in production points straight at its source.
+        """
+        if not value:
+            return None
+    
+        v = value.strip()
+        suffix = f" ({context})" if context else ""
+    
+        if v.lower() in _LICENSE_PLACEHOLDERS:
+            logger.warning(
+                "Ignoring placeholder license value %r%s -- no dct:license will be emitted",
+                value, suffix,
+            )
+            return None
+    
+        if v.startswith("http://") or v.startswith("https://"):
+            return v
+    
+        if v in SPDX_LICENSE_URIS:
+            return SPDX_LICENSE_URIS[v]
+    
+        guessed = f"https://spdx.org/licenses/{v}"
+        logger.warning(
+            "License value %r%s is not an absolute URI and not in SPDX_LICENSE_URIS -- "
+            "guessing %s. Add it to SPDX_LICENSE_URIS to silence this warning.",
+            value, suffix, guessed,
+        )
+        return guessed
+
 
 class Settings(BaseSettings):
     """Connector configuration loaded from environment variables or .env file."""
@@ -218,54 +265,6 @@ class Settings(BaseSettings):
             "if not already present."
         ),
     )
-
-    def resolve_license_uri(value: str | None, *, context: str = "") -> str | None:
-        """
-        Normalize a license value (from DCAT_DEFAULT_LICENSE or a Datastream's
-        own properties["license"]) into a URI safe to wrap in rdflib.URIRef.
-    
-        Resolution order:
-        1. None / empty / known placeholder ("other", "unknown", ...)
-            -> None. Warning logged. No dct:license triple should be emitted.
-        2. Already an absolute URI ("http://..." / "https://...")
-            -> returned unchanged.
-        3. A bare SPDX id present in SPDX_LICENSE_URIS
-            -> mapped to its canonical spdx.org URI.
-        4. Any other bare token
-            -> best-effort guess at "https://spdx.org/licenses/{token}",
-            with a warning, so an unmapped-but-valid SPDX id (or a typo)
-            is visible in logs rather than silently wrong.
-    
-        `context` is free text (e.g. "Datastream 771") purely for the log
-        message, so a bad value in production points straight at its source.
-        """
-        if not value:
-            return None
-    
-        v = value.strip()
-        suffix = f" ({context})" if context else ""
-    
-        if v.lower() in _LICENSE_PLACEHOLDERS:
-            logger.warning(
-                "Ignoring placeholder license value %r%s -- no dct:license will be emitted",
-                value, suffix,
-            )
-            return None
-    
-        if v.startswith("http://") or v.startswith("https://"):
-            return v
-    
-        if v in SPDX_LICENSE_URIS:
-            return SPDX_LICENSE_URIS[v]
-    
-        guessed = f"https://spdx.org/licenses/{v}"
-        logger.warning(
-            "License value %r%s is not an absolute URI and not in SPDX_LICENSE_URIS -- "
-            "guessing %s. Add it to SPDX_LICENSE_URIS to silence this warning.",
-            value, suffix, guessed,
-        )
-        return guessed
-
 
     @property
     def has_mandatory_dcat_fields(self) -> bool:
