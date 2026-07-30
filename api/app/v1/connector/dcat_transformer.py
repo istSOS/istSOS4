@@ -526,8 +526,6 @@ def _build_dataset(
         # in dummy data, not a real OGC-style URI -- once that's addressed
         # upstream, dcat:theme/dct:subject will start resolving for every
         # Dataset instead of only the ones with a live URL already set.
-        if op.get("name"):
-            g.add((dataset_uri, DCAT.keyword, Literal(op["name"], lang=lang)))
 
     bbox = None
     geometry = _resolve_dataset_geometry(thing, ds)
