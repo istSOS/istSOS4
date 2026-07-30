@@ -34,6 +34,8 @@ import logging
 from typing import Optional, Dict, Any
 import datetime
 
+from rdflib import Graph
+
 from app.db.redis_db import redis
 from app.v1.connector.utils import flatten_stac_catalog
 
@@ -42,6 +44,12 @@ logger = logging.getLogger(__name__)
 _STAC_KEY_PREFIX = "stac:*"
 STAC_AVAILABILITY = False 
 LAST_FETCH: Optional[str] = None
+
+# DCAT-AP graphs are cached whole per scope -- unlike STAC's flat
+# per-Collection/per-Item keys, there is no cross-scope merge to
+# invalidate, so each scope's serialized Turtle is written and purged
+# under its own "dcat:*" prefix, entirely independent of "stac:*".
+_DCAT_KEY_PREFIX = "dcat:*"
 
 
 def get_stac_metadata() -> Dict[str, Any]:
@@ -53,6 +61,35 @@ def get_stac_metadata() -> Dict[str, Any]:
         "stac_availability": json.loads(raw_avail) if raw_avail else False,
         "last_fetch": raw_fetch.decode("utf-8") if raw_fetch else None,
     }
+
+
+def get_dcat_metadata() -> Dict[str, Any]:
+    """Helper to fetch DCAT availability/last-fetch/network-id metadata from
+    Redis safely with defaults. Independent of get_stac_metadata -- the two
+    standards are harvested and cached on the same cycle but tracked as
+    separate availability flags, since one transformer failing should not
+    be reported as if both did."""
+    raw_avail = redis.get("dcat:meta:availability")
+    raw_fetch = redis.get("dcat:meta:last_fetch")
+    raw_network_ids = redis.get("dcat:meta:network_ids")
+
+    return {
+        "dcat_availability": json.loads(raw_avail) if raw_avail else False,
+        "last_fetch": raw_fetch.decode("utf-8") if raw_fetch else None,
+        "network_ids": json.loads(raw_network_ids) if raw_network_ids else [],
+    }
+
+
+def _dcat_root_key() -> str:
+    return "dcat:graph:root"
+
+
+def _dcat_orphan_key() -> str:
+    return "dcat:graph:orphan"
+
+
+def _dcat_network_key(network_id) -> str:
+    return f"dcat:graph:net-{network_id}"
 
 
 def _collection_key(collection_id: str) -> str:
@@ -232,4 +269,123 @@ def write_stac_catalog_with_networks(root_dict: dict) -> None:
         "%d Networks, %d network collections, %d network items)",
         len(flat), len(root_dict.get("collections", [])), len(root_dict.get("networks", [])),
         net_collections, net_items,
+    )
+
+
+# DCAT-AP reads and writes
+#
+# Each scope (root / orphan / one graph per Network) is cached as one whole
+# serialized Turtle document under its own key -- see dcat_transformer.py's
+# module docstring for why DCAT graphs are never merged across scopes the
+# way STAC's flat entity keys are. Readers get raw Turtle text back; api.py
+# is responsible for setting the response content-type, this layer does not
+# know or care that it's an HTTP response.
+
+async def get_dcat_root() -> Optional[str]:
+    """
+    Return the cached root DCAT-AP Turtle document, or None if no harvest
+    cycle has written it yet.
+
+    Under NETWORK=0 this is the only DCAT graph and carries every Dataset
+    and DatasetSeries. Under NETWORK=1 this is the structural-only root
+    (Catalog + DataService + Agents + dct:hasPart links), see
+    get_dcat_orphan / get_dcat_network for the scopes that carry data.
+    """
+    raw = redis.get(_dcat_root_key())
+    if raw is None:
+        return None
+    return raw.decode("utf-8") if isinstance(raw, bytes) else raw
+
+
+async def get_dcat_orphan() -> Optional[str]:
+    """
+    Return the cached orphan-scope DCAT-AP Turtle document (Datastreams with
+    no assigned Network), or None if NETWORK=0 or no harvest cycle has
+    written it yet.
+    """
+    raw = redis.get(_dcat_orphan_key())
+    if raw is None:
+        return None
+    return raw.decode("utf-8") if isinstance(raw, bytes) else raw
+
+
+async def get_dcat_network(network_id) -> Optional[str]:
+    """
+    Return the cached DCAT-AP Turtle document for one Network's sub-catalog,
+    or None if this network_id doesn't exist, NETWORK=0, or no harvest cycle
+    has completed yet.
+    """
+    raw = redis.get(_dcat_network_key(network_id))
+    if raw is None:
+        return None
+    return raw.decode("utf-8") if isinstance(raw, bytes) else raw
+
+
+def _purge_dcat_keys() -> None:
+    cursor = 0
+    stale_keys: list[str] = []
+    while True:
+        cursor, keys = redis.scan(cursor=cursor, match=_DCAT_KEY_PREFIX)
+        stale_keys.extend(keys)
+        if cursor == 0:
+            break
+    if stale_keys:
+        redis.delete(*stale_keys)
+
+
+def write_dcat_catalog(result: Dict[str, Graph]) -> None:
+    """
+    Serialize and write the NETWORK=0 DCAT-AP graph to Redis.
+
+    result is build_dcat_catalog()'s direct output: {"root": Graph}.
+    Following the sta2rest / write_stac_catalog pattern, this uses the
+    synchronous redis client and purges stale "dcat:*" keys before writing,
+    so readers hitting the cache mid-write may see a temporary miss rather
+    than a mixed old/new graph.
+    """
+    _purge_dcat_keys()
+
+    turtle = result["root"].serialize(format="turtle")
+    redis.set(_dcat_root_key(), turtle)
+
+    redis.set("dcat:meta:availability", json.dumps(True))
+    redis.set("dcat:meta:last_fetch", datetime.datetime.now(datetime.timezone.utc).isoformat())
+    redis.set("dcat:meta:network_ids", json.dumps([]))
+
+    logger.info(
+        "DCAT cache written to Redis: 1 root graph (%d triples)",
+        len(result["root"]),
+    )
+
+
+def write_dcat_catalog_with_networks(result: Dict[str, Any]) -> None:
+    """
+    Serialize and write the NETWORK=1 DCAT-AP graphs to Redis.
+
+    result is build_dcat_catalog_with_networks()'s output:
+        {"root": Graph, "orphan": Graph, "networks": {network_id: Graph, ...}}
+
+    Key layout:
+        dcat:graph:root        -> structural-only root (Catalog + DataService)
+        dcat:graph:orphan      -> orphan scope (full Dataset/DatasetSeries content)
+        dcat:graph:net-{id}    -> one per Network (full Dataset/DatasetSeries content)
+    """
+    _purge_dcat_keys()
+
+    redis.set(_dcat_root_key(), result["root"].serialize(format="turtle"))
+    redis.set(_dcat_orphan_key(), result["orphan"].serialize(format="turtle"))
+
+    network_ids = []
+    for network_id, graph in result["networks"].items():
+        redis.set(_dcat_network_key(network_id), graph.serialize(format="turtle"))
+        network_ids.append(network_id)
+
+    redis.set("dcat:meta:availability", json.dumps(True))
+    redis.set("dcat:meta:last_fetch", datetime.datetime.now(datetime.timezone.utc).isoformat())
+    redis.set("dcat:meta:network_ids", json.dumps(network_ids))
+
+    logger.info(
+        "DCAT network cache written to Redis: 1 root graph (%d triples), "
+        "1 orphan graph (%d triples), %d Network graphs",
+        len(result["root"]), len(result["orphan"]), len(network_ids),
     )

@@ -106,6 +106,117 @@ class Settings(BaseSettings):
             )
         return v
 
+    # DCAT-AP 3.0 catalog identity
+    DCAT_CATALOG_ID: str = Field(
+        default="istsos-connector-dcat-catalog",
+        description=(
+            "dct:identifier of the root dcat:Catalog. Independent from "
+            "STAC_CATALOG_ID -- the two standards are served as separate "
+            "catalogs and are allowed to diverge."
+        ),
+    )
+    DCAT_CATALOG_TITLE: Optional[str] = Field(
+        default=None,
+        description=(
+            "dct:title of the root dcat:Catalog. Mandatory per DCAT-AP 3.0. "
+            "When unset, has_mandatory_dcat_fields is False and the "
+            "transformer emits a partial graph with a logged warning."
+        ),
+    )
+    DCAT_CATALOG_DESCRIPTION: Optional[str] = Field(
+        default=None,
+        description=(
+            "dct:description of the root dcat:Catalog. Mandatory per "
+            "DCAT-AP 3.0, same partial-graph behavior as DCAT_CATALOG_TITLE "
+            "when unset."
+        ),
+    )
+    DCAT_DEPLOYMENT_NAME: str = Field(
+        default="istSOS4",
+        description=(
+            "Deployment name interpolated into composed dct:description "
+            "text, mirrors STAC_DEPLOYMENT_NAME's role for the STAC side."
+        ),
+    )
+    DCAT_LANGUAGE: str = Field(
+        default="en",
+        description=(
+            "BCP-47 language tag used on every rdflib.Literal with a "
+            "language-tagged string (dct:title, dct:description, "
+            "dcat:keyword, ...). Single-language deployment for now; "
+            "multi-language support is a future extension."
+        ),
+    )
+
+    # DCAT-AP licensing / rights
+    # TODO: DCAT_DEFAULT_LICENSE is a placeholder. dct:license needs to
+    # resolve to a real license URI (e.g. https://spdx.org/licenses/CC-BY-4.0),
+    # unlike STAC_DEFAULT_LICENSE which accepts a bare SPDX token. Build a
+    # small SPDX-id -> URI mapping table so operators can keep setting one
+    # license identifier and have both standards derive a spec-conformant
+    # value from it, instead of maintaining two separate license settings.
+    DCAT_DEFAULT_LICENSE: Optional[str] = Field(
+        default=None,
+        description=(
+            "Fallback dct:license URI applied to every Dataset and "
+            "Distribution when a Datastream's own properties carry no "
+            "license. Must be a resolvable URI, not an SPDX token -- see "
+            "the TODO above. Left unset (None) by default; no dct:license "
+            "triple is emitted until an operator sets this."
+        ),
+    )
+    DCAT_DEFAULT_ACCESS_RIGHTS: Optional[str] = Field(
+        default=None,
+        description=(
+            "Fallback dct:accessRights URI (e.g. a MDR-AccessRights "
+            "authority-table value such as PUBLIC) applied when a "
+            "Datastream's own properties carry no accessRights value."
+        ),
+    )
+
+    # DCAT-AP publisher agent
+    DCAT_PUBLISHER_NAME: Optional[str] = Field(
+        default=None,
+        description=(
+            "foaf:name of the publisher Agent. dct:publisher is mandatory "
+            "per DCAT-AP 3.0 on the root Catalog; leaving this unset means "
+            "has_mandatory_dcat_fields is False and no publisher node is "
+            "emitted at all."
+        ),
+    )
+    DCAT_PUBLISHER_URI: Optional[str] = Field(
+        default=None,
+        description=(
+            "URI identifying the publisher Agent as a named node. When "
+            "unset but DCAT_PUBLISHER_NAME is set, the publisher is "
+            "emitted as a BNode -- valid RDF, but not referenceable from "
+            "outside this graph, so a warning is logged."
+        ),
+    )
+    DCAT_PUBLISHER_HOMEPAGE: Optional[str] = Field(default=None)
+    DCAT_PUBLISHER_MBOX: Optional[str] = Field(
+        default=None,
+        description=(
+            "Publisher contact email. 'mailto:' is prepended automatically "
+            "if not already present."
+        ),
+    )
+
+    @property
+    def has_mandatory_dcat_fields(self) -> bool:
+        """
+        True only when every DCAT-AP 3.0 mandatory Catalog field that has
+        no STA source (title, description, publisher) has been configured.
+        Callers may gate on this before invoking the transformer; the
+        transformer itself always produces a graph regardless, logging a
+        warning when this is False.
+        """
+        return bool(
+            self.DCAT_CATALOG_TITLE
+            and self.DCAT_CATALOG_DESCRIPTION
+            and self.DCAT_PUBLISHER_NAME
+        )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
