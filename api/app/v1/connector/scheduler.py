@@ -18,9 +18,9 @@ Scheduling layer for the istSOS Metadata Connector.
 Immediate first run: start_scheduler() forces an immediate first fire
 (next_run_time=now) and then settles into the normal interval after that.
 
-Cache writes: stac and dcat are written within one cycle, or neither is.
-A failure before both writes complete leaves the previous valid Redis
-cache untouched.
+Cache writes: stac and dcat are written within one cycle, or neither is,
+per standard (each is independent of the other -- a DCAT failure does not
+roll back the STAC write, and vice versa; see _run_cycle).
 
 Public interface:
     start_scheduler(pool) -> AsyncIOScheduler
@@ -36,23 +36,21 @@ import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from app.v1.connector.cache import write_stac_catalog, write_stac_catalog_with_networks
+from app.v1.connector.cache import (
+    write_stac_catalog,
+    write_stac_catalog_with_networks,
+    write_dcat_catalog,
+    write_dcat_catalog_with_networks,
+)
 from app.v1.connector.config import get_settings
 from app.v1.connector.harvester import harvest, harvest_with_networks
 from app.v1.connector.stac_transformer import build_stac_catalog, build_stac_catalog_with_networks
+from app.v1.connector.dcat_transformer import build_dcat_catalog, build_dcat_catalog_with_networks
 
 logger = logging.getLogger(__name__)
 
 _HARVEST_LOCK_KEY = 726419950_1
 NETWORK = bool(os.getenv("NETWORK"))  # read once at startup, matches every other config constant
-
-try:
-    # Both currently not implemented
-    from app.v1.connector.dcat_transformer import build_dcat_catalog
-    from app.v1.connector.cache import write_dcat_catalog
-except ImportError:
-    build_dcat_catalog = None
-    write_dcat_catalog = None
 
 
 def start_scheduler(pool: asyncpg.Pool) -> AsyncIOScheduler:
@@ -125,24 +123,46 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
 
     STAC is always written. DCAT is written only when dcat_transformer.py
     has been implemented (i.e. build_dcat_catalog is not None). The two
-    writes are independent -- a future DCAT failure will not roll back the
-    STAC write, and vice versa.
+    standards are independent -- a DCAT failure will not roll back the
+    STAC write, and vice versa, since each has its own try/except below
+    rather than sharing one.
+
+    NETWORK dispatch mirrors STAC's exactly: harvest() and
+    build_stac_catalog()/build_dcat_catalog() for NETWORK=0,
+    harvest_with_networks() and the *_with_networks() variants for
+    NETWORK=1. Both standards are built from the same single harvest call
+    per cycle -- there is no second Postgres round trip for DCAT.
     """
     if NETWORK:
         network_catalog = await harvest_with_networks(connection)
+
         stac_dict = build_stac_catalog_with_networks(network_catalog)
         write_stac_catalog_with_networks(stac_dict)
+
+        try:
+            dcat_dict = build_dcat_catalog_with_networks(network_catalog)
+            write_dcat_catalog_with_networks(dcat_dict)
+            logger.info(
+                "DCAT cache written: %d Networks, harvested at %s",
+                len(network_catalog.networks), network_catalog.harvested_at,
+            )
+        except Exception:
+            logger.exception(
+                "DCAT transform/write failed this cycle -- STAC write above is "
+                "unaffected, previous DCAT cache left untouched"
+            )
     else:
         catalog = await harvest(connection)
+
         stac_dict = build_stac_catalog(catalog)
         write_stac_catalog(stac_dict)
 
-    if build_dcat_catalog is not None:
-        dcat_dict = build_dcat_catalog(catalog, config)
-        write_dcat_catalog(dcat_dict)
-        logger.info("DCAT cache written: %d Datasets", catalog.thing_count)
-    else:
-        logger.warning(
-            "dcat_transformer.py not implemented yet -- DCAT cache not "
-            "written this cycle. STAC cache write above is unaffected."
-        )
+        try:
+            dcat_dict = build_dcat_catalog(catalog)
+            write_dcat_catalog(dcat_dict)
+            logger.info("DCAT cache written: %d Things", catalog.thing_count)
+        except Exception:
+            logger.exception(
+                "DCAT transform/write failed this cycle -- STAC write above is "
+                "unaffected, previous DCAT cache left untouched"
+                )
