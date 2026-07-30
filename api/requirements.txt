@@ -13,3 +13,4 @@ redis==8.0.1
 sqlalchemy==2.0.51
 ujson==5.13.0
 uvicorn==0.51.0
+rdflib==7.1.1
