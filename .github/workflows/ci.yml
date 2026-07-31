@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  STA_BASE_URL: http://localhost:8018/v4/v1.1
+  STA_BASE_URL: http://localhost:8018/istsos4/v1.1
 
 jobs:
   conformance:
@@ -29,12 +29,12 @@ jobs:
       - name: Install test deps
         run: pip install -r tests/conformance/requirements.txt
 
-      - name: OGC 18-088 conformance (396 tests)
-        run: pytest tests/conformance -n auto
+      - name: OGC 18-088 conformance (405 tests)
+        run: pytest tests/conformance
 
-      - name: Stack logs
+      - name: API logs
         if: failure()
-        run: docker compose -f dev_docker-compose.yml logs --tail=200
+        run: docker compose -f dev_docker-compose.yml logs api
 
   publish:
     if: github.ref == 'refs/heads/main'
