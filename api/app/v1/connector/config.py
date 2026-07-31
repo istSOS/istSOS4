@@ -28,6 +28,7 @@ read by the APScheduler registration in istSOS's main.py.
 
 from __future__ import annotations
 
+import os
 import re
 from functools import lru_cache
 from typing import Optional
@@ -38,6 +39,27 @@ import logging
  
 logger = logging.getLogger(__name__)
 
+
+def _env_flag(name: str, default: str = "0") -> bool:
+    """
+    Parse a 0/1-style boolean env var. Deliberately NOT `bool(os.getenv(name))`
+    -- that treats any non-empty string as truthy, so an explicit "0" in
+    .env would evaluate to True, which is exactly backwards for a master
+    switch that must default off and require an explicit opt-in.
+    """
+    return os.getenv(name, default).strip() == "1"
+
+
+# Master switches for the two transformers. Read once at import time via
+# plain os.getenv rather than as Settings fields -- these gate whether the
+# scheduler and API even attempt to touch STAC/DCAT at all, so unlike the
+# rest of this file there's no need to inject them as instance state
+# anywhere. Centralized here (rather than duplicated in scheduler.py and
+# api.py, the two places that need them) purely so both read the same
+# parsed value instead of risking two slightly different os.getenv calls
+# drifting apart over time.
+STAC_TRANSFORMER: bool = _env_flag("STAC_TRANSFORMER")
+DCAT_TRANSFORMER: bool = _env_flag("DCAT_TRANSFORMER")
 
 _STAC_NON_SPDX_LICENSES = {"various", "proprietary"}
 _STAC_LICENSE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-+]*$")
@@ -56,52 +78,57 @@ SPDX_LICENSE_URIS: dict[str, str] = {
 
 _LICENSE_PLACEHOLDERS = {"other", "unknown", "none", "n/a", "na", "tbd", ""}
 
+
 def resolve_license_uri(value: str | None, *, context: str = "") -> str | None:
-        """
-        Normalize a license value (from DCAT_DEFAULT_LICENSE or a Datastream's
-        own properties["license"]) into a URI safe to wrap in rdflib.URIRef.
-    
-        Resolution order:
-        1. None / empty / known placeholder ("other", "unknown", ...)
-            -> None. Warning logged. No dct:license triple should be emitted.
-        2. Already an absolute URI ("http://..." / "https://...")
-            -> returned unchanged.
-        3. A bare SPDX id present in SPDX_LICENSE_URIS
-            -> mapped to its canonical spdx.org URI.
-        4. Any other bare token
-            -> best-effort guess at "https://spdx.org/licenses/{token}",
-            with a warning, so an unmapped-but-valid SPDX id (or a typo)
-            is visible in logs rather than silently wrong.
-    
-        `context` is free text (e.g. "Datastream 771") purely for the log
-        message, so a bad value in production points straight at its source.
-        """
-        if not value:
-            return None
-    
-        v = value.strip()
-        suffix = f" ({context})" if context else ""
-    
-        if v.lower() in _LICENSE_PLACEHOLDERS:
-            logger.warning(
-                "Ignoring placeholder license value %r%s -- no dct:license will be emitted",
-                value, suffix,
-            )
-            return None
-    
-        if v.startswith("http://") or v.startswith("https://"):
-            return v
-    
-        if v in SPDX_LICENSE_URIS:
-            return SPDX_LICENSE_URIS[v]
-    
-        guessed = f"https://spdx.org/licenses/{v}"
+    """
+    Normalize a license value (from DCAT_DEFAULT_LICENSE or a Datastream's
+    own properties["license"]) into a URI safe to wrap in rdflib.URIRef.
+
+    Resolution order:
+    1. None / empty / known placeholder ("other", "unknown", ...)
+        -> None. Warning logged. No dct:license triple should be emitted.
+    2. Already an absolute URI ("http://..." / "https://...")
+        -> returned unchanged.
+    3. A bare SPDX id present in SPDX_LICENSE_URIS
+        -> mapped to its canonical spdx.org URI.
+    4. Any other bare token
+        -> best-effort guess at "https://spdx.org/licenses/{token}",
+        with a warning, so an unmapped-but-valid SPDX id (or a typo)
+        is visible in logs rather than silently wrong.
+
+    `context` is free text (e.g. "Datastream 771") purely for the log
+    message, so a bad value in production points straight at its source.
+
+    Module-level on purpose (not a Settings method) -- dcat_transformer.py
+    imports it directly as `from app.v1.connector.config import
+    resolve_license_uri`, and it needs no `self`/instance state to run.
+    """
+    if not value:
+        return None
+
+    v = value.strip()
+    suffix = f" ({context})" if context else ""
+
+    if v.lower() in _LICENSE_PLACEHOLDERS:
         logger.warning(
-            "License value %r%s is not an absolute URI and not in SPDX_LICENSE_URIS -- "
-            "guessing %s. Add it to SPDX_LICENSE_URIS to silence this warning.",
-            value, suffix, guessed,
+            "Ignoring placeholder license value %r%s -- no dct:license will be emitted",
+            value, suffix,
         )
-        return guessed
+        return None
+
+    if v.startswith("http://") or v.startswith("https://"):
+        return v
+
+    if v in SPDX_LICENSE_URIS:
+        return SPDX_LICENSE_URIS[v]
+
+    guessed = f"https://spdx.org/licenses/{v}"
+    logger.warning(
+        "License value %r%s is not an absolute URI and not in SPDX_LICENSE_URIS -- "
+        "guessing %s. Add it to SPDX_LICENSE_URIS to silence this warning.",
+        value, suffix, guessed,
+    )
+    return guessed
 
 
 class Settings(BaseSettings):
