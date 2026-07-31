@@ -55,21 +55,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve image tag
+      - name: Resolve image tags
         id: image
         run: |
           ref=$(grep -oE "ghcr\.io/istsos/istsos4/${{ matrix.component }}:[^[:space:]]+" docker-compose.yml)
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          tags="${ref%:*}:latest"
           if docker manifest inspect "$ref" >/dev/null 2>&1; then
-            echo "$ref already published, skipping"
-            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "$ref already published, refreshing :latest only"
           else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+            tags="$tags,$ref"
+            echo "publishing $ref"
           fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
 
       - uses: docker/build-push-action@v6
-        if: steps.image.outputs.exists == 'false'
         with:
           context: ./${{ matrix.component }}
           push: true
-          tags: ${{ steps.image.outputs.ref }}
+          tags: ${{ steps.image.outputs.tags }}
