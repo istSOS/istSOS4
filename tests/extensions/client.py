@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 import httpx
 
-DEFAULT_BASE_URL = "http://localhost:8018/v4/v1.1"
+DEFAULT_BASE_URL = "http://localhost:8018/istsos4/v1.1"
 
 _SAFE_VALUE = "$()/:,'=;.-"
 

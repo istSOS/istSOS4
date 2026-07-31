@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+env:
+  STA_BASE_URL: http://localhost:8018/istsos4/v1.1
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Start stack
+        run: |
+          cp .env.example .env
+          docker compose -f dev_docker-compose.yml up -d --build --wait database api
+
+      - name: Wait for API
+        run: timeout 120 bash -c 'until curl -sf "$STA_BASE_URL" >/dev/null; do sleep 2; done'
+
+      - name: Install test deps
+        run: pip install -r tests/conformance/requirements.txt
+
+      - name: OGC 18-088 conformance (405 tests)
+        run: pytest tests/conformance
+
+      - name: API logs
+        if: failure()
+        run: docker compose -f dev_docker-compose.yml logs api
+
+  publish:
+    if: github.ref == 'refs/heads/main'
+    needs: conformance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [api, database]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image tag
+        id: image
+        run: |
+          ref=$(grep -oE "ghcr\.io/istsos/istsos4/${{ matrix.component }}:[^[:space:]]+" docker-compose.yml)
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          if docker manifest inspect "$ref" >/dev/null 2>&1; then
+            echo "$ref already published, skipping"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/build-push-action@v6
+        if: steps.image.outputs.exists == 'false'
+        with:
+          context: ./${{ matrix.component }}
+          push: true
+          tags: ${{ steps.image.outputs.ref }}
