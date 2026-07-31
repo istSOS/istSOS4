@@ -57,6 +57,7 @@ whole serialized Turtle document -- api.py serves it as-is with no
 reconstruction or link injection, same "pure reader" rule as the STAC routes.
 """
 
+import functools
 from typing import Optional
 
 from app import HOSTNAME, SUBPATH, VERSION
@@ -74,7 +75,7 @@ from app.v1.connector.cache import (
     get_dcat_network,
 )
 
-from app.v1.connector.config import get_settings
+from app.v1.connector.config import get_settings, STAC_TRANSFORMER, DCAT_TRANSFORMER
 
 from fastapi import APIRouter, status, Request
 from fastapi.responses import JSONResponse, Response
@@ -110,6 +111,36 @@ def _not_found(detail: str) -> JSONResponse:
             "message": detail,
         },
     )
+
+
+def _disabled(env_var: str) -> JSONResponse:
+    """
+    404 response for a standard whose master switch is off. Deliberately
+    the same shape as _not_found/_cache_unavailable rather than FastAPI's
+    default HTTPException body, so a disabled route looks like every other
+    error response from this file -- but the message is distinct from
+    _cache_unavailable's "not harvested yet" so an operator can tell
+    "disabled" apart from "enabled but still warming up" at a glance.
+    """
+    return _not_found(
+        f"This connector standard is disabled. Set {env_var}=1 to enable it."
+    )
+
+
+def _require_enabled(flag: bool, env_var: str):
+    """
+    Route decorator gating an endpoint on a master-switch flag. Checked
+    once per request (flags are read once at import time in config.py,
+    so this is just a cheap bool check, not a re-parse of the env var).
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            if not flag:
+                return _disabled(env_var)
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 async def _collection_envelope(coll: Optional[dict], collection_id: str):
@@ -155,9 +186,12 @@ async def get_connector_root(request: Request):
     dcat_meta = get_dcat_metadata()
 
     return {
+        "stac_enabled": STAC_TRANSFORMER,
         "stac_availability": stac_meta["stac_availability"],
         "stac_url": f"{base_url}{current_path}/stac",
 
+        "dcat_enabled": DCAT_TRANSFORMER,
+        "dcat_mandatory_fields_set": cache.has_mandatory_dcat_fields,
         "dcat_availability": dcat_meta["dcat_availability"],
         "dcat_url": f"{base_url}{current_path}/dcat",
         "dcat_network_ids": dcat_meta["network_ids"],
@@ -179,6 +213,7 @@ async def get_connector_root(request: Request):
     ),
     status_code=status.HTTP_200_OK,
 )
+@_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
 async def stac_root():
     try:
         catalog = await get_catalog()
@@ -208,6 +243,7 @@ async def stac_root():
     ),
     status_code=status.HTTP_200_OK,
 )
+@_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
 async def stac_collections():
     try:
         catalog = await get_catalog()
@@ -256,6 +292,7 @@ async def stac_collections():
     description="Returns one STAC Collection identified by collection_id (format: thing-{id}).",
     status_code=status.HTTP_200_OK,
 )
+@_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
 async def stac_collection(collection_id: str):
     try:
         return await _collection_envelope(await get_collection(collection_id), collection_id)
@@ -274,6 +311,7 @@ async def stac_collection(collection_id: str):
     ),
     status_code=status.HTTP_200_OK,
 )
+@_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
 async def stac_items(collection_id: str):
     try:
         coll = await get_collection(collection_id)
@@ -291,6 +329,7 @@ async def stac_items(collection_id: str):
     description="Returns one STAC Item identified by item_id (format: datastream-{id}).",
     status_code=status.HTTP_200_OK,
 )
+@_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
 async def stac_item(collection_id: str, item_id: str):
     try:
         coll = await get_collection(collection_id)
@@ -310,6 +349,7 @@ async def stac_item(collection_id: str, item_id: str):
     ),
     status_code=status.HTTP_200_OK,
 )
+@_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
 async def stac_network_root(network_id: int):
     try:
         net_catalog = await get_network_catalog(network_id)
@@ -321,6 +361,7 @@ async def stac_network_root(network_id: int):
 
 
 @v1.api_route("/stac/{network_id}/collections/{collection_id}", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
+@_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
 async def stac_network_collection(network_id: int, collection_id: str):
     try:
         coll = await get_network_collection(network_id, collection_id)
@@ -330,6 +371,7 @@ async def stac_network_collection(network_id: int, collection_id: str):
 
 
 @v1.api_route("/stac/{network_id}/collections/{collection_id}/items", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
+@_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
 async def stac_network_items(network_id: int, collection_id: str):
     try:
         coll = await get_network_collection(network_id, collection_id)
@@ -343,6 +385,7 @@ async def stac_network_items(network_id: int, collection_id: str):
 
 
 @v1.api_route("/stac/{network_id}/collections/{collection_id}/items/{item_id}", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
+@_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
 async def stac_network_item(network_id: int, collection_id: str, item_id: str):
     try:
         coll = await get_network_collection(network_id, collection_id)
@@ -395,6 +438,7 @@ def _turtle_not_found(detail: str) -> JSONResponse:
     ),
     status_code=status.HTTP_200_OK,
 )
+@_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
 async def dcat_root():
     try:
         turtle = await get_dcat_root()
@@ -420,6 +464,7 @@ async def dcat_root():
     ),
     status_code=status.HTTP_200_OK,
 )
+@_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
 async def dcat_orphan():
     try:
         turtle = await get_dcat_orphan()
@@ -446,6 +491,7 @@ async def dcat_orphan():
     ),
     status_code=status.HTTP_200_OK,
 )
+@_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
 async def dcat_network(network_id: int):
     try:
         turtle = await get_dcat_network(network_id)

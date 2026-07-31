@@ -42,7 +42,7 @@ from app.v1.connector.cache import (
     write_dcat_catalog,
     write_dcat_catalog_with_networks,
 )
-from app.v1.connector.config import get_settings
+from app.v1.connector.config import get_settings, STAC_TRANSFORMER, DCAT_TRANSFORMER
 from app.v1.connector.harvester import harvest, harvest_with_networks
 from app.v1.connector.stac_transformer import build_stac_catalog, build_stac_catalog_with_networks
 from app.v1.connector.dcat_transformer import build_dcat_catalog, build_dcat_catalog_with_networks
@@ -51,6 +51,20 @@ logger = logging.getLogger(__name__)
 
 _HARVEST_LOCK_KEY = 726419950_1
 NETWORK = bool(os.getenv("NETWORK"))  # read once at startup, matches every other config constant
+
+_dcat_misconfig_warned = False
+
+
+def _missing_dcat_mandatory_fields(config) -> list[str]:
+    """Names of the DCAT-AP 3.0 mandatory fields that are currently unset."""
+    missing = []
+    if not config.DCAT_CATALOG_TITLE:
+        missing.append("DCAT_CATALOG_TITLE")
+    if not config.DCAT_CATALOG_DESCRIPTION:
+        missing.append("DCAT_CATALOG_DESCRIPTION")
+    if not config.DCAT_PUBLISHER_NAME:
+        missing.append("DCAT_PUBLISHER_NAME")
+    return missing
 
 
 def start_scheduler(pool: asyncpg.Pool) -> AsyncIOScheduler:
@@ -80,6 +94,16 @@ def start_scheduler(pool: asyncpg.Pool) -> AsyncIOScheduler:
         "Connector scheduler started -- harvest cycle every %d minutes, first run immediate",
         config.HARVEST_INTERVAL_MINUTES,
     )
+    logger.info(
+        "STAC_TRANSFORMER=%s, DCAT_TRANSFORMER=%s",
+        int(STAC_TRANSFORMER), int(DCAT_TRANSFORMER),
+    )
+    if DCAT_TRANSFORMER and not config.has_mandatory_dcat_fields:
+        logger.warning(
+            "DCAT_TRANSFORMER=1 but DCAT-AP 3.0 mandatory fields are unset: %s -- "
+            "DCAT transform/write will be skipped every cycle until these are set",
+            ", ".join(_missing_dcat_mandatory_fields(config)),
+        )
     return scheduler
 
 
@@ -121,11 +145,14 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
     advisory lock for the whole duration. Raises on any failure so the
     caller's except block can log and skip the cycle cleanly.
 
-    STAC is always written. DCAT is written only when dcat_transformer.py
-    has been implemented (i.e. build_dcat_catalog is not None). The two
-    standards are independent -- a DCAT failure will not roll back the
-    STAC write, and vice versa, since each has its own try/except below
-    rather than sharing one.
+    STAC only builds/writes when STAC_TRANSFORMER=1. DCAT only builds/
+    writes when DCAT_TRANSFORMER=1 AND config.has_mandatory_dcat_fields is
+    True -- the transformer itself never refuses to run (see its own
+    docstring), so this check has to happen here, before it's ever
+    invoked, or a misconfigured deployment would cache and serve a
+    DCAT-AP-nonconformant partial graph every cycle. The two standards
+    remain independent of each other -- a DCAT failure will not roll back
+    the STAC write, and vice versa.
 
     NETWORK dispatch mirrors STAC's exactly: harvest() and
     build_stac_catalog()/build_dcat_catalog() for NETWORK=0,
@@ -133,36 +160,59 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
     NETWORK=1. Both standards are built from the same single harvest call
     per cycle -- there is no second Postgres round trip for DCAT.
     """
+    global _dcat_misconfig_warned
+
+    if not STAC_TRANSFORMER and not DCAT_TRANSFORMER:
+        logger.debug(
+            "Harvest cycle skipped -- both STAC_TRANSFORMER and DCAT_TRANSFORMER are 0"
+        )
+        return
+
+    dcat_ready = DCAT_TRANSFORMER and config.has_mandatory_dcat_fields
+
+    if DCAT_TRANSFORMER and not config.has_mandatory_dcat_fields and not _dcat_misconfig_warned:
+        logger.warning(
+            "DCAT transform/write skipped -- DCAT_TRANSFORMER=1 but mandatory "
+            "fields are unset: %s. This warning will not repeat every cycle; "
+            "fix the config and restart to clear it.",
+            ", ".join(_missing_dcat_mandatory_fields(config)),
+        )
+        _dcat_misconfig_warned = True
+
     if NETWORK:
         network_catalog = await harvest_with_networks(connection)
 
-        stac_dict = build_stac_catalog_with_networks(network_catalog)
-        write_stac_catalog_with_networks(stac_dict)
+        if STAC_TRANSFORMER:
+            stac_dict = build_stac_catalog_with_networks(network_catalog)
+            write_stac_catalog_with_networks(stac_dict)
 
-        try:
-            dcat_dict = build_dcat_catalog_with_networks(network_catalog)
-            write_dcat_catalog_with_networks(dcat_dict)
-            logger.info(
-                "DCAT cache written: %d Networks, harvested at %s",
-                len(network_catalog.networks), network_catalog.harvested_at,
-            )
-        except Exception:
-            logger.exception(
-                "DCAT transform/write failed this cycle -- STAC write above is "
-                "unaffected, previous DCAT cache left untouched"
-            )
+        if dcat_ready:
+            try:
+                dcat_dict = build_dcat_catalog_with_networks(network_catalog)
+                write_dcat_catalog_with_networks(dcat_dict)
+                logger.info(
+                    "DCAT cache written: %d Networks, harvested at %s",
+                    len(network_catalog.networks), network_catalog.harvested_at,
+                )
+            except Exception:
+                logger.exception(
+                    "DCAT transform/write failed this cycle -- STAC write above is "
+                    "unaffected, previous DCAT cache left untouched"
+                )
     else:
         catalog = await harvest(connection)
 
-        stac_dict = build_stac_catalog(catalog)
-        write_stac_catalog(stac_dict)
+        if STAC_TRANSFORMER:
+            stac_dict = build_stac_catalog(catalog)
+            write_stac_catalog(stac_dict)
 
-        try:
-            dcat_dict = build_dcat_catalog(catalog)
-            write_dcat_catalog(dcat_dict)
-            logger.info("DCAT cache written: %d Things", catalog.thing_count)
-        except Exception:
-            logger.exception(
-                "DCAT transform/write failed this cycle -- STAC write above is "
-                "unaffected, previous DCAT cache left untouched"
+        if dcat_ready:
+            try:
+                dcat_dict = build_dcat_catalog(catalog)
+                write_dcat_catalog(dcat_dict)
+                logger.info("DCAT cache written: %d Things", catalog.thing_count)
+            except Exception:
+                logger.exception(
+                    "DCAT transform/write failed this cycle -- STAC write above is "
+                    "unaffected, previous DCAT cache left untouched"
                 )
