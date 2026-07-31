@@ -24,7 +24,7 @@ from urllib.parse import quote
 
 import httpx
 
-DEFAULT_BASE_URL = "http://localhost:8018/v4/v1.1"
+DEFAULT_BASE_URL = "http://localhost:8018/istsos4/v1.1"
 
 # Characters left un-escaped in query VALUES. Space is deliberately excluded so
 # it becomes %20. Single quotes (string literals) and STA punctuation are kept
