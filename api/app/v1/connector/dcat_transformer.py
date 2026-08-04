@@ -60,7 +60,7 @@ from typing import Optional, Union
 
 import asyncpg
 from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
-from rdflib.namespace import DCTERMS, FOAF, OWL, SKOS, XSD
+from rdflib.namespace import DCTERMS, FOAF, OWL, RDFS, SKOS, XSD
 
 from app import HOSTNAME, SUBPATH, VERSION
 from app.v1.connector.config import Settings, get_settings, resolve_language_uri, resolve_license_uri
@@ -239,17 +239,28 @@ def _resolve_dataset_geometry(thing: HarvestedThing, ds: dict) -> Optional[dict]
 
 def _add_spatial(g: Graph, subject: Union[URIRef, BNode], geometry: Optional[dict]) -> None:
     """
-    Add a dct:spatial dct:Location node carrying a GeoJSON geometry literal.
+    Add a dct:spatial dct:Location node carrying a GeoJSON geometry.
     No-op when geometry is None.
+
+    dct:LocationShape's locn:geometry property requires shacl:class
+    locn:Geometry and shacl:nodeKind shacl:BlankNodeOrIRI -- it must point
+    at a typed node, not a bare literal. The actual GeoJSON serialization
+    lives on that locn:Geometry node via geosparql:asGeoJSON (the
+    GeoDCAT-AP-recommended predicate for this), one level deeper than
+    before.
     """
     if not geometry:
         return
     loc_node = BNode()
     g.add((subject, DCT.spatial, loc_node))
     g.add((loc_node, RDF.type, DCT.Location))
+
+    geom_node = BNode()
+    g.add((loc_node, LOCN.geometry, geom_node))
+    g.add((geom_node, RDF.type, LOCN.Geometry))
     g.add((
-        loc_node,
-        LOCN.geometry,
+        geom_node,
+        GEOSPARQL.asGeoJSON,
         Literal(json.dumps(geometry), datatype=GEOSPARQL.geoJSONLiteral),
     ))
 
@@ -428,6 +439,17 @@ def _add_distributions(
     ds_name = ds.get("name", "")
     base_href = _datastream_href(ds_id)
 
+    # dct:format must point at a dct:MediaTypeOrExtent and dcat:mediaType
+    # must point at a dct:MediaType (the IANA-registered media type class --
+    # note this is dct:MediaType, not dcat:MediaType). These four URIRefs
+    # are module-level constants reused across every Distribution, so
+    # typing them is idempotent -- g.add() on an already-present triple is
+    # a no-op, not a duplicate.
+    g.add((_FILE_TYPE_JSON, RDF.type, DCT.MediaTypeOrExtent))
+    g.add((_FILE_TYPE_CSV, RDF.type, DCT.MediaTypeOrExtent))
+    g.add((_IANA_JSON, RDF.type, DCT.MediaType))
+    g.add((_IANA_CSV, RDF.type, DCT.MediaType))
+
     dist_json = _distribution_uri(ds_id, "observations-json")
     g.add((dataset_uri, DCAT.distribution, dist_json))
     g.add((dist_json, RDF.type, DCAT.Distribution))
@@ -435,7 +457,9 @@ def _add_distributions(
     g.add((dist_json, DCT.description, Literal(
         f"Live OGC SensorThings Observations feed for Datastream: {ds_name}"
     )))
-    g.add((dist_json, DCAT.accessURL, URIRef(f"{base_href}/Observations")))
+    json_href = URIRef(f"{base_href}/Observations")
+    g.add((dist_json, DCAT.accessURL, json_href))
+    g.add((json_href, RDF.type, RDFS.Resource))
     g.add((dist_json, DCT.format, _FILE_TYPE_JSON))
     g.add((dist_json, DCAT.mediaType, _IANA_JSON))
     if license_uri:
@@ -451,6 +475,10 @@ def _add_distributions(
     csv_href = URIRef(f"{base_href}/Observations?$resultFormat=CSV")
     g.add((dist_csv, DCAT.accessURL, csv_href))
     g.add((dist_csv, DCAT.downloadURL, csv_href))
+    # accessURL and downloadURL must each point at an rdfs:Resource --
+    # trivially true of any IRI, but pyshacl won't infer it without
+    # rdfs:Resource being asserted explicitly (no reasoning enabled here).
+    g.add((csv_href, RDF.type, RDFS.Resource))
     g.add((dist_csv, DCT.format, _FILE_TYPE_CSV))
     g.add((dist_csv, DCAT.mediaType, _IANA_CSV))
     if license_uri:
@@ -463,7 +491,9 @@ def _add_distributions(
     g.add((dist_meta, DCT.description, Literal(
         f"OGC SensorThings Datastream entity metadata for: {ds_name}"
     )))
-    g.add((dist_meta, DCAT.accessURL, URIRef(base_href)))
+    meta_href = URIRef(base_href)
+    g.add((dist_meta, DCAT.accessURL, meta_href))
+    g.add((meta_href, RDF.type, RDFS.Resource))
     g.add((dist_meta, DCT.format, _FILE_TYPE_JSON))
     g.add((dist_meta, DCAT.mediaType, _IANA_JSON))
     if license_uri:
@@ -538,11 +568,18 @@ def _build_dataset(
     obs_type = ds.get("observation_type")
     if obs_type:
         g.add((dataset_uri, DCT.conformsTo, URIRef(obs_type)))
+        # dct:conformsTo must point at a dct:Standard -- same rule already
+        # applied to the root Catalog's conformsTo targets in
+        # _add_root_catalog_and_service, just missing here.
+        g.add((URIRef(obs_type), RDF.type, DCT.Standard))
 
     g.add((dataset_uri, DCAT.inSeries, series_uri))
     g.add((dataset_uri, DCT.isPartOf, series_uri))
-    g.add((dataset_uri, OWL.sameAs, URIRef(_datastream_href(ds_id))))
-    g.add((dataset_uri, DCAT.landingPage, URIRef(_datastream_href(ds_id))))
+    ds_href = URIRef(_datastream_href(ds_id))
+    g.add((dataset_uri, OWL.sameAs, ds_href))
+    g.add((dataset_uri, DCAT.landingPage, ds_href))
+    # dcat:landingPage must point at a foaf:Document.
+    g.add((ds_href, RDF.type, FOAF.Document))
 
     if publisher_node:
         g.add((dataset_uri, DCT.publisher, publisher_node))
@@ -558,6 +595,9 @@ def _build_dataset(
     access_rights = props.get("accessRights") or settings.DCAT_DEFAULT_ACCESS_RIGHTS
     if access_rights:
         g.add((dataset_uri, DCT.accessRights, URIRef(access_rights)))
+        # dct:accessRights must point at a dct:RightsStatement -- same rule
+        # already applied to the root Catalog's own accessRights value.
+        g.add((URIRef(access_rights), RDF.type, DCT.RightsStatement))
 
     contact = props.get("contactPoint")
     if isinstance(contact, dict):
@@ -714,7 +754,7 @@ def _add_root_catalog_and_service(
     publisher_node: Optional[URIRef],
     description: str,
     catalog_uri: URIRef,
-    part_uris: list[URIRef],
+    part_uris: list[tuple[URIRef, Optional[str], str]],
 ) -> URIRef:
     """
     Add the dual-typed dcat:Catalog + dcat:DataService node for the STA
@@ -734,7 +774,15 @@ def _add_root_catalog_and_service(
     g.add((_DCAT_AP_PROFILE_URI, RDF.type, DCT.Standard))
     g.add((_STA_CONFORMANCE_URI, RDF.type, DCT.Standard))
     g.add((catalog_uri, DCAT.endpointURL, catalog_uri))
-    g.add((catalog_uri, DCAT.endpointDescription, URIRef(f"{HOSTNAME}{SUBPATH}{VERSION}/Conformance")))
+    conformance_uri = URIRef(f"{HOSTNAME}{SUBPATH}{VERSION}/Conformance")
+    g.add((catalog_uri, DCAT.endpointDescription, conformance_uri))
+    # dcat:endpointURL and dcat:endpointDescription must each point at an
+    # rdfs:Resource -- same rdfs:Resource rule as accessURL/downloadURL on
+    # Distributions, just on the DataService side. catalog_uri is already
+    # in the graph as the endpointURL's own value (self-referential), so
+    # typing it here also satisfies that one.
+    g.add((catalog_uri, RDF.type, RDFS.Resource))
+    g.add((conformance_uri, RDF.type, RDFS.Resource))
 
     if settings.DCAT_CATALOG_TITLE:
         g.add((catalog_uri, DCT.title, Literal(settings.DCAT_CATALOG_TITLE, lang=lang)))
@@ -764,18 +812,28 @@ def _add_root_catalog_and_service(
     if publisher_node:
         g.add((catalog_uri, DCT.publisher, publisher_node))
 
-    for part_uri in part_uris:
+    for part_uri, part_title, part_description in part_uris:
         g.add((catalog_uri, DCT.hasPart, part_uri))
         # Each part_uri is a Network (or orphan) sub-catalog, genuinely
-        # typed dcat:Catalog -- but that rdf:type triple is asserted in
-        # that sub-catalog's own graph/file (_add_sub_catalog, a separate
-        # Turtle document per the per-scope design). pyshacl validates
-        # one file at a time and never opens the others, so from root.ttl's
-        # perspective alone, part_uri looks untyped. Restating the same
-        # true fact here makes root.ttl self-contained; it's a harmless
-        # duplicate once graphs are merged (e.g. the optional aggregate
-        # endpoint), RDF triples are a set.
+        # typed dcat:Catalog with its own title/description/publisher --
+        # but those triples are asserted in that sub-catalog's own
+        # graph/file (_add_sub_catalog, a separate Turtle document per the
+        # per-scope design). pyshacl validates one file at a time and never
+        # opens the others, so from root.ttl's perspective alone, part_uri
+        # looks like a bare stub missing every CatalogShape mandatory
+        # field (dc:title, dc:description, dc:publisher -- all minCount 1).
+        # Restating the same true facts here makes root.ttl self-contained
+        # and independently conformant; it's a harmless duplicate once
+        # graphs are merged (e.g. the optional aggregate endpoint), RDF
+        # triples are a set. Values must match _add_sub_catalog's own
+        # assertions for that catalog exactly, since these are literally
+        # the same facts restated in a different file.
         g.add((part_uri, RDF.type, DCAT.Catalog))
+        if part_title:
+            g.add((part_uri, DCT.title, Literal(part_title, lang=lang)))
+        g.add((part_uri, DCT.description, Literal(part_description, lang=lang)))
+        if publisher_node:
+            g.add((part_uri, DCT.publisher, publisher_node))
 
     return catalog_uri
 
@@ -900,14 +958,16 @@ def build_dcat_catalog_with_networks(
     _bind_namespaces(orphan_g)
     orphan_pub = _add_publisher_agent(orphan_g, settings)
     orphan_catalog_uri = _catalog_uri(orphan=True)
+    orphan_title = "Unassigned Datastreams"
+    orphan_description = (
+        f"Datastreams with no assigned Network, harvested at "
+        f"{network_catalog.harvested_at}."
+    )
     _add_sub_catalog(
         orphan_g, settings, orphan_pub, orphan_catalog_uri,
         identifier=f"{settings.DCAT_CATALOG_ID}-orphan",
-        title="Unassigned Datastreams",
-        description=(
-            f"Datastreams with no assigned Network, harvested at "
-            f"{network_catalog.harvested_at}."
-        ),
+        title=orphan_title,
+        description=orphan_description,
     )
     o_series, o_datasets, o_skipped = _build_scope(
         orphan_g, network_catalog.orphan_things, orphan_catalog_uri, orphan_pub, settings
@@ -915,6 +975,12 @@ def build_dcat_catalog_with_networks(
     total_series += o_series
     total_datasets += o_datasets
     total_skipped += o_skipped
+
+    # (uri, title, description) per sub-catalog, fed to root_g below so it
+    # can restate these mandatory CatalogShape fields on each stub node.
+    part_uris: list[tuple[URIRef, Optional[str], str]] = [
+        (orphan_catalog_uri, orphan_title, orphan_description),
+    ]
 
     # --- per-Network graphs ---
     network_graphs: dict[int, Graph] = {}
@@ -924,14 +990,16 @@ def build_dcat_catalog_with_networks(
         net_pub = _add_publisher_agent(net_g, settings)
         net_catalog_uri = _catalog_uri(network_id=net.id)
         things = network_catalog.things_by_network.get(net.id, [])
+        net_title = net.name or None
+        net_description = (
+            f"{settings.DCAT_DEPLOYMENT_NAME} Network subcatalog: "
+            f"{net.name} ({len(things)} Things)."
+        )
         _add_sub_catalog(
             net_g, settings, net_pub, net_catalog_uri,
             identifier=f"network-{net.id}",
-            title=net.name or None,
-            description=(
-                f"{settings.DCAT_DEPLOYMENT_NAME} Network subcatalog: "
-                f"{net.name} ({len(things)} Things)."
-            ),
+            title=net_title,
+            description=net_description,
         )
         n_series, n_datasets, n_skipped = _build_scope(
             net_g, things, net_catalog_uri, net_pub, settings
@@ -940,13 +1008,13 @@ def build_dcat_catalog_with_networks(
         total_datasets += n_datasets
         total_skipped += n_skipped
         network_graphs[net.id] = net_g
+        part_uris.append((net_catalog_uri, net_title, net_description))
 
     # --- root graph: structural only, no Dataset/DatasetSeries content ---
     root_g = Graph()
     _bind_namespaces(root_g)
     root_pub = _add_publisher_agent(root_g, settings)
     root_catalog_uri = _catalog_uri()
-    part_uris = [orphan_catalog_uri] + [_catalog_uri(network_id=net.id) for net in network_catalog.networks]
 
     _add_root_catalog_and_service(
         root_g, settings, root_pub,
