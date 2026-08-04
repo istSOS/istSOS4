@@ -131,6 +131,63 @@ def resolve_license_uri(value: str | None, *, context: str = "") -> str | None:
     return guessed
 
 
+# EU Publications Office Named Authority List (NAL) for languages, keyed by
+# the BCP-47 tag an operator would naturally set DCAT_LANGUAGE to. DCAT-AP
+# 3.0 requires dct:language to be a skos:Concept URI from this list (a
+# LinguisticSystem resource), not a bare string literal -- that's what
+# distinguishes it from the lang= tag on Literal(..., lang="en") used for
+# dct:title / dct:description / dcat:keyword, which is a separate, correct
+# mechanism and not touched here. Extend this table as new deployments need
+# additional languages; the full NAL has ~450 entries and there's no value
+# in enumerating ones nobody uses yet.
+EU_LANGUAGE_AUTHORITY_URIS: dict[str, str] = {
+    "en": "http://publications.europa.eu/resource/authority/language/ENG",
+    "it": "http://publications.europa.eu/resource/authority/language/ITA",
+    "de": "http://publications.europa.eu/resource/authority/language/DEU",
+    "fr": "http://publications.europa.eu/resource/authority/language/FRA",
+    "es": "http://publications.europa.eu/resource/authority/language/SPA",
+}
+
+
+def resolve_language_uri(value: str | None) -> str | None:
+    """
+    Normalize a BCP-47 language tag (typically settings.DCAT_LANGUAGE) into
+    the EU NAL language URI that dct:language must point at.
+
+    Resolution order:
+    1. None / empty -> None. No dct:language triple should be emitted.
+    2. Already an absolute URI ("http://..." / "https://...")
+        -> returned unchanged, so an operator who already set the full
+        authority URI in DCAT_LANGUAGE isn't double-mapped.
+    3. A bare tag present in EU_LANGUAGE_AUTHORITY_URIS (case-insensitive)
+        -> mapped to its canonical authority URI.
+    4. Anything else
+        -> None, with a warning logged, since guessing a NAL URI the way
+        resolve_license_uri() guesses an spdx.org URI would silently
+        produce a URI that very likely doesn't resolve to a real NAL
+        concept -- unlike SPDX ids, NAL language codes don't follow a
+        predictable token pattern.
+    """
+    if not value:
+        return None
+
+    v = value.strip()
+
+    if v.startswith("http://") or v.startswith("https://"):
+        return v
+
+    uri = EU_LANGUAGE_AUTHORITY_URIS.get(v.lower())
+    if uri is None:
+        logger.warning(
+            "DCAT_LANGUAGE=%r has no entry in EU_LANGUAGE_AUTHORITY_URIS -- "
+            "no dct:language triple will be emitted. Add it to the table "
+            "(or set DCAT_LANGUAGE to the full authority URI directly) to fix this.",
+            value,
+        )
+        return None
+    return uri
+
+
 class Settings(BaseSettings):
     """Connector configuration loaded from environment variables or .env file."""
 

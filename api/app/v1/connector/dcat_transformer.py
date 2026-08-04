@@ -63,7 +63,7 @@ from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCTERMS, FOAF, OWL, SKOS, XSD
 
 from app import HOSTNAME, SUBPATH, VERSION
-from app.v1.connector.config import Settings, get_settings, resolve_license_uri
+from app.v1.connector.config import Settings, get_settings, resolve_license_uri, resolve_language_uri
 from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)
@@ -713,7 +713,9 @@ def _add_root_catalog_and_service(
         g.add((catalog_uri, DCT.description, Literal(
             f"{settings.DCAT_CATALOG_DESCRIPTION}. {description}", lang=lang
         )))
-    g.add((catalog_uri, DCT.language, Literal(lang)))
+    root_lang_uri = resolve_language_uri(lang)
+    if root_lang_uri:
+        g.add((catalog_uri, DCT.language, URIRef(root_lang_uri)))
 
     root_license_uri = resolve_license_uri(settings.DCAT_DEFAULT_LICENSE, context="root Catalog")
     if root_license_uri:
@@ -752,7 +754,9 @@ def _add_sub_catalog(
     if title:
         g.add((catalog_uri, DCT.title, Literal(title, lang=lang)))
     g.add((catalog_uri, DCT.description, Literal(description, lang=lang)))
-    g.add((catalog_uri, DCT.language, Literal(lang)))
+    sub_lang_uri = resolve_language_uri(lang)
+    if sub_lang_uri:
+        g.add((catalog_uri, DCT.language, URIRef(sub_lang_uri)))
     g.add((catalog_uri, DCT.isPartOf, _catalog_uri()))
 
     sub_license_uri = resolve_license_uri(settings.DCAT_DEFAULT_LICENSE, context=f"sub-catalog {identifier}")
