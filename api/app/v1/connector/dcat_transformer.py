@@ -63,7 +63,7 @@ from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCTERMS, FOAF, OWL, SKOS, XSD
 
 from app import HOSTNAME, SUBPATH, VERSION
-from app.v1.connector.config import Settings, get_settings, resolve_license_uri, resolve_language_uri
+from app.v1.connector.config import Settings, get_settings, resolve_language_uri, resolve_license_uri
 from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)
@@ -672,10 +672,34 @@ def _build_scope(
                 thing.id, thing.name, len(thing.datastreams),
             )
 
-        series_uri = _build_dataset_series(
+        # series_uri is the DatasetSeries for this Thing (one Series
+        # groups all of a Thing's Datastreams). It does NOT go in
+        # dcat:dataset below, only the individual Datasets do.
+        #
+        # Why: DCAT-AP 3.0.0's rules say every dcat:dataset value must be
+        # typed dcat:Dataset. A DatasetSeries isn't one, in plain W3C
+        # DCAT it would be, but DCAT-AP deliberately kept them separate,
+        # and there's currently no clean DCAT-AP property for "Catalog
+        # contains this Series" (open community gap, see
+        # SEMICeu/DCAT-AP#289). So for now we just don't claim it.
+        #
+        # This doesn't make the Series unreachable, it's still one hop
+        # away either direction:
+        #   - every Dataset already points at its Series
+        #     (dcat:inSeries / dct:isPartOf, set in _build_dataset above)
+        #   - every Series already points at this catalog
+        #     (dct:isPartOf, set in _build_dataset_series below)
+        # so a client with one Dataset can always find its Series, and a
+        # client that wants every Series in this catalog can ask for
+        # "everything typed dcat:DatasetSeries with dct:isPartOf this
+        # catalog" instead of reading it off dcat:dataset directly.
+        # Return value unused now that we don't add series_uri to
+        # dcat:dataset below; still called for its side effect of adding
+        # the Series' own triples (rdf:type, dct:title, dct:isPartOf,
+        # ...) into the graph.
+        _build_dataset_series(
             g, thing, thing.datastreams, records, catalog_uri, publisher_node, settings
         )
-        g.add((catalog_uri, DCAT.dataset, series_uri))
         for dataset_uri, _bbox, _start, _end in records:
             g.add((catalog_uri, DCAT.dataset, dataset_uri))
 
@@ -704,6 +728,11 @@ def _add_root_catalog_and_service(
     g.add((catalog_uri, DCT.identifier, Literal(settings.DCAT_CATALOG_ID)))
     g.add((catalog_uri, DCT.conformsTo, _DCAT_AP_PROFILE_URI))
     g.add((catalog_uri, DCT.conformsTo, _STA_CONFORMANCE_URI))
+    # DCAT-AP 3.0.0's shapes require anything reached via dct:conformsTo to
+    # be typed dct:Standard. Both of these are true (a profile spec and a
+    # conformance-class spec are standards), we just weren't asserting it.
+    g.add((_DCAT_AP_PROFILE_URI, RDF.type, DCT.Standard))
+    g.add((_STA_CONFORMANCE_URI, RDF.type, DCT.Standard))
     g.add((catalog_uri, DCAT.endpointURL, catalog_uri))
     g.add((catalog_uri, DCAT.endpointDescription, URIRef(f"{HOSTNAME}{SUBPATH}{VERSION}/Conformance")))
 
@@ -716,18 +745,37 @@ def _add_root_catalog_and_service(
     root_lang_uri = resolve_language_uri(lang)
     if root_lang_uri:
         g.add((catalog_uri, DCT.language, URIRef(root_lang_uri)))
+        # dct:language must point at a dct:LinguisticSystem, not a bare
+        # literal or an untyped URI -- pyshacl won't fetch the EU NAL
+        # entry itself to confirm this, so assert it locally.
+        g.add((URIRef(root_lang_uri), RDF.type, DCT.LinguisticSystem))
 
     root_license_uri = resolve_license_uri(settings.DCAT_DEFAULT_LICENSE, context="root Catalog")
     if root_license_uri:
         g.add((catalog_uri, DCT.license, URIRef(root_license_uri)))
+        # Same reasoning as language above: dct:license must point at a
+        # dct:LicenseDocument.
+        g.add((URIRef(root_license_uri), RDF.type, DCT.LicenseDocument))
     if settings.DCAT_DEFAULT_ACCESS_RIGHTS:
         g.add((catalog_uri, DCT.accessRights, URIRef(settings.DCAT_DEFAULT_ACCESS_RIGHTS)))
+        # dct:accessRights must point at a dct:RightsStatement.
+        g.add((URIRef(settings.DCAT_DEFAULT_ACCESS_RIGHTS), RDF.type, DCT.RightsStatement))
 
     if publisher_node:
         g.add((catalog_uri, DCT.publisher, publisher_node))
 
     for part_uri in part_uris:
         g.add((catalog_uri, DCT.hasPart, part_uri))
+        # Each part_uri is a Network (or orphan) sub-catalog, genuinely
+        # typed dcat:Catalog -- but that rdf:type triple is asserted in
+        # that sub-catalog's own graph/file (_add_sub_catalog, a separate
+        # Turtle document per the per-scope design). pyshacl validates
+        # one file at a time and never opens the others, so from root.ttl's
+        # perspective alone, part_uri looks untyped. Restating the same
+        # true fact here makes root.ttl self-contained; it's a harmless
+        # duplicate once graphs are merged (e.g. the optional aggregate
+        # endpoint), RDF triples are a set.
+        g.add((part_uri, RDF.type, DCAT.Catalog))
 
     return catalog_uri
 
@@ -751,17 +799,20 @@ def _add_sub_catalog(
     g.add((catalog_uri, RDF.type, DCAT.Catalog))
     g.add((catalog_uri, DCT.identifier, Literal(identifier)))
     g.add((catalog_uri, DCT.conformsTo, _DCAT_AP_PROFILE_URI))
+    g.add((_DCAT_AP_PROFILE_URI, RDF.type, DCT.Standard))
     if title:
         g.add((catalog_uri, DCT.title, Literal(title, lang=lang)))
     g.add((catalog_uri, DCT.description, Literal(description, lang=lang)))
     sub_lang_uri = resolve_language_uri(lang)
     if sub_lang_uri:
         g.add((catalog_uri, DCT.language, URIRef(sub_lang_uri)))
+        g.add((URIRef(sub_lang_uri), RDF.type, DCT.LinguisticSystem))
     g.add((catalog_uri, DCT.isPartOf, _catalog_uri()))
 
     sub_license_uri = resolve_license_uri(settings.DCAT_DEFAULT_LICENSE, context=f"sub-catalog {identifier}")
     if sub_license_uri:
         g.add((catalog_uri, DCT.license, URIRef(sub_license_uri)))
+        g.add((URIRef(sub_license_uri), RDF.type, DCT.LicenseDocument))
     if publisher_node:
         g.add((catalog_uri, DCT.publisher, publisher_node))
 
