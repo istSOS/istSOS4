@@ -550,8 +550,20 @@ def _build_dataset(
     if op:
         op_def = op.get("definition")
         if op_def and str(op_def).startswith("http"):
-            g.add((dataset_uri, DCAT.theme, URIRef(op_def)))
-            g.add((dataset_uri, DCT.subject, URIRef(op_def)))
+            op_def_uri = URIRef(op_def)
+            g.add((dataset_uri, DCAT.theme, op_def_uri))
+            g.add((dataset_uri, DCT.subject, op_def_uri))
+            # dcat:theme (unlike dct:subject, which this profile leaves
+            # unconstrained) must point at a skos:Concept. This is a
+            # semantic claim, not just a technical shape check like
+            # rdfs:Resource elsewhere in this file -- it asserts that the
+            # OGC observedProperty definition URI names a controlled-
+            # vocabulary term. That's the right call for real OGC
+            # definition URIs (they do identify concepts in a
+            # vocabulary), but worth a second look once real ones start
+            # flowing through, in case some point at plain documentation
+            # pages instead.
+            g.add((op_def_uri, RDF.type, SKOS.Concept))
         # NOTE(future): observed_property_definition is a placeholder string
         # in dummy data, not a real OGC-style URI -- once that's addressed
         # upstream, dcat:theme/dct:subject will start resolving for every
