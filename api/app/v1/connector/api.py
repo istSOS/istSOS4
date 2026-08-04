@@ -44,7 +44,7 @@ Cache shape vs. STAC spec:
     "links" arrays are built here. The Collection and Item objects nested
     inside those envelopes are still served with their cached links as-is.
 
-/connector/dcat follows the same pure-reader pattern, serving cached Turtle
+/connector/dcat follows the same pure-reader pattern, serving cached
 documents built by dcat_transformer.py:
     dcat:graph:root       -> root scope (NETWORK=0: full content; NETWORK=1:
                              structural Catalog+DataService only, dct:hasPart
@@ -52,8 +52,15 @@ documents built by dcat_transformer.py:
     dcat:graph:orphan     -> orphan scope (NETWORK=1 only)
     dcat:graph:net-{id}   -> one per Network (NETWORK=1 only)
 
-Unlike STAC's flat per-entity JSON keys, each DCAT scope is cached as one
-whole serialized Turtle document -- api.py serves it as-is with no
+Each scope above is cached twice by cache.py -- once as Turtle, once as
+JSON-LD, under a sibling ":jsonld" key -- so both are a plain Redis read,
+never a per-request re-serialization. Routes are named /dcat/root,
+/dcat/orphan, /dcat/{network_id} for JSON-LD (the default, since it's the
+more broadly consumed of the two), and the same paths with a ".ttl" suffix
+for Turtle.
+
+Unlike STAC's flat per-entity JSON keys, each DCAT scope/format pair is
+cached as one whole serialized document -- api.py serves it as-is with no
 reconstruction or link injection, same "pure reader" rule as the STAC routes.
 """
 
@@ -71,8 +78,11 @@ from app.v1.connector.cache import (
     get_network_item,
     get_dcat_metadata,
     get_dcat_root,
+    get_dcat_root_jsonld,
     get_dcat_orphan,
+    get_dcat_orphan_jsonld,
     get_dcat_network,
+    get_dcat_network_jsonld,
 )
 
 from app.v1.connector.config import get_settings, STAC_TRANSFORMER, DCAT_TRANSFORMER
@@ -193,7 +203,8 @@ async def get_connector_root(request: Request):
         "dcat_enabled": DCAT_TRANSFORMER,
         "dcat_mandatory_fields_set": cache.has_mandatory_dcat_fields,
         "dcat_availability": dcat_meta["dcat_availability"],
-        "dcat_url": f"{base_url}{current_path}/dcat",
+        "dcat_url_jsonld": f"{base_url}{current_path}/dcat/root",
+        "dcat_url_ttl": f"{base_url}{current_path}/dcat/root.ttl",
         "dcat_network_ids": dcat_meta["network_ids"],
 
         "harvester_interval_minutes": cache.HARVEST_INTERVAL_MINUTES,
@@ -400,14 +411,31 @@ async def stac_network_item(network_id: int, collection_id: str, item_id: str):
 # DCAT-AP 3.0 routes
 #
 # Pure reader, same rule as every STAC route above: these serve cached
-# Turtle text as-is. No route here touches Postgres, runs the harvester, or
-# calls dcat_transformer.py directly.
+# text as-is. No route here touches Postgres, runs the harvester, or calls
+# dcat_transformer.py directly.
+#
+# Each scope is exposed at two paths, format picked by the extension:
+#   /dcat/root            JSON-LD (default -- the more broadly consumed format)
+#   /dcat/root.ttl        Turtle
+#   /dcat/orphan[.ttl]     same pattern
+#   /dcat/{network_id}[.ttl]   same pattern
+#
+# The plain (no-suffix) and ".ttl" routes for a given scope are declared
+# back-to-back below and share one cache-miss/error handling shape; the
+# static "/dcat/root" and "/dcat/orphan" routes are registered before the
+# dynamic "/dcat/{network_id}" ones so the network_id path parameter never
+# has a chance to swallow them.
 
 _TURTLE_MEDIA_TYPE = "text/turtle"
+_JSONLD_MEDIA_TYPE = "application/ld+json"
 
 
 def _turtle_response(body: str) -> Response:
     return Response(content=body, media_type=_TURTLE_MEDIA_TYPE, status_code=status.HTTP_200_OK)
+
+
+def _jsonld_response(body: str) -> Response:
+    return Response(content=body, media_type=_JSONLD_MEDIA_TYPE, status_code=status.HTTP_200_OK)
 
 
 def _turtle_unavailable(detail: str) -> JSONResponse:
@@ -425,21 +453,44 @@ def _turtle_not_found(detail: str) -> JSONResponse:
 
 
 @v1.api_route(
-    "/dcat",
+    "/dcat/root",
     methods=["GET"],
     tags=["DCAT"],
-    summary="Root DCAT-AP 3.0 Catalog",
+    summary="Root DCAT-AP 3.0 Catalog (JSON-LD)",
     description=(
-        "Returns the cached root dcat:Catalog as Turtle. Under NETWORK=0 "
+        "Returns the cached root dcat:Catalog as JSON-LD. Under NETWORK=0 "
         "this carries every DatasetSeries and Dataset directly. Under "
         "NETWORK=1 this is structural only (Catalog + DataService + "
         "dct:hasPart links) -- fetch /dcat/orphan and /dcat/{network_id} "
-        "for the scopes that carry Dataset content."
+        "for the scopes that carry Dataset content. See /dcat/root.ttl "
+        "for the same document as Turtle."
     ),
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
 async def dcat_root():
+    try:
+        jsonld = await get_dcat_root_jsonld()
+        if jsonld is None:
+            return _turtle_unavailable(
+                "DCAT catalog has not been generated yet. "
+                "Try again after the next scheduled harvest cycle."
+            )
+        return _jsonld_response(jsonld)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+
+
+@v1.api_route(
+    "/dcat/root.ttl",
+    methods=["GET"],
+    tags=["DCAT"],
+    summary="Root DCAT-AP 3.0 Catalog (Turtle)",
+    description="Same document as /dcat/root, serialized as Turtle instead of JSON-LD.",
+    status_code=status.HTTP_200_OK,
+)
+@_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
+async def dcat_root_ttl():
     try:
         turtle = await get_dcat_root()
         if turtle is None:
@@ -456,16 +507,40 @@ async def dcat_root():
     "/dcat/orphan",
     methods=["GET"],
     tags=["DCAT"],
-    summary="Orphan-scope DCAT-AP 3.0 Catalog",
+    summary="Orphan-scope DCAT-AP 3.0 Catalog (JSON-LD)",
     description=(
-        "Returns the cached orphan-scope dcat:Catalog as Turtle -- "
+        "Returns the cached orphan-scope dcat:Catalog as JSON-LD -- "
         "Datastreams with no assigned Network. Only populated when "
-        "NETWORK=1; returns 404 under NETWORK=0."
+        "NETWORK=1; returns 404 under NETWORK=0. See /dcat/orphan.ttl "
+        "for the same document as Turtle."
     ),
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
 async def dcat_orphan():
+    try:
+        jsonld = await get_dcat_orphan_jsonld()
+        if jsonld is None:
+            return _turtle_not_found(
+                "No orphan DCAT catalog is available. This deployment may "
+                "be running with NETWORK=0, or no harvest cycle has "
+                "completed yet."
+            )
+        return _jsonld_response(jsonld)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+
+
+@v1.api_route(
+    "/dcat/orphan.ttl",
+    methods=["GET"],
+    tags=["DCAT"],
+    summary="Orphan-scope DCAT-AP 3.0 Catalog (Turtle)",
+    description="Same document as /dcat/orphan, serialized as Turtle instead of JSON-LD.",
+    status_code=status.HTTP_200_OK,
+)
+@_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
+async def dcat_orphan_ttl():
     try:
         turtle = await get_dcat_orphan()
         if turtle is None:
@@ -483,16 +558,36 @@ async def dcat_orphan():
     "/dcat/{network_id}",
     methods=["GET"],
     tags=["DCAT"],
-    summary="Network DCAT-AP 3.0 sub-catalog",
+    summary="Network DCAT-AP 3.0 sub-catalog (JSON-LD)",
     description=(
-        "Returns the cached DCAT-AP Turtle document for one Network's "
+        "Returns the cached DCAT-AP JSON-LD document for one Network's "
         "sub-catalog. Only populated when NETWORK=1; returns 404 if this "
-        "network_id doesn't exist or no harvest cycle has completed yet."
+        "network_id doesn't exist or no harvest cycle has completed yet. "
+        "See /dcat/{network_id}.ttl for the same document as Turtle."
     ),
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
 async def dcat_network(network_id: int):
+    try:
+        jsonld = await get_dcat_network_jsonld(network_id)
+        if jsonld is None:
+            return _turtle_not_found(f"Network '{network_id}' not found.")
+        return _jsonld_response(jsonld)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+
+
+@v1.api_route(
+    "/dcat/{network_id}.ttl",
+    methods=["GET"],
+    tags=["DCAT"],
+    summary="Network DCAT-AP 3.0 sub-catalog (Turtle)",
+    description="Same document as /dcat/{network_id}, serialized as Turtle instead of JSON-LD.",
+    status_code=status.HTTP_200_OK,
+)
+@_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
+async def dcat_network_ttl(network_id: int):
     try:
         turtle = await get_dcat_network(network_id)
         if turtle is None:

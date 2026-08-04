@@ -92,6 +92,23 @@ def _dcat_network_key(network_id) -> str:
     return f"dcat:graph:net-{network_id}"
 
 
+# JSON-LD is cached alongside Turtle under the same scope, one key per
+# format rather than one key holding both -- readers ask for exactly the
+# bytes they want, and _purge_dcat_keys()'s "dcat:*" scan already covers
+# both suffixes so no separate purge logic is needed.
+
+def _dcat_root_jsonld_key() -> str:
+    return "dcat:graph:root:jsonld"
+
+
+def _dcat_orphan_jsonld_key() -> str:
+    return "dcat:graph:orphan:jsonld"
+
+
+def _dcat_network_jsonld_key(network_id) -> str:
+    return f"dcat:graph:net-{network_id}:jsonld"
+
+
 def _collection_key(collection_id: str) -> str:
     return f"stac:collection:{collection_id}"
 
@@ -321,6 +338,39 @@ async def get_dcat_network(network_id) -> Optional[str]:
     return raw.decode("utf-8") if isinstance(raw, bytes) else raw
 
 
+# JSON-LD readers -- same scopes as the Turtle readers above, same
+# None-if-missing contract, just the sibling ":jsonld" key.
+
+async def get_dcat_root_jsonld() -> Optional[str]:
+    """Return the cached root DCAT-AP JSON-LD document, or None if no
+    harvest cycle has written it yet. Same scope rules as get_dcat_root."""
+    raw = redis.get(_dcat_root_jsonld_key())
+    if raw is None:
+        return None
+    return raw.decode("utf-8") if isinstance(raw, bytes) else raw
+
+
+async def get_dcat_orphan_jsonld() -> Optional[str]:
+    """Return the cached orphan-scope DCAT-AP JSON-LD document, or None if
+    NETWORK=0 or no harvest cycle has written it yet. Same scope rules as
+    get_dcat_orphan."""
+    raw = redis.get(_dcat_orphan_jsonld_key())
+    if raw is None:
+        return None
+    return raw.decode("utf-8") if isinstance(raw, bytes) else raw
+
+
+async def get_dcat_network_jsonld(network_id) -> Optional[str]:
+    """Return the cached DCAT-AP JSON-LD document for one Network's
+    sub-catalog, or None if this network_id doesn't exist, NETWORK=0, or
+    no harvest cycle has completed yet. Same scope rules as
+    get_dcat_network."""
+    raw = redis.get(_dcat_network_jsonld_key(network_id))
+    if raw is None:
+        return None
+    return raw.decode("utf-8") if isinstance(raw, bytes) else raw
+
+
 def _purge_dcat_keys() -> None:
     cursor = 0
     stale_keys: list[str] = []
@@ -345,8 +395,9 @@ def write_dcat_catalog(result: Dict[str, Graph]) -> None:
     """
     _purge_dcat_keys()
 
-    turtle = result["root"].serialize(format="turtle")
-    redis.set(_dcat_root_key(), turtle)
+    root_graph = result["root"]
+    redis.set(_dcat_root_key(), root_graph.serialize(format="turtle"))
+    redis.set(_dcat_root_jsonld_key(), root_graph.serialize(format="json-ld"))
 
     redis.set("dcat:meta:availability", json.dumps(True))
     redis.set("dcat:meta:last_fetch", datetime.datetime.now(datetime.timezone.utc).isoformat())
@@ -373,11 +424,14 @@ def write_dcat_catalog_with_networks(result: Dict[str, Any]) -> None:
     _purge_dcat_keys()
 
     redis.set(_dcat_root_key(), result["root"].serialize(format="turtle"))
+    redis.set(_dcat_root_jsonld_key(), result["root"].serialize(format="json-ld"))
     redis.set(_dcat_orphan_key(), result["orphan"].serialize(format="turtle"))
+    redis.set(_dcat_orphan_jsonld_key(), result["orphan"].serialize(format="json-ld"))
 
     network_ids = []
     for network_id, graph in result["networks"].items():
         redis.set(_dcat_network_key(network_id), graph.serialize(format="turtle"))
+        redis.set(_dcat_network_jsonld_key(network_id), graph.serialize(format="json-ld"))
         network_ids.append(network_id)
 
     redis.set("dcat:meta:availability", json.dumps(True))
