@@ -7,7 +7,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      DATADIR: /var/lib/postgresql/data
     command: >
       postgres
         -c custom.network=${NETWORK:-0}
@@ -23,7 +22,7 @@ services:
     ports:
       - ${POSTGRES_EXTERNAL_PORT}:5432
     volumes:
-      - v-istsos4-database-data:/var/lib/postgresql/data
+      - v-istsos4-database-data:/home/postgres/pgdata
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
       interval: 10s
