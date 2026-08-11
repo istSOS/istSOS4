@@ -61,6 +61,47 @@ def _env_flag(name: str, default: str = "0") -> bool:
 STAC_TRANSFORMER: bool = _env_flag("STAC_TRANSFORMER")
 DCAT_TRANSFORMER: bool = _env_flag("DCAT_TRANSFORMER")
 
+
+def _env_int_set(name: str) -> frozenset[int]:
+    """
+    Parse a comma-separated list of integer ids from env var *name*.
+
+    Empty / unset → empty frozenset. Malformed tokens (empty strings from
+    ``"3,,7"`` or non-numeric like ``"3,abc"``) are logged as warnings and
+    skipped individually, same warn-and-continue style as
+    resolve_license_uri.
+    """
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return frozenset()
+    ids: set[int] = set()
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            ids.add(int(token))
+        except ValueError:
+            logger.warning(
+                "%s: ignoring malformed token %r (expected an integer network id)",
+                name, token,
+            )
+    return frozenset(ids)
+
+
+# Auth-related connector flags.  Read once at import time via plain
+# os.getenv, same reasoning as the transformer switches above.
+#
+# OPEN_CATALOG_METADATA — defaults *open* (1).  When AUTHORIZATION=1 and
+# ANONYMOUS_VIEWER=0, setting this to 0 requires authentication even for
+# the shallow tier (STAC root, /collections, /dcat/root etc.).
+OPEN_CATALOG_METADATA: bool = _env_flag("OPEN_CATALOG_METADATA", default="1")
+
+# CATALOG_CLOSED_NETWORKS — comma-separated integer network ids whose
+# existence must not be leaked to unauthenticated callers (returns 404,
+# not 401).  Only meaningful when AUTHORIZATION=1 and ANONYMOUS_VIEWER=0.
+CATALOG_CLOSED_NETWORKS: frozenset[int] = _env_int_set("CATALOG_CLOSED_NETWORKS")
+
 _STAC_NON_SPDX_LICENSES = {"various", "proprietary"}
 _STAC_LICENSE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-+]*$")
 
