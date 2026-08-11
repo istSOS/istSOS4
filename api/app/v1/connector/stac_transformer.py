@@ -50,7 +50,7 @@ import asyncpg
 from app import HOSTNAME, SUBPATH, VERSION
 from app.settings import serverSettings
 from app.v1.connector.config import get_settings
-import app.v1.connector.config as connector_config
+from app.v1.connector.config import CATALOG_CLOSED_NETWORKS
 from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)
@@ -374,7 +374,7 @@ def _catalog_nav_links(
     for cid in collection_ids:
         links.append({"rel": "child", "href": f"{base}/{cid}", "type": _MEDIA_JSON})
     for nid in (network_ids or []):
-        if nid in connector_config.CATALOG_CLOSED_NETWORKS:
+        if nid in CATALOG_CLOSED_NETWORKS:
             continue
         links.append({"rel": "child", "href": _network_catalog_href(nid), "type": _MEDIA_JSON})
     return links
@@ -842,7 +842,7 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
     # (so authenticated callers can reach them by id), they are just not
     # advertised from root.
     visible_network_ids = [
-        nid for nid in network_ids if nid not in connector_config.CATALOG_CLOSED_NETWORKS
+        nid for nid in network_ids if nid not in CATALOG_CLOSED_NETWORKS
     ]
     root_catalog = {
         "type": "Catalog",

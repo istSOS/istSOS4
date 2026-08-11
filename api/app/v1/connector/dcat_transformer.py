@@ -64,7 +64,7 @@ from rdflib.namespace import DCTERMS, FOAF, OWL, RDFS, SKOS, XSD
 
 from app import HOSTNAME, SUBPATH, VERSION
 from app.v1.connector.config import Settings, get_settings, resolve_language_uri, resolve_license_uri
-import app.v1.connector.config as connector_config
+from app.v1.connector.config import CATALOG_CLOSED_NETWORKS
 from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)
@@ -1024,7 +1024,7 @@ def build_dcat_catalog_with_networks(
         # Only advertise non-closed networks in the root graph's hasPart /
         # catalog links.  Closed networks are still built and cached
         # (authenticated callers reach them by id), just not linked.
-        if net.id not in connector_config.CATALOG_CLOSED_NETWORKS:
+        if net.id not in CATALOG_CLOSED_NETWORKS:
             part_uris.append((net_catalog_uri, net_title, net_description))
 
     # --- root graph: structural only, no Dataset/DatasetSeries content ---
@@ -1046,7 +1046,7 @@ def build_dcat_catalog_with_networks(
     root_g.add((root_catalog_uri, DCAT.service, root_catalog_uri))
     root_g.add((root_catalog_uri, DCAT.catalog, orphan_catalog_uri))
     for net in network_catalog.networks:
-        if net.id not in connector_config.CATALOG_CLOSED_NETWORKS:
+        if net.id not in CATALOG_CLOSED_NETWORKS:
             root_g.add((root_catalog_uri, DCAT.catalog, _catalog_uri(network_id=net.id)))
 
     logger.info(

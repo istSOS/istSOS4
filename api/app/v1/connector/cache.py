@@ -37,7 +37,7 @@ import datetime
 from rdflib import Graph
 
 from app.db.redis_db import redis
-import app.v1.connector.config as connector_config
+from app.v1.connector.config import CATALOG_CLOSED_NETWORKS
 from app.v1.connector.utils import flatten_stac_catalog
 
 logger = logging.getLogger(__name__)
@@ -80,8 +80,7 @@ def get_dcat_metadata() -> Dict[str, Any]:
     raw_network_ids = redis.get("dcat:meta:network_ids")
 
     all_ids = json.loads(raw_network_ids) if raw_network_ids else []
-    closed = getattr(connector_config, "CATALOG_CLOSED_NETWORKS", frozenset())
-    visible_ids = [nid for nid in all_ids if nid not in closed]
+    visible_ids = [nid for nid in all_ids if nid not in CATALOG_CLOSED_NETWORKS]
 
     return {
         "dcat_availability": json.loads(raw_avail) if raw_avail else False,

@@ -402,10 +402,15 @@ async def stac_network_item(network_id: int, collection_id: str, item_id: str, g
 #   /dcat/{network_id}[.ttl]   same pattern
 #
 # The plain (no-suffix) and ".ttl" routes for a given scope are declared
-# back-to-back below and share one cache-miss/error handling shape; the
-# static "/dcat/root" and "/dcat/orphan" routes are registered before the
-# dynamic "/dcat/{network_id}" ones so the network_id path parameter never
-# has a chance to swallow them.
+# back-to-back below and share one cache-miss/error handling shape. Two
+# ordering rules matter here, both because Starlette matches routes in
+# registration order and the default path-param converter matches any
+# segment without a "/" -- including one with a dot in it:
+#   1. static "/dcat/root" and "/dcat/orphan" are registered before the
+#      dynamic "/dcat/{network_id}" routes, so network_id never swallows them.
+#   2. "/dcat/{network_id}.ttl" is registered before "/dcat/{network_id}",
+#      since {network_id} alone would otherwise match "1.ttl" as its
+#      capture and fail int coercion, never reaching the .ttl route.
 
 _TURTLE_MEDIA_TYPE = "text/turtle"
 _JSONLD_MEDIA_TYPE = "application/ld+json"
@@ -544,6 +549,27 @@ async def dcat_orphan_ttl(gate_result: Optional[JSONResponse] = Depends(deep_gat
 
 
 @v1.api_route(
+    "/dcat/{network_id}.ttl",
+    methods=["GET"],
+    tags=["DCAT"],
+    summary="Network DCAT-AP 3.0 sub-catalog (Turtle)",
+    description="Same document as /dcat/{network_id}, serialized as Turtle instead of JSON-LD.",
+    status_code=status.HTTP_200_OK,
+)
+@_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
+async def dcat_network_ttl(network_id: int, gate_result: Optional[JSONResponse] = Depends(deep_gate)):
+    try:
+        if gate_result is not None:
+            return gate_result
+        turtle = await get_dcat_network(network_id)
+        if turtle is None:
+            return _turtle_not_found(f"Network '{network_id}' not found.")
+        return _turtle_response(turtle)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+
+
+@v1.api_route(
     "/dcat/{network_id}",
     methods=["GET"],
     tags=["DCAT"],
@@ -565,26 +591,5 @@ async def dcat_network(network_id: int, gate_result: Optional[JSONResponse] = De
         if jsonld is None:
             return _turtle_not_found(f"Network '{network_id}' not found.")
         return _jsonld_response(jsonld)
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
-
-
-@v1.api_route(
-    "/dcat/{network_id}.ttl",
-    methods=["GET"],
-    tags=["DCAT"],
-    summary="Network DCAT-AP 3.0 sub-catalog (Turtle)",
-    description="Same document as /dcat/{network_id}, serialized as Turtle instead of JSON-LD.",
-    status_code=status.HTTP_200_OK,
-)
-@_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_network_ttl(network_id: int, gate_result: Optional[JSONResponse] = Depends(deep_gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        turtle = await get_dcat_network(network_id)
-        if turtle is None:
-            return _turtle_not_found(f"Network '{network_id}' not found.")
-        return _turtle_response(turtle)
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
