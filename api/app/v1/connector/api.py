@@ -18,10 +18,12 @@ Connector API router.
 Mounted at {SUBPATH}{VERSION}/connector by api/app/v1/api.py, the same way
 main.py mounts the core STA router at {SUBPATH}{VERSION}.
 
-Pure reader: every route here reads the already-transformed catalog from
-cache.py (Redis, written once per harvest cycle by scheduler.py) and
-serves it as a STAC-compliant response. No route in this file touches 
-Postgres, runs the harvester, or calls stac_transformer.py directly.
+Pure reader for catalog contents: every route here reads the
+already-transformed catalog from cache.py (Redis, written once per harvest
+cycle by scheduler.py) and serves it. When authorization is enabled in strict
+mode, gated routes validate bearer tokens via get_current_user_optional (which
+queries user state in Postgres); no route in this file runs the harvester or
+calls transformers directly.
 
 Cache shape vs. STAC spec:
     cache.py stores three flat entity types in Redis:
@@ -56,7 +58,7 @@ Each scope above is cached twice by cache.py -- once as Turtle, once as
 JSON-LD, under a sibling ":jsonld" key -- so both are a plain Redis read,
 never a per-request re-serialization. Routes are named /dcat/root,
 /dcat/orphan, /dcat/{network_id} for JSON-LD (the default, since it's the
-more broadly consumed of the two), and the same paths with a ".ttl" suffix
+more broadly consumed format), and the same paths with a ".ttl" suffix
 for Turtle.
 
 Unlike STAC's flat per-entity JSON keys, each DCAT scope/format pair is
@@ -68,6 +70,7 @@ import functools
 from typing import Optional
 
 from app import HOSTNAME, SUBPATH, VERSION
+from app.v1.connector.auth_gate import make_gate
 from app.v1.connector.cache import (
     get_catalog,
     get_collection,
@@ -87,11 +90,14 @@ from app.v1.connector.cache import (
 
 from app.v1.connector.config import get_settings, STAC_TRANSFORMER, DCAT_TRANSFORMER
 
-from fastapi import APIRouter, status, Request
+from fastapi import APIRouter, Depends, status, Request
 from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
 cache = get_settings()
+
+shallow_gate = make_gate(deep_tier=False)
+deep_gate = make_gate(deep_tier=True)
 
 _STAC_ROOT_HREF = f"{HOSTNAME}{SUBPATH}{VERSION}/connector/stac"
 
@@ -225,8 +231,10 @@ async def get_connector_root(request: Request):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_root():
+async def stac_root(gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         catalog = await get_catalog()
         if catalog is None:
             return _cache_unavailable(
@@ -255,8 +263,10 @@ async def stac_root():
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_collections():
+async def stac_collections(gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         catalog = await get_catalog()
         if catalog is None:
             return _cache_unavailable(
@@ -304,8 +314,10 @@ async def stac_collections():
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_collection(collection_id: str):
+async def stac_collection(collection_id: str, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         return await _collection_envelope(await get_collection(collection_id), collection_id)
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
@@ -323,8 +335,10 @@ async def stac_collection(collection_id: str):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_items(collection_id: str):
+async def stac_items(collection_id: str, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         coll = await get_collection(collection_id)
         collection_href = f"{_STAC_ROOT_HREF}/collections/{collection_id}"
         return await _items_envelope(coll, collection_id, collection_href, item_fetch=lambda iid: get_item(collection_id, iid))
@@ -341,8 +355,10 @@ async def stac_items(collection_id: str):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_item(collection_id: str, item_id: str):
+async def stac_item(collection_id: str, item_id: str, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         coll = await get_collection(collection_id)
         return await _item_envelope(coll, collection_id, item_id, item_fetch=lambda iid: get_item(collection_id, iid))
     except Exception as e:
@@ -361,8 +377,10 @@ async def stac_item(collection_id: str, item_id: str):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_network_root(network_id: int):
+async def stac_network_root(network_id: int, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         net_catalog = await get_network_catalog(network_id)
         if net_catalog is None:
             return _not_found(f"Network '{network_id}' not found.")
@@ -373,8 +391,10 @@ async def stac_network_root(network_id: int):
 
 @v1.api_route("/stac/{network_id}/collections/{collection_id}", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_network_collection(network_id: int, collection_id: str):
+async def stac_network_collection(network_id: int, collection_id: str, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         coll = await get_network_collection(network_id, collection_id)
         return await _collection_envelope(coll, collection_id)
     except Exception as e:
@@ -383,8 +403,10 @@ async def stac_network_collection(network_id: int, collection_id: str):
 
 @v1.api_route("/stac/{network_id}/collections/{collection_id}/items", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_network_items(network_id: int, collection_id: str):
+async def stac_network_items(network_id: int, collection_id: str, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         coll = await get_network_collection(network_id, collection_id)
         collection_href = f"{_STAC_ROOT_HREF}/{network_id}/collections/{collection_id}"
         return await _items_envelope(
@@ -397,8 +419,10 @@ async def stac_network_items(network_id: int, collection_id: str):
 
 @v1.api_route("/stac/{network_id}/collections/{collection_id}/items/{item_id}", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_network_item(network_id: int, collection_id: str, item_id: str):
+async def stac_network_item(network_id: int, collection_id: str, item_id: str, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         coll = await get_network_collection(network_id, collection_id)
         return await _item_envelope(
             coll, collection_id, item_id,
@@ -468,8 +492,10 @@ def _turtle_not_found(detail: str) -> JSONResponse:
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_root():
+async def dcat_root(gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         jsonld = await get_dcat_root_jsonld()
         if jsonld is None:
             return _turtle_unavailable(
@@ -490,8 +516,10 @@ async def dcat_root():
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_root_ttl():
+async def dcat_root_ttl(gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         turtle = await get_dcat_root()
         if turtle is None:
             return _turtle_unavailable(
@@ -517,8 +545,10 @@ async def dcat_root_ttl():
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_orphan():
+async def dcat_orphan(gate_result: Optional[JSONResponse] = Depends(deep_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         jsonld = await get_dcat_orphan_jsonld()
         if jsonld is None:
             return _turtle_not_found(
@@ -540,8 +570,10 @@ async def dcat_orphan():
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_orphan_ttl():
+async def dcat_orphan_ttl(gate_result: Optional[JSONResponse] = Depends(deep_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         turtle = await get_dcat_orphan()
         if turtle is None:
             return _turtle_not_found(
@@ -568,8 +600,10 @@ async def dcat_orphan_ttl():
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_network(network_id: int):
+async def dcat_network(network_id: int, gate_result: Optional[JSONResponse] = Depends(deep_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         jsonld = await get_dcat_network_jsonld(network_id)
         if jsonld is None:
             return _turtle_not_found(f"Network '{network_id}' not found.")
@@ -587,8 +621,10 @@ async def dcat_network(network_id: int):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_network_ttl(network_id: int):
+async def dcat_network_ttl(network_id: int, gate_result: Optional[JSONResponse] = Depends(deep_gate)):
     try:
+        if gate_result is not None:
+            return gate_result
         turtle = await get_dcat_network(network_id)
         if turtle is None:
             return _turtle_not_found(f"Network '{network_id}' not found.")
