@@ -37,6 +37,7 @@ import datetime
 from rdflib import Graph
 
 from app.db.redis_db import redis
+from app.v1.connector.config import CATALOG_CLOSED_NETWORKS
 from app.v1.connector.utils import flatten_stac_catalog
 
 logger = logging.getLogger(__name__)
@@ -68,15 +69,23 @@ def get_dcat_metadata() -> Dict[str, Any]:
     Redis safely with defaults. Independent of get_stac_metadata -- the two
     standards are harvested and cached on the same cycle but tracked as
     separate availability flags, since one transformer failing should not
-    be reported as if both did."""
+    be reported as if both did.
+
+    Closed network ids (CATALOG_CLOSED_NETWORKS) are filtered out of the
+    returned ``network_ids`` list so the ``/connector`` summary endpoint
+    never leaks their existence to unauthenticated callers.
+    """
     raw_avail = redis.get("dcat:meta:availability")
     raw_fetch = redis.get("dcat:meta:last_fetch")
     raw_network_ids = redis.get("dcat:meta:network_ids")
 
+    all_ids = json.loads(raw_network_ids) if raw_network_ids else []
+    visible_ids = [nid for nid in all_ids if nid not in CATALOG_CLOSED_NETWORKS]
+
     return {
         "dcat_availability": json.loads(raw_avail) if raw_avail else False,
         "last_fetch": raw_fetch.decode("utf-8") if raw_fetch else None,
-        "network_ids": json.loads(raw_network_ids) if raw_network_ids else [],
+        "network_ids": visible_ids,
     }
 
 
