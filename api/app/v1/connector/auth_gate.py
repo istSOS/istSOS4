@@ -15,25 +15,21 @@
 """
 Connector authentication gate dependency.
 
-Enforces the access control policy defined in IMPLEMENTATION_PLAN.md:
-- AUTHORIZATION=0 or ANONYMOUS_VIEWER=1: Everything is public. No gate restriction.
-- Strict mode (AUTHORIZATION=1, ANONYMOUS_VIEWER=0):
-  - Any valid JWT passes (current_user is not None).
-  - Closed-network override (network_id in CATALOG_CLOSED_NETWORKS):
-    Requires authentication. Returns 404 (hidden) if unauthenticated.
-  - Deep tier (deep_tier=True):
-    Requires authentication. Returns 401 (login required) if unauthenticated.
-  - Shallow tier (deep_tier=False):
-    Gated by OPEN_CATALOG_METADATA. If 1, public. If 0, requires authentication (401).
+AUTHORIZATION=0 or ANONYMOUS_VIEWER=1: everything is public, no gate.
+Strict mode (AUTHORIZATION=1, ANONYMOUS_VIEWER=0): any valid JWT passes.
+Unauthenticated requests are then gated per route:
+- network_id in CATALOG_CLOSED_NETWORKS -> 404 (hidden).
+- deep_tier routes -> 401 (login required).
+- shallow_tier routes -> 401 only if OPEN_CATALOG_METADATA=0.
 """
 
 from typing import Optional
 from fastapi import Depends, status
 from fastapi.responses import JSONResponse
 
-import app
+from app import AUTHORIZATION, ANONYMOUS_VIEWER
 from app.oauth import get_current_user_optional
-import app.v1.connector.config as connector_config
+from app.v1.connector.config import CATALOG_CLOSED_NETWORKS, OPEN_CATALOG_METADATA
 
 
 def _login_required(detail: str = "Login required.") -> JSONResponse:
@@ -68,24 +64,22 @@ def make_gate(*, deep_tier: bool):
         network_id: Optional[int] = None,
         current_user: Optional[dict] = Depends(get_current_user_optional),
     ) -> Optional[JSONResponse]:
-        if not getattr(app, "AUTHORIZATION", 0):
+        if not AUTHORIZATION:
             return None
-        if getattr(app, "ANONYMOUS_VIEWER", 0):
+        if ANONYMOUS_VIEWER:
             return None
 
         # Strict mode
         if current_user is not None:
             return None
 
-        closed_networks = getattr(connector_config, "CATALOG_CLOSED_NETWORKS", frozenset())
-        if network_id is not None and network_id in closed_networks:
+        if network_id is not None and network_id in CATALOG_CLOSED_NETWORKS:
             return _hidden("Not found.")
 
         if deep_tier:
             return _login_required("Login required.")
 
-        open_metadata = getattr(connector_config, "OPEN_CATALOG_METADATA", True)
-        if not open_metadata:
+        if not OPEN_CATALOG_METADATA:
             return _login_required("Login required.")
 
         return None

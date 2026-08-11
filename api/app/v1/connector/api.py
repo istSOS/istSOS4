@@ -15,55 +15,23 @@
 """
 Connector API router.
 
-Mounted at {SUBPATH}{VERSION}/connector by api/app/v1/api.py, the same way
-main.py mounts the core STA router at {SUBPATH}{VERSION}.
+Mounted at {SUBPATH}{VERSION}/connector by api/app/v1/api.py. Pure reader
+for catalog contents: every route reads the already-transformed catalog
+from cache.py (Redis, written once per harvest cycle by scheduler.py) and
+serves it as-is -- no route here runs the harvester or calls a transformer
+directly. Gated routes validate bearer tokens via auth_gate.make_gate().
 
-Pure reader for catalog contents: every route here reads the
-already-transformed catalog from cache.py (Redis, written once per harvest
-cycle by scheduler.py) and serves it. When authorization is enabled in strict
-mode, gated routes validate bearer tokens via get_current_user_optional (which
-queries user state in Postgres); no route in this file runs the harvester or
-calls transformers directly.
+STAC (stac_transformer.py) is stored flat in Redis -- stac:catalog,
+stac:collection:{id}, stac:item:{coll_id}:{id} -- each already carrying its
+own navigation links. "collection_ids"/"item_ids" are internal tracking
+lists, stripped from every response. The /stac/collections and
+/stac/collections/{id}/items envelopes are synthetic wrappers assembled
+here at request time, so only their own top-level "links" are built here.
 
-Cache shape vs. STAC spec:
-    cache.py stores three flat entity types in Redis:
-        stac:catalog              -> catalog metadata + "collection_ids" list + "links"
-        stac:collection:{id}      -> collection metadata + "item_ids" list + "links"
-        stac:item:{coll_id}:{id}  -> full Item dict (already has "links")
-
-    "collection_ids" and "item_ids" are internal tracking lists used to
-    enumerate children without loading the full tree. They are NOT part of
-    the STAC spec and are stripped from every outgoing response.
-
-    All STAC navigation links (self, root, parent, child, item, collection)
-    are built once by stac_transformer.py at harvest time and cached
-    verbatim.
-
-    The two exceptions are the /stac/collections listing and
-    /stac/collections/{id}/items envelopes: these are synthetic wrappers
-    api.py assembles at request time (a FeatureCollection and a Collections
-    listing are not themselves cached entities), so their own top-level
-    "links" arrays are built here. The Collection and Item objects nested
-    inside those envelopes are still served with their cached links as-is.
-
-/connector/dcat follows the same pure-reader pattern, serving cached
-documents built by dcat_transformer.py:
-    dcat:graph:root       -> root scope (NETWORK=0: full content; NETWORK=1:
-                             structural Catalog+DataService only, dct:hasPart
-                             links out to orphan and each Network)
-    dcat:graph:orphan     -> orphan scope (NETWORK=1 only)
-    dcat:graph:net-{id}   -> one per Network (NETWORK=1 only)
-
-Each scope above is cached twice by cache.py -- once as Turtle, once as
-JSON-LD, under a sibling ":jsonld" key -- so both are a plain Redis read,
-never a per-request re-serialization. Routes are named /dcat/root,
-/dcat/orphan, /dcat/{network_id} for JSON-LD (the default, since it's the
-more broadly consumed format), and the same paths with a ".ttl" suffix
-for Turtle.
-
-Unlike STAC's flat per-entity JSON keys, each DCAT scope/format pair is
-cached as one whole serialized document -- api.py serves it as-is with no
-reconstruction or link injection, same "pure reader" rule as the STAC routes.
+DCAT (dcat_transformer.py) is cached one whole document per scope --
+dcat:graph:root|orphan|net-{id} -- each in both Turtle and JSON-LD (a
+sibling ":jsonld" key), so every /dcat/* route is a plain Redis read
+served verbatim, no reconstruction.
 """
 
 import functools
@@ -130,25 +98,14 @@ def _not_found(detail: str) -> JSONResponse:
 
 
 def _disabled(env_var: str) -> JSONResponse:
-    """
-    404 response for a standard whose master switch is off. Deliberately
-    the same shape as _not_found/_cache_unavailable rather than FastAPI's
-    default HTTPException body, so a disabled route looks like every other
-    error response from this file -- but the message is distinct from
-    _cache_unavailable's "not harvested yet" so an operator can tell
-    "disabled" apart from "enabled but still warming up" at a glance.
-    """
+    """404 response for a standard whose master switch is off."""
     return _not_found(
         f"This connector standard is disabled. Set {env_var}=1 to enable it."
     )
 
 
 def _require_enabled(flag: bool, env_var: str):
-    """
-    Route decorator gating an endpoint on a master-switch flag. Checked
-    once per request (flags are read once at import time in config.py,
-    so this is just a cheap bool check, not a re-parse of the env var).
-    """
+    """Route decorator gating an endpoint on a master-switch flag."""
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
