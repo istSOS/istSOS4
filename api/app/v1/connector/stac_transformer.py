@@ -49,7 +49,7 @@ from typing import Optional, Union
 import asyncpg
 from app import HOSTNAME, SUBPATH, VERSION
 from app.settings import serverSettings
-from app.v1.connector.config import get_settings
+from app.v1.connector.config import get_settings, CATALOG_CLOSED_NETWORKS
 from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)
@@ -373,6 +373,8 @@ def _catalog_nav_links(
     for cid in collection_ids:
         links.append({"rel": "child", "href": f"{base}/{cid}", "type": _MEDIA_JSON})
     for nid in (network_ids or []):
+        if nid in CATALOG_CLOSED_NETWORKS:
+            continue
         links.append({"rel": "child", "href": _network_catalog_href(nid), "type": _MEDIA_JSON})
     return links
 
@@ -834,6 +836,13 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
         network_blocks.append({"network_id": net.id, "catalog": sub_catalog, "collections": collections})
 
     network_ids = [net.id for net in network_catalog.networks]
+    # Filter closed network ids from the root catalog's public metadata.
+    # The closed networks' subcatalogs are still built and cached normally
+    # (so authenticated callers can reach them by id), they are just not
+    # advertised from root.
+    visible_network_ids = [
+        nid for nid in network_ids if nid not in CATALOG_CLOSED_NETWORKS
+    ]
     root_catalog = {
         "type": "Catalog",
         "stac_version": _STAC_VERSION,
@@ -845,9 +854,9 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
         ),
         "conformsTo": _CONFORMANCE_CLASSES,
         "sta_conformsTo": serverSettings["conformance"],
-        "links": _catalog_nav_links(orphan_ids, network_ids=network_ids),
+        "links": _catalog_nav_links(orphan_ids, network_ids=visible_network_ids),
         "collection_ids": orphan_ids,
-        "network_ids": network_ids,
+        "network_ids": visible_network_ids,
     }
     if settings.STAC_CATALOG_TITLE:
         root_catalog["title"] = settings.STAC_CATALOG_TITLE
