@@ -17,10 +17,9 @@ Connector authentication gate dependency.
 
 AUTHORIZATION=0 or ANONYMOUS_VIEWER=1: everything is public, no gate.
 Strict mode (AUTHORIZATION=1, ANONYMOUS_VIEWER=0): any valid JWT passes.
-Unauthenticated requests are then gated per route:
+Unauthenticated requests are then gated:
 - network_id in CATALOG_CLOSED_NETWORKS -> 404 (hidden).
-- deep_tier routes -> 401 (login required).
-- shallow_tier routes -> 401 only if OPEN_CATALOG_METADATA=0.
+- otherwise -> 401 (login required) only if OPEN_CATALOG_METADATA=0.
 """
 
 from typing import Optional
@@ -53,35 +52,24 @@ def _hidden(detail: str = "Not found.") -> JSONResponse:
     )
 
 
-def make_gate(*, deep_tier: bool):
-    """
-    Factory creating a FastAPI dependency function for gating connector routes.
-
-    :param deep_tier: True for deep tier routes (/dcat/orphan, /dcat/{network_id}),
-                      False for shallow tier routes.
-    """
-    async def gate(
-        network_id: Optional[int] = None,
-        current_user: Optional[dict] = Depends(get_current_user_optional),
-    ) -> Optional[JSONResponse]:
-        if not AUTHORIZATION:
-            return None
-        if ANONYMOUS_VIEWER:
-            return None
-
-        # Strict mode
-        if current_user is not None:
-            return None
-
-        if network_id is not None and network_id in CATALOG_CLOSED_NETWORKS:
-            return _hidden("Not found.")
-
-        if deep_tier:
-            return _login_required("Login required.")
-
-        if not OPEN_CATALOG_METADATA:
-            return _login_required("Login required.")
-
+async def gate(
+    network_id: Optional[int] = None,
+    current_user: Optional[dict] = Depends(get_current_user_optional),
+) -> Optional[JSONResponse]:
+    """FastAPI dependency gating every connector route."""
+    if not AUTHORIZATION:
+        return None
+    if ANONYMOUS_VIEWER:
         return None
 
-    return gate
+    # Strict mode
+    if current_user is not None:
+        return None
+
+    if network_id is not None and network_id in CATALOG_CLOSED_NETWORKS:
+        return _hidden("Not found.")
+
+    if not OPEN_CATALOG_METADATA:
+        return _login_required("Login required.")
+
+    return None

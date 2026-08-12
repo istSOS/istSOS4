@@ -19,7 +19,7 @@ Mounted at {SUBPATH}{VERSION}/connector by api/app/v1/api.py. Pure reader
 for catalog contents: every route reads the already-transformed catalog
 from cache.py (Redis, written once per harvest cycle by scheduler.py) and
 serves it as-is -- no route here runs the harvester or calls a transformer
-directly. Gated routes validate bearer tokens via auth_gate.make_gate().
+directly. Gated routes validate bearer tokens via auth_gate.gate().
 
 STAC (stac_transformer.py) is stored flat in Redis -- stac:catalog,
 stac:collection:{id}, stac:item:{coll_id}:{id} -- each already carrying its
@@ -38,7 +38,7 @@ import functools
 from typing import Optional
 
 from app import HOSTNAME, SUBPATH, VERSION
-from app.v1.connector.auth_gate import make_gate
+from app.v1.connector.auth_gate import gate
 from app.v1.connector.cache import (
     get_catalog,
     get_collection,
@@ -64,8 +64,6 @@ from fastapi.responses import JSONResponse, Response
 v1 = APIRouter()
 cache = get_settings()
 
-shallow_gate = make_gate(deep_tier=False)
-deep_gate = make_gate(deep_tier=True)
 
 _STAC_ROOT_HREF = f"{HOSTNAME}{SUBPATH}{VERSION}/connector/stac"
 
@@ -188,7 +186,7 @@ async def get_connector_root(request: Request):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_root(gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
+async def stac_root(gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -220,7 +218,7 @@ async def stac_root(gate_result: Optional[JSONResponse] = Depends(shallow_gate))
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_collections(gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
+async def stac_collections(gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -271,7 +269,7 @@ async def stac_collections(gate_result: Optional[JSONResponse] = Depends(shallow
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_collection(collection_id: str, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
+async def stac_collection(collection_id: str, gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -292,7 +290,7 @@ async def stac_collection(collection_id: str, gate_result: Optional[JSONResponse
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_items(collection_id: str, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
+async def stac_items(collection_id: str, gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -312,7 +310,7 @@ async def stac_items(collection_id: str, gate_result: Optional[JSONResponse] = D
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_item(collection_id: str, item_id: str, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
+async def stac_item(collection_id: str, item_id: str, gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -334,7 +332,7 @@ async def stac_item(collection_id: str, item_id: str, gate_result: Optional[JSON
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_network_root(network_id: int, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
+async def stac_network_root(network_id: int, gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -348,7 +346,7 @@ async def stac_network_root(network_id: int, gate_result: Optional[JSONResponse]
 
 @v1.api_route("/stac/{network_id}/collections/{collection_id}", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_network_collection(network_id: int, collection_id: str, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
+async def stac_network_collection(network_id: int, collection_id: str, gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -360,7 +358,7 @@ async def stac_network_collection(network_id: int, collection_id: str, gate_resu
 
 @v1.api_route("/stac/{network_id}/collections/{collection_id}/items", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_network_items(network_id: int, collection_id: str, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
+async def stac_network_items(network_id: int, collection_id: str, gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -376,7 +374,7 @@ async def stac_network_items(network_id: int, collection_id: str, gate_result: O
 
 @v1.api_route("/stac/{network_id}/collections/{collection_id}/items/{item_id}", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
-async def stac_network_item(network_id: int, collection_id: str, item_id: str, gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
+async def stac_network_item(network_id: int, collection_id: str, item_id: str, gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -454,7 +452,7 @@ def _turtle_not_found(detail: str) -> JSONResponse:
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_root(gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
+async def dcat_root(gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -478,7 +476,7 @@ async def dcat_root(gate_result: Optional[JSONResponse] = Depends(shallow_gate))
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_root_ttl(gate_result: Optional[JSONResponse] = Depends(shallow_gate)):
+async def dcat_root_ttl(gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -507,7 +505,7 @@ async def dcat_root_ttl(gate_result: Optional[JSONResponse] = Depends(shallow_ga
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_orphan(gate_result: Optional[JSONResponse] = Depends(deep_gate)):
+async def dcat_orphan(gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -532,7 +530,7 @@ async def dcat_orphan(gate_result: Optional[JSONResponse] = Depends(deep_gate)):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_orphan_ttl(gate_result: Optional[JSONResponse] = Depends(deep_gate)):
+async def dcat_orphan_ttl(gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -557,7 +555,7 @@ async def dcat_orphan_ttl(gate_result: Optional[JSONResponse] = Depends(deep_gat
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_network_ttl(network_id: int, gate_result: Optional[JSONResponse] = Depends(deep_gate)):
+async def dcat_network_ttl(network_id: int, gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
@@ -583,7 +581,7 @@ async def dcat_network_ttl(network_id: int, gate_result: Optional[JSONResponse] 
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
-async def dcat_network(network_id: int, gate_result: Optional[JSONResponse] = Depends(deep_gate)):
+async def dcat_network(network_id: int, gate_result: Optional[JSONResponse] = Depends(gate)):
     try:
         if gate_result is not None:
             return gate_result
