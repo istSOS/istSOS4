@@ -103,46 +103,79 @@ STAC_ROOT_HREF = f"{HOSTNAME}{SUBPATH}{VERSION}/connector/stac"
 # AUTHORIZATION and not ANONYMOUS_VIEWER), not per-network, so whether an
 # asset needs a token is a single deployment-wide flag, not something
 # computed per Item.
+#
+# Two schemes are declared, both describing the exact same real endpoint,
+# because no single scheme type serves both audiences:
+#   - "oauth2" (password grant) is the spec-accurate description of what
+#     app/oauth.py actually does (OAuth2PasswordBearer(tokenUrl="Login")).
+#     A script (pystac-client, a custom stac-asset auth plugin) that already
+#     knows how to drive a password grant can use this without guessing.
+#   - "apiKey" (header "Authorization") is there for STAC Browser: per its
+#     own docs, it only ever renders an interactive login box for "apiKey"
+#     or "openIdConnect" -- everything else ("oauth2", "http") is reported
+#     as "Unsupported" no matter how it's declared here. Even apiKey only
+#     lights up once the *browser* is deployed with a matching authConfig
+#     (a STAC Browser-side setting, not something this catalog can set) --
+#     see the reply where this is wired up.
+# Assets reference both ids in auth:refs; each client picks whichever it
+# understands and ignores the other.
 _AUTH_EXTENSION_URI = "https://stac-extensions.github.io/authentication/v1.1.0/schema.json"
-_AUTH_SCHEME_ID = "istsosLogin"
+_AUTH_SCHEME_ID_OAUTH2 = "istsosLogin"
+_AUTH_SCHEME_ID_APIKEY = "istsosBearerToken"
+_AUTH_SCHEME_IDS = [_AUTH_SCHEME_ID_OAUTH2, _AUTH_SCHEME_ID_APIKEY]
 _STA_DATA_REQUIRES_AUTH = bool(AUTHORIZATION) and not bool(ANONYMOUS_VIEWER)
 
 
-def _auth_scheme() -> dict:
+def _auth_schemes() -> dict:
     """
-    The single auth:schemes entry this deployment ever emits: istSOS's
-    existing Login endpoint, an OAuth2 password grant. Matches
-    OAuth2PasswordBearer(tokenUrl="Login") in app/oauth.py exactly, so a
-    client that already knows how to drive that flow (or a human reading
-    STAC Browser's auto-generated login prompt) has everything needed.
+    Both auth:schemes entries this deployment ever emits, keyed by id.
+    Same underlying endpoint (app/oauth.py's OAuth2PasswordBearer(
+    tokenUrl="Login")) described two ways -- see the module-level comment
+    above for why both exist.
     """
+    login_url = f"{HOSTNAME}{SUBPATH}{VERSION}/Login"
+    token_instructions = (
+        f"{STAC_AUTH_DESCRIPTION} (POST {login_url} with your "
+        "username/password to obtain one.)"
+    )
     return {
-        "type": "oauth2",
-        "description": STAC_AUTH_DESCRIPTION,
-        "flows": {
-            "password": {
-                "tokenUrl": f"{HOSTNAME}{SUBPATH}{VERSION}/Login",
-                "scopes": {},
-            }
+        _AUTH_SCHEME_ID_OAUTH2: {
+            "type": "oauth2",
+            "description": STAC_AUTH_DESCRIPTION,
+            "flows": {
+                "password": {
+                    "tokenUrl": login_url,
+                    "scopes": {},
+                }
+            },
+        },
+        _AUTH_SCHEME_ID_APIKEY: {
+            "type": "apiKey",
+            "in": "header",
+            "name": "Authorization",
+            "description": token_instructions,
         },
     }
 
 
 def _apply_catalog_auth_extension(catalog_dict: dict) -> None:
     """
-    In place, declare auth:schemes on a root Catalog dict when STA data
-    endpoints require a bearer token. No-op when AUTHORIZATION=0 or
+    In place, declare auth:schemes on a Catalog or Collection dict when STA
+    data endpoints require a bearer token. No-op when AUTHORIZATION=0 or
     ANONYMOUS_VIEWER=1 -- assets are fetchable as-is, nothing to declare.
 
-    Declared once at the root (not repeated per Collection/sub-Catalog):
-    every Item/Collection this module builds carries a "root" nav link
-    back to STAC_ROOT_HREF, which is how STAC clients -- STAC Browser
-    included -- are expected to resolve auth:refs back to their scheme.
+    Applied to every Catalog/sub-Catalog/Collection this module builds, not
+    just the root: STAC JSON-schema validation treats each document as
+    self-contained (it never walks the "root" link to resolve refs defined
+    elsewhere), so a document that declares the extension has to carry its
+    own auth:schemes to validate on its own.
     """
     if not _STA_DATA_REQUIRES_AUTH:
         return
     catalog_dict.setdefault("stac_extensions", []).append(_AUTH_EXTENSION_URI)
-    catalog_dict["auth:schemes"] = {_AUTH_SCHEME_ID: _auth_scheme()}
+    catalog_dict["auth:schemes"] = _auth_schemes()
+
+
 
 
 # Temporal helpers
@@ -607,9 +640,9 @@ def _build_item_dict(
     item_stac_extensions: list[str] = []
     if _STA_DATA_REQUIRES_AUTH:
         item_stac_extensions.append(_AUTH_EXTENSION_URI)
-        properties["auth:schemes"] = {_AUTH_SCHEME_ID: _auth_scheme()}
+        properties["auth:schemes"] = _auth_schemes()
         for asset in assets.values():
-            asset["auth:refs"] = [_AUTH_SCHEME_ID]
+            asset["auth:refs"] = list(_AUTH_SCHEME_IDS)
 
     # Navigation links built here -- served from cache as-is by api.py.
     # sta_datastream appended after nav links as a custom cross-reference rel.
@@ -774,6 +807,8 @@ def _build_collection_dict(
     coll["item_ids"] = item_ids
     coll["items"] = items
 
+    _apply_catalog_auth_extension(coll)
+
     return coll
 
 
@@ -907,6 +942,7 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
             "links": _network_subcatalog_nav_links(net.id, collection_ids),
             "collection_ids": collection_ids,
         }
+        _apply_catalog_auth_extension(sub_catalog)
         network_blocks.append({"network_id": net.id, "catalog": sub_catalog, "collections": collections})
 
     network_ids = [net.id for net in network_catalog.networks]
