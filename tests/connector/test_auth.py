@@ -1,33 +1,31 @@
-from unittest.mock import AsyncMock, patch
+"""
+End-to-end tests for the connector's auth matrix, exercised through the
+mounted router (v1) rather than calling auth_gate directly (see
+test_auth_gate.py for the unit-level version).
+
+STAC_TRANSFORMER/DCAT_TRANSFORMER are forced on in conftest.py's env
+bootstrap, not here -- api.py's route decorators bake that flag in at
+import time, so it can't be toggled per-test. SECRET_KEY is set the same
+way, so app.oauth's SECRET_KEY (imported by name, same as everything
+else here) is already correct before any test module loads.
+"""
+
+from unittest.mock import AsyncMock
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-import app
 from app.oauth import create_access_token
 from app.v1.api import v1
 from app.v1.connector.harvester import HarvestedNetwork, HarvestedNetworkCatalog, HarvestedThing
-import app.v1.connector.config as connector_config
 import app.v1.connector.stac_transformer as stac_transformer
 import app.v1.connector.dcat_transformer as dcat_transformer
 from app.v1.connector.cache import get_dcat_metadata
 
-# Ensure SECRET_KEY is set for JWT encoding/decoding during tests
-app.SECRET_KEY = "test-secret-key-1234567890-test"
-import app.oauth as oauth
-oauth.SECRET_KEY = "test-secret-key-1234567890-test"
-
-
-@pytest.fixture(autouse=True)
-def setup_test_flags(monkeypatch):
-    """Enable transformer switches by default for connector route tests."""
-    connector_config.STAC_TRANSFORMER = True
-    connector_config.DCAT_TRANSFORMER = True
-    monkeypatch.setattr("app.oauth.SECRET_KEY", "test-secret-key-1234567890-test")
-
 
 @pytest.fixture
 def mock_cache(monkeypatch):
-    """Mock cache layer functions so tests run without Redis dependency."""
+    """Mock the cache layer so route tests run without a Redis dependency."""
     monkeypatch.setattr("app.v1.connector.api.get_catalog", AsyncMock(return_value={"id": "test-cat", "type": "Catalog"}))
     monkeypatch.setattr("app.v1.connector.api.get_collection", AsyncMock(return_value={"id": "thing-1", "type": "Collection"}))
     monkeypatch.setattr("app.v1.connector.api.get_network_catalog", AsyncMock(return_value={"id": "network-1", "type": "Catalog"}))
@@ -48,10 +46,9 @@ def valid_auth_headers(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_authorization_disabled(mock_cache):
+async def test_authorization_disabled(mock_cache, set_connector_flags):
     """AUTHORIZATION=0: shallow and deep routes both public, no token needed."""
-    app.AUTHORIZATION = 0
-    app.ANONYMOUS_VIEWER = 0
+    set_connector_flags(authorization=0, anonymous_viewer=0)
 
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
         res_shallow = await ac.get("/connector/stac")
@@ -62,10 +59,9 @@ async def test_authorization_disabled(mock_cache):
 
 
 @pytest.mark.asyncio
-async def test_authorization_anonymous_viewer(mock_cache):
+async def test_authorization_anonymous_viewer(mock_cache, set_connector_flags):
     """AUTHORIZATION=1, ANONYMOUS_VIEWER=1: shallow and deep routes both public."""
-    app.AUTHORIZATION = 1
-    app.ANONYMOUS_VIEWER = 1
+    set_connector_flags(authorization=1, anonymous_viewer=1)
 
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
         res_shallow = await ac.get("/connector/stac")
@@ -76,85 +72,82 @@ async def test_authorization_anonymous_viewer(mock_cache):
 
 
 @pytest.mark.asyncio
-async def test_strict_mode_open_metadata(mock_cache, valid_auth_headers):
+async def test_strict_mode_open_metadata(mock_cache, valid_auth_headers, set_connector_flags):
     """AUTHORIZATION=1, ANONYMOUS_VIEWER=0, OPEN_CATALOG_METADATA=1:
     shallow public, deep requires token (401 without token, 200 with valid token)."""
-    app.AUTHORIZATION = 1
-    app.ANONYMOUS_VIEWER = 0
-    connector_config.OPEN_CATALOG_METADATA = True
-    connector_config.CATALOG_CLOSED_NETWORKS = frozenset()
+    set_connector_flags(
+        authorization=1, anonymous_viewer=0, open_catalog_metadata=True, closed_networks=[]
+    )
 
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
-        # Shallow route: public
+        # Shallow route: public.
         res_shallow = await ac.get("/connector/stac")
         assert res_shallow.status_code == 200
 
-        # Deep route unauthenticated: 401
+        # Deep route unauthenticated: 401.
         res_deep_anon = await ac.get("/connector/dcat/orphan")
         assert res_deep_anon.status_code == 401
 
-        # Deep route authenticated: 200
+        # Deep route authenticated: 200.
         res_deep_auth = await ac.get("/connector/dcat/orphan", headers=valid_auth_headers)
         assert res_deep_auth.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_strict_mode_closed_metadata(mock_cache, valid_auth_headers):
+async def test_strict_mode_closed_metadata(mock_cache, valid_auth_headers, set_connector_flags):
     """AUTHORIZATION=1, ANONYMOUS_VIEWER=0, OPEN_CATALOG_METADATA=0:
     shallow requires token too (401 without token, not 404)."""
-    app.AUTHORIZATION = 1
-    app.ANONYMOUS_VIEWER = 0
-    connector_config.OPEN_CATALOG_METADATA = False
-    connector_config.CATALOG_CLOSED_NETWORKS = frozenset()
+    set_connector_flags(
+        authorization=1, anonymous_viewer=0, open_catalog_metadata=False, closed_networks=[]
+    )
 
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
-        # Shallow route unauthenticated: 401
+        # Shallow route unauthenticated: 401.
         res_shallow_anon = await ac.get("/connector/stac")
         assert res_shallow_anon.status_code == 401
 
-        # Shallow route authenticated: 200
+        # Shallow route authenticated: 200.
         res_shallow_auth = await ac.get("/connector/stac", headers=valid_auth_headers)
         assert res_shallow_auth.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_closed_network_override(mock_cache, valid_auth_headers):
+async def test_closed_network_override(mock_cache, valid_auth_headers, set_connector_flags):
     """AUTHORIZATION=1, ANONYMOUS_VIEWER=0, CATALOG_CLOSED_NETWORKS=3,7:
     closed network routes return 404 without token (not 401), 200 with token.
     Unclosed network 1 obeys OPEN_CATALOG_METADATA."""
-    app.AUTHORIZATION = 1
-    app.ANONYMOUS_VIEWER = 0
-    connector_config.OPEN_CATALOG_METADATA = True
-    connector_config.CATALOG_CLOSED_NETWORKS = frozenset([3, 7])
+    set_connector_flags(
+        authorization=1, anonymous_viewer=0, open_catalog_metadata=True, closed_networks=[3, 7]
+    )
 
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
-        # Closed network shallow route unauthenticated: 404
+        # Closed network shallow route unauthenticated: 404.
         res_closed_shallow_anon = await ac.get("/connector/stac/7")
         assert res_closed_shallow_anon.status_code == 404
 
-        # Closed network deep route unauthenticated: 404
+        # Closed network deep route unauthenticated: 404.
         res_closed_deep_anon = await ac.get("/connector/dcat/7")
         assert res_closed_deep_anon.status_code == 404
 
-        # Closed network authenticated: 200
+        # Closed network authenticated: 200.
         res_closed_shallow_auth = await ac.get("/connector/stac/7", headers=valid_auth_headers)
         assert res_closed_shallow_auth.status_code == 200
 
         res_closed_deep_auth = await ac.get("/connector/dcat/7", headers=valid_auth_headers)
         assert res_closed_deep_auth.status_code == 200
 
-        # Unclosed network 1 shallow route unauthenticated: 200 (since OPEN_CATALOG_METADATA=True)
+        # Unclosed network 1 shallow route unauthenticated: 200 (OPEN_CATALOG_METADATA=True).
         res_unclosed_shallow_anon = await ac.get("/connector/stac/1")
         assert res_unclosed_shallow_anon.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_root_catalog_link_leak_check():
-    """Root catalog link leak check (STAC & DCAT):
-    With closed network 7, STAC root links and DCAT root graph must not contain network 7."""
-    connector_config.CATALOG_CLOSED_NETWORKS = frozenset([7])
+async def test_root_catalog_link_leak_check(set_connector_flags):
+    """Root catalog link leak check (STAC & DCAT): with closed network 7,
+    STAC root links and the DCAT root graph must not contain network 7."""
+    set_connector_flags(closed_networks=[7])
 
-    # Sample harvested network catalog containing network 1 and closed network 7
+    # Sample harvested network catalog containing network 1 and closed network 7.
     net_cat = HarvestedNetworkCatalog(
         harvested_at="2026-08-11T12:00:00Z",
         orphan_things=[],
@@ -168,14 +161,14 @@ async def test_root_catalog_link_leak_check():
         },
     )
 
-    # STAC check
+    # STAC check.
     stac_res = stac_transformer.build_stac_catalog_with_networks(net_cat)
     stac_root_cat = stac_res["catalog"]
     assert 7 not in stac_root_cat["network_ids"]
     hrefs = [link["href"] for link in stac_root_cat["links"]]
     assert not any("/7" in href for href in hrefs)
 
-    # DCAT check
+    # DCAT check.
     dcat_res = dcat_transformer.build_dcat_catalog_with_networks(net_cat)
     dcat_root_graph = dcat_res["root"]
     turtle_output = dcat_root_graph.serialize(format="turtle")
@@ -183,18 +176,18 @@ async def test_root_catalog_link_leak_check():
 
 
 @pytest.mark.asyncio
-async def test_connector_summary_endpoint_closed_network(monkeypatch, mock_cache):
+async def test_connector_summary_endpoint_closed_network(mock_cache, monkeypatch, set_connector_flags):
     """GET /connector: closed network id is absent from dcat_network_ids."""
-    connector_config.CATALOG_CLOSED_NETWORKS = frozenset([7])
+    set_connector_flags(closed_networks=[7])
 
-    # Mock Redis returning raw network_ids [1, 7, 2]
+    # Mock Redis returning raw network_ids [1, 7, 2].
     monkeypatch.setattr("app.v1.connector.cache.redis.get", lambda key: b'[1, 7, 2]' if key == "dcat:meta:network_ids" else None)
 
     dcat_meta = get_dcat_metadata()
     assert 7 not in dcat_meta["network_ids"]
     assert dcat_meta["network_ids"] == [1, 2]
 
-    # Test via route handler GET /connector
+    # Same check through the route handler.
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
         res = await ac.get("/connector")
         assert res.status_code == 200
@@ -203,11 +196,9 @@ async def test_connector_summary_endpoint_closed_network(monkeypatch, mock_cache
 
 
 @pytest.mark.asyncio
-async def test_garbage_token_returns_401(mock_cache):
+async def test_garbage_token_returns_401(mock_cache, set_connector_flags):
     """Garbage/expired token on a gated route returns 401 (not treated as no-token)."""
-    app.AUTHORIZATION = 1
-    app.ANONYMOUS_VIEWER = 0
-    connector_config.OPEN_CATALOG_METADATA = True
+    set_connector_flags(authorization=1, anonymous_viewer=0, open_catalog_metadata=True)
 
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
         invalid_headers = {"Authorization": "Bearer invalid.garbage.jwt.token"}
