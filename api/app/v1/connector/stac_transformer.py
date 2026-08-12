@@ -49,8 +49,7 @@ from typing import Optional, Union
 import asyncpg
 from app import HOSTNAME, SUBPATH, VERSION
 from app.settings import serverSettings
-from app.v1.connector.config import get_settings
-from app.v1.connector.config import CATALOG_CLOSED_NETWORKS
+from app.v1.connector.config import CATALOG_CLOSED_NETWORKS, get_settings
 from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)

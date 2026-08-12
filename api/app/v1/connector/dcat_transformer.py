@@ -63,8 +63,13 @@ from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCTERMS, FOAF, OWL, RDFS, SKOS, XSD
 
 from app import HOSTNAME, SUBPATH, VERSION
-from app.v1.connector.config import Settings, get_settings, resolve_language_uri, resolve_license_uri
-from app.v1.connector.config import CATALOG_CLOSED_NETWORKS
+from app.v1.connector.config import (
+    CATALOG_CLOSED_NETWORKS,
+    Settings,
+    get_settings,
+    resolve_language_uri,
+    resolve_license_uri,
+)
 from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)

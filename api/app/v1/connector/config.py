@@ -39,9 +39,8 @@ logger = logging.getLogger(__name__)
 # Master switches for the two transformers, read once at import time.
 # These gate whether the scheduler and API even attempt to touch STAC/DCAT
 # at all, so they're plain module attributes rather than Settings fields --
-# every caller imports this module as connector_config and reads them
-# directly (connector_config.STAC_TRANSFORMER), same as the rest of this
-# section.
+# callers import them directly by name (from app.v1.connector.config
+# import STAC_TRANSFORMER), same as the rest of this codebase.
 STAC_TRANSFORMER: bool = os.getenv("STAC_TRANSFORMER", "0").strip() == "1"
 DCAT_TRANSFORMER: bool = os.getenv("DCAT_TRANSFORMER", "0").strip() == "1"
 
