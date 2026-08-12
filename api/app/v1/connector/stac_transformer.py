@@ -47,9 +47,9 @@ from datetime import datetime, timezone
 from typing import Optional, Union
 
 import asyncpg
-from app import HOSTNAME, SUBPATH, VERSION
+from app import ANONYMOUS_VIEWER, AUTHORIZATION, HOSTNAME, SUBPATH, VERSION
 from app.settings import serverSettings
-from app.v1.connector.config import CATALOG_CLOSED_NETWORKS, get_settings
+from app.v1.connector.config import CATALOG_CLOSED_NETWORKS, STAC_AUTH_DESCRIPTION, get_settings
 from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,61 @@ _CONFORMANCE_CLASSES = [
 # second deployment only needs a different .env, never a code change.
 
 STAC_ROOT_HREF = f"{HOSTNAME}{SUBPATH}{VERSION}/connector/stac"
+
+# stac-extensions/authentication -- declares HOW to satisfy the 401 a client
+# hits when it follows an Item asset href (Observations, Datastream) into
+# the underlying STA API. This is orthogonal to auth_gate.py: auth_gate
+# controls whether the *connector's own* catalog/item JSON is visible at
+# all (shallow/deep tier, per-network 404-hiding); this controls what a
+# client is told once it's looking at an Item whose data assets sit behind
+# istSOS's own Login flow. The two can and do disagree -- an Item can be
+# openly visible while its assets still need a token.
+#
+# The STA API gates read routes with one global dependency (see
+# app/v1/endpoints/read/read.py: `user = Depends(get_current_user)` iff
+# AUTHORIZATION and not ANONYMOUS_VIEWER), not per-network, so whether an
+# asset needs a token is a single deployment-wide flag, not something
+# computed per Item.
+_AUTH_EXTENSION_URI = "https://stac-extensions.github.io/authentication/v1.1.0/schema.json"
+_AUTH_SCHEME_ID = "istsosLogin"
+_STA_DATA_REQUIRES_AUTH = bool(AUTHORIZATION) and not bool(ANONYMOUS_VIEWER)
+
+
+def _auth_scheme() -> dict:
+    """
+    The single auth:schemes entry this deployment ever emits: istSOS's
+    existing Login endpoint, an OAuth2 password grant. Matches
+    OAuth2PasswordBearer(tokenUrl="Login") in app/oauth.py exactly, so a
+    client that already knows how to drive that flow (or a human reading
+    STAC Browser's auto-generated login prompt) has everything needed.
+    """
+    return {
+        "type": "oauth2",
+        "description": STAC_AUTH_DESCRIPTION,
+        "flows": {
+            "password": {
+                "tokenUrl": f"{HOSTNAME}{SUBPATH}{VERSION}/Login",
+                "scopes": {},
+            }
+        },
+    }
+
+
+def _apply_catalog_auth_extension(catalog_dict: dict) -> None:
+    """
+    In place, declare auth:schemes on a root Catalog dict when STA data
+    endpoints require a bearer token. No-op when AUTHORIZATION=0 or
+    ANONYMOUS_VIEWER=1 -- assets are fetchable as-is, nothing to declare.
+
+    Declared once at the root (not repeated per Collection/sub-Catalog):
+    every Item/Collection this module builds carries a "root" nav link
+    back to STAC_ROOT_HREF, which is how STAC clients -- STAC Browser
+    included -- are expected to resolve auth:refs back to their scheme.
+    """
+    if not _STA_DATA_REQUIRES_AUTH:
+        return
+    catalog_dict.setdefault("stac_extensions", []).append(_AUTH_EXTENSION_URI)
+    catalog_dict["auth:schemes"] = {_AUTH_SCHEME_ID: _auth_scheme()}
 
 
 # Temporal helpers
@@ -538,6 +593,24 @@ def _build_item_dict(
         },
     }
 
+    # All three assets above point at the STA API, which gates every read
+    # route behind the same single flag -- see _STA_DATA_REQUIRES_AUTH.
+    # Tag them so a client following the href straight into a bare 401
+    # knows what scheme to satisfy and where, instead of guessing.
+    #
+    # auth:schemes has to be repeated here in Item Properties, not just on
+    # the root Catalog: STAC JSON-schema validation (and most client-side
+    # resolution) treats each document as self-contained -- validators
+    # check the Item in isolation, they don't walk the "root" link to find
+    # schemes declared elsewhere. Per the extension spec, Item-level
+    # auth:schemes belongs in Properties, not at the Item's top level.
+    item_stac_extensions: list[str] = []
+    if _STA_DATA_REQUIRES_AUTH:
+        item_stac_extensions.append(_AUTH_EXTENSION_URI)
+        properties["auth:schemes"] = {_AUTH_SCHEME_ID: _auth_scheme()}
+        for asset in assets.values():
+            asset["auth:refs"] = [_AUTH_SCHEME_ID]
+
     # Navigation links built here -- served from cache as-is by api.py.
     # sta_datastream appended after nav links as a custom cross-reference rel.
     links = _item_nav_links(item_id, collection_id, network_id) + [
@@ -552,7 +625,7 @@ def _build_item_dict(
     return {
         "type":            "Feature",
         "stac_version":    _STAC_VERSION,
-        "stac_extensions": [],
+        "stac_extensions": item_stac_extensions,
         "id":              item_id,
         "geometry":        geometry,
         "bbox":            bbox,
@@ -777,6 +850,7 @@ def build_stac_catalog(catalog: HarvestedCatalog) -> dict:
     }
     if settings.STAC_CATALOG_TITLE:
         root_catalog["title"] = settings.STAC_CATALOG_TITLE
+    _apply_catalog_auth_extension(root_catalog)
 
     logger.info(
         "STAC transform complete: %d Collections, %d Items, %d skipped",
@@ -860,6 +934,7 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
     }
     if settings.STAC_CATALOG_TITLE:
         root_catalog["title"] = settings.STAC_CATALOG_TITLE
+    _apply_catalog_auth_extension(root_catalog)
 
     logger.info(
         "STAC network transform complete: %d Networks, %d orphan Collections, %d total Items, %d skipped",

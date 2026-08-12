@@ -75,6 +75,21 @@ def _parse_closed_networks() -> frozenset[int]:
 
 CATALOG_CLOSED_NETWORKS: frozenset[int] = _parse_closed_networks()
 
+# Human-readable text embedded in the STAC authentication extension's
+# auth:schemes entry (see stac_transformer._auth_scheme), telling a catalog
+# consumer -- a person reading STAC Browser's login prompt, or a script
+# reading the catalog JSON -- how to actually obtain a token. istSOS ships
+# no login page to redirect to, so by default this just points at the
+# Login endpoint istSOS already exposes. Deployments that would rather tell
+# people to email an administrator, use an SSO portal, etc. can override it
+# with their own text; it is opaque to us, we just pass it through.
+STAC_AUTH_DESCRIPTION: str = os.getenv(
+    "STAC_AUTH_DESCRIPTION",
+    "This asset requires an istSOS4 account. Obtain a bearer token from "
+    "the Login endpoint (POST username/password) and send it as "
+    "'Authorization: Bearer <token>'.",
+).strip()
+
 _STAC_NON_SPDX_LICENSES = {"various", "proprietary"}
 _STAC_LICENSE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-+]*$")
 
