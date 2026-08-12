@@ -72,73 +72,77 @@ async def test_authorization_anonymous_viewer(mock_cache, set_connector_flags):
 
 
 @pytest.mark.asyncio
-async def test_strict_mode_open_metadata(mock_cache, valid_auth_headers, set_connector_flags):
+async def test_strict_mode_open_metadata(mock_cache, set_connector_flags):
     """AUTHORIZATION=1, ANONYMOUS_VIEWER=0, OPEN_CATALOG_METADATA=1:
-    shallow public, deep requires token (401 without token, 200 with valid token)."""
+    every connector route is public, STAC and DCAT alike (no route is
+    gated purely by being a network/orphan sub-catalog -- see
+    test_dcat_gate_parity.py for the regression this guards)."""
     set_connector_flags(
         authorization=1, anonymous_viewer=0, open_catalog_metadata=True, closed_networks=[]
     )
 
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
-        # Shallow route: public.
-        res_shallow = await ac.get("/connector/stac")
-        assert res_shallow.status_code == 200
+        res_stac = await ac.get("/connector/stac")
+        assert res_stac.status_code == 200
 
-        # Deep route unauthenticated: 401.
-        res_deep_anon = await ac.get("/connector/dcat/orphan")
-        assert res_deep_anon.status_code == 401
+        res_dcat_orphan = await ac.get("/connector/dcat/orphan")
+        assert res_dcat_orphan.status_code == 200
 
-        # Deep route authenticated: 200.
-        res_deep_auth = await ac.get("/connector/dcat/orphan", headers=valid_auth_headers)
-        assert res_deep_auth.status_code == 200
+        res_dcat_network = await ac.get("/connector/dcat/1")
+        assert res_dcat_network.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_strict_mode_closed_metadata(mock_cache, valid_auth_headers, set_connector_flags):
     """AUTHORIZATION=1, ANONYMOUS_VIEWER=0, OPEN_CATALOG_METADATA=0:
-    shallow requires token too (401 without token, not 404)."""
+    every connector route requires a token (401 without, 200 with)."""
     set_connector_flags(
         authorization=1, anonymous_viewer=0, open_catalog_metadata=False, closed_networks=[]
     )
 
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
-        # Shallow route unauthenticated: 401.
-        res_shallow_anon = await ac.get("/connector/stac")
-        assert res_shallow_anon.status_code == 401
+        res_stac_anon = await ac.get("/connector/stac")
+        assert res_stac_anon.status_code == 401
+        res_stac_auth = await ac.get("/connector/stac", headers=valid_auth_headers)
+        assert res_stac_auth.status_code == 200
 
-        # Shallow route authenticated: 200.
-        res_shallow_auth = await ac.get("/connector/stac", headers=valid_auth_headers)
-        assert res_shallow_auth.status_code == 200
+        res_dcat_anon = await ac.get("/connector/dcat/orphan")
+        assert res_dcat_anon.status_code == 401
+        res_dcat_auth = await ac.get("/connector/dcat/orphan", headers=valid_auth_headers)
+        assert res_dcat_auth.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_closed_network_override(mock_cache, valid_auth_headers, set_connector_flags):
     """AUTHORIZATION=1, ANONYMOUS_VIEWER=0, CATALOG_CLOSED_NETWORKS=3,7:
     closed network routes return 404 without token (not 401), 200 with token.
-    Unclosed network 1 obeys OPEN_CATALOG_METADATA."""
+    Unclosed network 1 obeys OPEN_CATALOG_METADATA, on both STAC and DCAT."""
     set_connector_flags(
         authorization=1, anonymous_viewer=0, open_catalog_metadata=True, closed_networks=[3, 7]
     )
 
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
-        # Closed network shallow route unauthenticated: 404.
-        res_closed_shallow_anon = await ac.get("/connector/stac/7")
-        assert res_closed_shallow_anon.status_code == 404
+        # Closed network, STAC, unauthenticated: 404.
+        res_closed_stac_anon = await ac.get("/connector/stac/7")
+        assert res_closed_stac_anon.status_code == 404
 
-        # Closed network deep route unauthenticated: 404.
-        res_closed_deep_anon = await ac.get("/connector/dcat/7")
-        assert res_closed_deep_anon.status_code == 404
+        # Closed network, DCAT, unauthenticated: 404.
+        res_closed_dcat_anon = await ac.get("/connector/dcat/7")
+        assert res_closed_dcat_anon.status_code == 404
 
-        # Closed network authenticated: 200.
-        res_closed_shallow_auth = await ac.get("/connector/stac/7", headers=valid_auth_headers)
-        assert res_closed_shallow_auth.status_code == 200
+        # Closed network, authenticated: 200 on both.
+        res_closed_stac_auth = await ac.get("/connector/stac/7", headers=valid_auth_headers)
+        assert res_closed_stac_auth.status_code == 200
 
-        res_closed_deep_auth = await ac.get("/connector/dcat/7", headers=valid_auth_headers)
-        assert res_closed_deep_auth.status_code == 200
+        res_closed_dcat_auth = await ac.get("/connector/dcat/7", headers=valid_auth_headers)
+        assert res_closed_dcat_auth.status_code == 200
 
-        # Unclosed network 1 shallow route unauthenticated: 200 (OPEN_CATALOG_METADATA=True).
-        res_unclosed_shallow_anon = await ac.get("/connector/stac/1")
-        assert res_unclosed_shallow_anon.status_code == 200
+        # Unclosed network 1, unauthenticated: 200 on both (OPEN_CATALOG_METADATA=True).
+        res_unclosed_stac_anon = await ac.get("/connector/stac/1")
+        assert res_unclosed_stac_anon.status_code == 200
+
+        res_unclosed_dcat_anon = await ac.get("/connector/dcat/1")
+        assert res_unclosed_dcat_anon.status_code == 200
 
 
 @pytest.mark.asyncio
