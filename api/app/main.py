@@ -21,6 +21,7 @@ from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.settings import serverSettings, tables
 from app.v1 import api
+from app.v1.connector.scheduler import start_scheduler
 from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,10 @@ async def initialize_pool():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await initialize_pool()
+    pool = await get_pool()
+    scheduler = start_scheduler(pool)
     yield
+    scheduler.shutdown()
 
 
 app = FastAPI(
