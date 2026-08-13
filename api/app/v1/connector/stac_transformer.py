@@ -134,14 +134,26 @@ def _auth_schemes() -> dict:
     above for why both exist.
     """
     login_url = f"{HOSTNAME}{SUBPATH}{VERSION}/Login"
-    token_instructions = (
+    oauth2_instructions = (
         f"{STAC_AUTH_DESCRIPTION} (POST {login_url} with your "
         "username/password to obtain one.)"
+    )
+    # apiKey with in:header sends this field's value VERBATIM as the
+    # Authorization header. STAC Browser (and any other apiKey-driven
+    # client) will not prepend "Bearer " for you, so the paste-target
+    # value has to include it or every request 401s with a token that
+    # is otherwise valid. Say so imperatively, not as a formatted-header
+    # example a user can skim past.
+    apikey_instructions = (
+        f"Paste this EXACT format into the field: Bearer <token> "
+        f"(the word 'Bearer', one space, then your token -- pasting the "
+        f"token alone will fail). Get a token by sending a POST request "
+        f"to {login_url} with your username/password."
     )
     return {
         _AUTH_SCHEME_ID_OAUTH2: {
             "type": "oauth2",
-            "description": STAC_AUTH_DESCRIPTION,
+            "description": oauth2_instructions,
             "flows": {
                 "password": {
                     "tokenUrl": login_url,
@@ -153,7 +165,7 @@ def _auth_schemes() -> dict:
             "type": "apiKey",
             "in": "header",
             "name": "Authorization",
-            "description": token_instructions,
+            "description": apikey_instructions,
         },
     }
 
