@@ -14,10 +14,9 @@ Coverage:
 from __future__ import annotations
 
 import pytest
-
 import sample_data
-from client import entity_id, format_id, id_from_self_link
 from c02.conftest import create_datastream_tree
+from client import entity_id, format_id, id_from_self_link
 
 pytestmark = pytest.mark.c02
 
@@ -25,6 +24,7 @@ pytestmark = pytest.mark.c02
 # ===========================================================================
 # CREATE 7 – Validation errors
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_validation_missing_name_thing(client, unique_name):
@@ -34,9 +34,9 @@ def test_validation_missing_name_thing(client, unique_name):
     with a 400 Bad Request.
     """
     resp = client.create("Things", {"description": "no-name-thing"})
-    assert resp.status_code == 400, (
-        f"Missing mandatory 'name' should return 400, got {resp.status_code}: {resp.text[:300]}"
-    )
+    assert (
+        resp.status_code == 400
+    ), f"Missing mandatory 'name' should return 400, got {resp.status_code}: {resp.text[:300]}"
 
 
 @pytest.mark.c02
@@ -50,9 +50,9 @@ def test_validation_missing_name_location(client, unique_name):
             "location": sample_data.SEED_POINT,
         },
     )
-    assert resp.status_code == 400, (
-        f"Missing 'name' in Location should return 400, got {resp.status_code}: {resp.text[:300]}"
-    )
+    assert (
+        resp.status_code == 400
+    ), f"Missing 'name' in Location should return 400, got {resp.status_code}: {resp.text[:300]}"
 
 
 @pytest.mark.c02
@@ -67,7 +67,9 @@ def test_validation_missing_mandatory_datastream(client, unique_name, cleanup):
     t_id = id_from_self_link(t_url)
     cleanup(t_url)
 
-    op_resp = client.create("ObservedProperties", sample_data.minimal_observed_property(tag))
+    op_resp = client.create(
+        "ObservedProperties", sample_data.minimal_observed_property(tag)
+    )
     assert op_resp.status_code == 201
     op_url = client.location_of(op_resp)
     op_id = id_from_self_link(op_url)
@@ -85,9 +87,10 @@ def test_validation_missing_mandatory_datastream(client, unique_name, cleanup):
             "ObservedProperty": {"@iot.id": op_id},
         },
     )
-    assert resp.status_code in (400, 422), (
-        f"Datastream without Sensor should be rejected (4xx), got {resp.status_code}"
-    )
+    assert resp.status_code in (
+        400,
+        422,
+    ), f"Datastream without Sensor should be rejected (4xx), got {resp.status_code}"
 
 
 @pytest.mark.c02
@@ -108,9 +111,11 @@ def test_validation_bad_iot_id_link(client, unique_name):
             "ObservedProperty": {"@iot.id": 999999997},
         },
     )
-    assert resp.status_code in (400, 404, 409), (
-        f"Non-existent @iot.id link should return 4xx, got {resp.status_code}: {resp.text[:300]}"
-    )
+    assert resp.status_code in (
+        400,
+        404,
+        409,
+    ), f"Non-existent @iot.id link should return 4xx, got {resp.status_code}: {resp.text[:300]}"
 
 
 @pytest.mark.c02
@@ -125,9 +130,10 @@ def test_validation_malformed_json(client, unique_name):
         content=b"{not valid json!!!}",
         headers={"content-type": "application/json"},
     )
-    assert resp.status_code in (400, 422), (
-        f"Malformed JSON should return 4xx, got {resp.status_code}: {resp.text[:300]}"
-    )
+    assert resp.status_code in (
+        400,
+        422,
+    ), f"Malformed JSON should return 4xx, got {resp.status_code}: {resp.text[:300]}"
 
 
 @pytest.mark.c02
@@ -145,9 +151,10 @@ def test_validation_unknown_property(client, unique_name):
             "unknownExtraProperty": "should-be-rejected",
         },
     )
-    assert resp.status_code in (400, 422), (
-        f"Unknown property should be rejected (4xx), got {resp.status_code}: {resp.text[:300]}"
-    )
+    assert resp.status_code in (
+        400,
+        422,
+    ), f"Unknown property should be rejected (4xx), got {resp.status_code}: {resp.text[:300]}"
 
 
 @pytest.mark.c02
@@ -361,6 +368,7 @@ def test_patch_link_to_nonexistent_returns_4xx(client, unique_name, cleanup):
 # with a controlled 400, never crash with a 500. Regression: these
 # NotNull/Check violations used to propagate as unhandled exceptions → 500.
 
+
 @pytest.mark.c02
 def test_deep_insert_observation_inline_foi_missing_encodingtype_returns_400(
     client, unique_name, cleanup
@@ -369,17 +377,20 @@ def test_deep_insert_observation_inline_foi_missing_encodingtype_returns_400(
     FeatureOfInterest missing the mandatory ``encodingType`` → 400, not 500."""
     tree = create_datastream_tree(client, unique_name, cleanup)
 
-    resp = client.create("Observations", {
-        "phenomenonTime": "2015-03-01T00:00:00Z",
-        "result": 100,
-        # inline FoI WITHOUT encodingType (NOT NULL in the schema)
-        "FeatureOfInterest": {
-            "name": f"{unique_name('foi')} station",
-            "description": "missing encodingType",
-            "feature": {"type": "Point", "coordinates": [-114.05, 51.05]},
+    resp = client.create(
+        "Observations",
+        {
+            "phenomenonTime": "2015-03-01T00:00:00Z",
+            "result": 100,
+            # inline FoI WITHOUT encodingType (NOT NULL in the schema)
+            "FeatureOfInterest": {
+                "name": f"{unique_name('foi')} station",
+                "description": "missing encodingType",
+                "feature": {"type": "Point", "coordinates": [-114.05, 51.05]},
+            },
+            "Datastream": {"@iot.id": tree["ds_id"]},
         },
-        "Datastream": {"@iot.id": tree["ds_id"]},
-    })
+    )
 
     assert resp.status_code == 400, (
         f"deep-insert with FoI missing encodingType must be 400 (not 500), "
@@ -390,9 +401,9 @@ def test_deep_insert_observation_inline_foi_missing_encodingtype_returns_400(
     # no raw Postgres internals leaked in the controlled message
     raw_lower = resp.text.lower()
     for marker in _POSTGRES_LEAK_MARKERS:
-        assert marker.lower() not in raw_lower, (
-            f"Postgres internal {marker!r} must not leak; body: {resp.text[:300]}"
-        )
+        assert (
+            marker.lower() not in raw_lower
+        ), f"Postgres internal {marker!r} must not leak; body: {resp.text[:300]}"
 
 
 @pytest.mark.c02
@@ -407,16 +418,22 @@ def test_deep_insert_datastream_inline_sensor_missing_encodingtype_returns_400(
     cleanup(client.location_of(t_resp))
     t_id = id_from_self_link(client.location_of(t_resp))
 
-    resp = client.create("Datastreams", {
-        "name": f"{tag} DS",
-        "description": "inline sensor missing encodingType",
-        "unitOfMeasurement": sample_data.unit_lumen(),
-        "observationType": sample_data.OM_MEASUREMENT,
-        "Thing": {"@iot.id": t_id},
-        # inline Sensor WITHOUT encodingType (NOT NULL in the schema)
-        "Sensor": {"name": f"{tag} sensor", "description": "no encodingType"},
-        "ObservedProperty": sample_data.minimal_observed_property(tag),
-    })
+    resp = client.create(
+        "Datastreams",
+        {
+            "name": f"{tag} DS",
+            "description": "inline sensor missing encodingType",
+            "unitOfMeasurement": sample_data.unit_lumen(),
+            "observationType": sample_data.OM_MEASUREMENT,
+            "Thing": {"@iot.id": t_id},
+            # inline Sensor WITHOUT encodingType (NOT NULL in the schema)
+            "Sensor": {
+                "name": f"{tag} sensor",
+                "description": "no encodingType",
+            },
+            "ObservedProperty": sample_data.minimal_observed_property(tag),
+        },
+    )
 
     assert resp.status_code == 400, (
         f"deep-insert with Sensor missing encodingType must be 400 (not 500), "
@@ -427,7 +444,9 @@ def test_deep_insert_datastream_inline_sensor_missing_encodingtype_returns_400(
 
 
 @pytest.mark.c02
-def test_deep_insert_observation_valid_foi_returns_201(client, unique_name, cleanup):
+def test_deep_insert_observation_valid_foi_returns_201(
+    client, unique_name, cleanup
+):
     """req/create-update-delete/create-entity — a VALID deep-insert (Observation
     with a complete inline FeatureOfInterest) still returns 201.
 
@@ -436,17 +455,20 @@ def test_deep_insert_observation_valid_foi_returns_201(client, unique_name, clea
     """
     tree = create_datastream_tree(client, unique_name, cleanup)
 
-    resp = client.create("Observations", {
-        "phenomenonTime": "2015-03-02T00:00:00Z",
-        "result": 101,
-        "FeatureOfInterest": {
-            "name": f"{unique_name('foi')} station",
-            "description": "complete inline FoI",
-            "encodingType": sample_data.GEOJSON,
-            "feature": {"type": "Point", "coordinates": [-114.05, 51.05]},
+    resp = client.create(
+        "Observations",
+        {
+            "phenomenonTime": "2015-03-02T00:00:00Z",
+            "result": 101,
+            "FeatureOfInterest": {
+                "name": f"{unique_name('foi')} station",
+                "description": "complete inline FoI",
+                "encodingType": sample_data.GEOJSON,
+                "feature": {"type": "Point", "coordinates": [-114.05, 51.05]},
+            },
+            "Datastream": {"@iot.id": tree["ds_id"]},
         },
-        "Datastream": {"@iot.id": tree["ds_id"]},
-    })
+    )
 
     assert resp.status_code == 201, (
         f"valid deep-insert Observation+FoI must be 201, got "
@@ -459,4 +481,6 @@ def test_deep_insert_observation_valid_foi_returns_201(client, unique_name, clea
     foi = client.nav(
         f"{client.base_url}/Observations({format_id(obs_id)})/FeatureOfInterest"
     )
-    cleanup(f"{client.base_url}/FeaturesOfInterest({format_id(entity_id(foi))})")
+    cleanup(
+        f"{client.base_url}/FeaturesOfInterest({format_id(entity_id(foi))})"
+    )
