@@ -26,14 +26,6 @@ DECLARE
     target_schema text;
     target_table text;
 BEGIN
-    -- On a TimescaleDB hypertable the trigger fires on the underlying chunk, so
-    -- TG_TABLE_SCHEMA/TG_TABLE_NAME point at the internal chunk
-    -- (e.g. _timescaledb_internal._hyper_1_1_chunk) instead of the logical
-    -- table. A chunk is a plain inheritance child of its hypertable, so resolve
-    -- the parent via pg_inherits/TG_RELID and target the real
-    -- <schema>_history.<table>. pg_catalog is readable by every role (unlike the
-    -- privilege-filtered timescaledb_information views). For ordinary tables the
-    -- relation has no parent and we keep the trigger's own identity.
     SELECT n.nspname, c.relname
     INTO target_schema, target_table
     FROM pg_inherits i
