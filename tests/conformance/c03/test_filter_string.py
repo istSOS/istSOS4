@@ -17,7 +17,6 @@ is itself 1-based, so istSOS4 conforms to the OGC example (not OData's 0-based).
 from __future__ import annotations
 
 import pytest
-
 from client import format_id
 
 pytestmark = pytest.mark.c03
@@ -25,9 +24,9 @@ pytestmark = pytest.mark.c03
 
 def fetch(client, path, params=None) -> dict:
     r = client.get(path, params=params)
-    assert r.status_code == 200, (
-        f"GET {path} params={params} -> {r.status_code}: {r.text[:400]}"
-    )
+    assert (
+        r.status_code == 200
+    ), f"GET {path} params={params} -> {r.status_code}: {r.text[:400]}"
     return r.json()
 
 
@@ -53,8 +52,11 @@ def ds_scope(seed) -> str:
 
 def string_filter(client, seed, pred):
     """Seed Datastreams (ordered by name) whose name matches the string predicate."""
-    return fetch(client, "Datastreams",
-                 {"$filter": f"{ds_scope(seed)} and ({pred})", "$orderby": "name asc"})
+    return fetch(
+        client,
+        "Datastreams",
+        {"$filter": f"{ds_scope(seed)} and ({pred})", "$orderby": "name asc"},
+    )
 
 
 def both_names(seed):
@@ -92,7 +94,8 @@ def test_length(client, seed):
 
 def test_indexof(client, seed):
     """req/request-data/built-in-query-functions -- indexof (1-based per the OGC Table 23
-    example).  'name' sits at 0-based index 11 in 'datastream name 1' -> 1-based 12."""
+    example).  'name' sits at 0-based index 11 in 'datastream name 1' -> 1-based 12.
+    """
     one_based = seed.ds1.name.index("name") + 1
     doc = string_filter(client, seed, f"indexof(name,'name') eq {one_based}")
     assert names_of(doc) == both_names(seed)
@@ -107,21 +110,27 @@ def test_substring_two_arg(client, seed):
 
 def test_substring_one_arg(client, seed):
     """req/request-data/built-in-query-functions -- substring(p0,start) tail (0-based)."""
-    start = seed.ds1.name.index("name")            # 0-based -> 'name 1'
+    start = seed.ds1.name.index("name")  # 0-based -> 'name 1'
     tail = seed.ds1.name[start:]
-    doc = string_filter(client, seed, f"substring(name,{start}) eq {lit(tail)}")
+    doc = string_filter(
+        client, seed, f"substring(name,{start}) eq {lit(tail)}"
+    )
     assert ids_of(doc) == [seed.ds1.id]
 
 
 def test_tolower(client, seed):
     """req/request-data/built-in-query-functions -- tolower."""
-    doc = string_filter(client, seed, f"tolower(name) eq {lit(seed.ds1.name.lower())}")
+    doc = string_filter(
+        client, seed, f"tolower(name) eq {lit(seed.ds1.name.lower())}"
+    )
     assert ids_of(doc) == [seed.ds1.id]
 
 
 def test_toupper(client, seed):
     """req/request-data/built-in-query-functions -- toupper."""
-    doc = string_filter(client, seed, f"toupper(name) eq {lit(seed.ds1.name.upper())}")
+    doc = string_filter(
+        client, seed, f"toupper(name) eq {lit(seed.ds1.name.upper())}"
+    )
     assert ids_of(doc) == [seed.ds1.id]
 
 
@@ -133,14 +142,18 @@ def test_trim(client, seed):
 
 def test_concat(client, seed):
     """req/request-data/built-in-query-functions -- concat(p0,p1)."""
-    doc = string_filter(client, seed, f"concat(name,'!') eq {lit(seed.ds1.name + '!')}")
+    doc = string_filter(
+        client, seed, f"concat(name,'!') eq {lit(seed.ds1.name + '!')}"
+    )
     assert ids_of(doc) == [seed.ds1.id]
 
 
 def test_tolower_case_insensitive_match(client, seed):
     """req/request-data/built-in-query-functions -- tolower enables a case-insensitive
     match where a plain eq (case-sensitive) would not."""
-    doc = string_filter(client, seed, f"tolower(name) eq {lit(seed.ds2.name.lower())}")
+    doc = string_filter(
+        client, seed, f"tolower(name) eq {lit(seed.ds2.name.lower())}"
+    )
     assert ids_of(doc) == [seed.ds2.id]
 
 

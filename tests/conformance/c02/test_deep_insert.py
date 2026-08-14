@@ -16,10 +16,9 @@ import concurrent.futures
 import threading
 
 import pytest
-
 import sample_data
-from client import STAClient, entity_id, format_id, id_from_self_link
 from c02.conftest import create_datastream_tree
+from client import STAClient, entity_id, format_id, id_from_self_link
 
 pytestmark = pytest.mark.c02
 
@@ -29,6 +28,7 @@ pytestmark = pytest.mark.c02
 #   req/create-update-delete/deep-insert
 #   req/create-update-delete/deep-insert-status-code
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_deep_insert(client, unique_name, cleanup):
@@ -43,16 +43,20 @@ def test_deep_insert(client, unique_name, cleanup):
 
     resp = client.create("Things", tree_payload)
 
-    assert resp.status_code == 201, (
-        f"Deep insert should return 201, got {resp.status_code}: {resp.text[:400]}"
-    )
+    assert (
+        resp.status_code == 201
+    ), f"Deep insert should return 201, got {resp.status_code}: {resp.text[:400]}"
     thing_url = client.location_of(resp)
-    assert thing_url.startswith("http"), "Location header must be an absolute URL"
+    assert thing_url.startswith(
+        "http"
+    ), "Location header must be an absolute URL"
 
     # Navigate the created tree (2 Datastreams per entitiesDefault.json)
     thing = client.nav(
         thing_url,
-        params={"$expand": "Locations,Datastreams($expand=Sensor,ObservedProperty,Observations)"},
+        params={
+            "$expand": "Locations,Datastreams($expand=Sensor,ObservedProperty,Observations)"
+        },
     )
 
     # Thing
@@ -66,14 +70,18 @@ def test_deep_insert(client, unique_name, cleanup):
 
     # Datastreams (entitiesDefault has 2)
     datastreams = thing.get("Datastreams", [])
-    assert len(datastreams) == 2, "entitiesDefault.json deep insert must create 2 Datastreams"
+    assert (
+        len(datastreams) == 2
+    ), "entitiesDefault.json deep insert must create 2 Datastreams"
 
     sensor_ids = []
     op_ids = []
     for ds in datastreams:
         assert "@iot.id" in ds
         assert "Sensor" in ds, "Sensor must be created via deep insert"
-        assert "ObservedProperty" in ds, "ObservedProperty must be created via deep insert"
+        assert (
+            "ObservedProperty" in ds
+        ), "ObservedProperty must be created via deep insert"
         sensor_ids.append(entity_id(ds["Sensor"]))
         op_ids.append(entity_id(ds["ObservedProperty"]))
         observations = ds.get("Observations", [])
@@ -101,13 +109,16 @@ def test_deep_insert(client, unique_name, cleanup):
                 foi_id = entity_id(foi_resp.json())
                 if foi_id not in foi_seen:
                     foi_seen.add(foi_id)
-                    cleanup(f"{client.base_url}/FeaturesOfInterest({format_id(foi_id)})")
+                    cleanup(
+                        f"{client.base_url}/FeaturesOfInterest({format_id(foi_id)})"
+                    )
 
 
 # ===========================================================================
 # CREATE 2b – 3-level deep-insert: nested Sensor / ObservedProperty FIELD fidelity
 #   req/create-update-delete/deep-insert (18-088 §10.2.1.3)
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_deep_insert_nested_sensor_fields(client, unique_name, cleanup):
@@ -168,15 +179,17 @@ def test_deep_insert_nested_sensor_fields(client, unique_name, cleanup):
     }
 
     resp = client.create("Things", payload)
-    assert resp.status_code == 201, (
-        f"3-level deep insert should be 201, got {resp.status_code}: {resp.text[:400]}"
-    )
+    assert (
+        resp.status_code == 201
+    ), f"3-level deep insert should be 201, got {resp.status_code}: {resp.text[:400]}"
     thing_url = client.location_of(resp)
     thing_id = id_from_self_link(thing_url)
 
     thing = client.nav(thing_url, params={"$expand": "Locations"})
     cleanup(thing_url)
-    cleanup(f"{client.base_url}/Locations({format_id(entity_id(thing['Locations'][0]))})")
+    cleanup(
+        f"{client.base_url}/Locations({format_id(entity_id(thing['Locations'][0]))})"
+    )
 
     # Map datastreams by name so the assertions are order-independent.
     ds_docs = client.nav(f"{thing_url}/Datastreams")["value"]
@@ -193,9 +206,9 @@ def test_deep_insert_nested_sensor_fields(client, unique_name, cleanup):
 
         # --- Sensor: every field must round-trip via the navigation link ---
         s_resp = client.get(f"Datastreams({format_id(ds_id)})/Sensor")
-        assert s_resp.status_code == 200, (
-            f"GET Datastreams({ds_id})/Sensor failed: {s_resp.status_code}"
-        )
+        assert (
+            s_resp.status_code == 200
+        ), f"GET Datastreams({ds_id})/Sensor failed: {s_resp.status_code}"
         sensor = s_resp.json()
         cleanup(f"{client.base_url}/Sensors({format_id(entity_id(sensor))})")
 
@@ -207,15 +220,19 @@ def test_deep_insert_nested_sensor_fields(client, unique_name, cleanup):
             f"nested Sensor.metadata must round-trip verbatim; "
             f"sent {exp_sensor['metadata']!r}, got {sensor['metadata']!r}"
         )
-        assert sensor.get("properties") == exp_sensor_props, (
-            f"nested Sensor.properties mismatch: {sensor.get('properties')!r}"
-        )
+        assert (
+            sensor.get("properties") == exp_sensor_props
+        ), f"nested Sensor.properties mismatch: {sensor.get('properties')!r}"
 
         # --- ObservedProperty: fields round-trip too ---
-        op_resp = client.get(f"Datastreams({format_id(ds_id)})/ObservedProperty")
+        op_resp = client.get(
+            f"Datastreams({format_id(ds_id)})/ObservedProperty"
+        )
         assert op_resp.status_code == 200
         op = op_resp.json()
-        cleanup(f"{client.base_url}/ObservedProperties({format_id(entity_id(op))})")
+        cleanup(
+            f"{client.base_url}/ObservedProperties({format_id(entity_id(op))})"
+        )
         assert op["name"] == exp_op["name"], op
         assert op["definition"] == exp_op["definition"], op
         assert op["description"] == exp_op["description"], op
@@ -225,6 +242,7 @@ def test_deep_insert_nested_sensor_fields(client, unique_name, cleanup):
 # CREATE 5 – FeatureOfInterest auto-generation from Thing's Location
 #   18-088 §10.2.2.3
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_foi_auto_generation(client, unique_name, cleanup):
@@ -245,9 +263,9 @@ def test_foi_auto_generation(client, unique_name, cleanup):
     }
     resp = client.create("Observations", obs_payload)
 
-    assert resp.status_code == 201, (
-        f"Expected 201 for Observation without FoI, got {resp.status_code}: {resp.text[:300]}"
-    )
+    assert (
+        resp.status_code == 201
+    ), f"Expected 201 for Observation without FoI, got {resp.status_code}: {resp.text[:300]}"
     obs_url = client.location_of(resp)
     obs_id = id_from_self_link(obs_url)
     cleanup(obs_url)
@@ -255,9 +273,9 @@ def test_foi_auto_generation(client, unique_name, cleanup):
     # Verify FeatureOfInterest is auto-created and accessible
     foi_url = f"{client.base_url}/Observations({format_id(obs_id)})/FeatureOfInterest"
     foi_resp = client.get(foi_url)
-    assert foi_resp.status_code == 200, (
-        f"FeatureOfInterest should be auto-generated; GET returned {foi_resp.status_code}"
-    )
+    assert (
+        foi_resp.status_code == 200
+    ), f"FeatureOfInterest should be auto-generated; GET returned {foi_resp.status_code}"
     foi = foi_resp.json()
     assert "@iot.id" in foi, "Auto-generated FoI must have @iot.id"
     assert "@iot.selfLink" in foi, "Auto-generated FoI must have @iot.selfLink"
@@ -267,9 +285,9 @@ def test_foi_auto_generation(client, unique_name, cleanup):
     # Auto-FoI should match the Thing's Location geometry
     loc_url = tree["location_url"]
     loc = client.nav(loc_url)
-    assert foi["feature"] == loc["location"], (
-        "Auto-generated FoI feature must match the Thing's Location geometry"
-    )
+    assert (
+        foi["feature"] == loc["location"]
+    ), "Auto-generated FoI feature must match the Thing's Location geometry"
 
     # POST a second Observation without FoI; server must reuse the same FoI
     obs2_payload = {
@@ -288,9 +306,9 @@ def test_foi_auto_generation(client, unique_name, cleanup):
     )
     assert foi2_resp.status_code == 200
     foi2_id = entity_id(foi2_resp.json())
-    assert foi2_id == foi_id, (
-        "Second Observation without FoI for same Datastream/Location should reuse the same FoI"
-    )
+    assert (
+        foi2_id == foi_id
+    ), "Second Observation without FoI for same Datastream/Location should reuse the same FoI"
 
 
 # ===========================================================================
@@ -298,8 +316,11 @@ def test_foi_auto_generation(client, unique_name, cleanup):
 #   18-088 §10.2.2.3
 # ===========================================================================
 
+
 @pytest.mark.c02
-def test_foi_auto_generation_concurrent(client, base_url, unique_name, cleanup):
+def test_foi_auto_generation_concurrent(
+    client, base_url, unique_name, cleanup
+):
     """18-088 §10.2.2.3 — concurrent Observation inserts for one Thing/Location
     must resolve to a SINGLE auto-generated FeatureOfInterest.
 
@@ -349,9 +370,9 @@ def test_foi_auto_generation_concurrent(client, base_url, unique_name, cleanup):
             f"{resp.status_code}: {resp.text[:300]}"
         )
         loc_hdr = resp.headers.get("location", "")
-        assert loc_hdr.startswith("http"), (
-            f"concurrent Observation {i} missing Location header: {loc_hdr!r}"
-        )
+        assert loc_hdr.startswith(
+            "http"
+        ), f"concurrent Observation {i} missing Location header: {loc_hdr!r}"
         cleanup(loc_hdr)
 
     # 2. All N Observations resolve to exactly ONE FeatureOfInterest (no
@@ -360,9 +381,9 @@ def test_foi_auto_generation_concurrent(client, base_url, unique_name, cleanup):
         f"Datastreams({format_id(ds_id)})/Observations",
         params={"$expand": "FeatureOfInterest", "$top": str(n + 5)},
     )["value"]
-    assert len(obs_docs) == n, (
-        f"expected {n} Observations on the Datastream, got {len(obs_docs)}"
-    )
+    assert (
+        len(obs_docs) == n
+    ), f"expected {n} Observations on the Datastream, got {len(obs_docs)}"
     foi_ids = {
         entity_id(o["FeatureOfInterest"])
         for o in obs_docs
@@ -379,6 +400,7 @@ def test_foi_auto_generation_concurrent(client, base_url, unique_name, cleanup):
 # CREATE 6 – phenomenonTime / resultTime defaulting
 #   18-088 §10.2.2.3
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_phenomenon_time_defaulting(client, unique_name, cleanup):
@@ -398,22 +420,22 @@ def test_phenomenon_time_defaulting(client, unique_name, cleanup):
         {"result": 42.0, "Datastream": {"@iot.id": ds_id}},
     )
 
-    assert resp.status_code == 201, (
-        f"POST Observation without phenomenonTime should succeed; got {resp.status_code}: {resp.text[:300]}"
-    )
+    assert (
+        resp.status_code == 201
+    ), f"POST Observation without phenomenonTime should succeed; got {resp.status_code}: {resp.text[:300]}"
     obs_url = client.location_of(resp)
     obs_id = id_from_self_link(obs_url)
     cleanup(obs_url)
 
     obs = client.nav(obs_url)
     # phenomenonTime must have been set (not null)
-    assert obs.get("phenomenonTime") is not None, (
-        "phenomenonTime must be defaulted to a non-null time when omitted in POST"
-    )
+    assert (
+        obs.get("phenomenonTime") is not None
+    ), "phenomenonTime must be defaulted to a non-null time when omitted in POST"
     # resultTime should be null when not provided
-    assert obs.get("resultTime") is None, (
-        "resultTime should default to null when not provided in POST"
-    )
+    assert (
+        obs.get("resultTime") is None
+    ), "resultTime should default to null when not provided in POST"
 
     foi_resp = client.get(
         f"{client.base_url}/Observations({format_id(obs_id)})/FeatureOfInterest"
@@ -442,22 +464,22 @@ def test_result_time_stored_when_provided(client, unique_name, cleanup):
         },
     )
 
-    assert resp.status_code == 201, (
-        f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
-    )
+    assert (
+        resp.status_code == 201
+    ), f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
     obs_url = client.location_of(resp)
     obs_id = id_from_self_link(obs_url)
     cleanup(obs_url)
 
     obs = client.nav(obs_url)
     stored_rt = obs.get("resultTime", "")
-    assert stored_rt is not None and stored_rt != "", (
-        f"resultTime must be stored when provided; got: {stored_rt!r}"
-    )
+    assert (
+        stored_rt is not None and stored_rt != ""
+    ), f"resultTime must be stored when provided; got: {stored_rt!r}"
     # Value must match (server may normalise to Z or +00:00)
-    assert "2023-07-01T15:30:00" in (stored_rt or ""), (
-        f"Stored resultTime {stored_rt!r} does not match provided {result_time!r}"
-    )
+    assert "2023-07-01T15:30:00" in (
+        stored_rt or ""
+    ), f"Stored resultTime {stored_rt!r} does not match provided {result_time!r}"
 
     foi_resp = client.get(
         f"{client.base_url}/Observations({format_id(obs_id)})/FeatureOfInterest"

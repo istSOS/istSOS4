@@ -5,10 +5,10 @@ Covers:
   req/resource-path/resource-path-to-entities  §9.2 non-existent entity → 404
   req/request-data/query-status-code           §9.3.1 malformed query → 400
 """
+
 from __future__ import annotations
 
 import pytest
-
 from client import format_id
 
 pytestmark = pytest.mark.c01
@@ -17,6 +17,7 @@ pytestmark = pytest.mark.c01
 # ============================================================================
 # 14. Error handling
 # ============================================================================
+
 
 class TestErrorHandling:
     """req/resource-path — invalid resource paths must return appropriate HTTP
@@ -30,22 +31,25 @@ class TestErrorHandling:
     FROST parity: Capability1Tests.readNonexistentEntity()
     """
 
-    @pytest.mark.parametrize("path", [
-        "Things(999999999)",
-        "Locations(999999999)",
-        "Datastreams(999999999)",
-        "Observations(999999999)",
-        "Sensors(999999999)",
-        "ObservedProperties(999999999)",
-        "FeaturesOfInterest(999999999)",
-        "HistoricalLocations(999999999)",
-    ])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "Things(999999999)",
+            "Locations(999999999)",
+            "Datastreams(999999999)",
+            "Observations(999999999)",
+            "Sensors(999999999)",
+            "ObservedProperties(999999999)",
+            "FeaturesOfInterest(999999999)",
+            "HistoricalLocations(999999999)",
+        ],
+    )
     def test_nonexistent_entity_id_returns_404(self, client, path):
         """req/resource-path — GET /<entity>(max_int) → 404 for non-existent id."""
         resp = client.get(path)
-        assert resp.status_code == 404, (
-            f"Non-existent entity must return 404, got {resp.status_code} for {path}"
-        )
+        assert (
+            resp.status_code == 404
+        ), f"Non-existent entity must return 404, got {resp.status_code} for {path}"
 
     def test_unknown_property_returns_404(self, client, seed):
         """req/resource-path — /Things(<id>)/nosuchprop → 404.
@@ -54,9 +58,9 @@ class TestErrorHandling:
         on the entity MUST return 404, not 5xx.
         """
         resp = client.get(f"Things({format_id(seed.thing_id)})/nosuchprop")
-        assert resp.status_code == 404, (
-            f"Non-existent property must return 404, got {resp.status_code}"
-        )
+        assert (
+            resp.status_code == 404
+        ), f"Non-existent property must return 404, got {resp.status_code}"
 
     def test_unknown_collection_returns_404(self, client):
         """req/resource-path — /NonExistentCollection → 404.
@@ -65,9 +69,9 @@ class TestErrorHandling:
         not a 5xx server error.
         """
         resp = client.get("NonExistentCollection")
-        assert resp.status_code == 404, (
-            f"Unknown collection must return 404, got {resp.status_code}"
-        )
+        assert (
+            resp.status_code == 404
+        ), f"Unknown collection must return 404, got {resp.status_code}"
 
     def test_property_of_nonexistent_entity_returns_404(self, client):
         """req/resource-path — /Things(999999999)/name → 404 (entity not found)."""
@@ -80,11 +84,13 @@ class TestErrorHandling:
     def test_dollar_value_of_nonexistent_entity_returns_404(self, client):
         """req/resource-path — /Things(999999999)/name/$value → 404."""
         resp = client.get("Things(999999999)/name/$value")
-        assert resp.status_code == 404, (
-            f"$value on non-existent entity must return 404, got {resp.status_code}"
-        )
+        assert (
+            resp.status_code == 404
+        ), f"$value on non-existent entity must return 404, got {resp.status_code}"
 
-    def test_navigation_from_nonexistent_entity_returns_empty_or_404(self, client):
+    def test_navigation_from_nonexistent_entity_returns_empty_or_404(
+        self, client
+    ):
         """req/resource-path — /Things(999999999)/Datastreams — navigation from a
         non-existent parent.
 
@@ -98,9 +104,9 @@ class TestErrorHandling:
             data = resp.json()
             # If 200, the body must be an empty collection (not real data)
             assert "value" in data
-            assert data["value"] == [], (
-                "Navigation from non-existent parent: 200 response must be empty collection"
-            )
+            assert (
+                data["value"] == []
+            ), "Navigation from non-existent parent: 200 response must be empty collection"
         else:
             assert resp.status_code == 404, (
                 f"Navigation from non-existent parent: expected 200 (empty) or 404, "
@@ -111,6 +117,7 @@ class TestErrorHandling:
 # ============================================================================
 # 20. req/request-data/query-status-code — malformed queries return 400
 # ============================================================================
+
 
 class TestQueryStatusCode:
     """req/request-data/query-status-code — a request with an invalid system
@@ -144,9 +151,7 @@ class TestQueryStatusCode:
             )
         # Body must have an error indicator — at minimum one of code/message/error
         has_error_shape = (
-            "code" in body
-            or "message" in body
-            or "error" in body
+            "code" in body or "message" in body or "error" in body
         )
         assert has_error_shape, (
             f"req/request-data/query-status-code: {case_label} error body must "
@@ -217,9 +222,9 @@ class TestQueryStatusCode:
             f"req/request-data/query-status-code: 400 body must be JSON "
             f"(starts with '{{'), not a stacktrace; got: {body[:80]!r}"
         )
-        assert "<html" not in body.lower(), (
-            "400 error body must not be an HTML page (stacktrace)"
-        )
-        assert "Traceback" not in body, (
-            "400 error body must not contain a raw Python traceback"
-        )
+        assert (
+            "<html" not in body.lower()
+        ), "400 error body must not be an HTML page (stacktrace)"
+        assert (
+            "Traceback" not in body
+        ), "400 error body must not contain a raw Python traceback"

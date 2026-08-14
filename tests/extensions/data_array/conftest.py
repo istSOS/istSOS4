@@ -7,4 +7,5 @@ re-export the standard `seed` fixture from tests/extensions/standard_seed.py.
 (base_url / client / unique_name come from tests/extensions/conftest.py, which is
 this tree's root conftest and puts tests/extensions/ on sys.path.)
 """
+
 from standard_seed import seed  # noqa: F401  (re-exported as a pytest fixture)

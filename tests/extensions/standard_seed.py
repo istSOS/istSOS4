@@ -13,12 +13,12 @@ tests/extensions/conftest.py.)
 
 Mirrors tests/conformance/conftest.py::seed (kept in sync by hand).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 import pytest
-
 import sample_data
 from client import entity_id, format_id
 
@@ -26,6 +26,7 @@ from client import entity_id, format_id
 @dataclass
 class DatastreamSeed:
     """One seeded Datastream and its dependents (ids derived at runtime)."""
+
     id: object
     name: str
     unit_name: str
@@ -41,12 +42,14 @@ class DatastreamSeed:
 @dataclass
 class SeedData:
     """Ids + expected values for the seeded entitiesDefault.json subtree.
-    Everything is derived at runtime; id type is whatever the server assigns."""
+    Everything is derived at runtime; id type is whatever the server assigns.
+    """
+
     thing_id: object
     thing_name: str
     location_id: object
     location_name: str
-    datastreams: list                       # list[DatastreamSeed], payload order (DS1, DS2)
+    datastreams: list  # list[DatastreamSeed], payload order (DS1, DS2)
     foi_ids: list = field(default_factory=list)
 
     # convenience accessors -------------------------------------------------
@@ -68,7 +71,7 @@ class SeedData:
 
     @property
     def all_results(self) -> list:
-        return [r for d in self.datastreams for r in d.results]   # [3, 4, 5, 6]
+        return [r for d in self.datastreams for r in d.results]  # [3, 4, 5, 6]
 
     @property
     def all_phenomenon_times(self) -> list:
@@ -76,16 +79,16 @@ class SeedData:
 
     @property
     def n_observations(self) -> int:
-        return len(self.all_observation_ids)                       # 4
+        return len(self.all_observation_ids)  # 4
 
 
 @pytest.fixture(scope="session")
 def seed(client) -> SeedData:
     # 1. Deep-insert the EXACT compliance dataset in one request.
     resp = client.create("Things", sample_data.deep_insert_tree())
-    assert resp.status_code == 201, (
-        f"seed deep-insert failed: {resp.status_code} {resp.text[:400]}"
-    )
+    assert (
+        resp.status_code == 201
+    ), f"seed deep-insert failed: {resp.status_code} {resp.text[:400]}"
     thing_url = client.location_of(resp)
     thing = client.nav(thing_url)
     thing_id = entity_id(thing)
@@ -102,11 +105,13 @@ def seed(client) -> SeedData:
         params={
             "$orderby": "name asc",
             "$expand": "Sensor,ObservedProperty,"
-                       "Observations($orderby=phenomenonTime asc;"
-                       "$expand=FeatureOfInterest)",
+            "Observations($orderby=phenomenonTime asc;"
+            "$expand=FeatureOfInterest)",
         },
     )["value"]
-    assert len(ds_docs) == 2, f"expected 2 seed Datastreams, got {len(ds_docs)}"
+    assert (
+        len(ds_docs) == 2
+    ), f"expected 2 seed Datastreams, got {len(ds_docs)}"
 
     datastreams = []
     foi_ids = set()
@@ -155,6 +160,8 @@ def seed(client) -> SeedData:
     _safe_delete(f"Locations({format_id(data.location_id)})")
     for d in datastreams:
         _safe_delete(f"Sensors({format_id(d.sensor_id)})")
-        _safe_delete(f"ObservedProperties({format_id(d.observed_property_id)})")
+        _safe_delete(
+            f"ObservedProperties({format_id(d.observed_property_id)})"
+        )
     for fid in data.foi_ids:
         _safe_delete(f"FeaturesOfInterest({format_id(fid)})")

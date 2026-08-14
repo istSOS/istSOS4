@@ -39,9 +39,8 @@ from __future__ import annotations
 import json
 
 import pytest
-
 import sample_data
-from client import entity_id, format_id, id_from_self_link
+from client import id_from_self_link
 
 pytestmark = pytest.mark.c02
 
@@ -66,6 +65,7 @@ def json_patch(client, url: str, ops: list):
 # Shared setup helpers
 # ---------------------------------------------------------------------------
 
+
 def create_thing_with_props(client, unique_name, cleanup):
     """Create a fresh Thing with an empty properties bag.  Return (url, id)."""
     tag = unique_name("jp-thing")
@@ -77,9 +77,9 @@ def create_thing_with_props(client, unique_name, cleanup):
             "properties": {},
         },
     )
-    assert resp.status_code == 201, (
-        f"Setup Thing failed: {resp.status_code} {resp.text[:300]}"
-    )
+    assert (
+        resp.status_code == 201
+    ), f"Setup Thing failed: {resp.status_code} {resp.text[:300]}"
     url = client.location_of(resp)
     t_id = id_from_self_link(url)
     cleanup(url)
@@ -106,7 +106,9 @@ def create_datastream_tree(client, unique_name, cleanup):
     cleanup(s_url)
 
     # ObservedProperty
-    op_resp = client.create("ObservedProperties", sample_data.minimal_observed_property(tag))
+    op_resp = client.create(
+        "ObservedProperties", sample_data.minimal_observed_property(tag)
+    )
     assert op_resp.status_code == 201
     op_url = client.location_of(op_resp)
     op_id = id_from_self_link(op_url)
@@ -129,6 +131,7 @@ def create_datastream_tree(client, unique_name, cleanup):
 # ===========================================================================
 # Conformance advertisement check (must pass independently of implementation)
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_jsonpatch_advertised_in_conformance(client):
@@ -161,6 +164,7 @@ def test_jsonpatch_advertised_in_conformance(client):
 #         → GET and verify keyCopy1==1, key1 absent/null, key2==1
 # ===========================================================================
 
+
 @pytest.mark.c02
 def test_jsonpatch_thing_add(client, unique_name, cleanup):
     """req/create-update-delete/update-entity-jsonpatch + RFC 6902 §4.1 (add).
@@ -185,9 +189,9 @@ def test_jsonpatch_thing_add(client, unique_name, cleanup):
 
     after = client.nav(url)
     props = after.get("properties") or {}
-    assert props.get("key1") == 1, (
-        f"JSON-Patch 'add' must set properties.key1=1; got properties={props!r}"
-    )
+    assert (
+        props.get("key1") == 1
+    ), f"JSON-Patch 'add' must set properties.key1=1; got properties={props!r}"
 
 
 @pytest.mark.c02
@@ -209,13 +213,18 @@ def test_jsonpatch_thing_copy_then_move(client, unique_name, cleanup):
     # (content-type application/json — works today) so the JSON-Patch ops have
     # a source value to operate on if they're ever dispatched.
     pre = client.patch(url, json={"properties": {"key1": 1}})
-    assert pre.status_code in (200, 204), (
-        f"Pre-condition PATCH to set key1 failed: {pre.status_code} {pre.text[:200]}"
-    )
+    assert pre.status_code in (
+        200,
+        204,
+    ), f"Pre-condition PATCH to set key1 failed: {pre.status_code} {pre.text[:200]}"
 
     # Now apply the JSON-Patch (advertised, must work per spec)
     ops = [
-        {"op": "copy", "from": "/properties/key1", "path": "/properties/keyCopy1"},
+        {
+            "op": "copy",
+            "from": "/properties/key1",
+            "path": "/properties/keyCopy1",
+        },
         {"op": "move", "from": "/properties/key1", "path": "/properties/key2"},
     ]
     resp = json_patch(client, url, ops)
@@ -228,15 +237,15 @@ def test_jsonpatch_thing_copy_then_move(client, unique_name, cleanup):
 
     after = client.nav(url)
     props = after.get("properties") or {}
-    assert props.get("keyCopy1") == 1, (
-        f"JSON-Patch 'copy' must create properties.keyCopy1=1; got {props!r}"
-    )
-    assert props.get("key1") is None, (
-        f"JSON-Patch 'move' must remove properties.key1; got {props!r}"
-    )
-    assert props.get("key2") == 1, (
-        f"JSON-Patch 'move' must create properties.key2=1; got {props!r}"
-    )
+    assert (
+        props.get("keyCopy1") == 1
+    ), f"JSON-Patch 'copy' must create properties.keyCopy1=1; got {props!r}"
+    assert (
+        props.get("key1") is None
+    ), f"JSON-Patch 'move' must remove properties.key1; got {props!r}"
+    assert (
+        props.get("key2") == 1
+    ), f"JSON-Patch 'move' must create properties.key2=1; got {props!r}"
 
 
 # ===========================================================================
@@ -245,6 +254,7 @@ def test_jsonpatch_thing_copy_then_move(client, unique_name, cleanup):
 # Step 1: add /properties = {"key1": 2}  → verify key1==2
 # Step 2: replace /properties/key1 = 2   ("no-op": same value) → verify key1 still 2
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_jsonpatch_thing_replace_same_value(client, unique_name, cleanup):
@@ -270,9 +280,9 @@ def test_jsonpatch_thing_replace_same_value(client, unique_name, cleanup):
     )
 
     after1 = client.nav(url)
-    assert (after1.get("properties") or {}).get("key1") == 2, (
-        "After 'add', properties.key1 must be 2"
-    )
+    assert (after1.get("properties") or {}).get(
+        "key1"
+    ) == 2, "After 'add', properties.key1 must be 2"
 
     # Step 2: replace with same value ("no-op")
     ops2 = [{"op": "replace", "path": "/properties/key1", "value": 2}]
@@ -285,9 +295,9 @@ def test_jsonpatch_thing_replace_same_value(client, unique_name, cleanup):
 
     after2 = client.nav(url)
     props = after2.get("properties") or {}
-    assert props.get("key1") == 2, (
-        f"After no-op 'replace', properties.key1 must still be 2; got {props!r}"
-    )
+    assert (
+        props.get("key1") == 2
+    ), f"After no-op 'replace', properties.key1 must still be 2; got {props!r}"
 
 
 # ===========================================================================
@@ -296,6 +306,7 @@ def test_jsonpatch_thing_replace_same_value(client, unique_name, cleanup):
 # Step 1: add /properties = {"key1": 1}      → verify key1==1
 # Step 2: copy key1→keyCopy1 + move key1→key2 → verify keyCopy1==1, key1 absent, key2==1
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_jsonpatch_datastream_add(client, unique_name, cleanup):
@@ -321,9 +332,9 @@ def test_jsonpatch_datastream_add(client, unique_name, cleanup):
 
     after = client.nav(ds_url)
     props = after.get("properties") or {}
-    assert props.get("key1") == 1, (
-        f"JSON-Patch 'add' must set Datastream.properties.key1=1; got {props!r}"
-    )
+    assert (
+        props.get("key1") == 1
+    ), f"JSON-Patch 'add' must set Datastream.properties.key1=1; got {props!r}"
 
 
 @pytest.mark.c02
@@ -344,12 +355,17 @@ def test_jsonpatch_datastream_copy_then_move(client, unique_name, cleanup):
 
     # Pre-condition: set properties.key1=1 via regular merge-patch
     pre = client.patch(ds_url, json={"properties": {"key1": 1}})
-    assert pre.status_code in (200, 204), (
-        f"Pre-condition PATCH to set DS key1 failed: {pre.status_code} {pre.text[:200]}"
-    )
+    assert pre.status_code in (
+        200,
+        204,
+    ), f"Pre-condition PATCH to set DS key1 failed: {pre.status_code} {pre.text[:200]}"
 
     ops = [
-        {"op": "copy", "from": "/properties/key1", "path": "/properties/keyCopy1"},
+        {
+            "op": "copy",
+            "from": "/properties/key1",
+            "path": "/properties/keyCopy1",
+        },
         {"op": "move", "from": "/properties/key1", "path": "/properties/key2"},
     ]
     resp = json_patch(client, ds_url, ops)
@@ -362,15 +378,15 @@ def test_jsonpatch_datastream_copy_then_move(client, unique_name, cleanup):
 
     after = client.nav(ds_url)
     props = after.get("properties") or {}
-    assert props.get("keyCopy1") == 1, (
-        f"JSON-Patch 'copy' must create Datastream.properties.keyCopy1=1; got {props!r}"
-    )
-    assert props.get("key1") is None, (
-        f"JSON-Patch 'move' must remove Datastream.properties.key1; got {props!r}"
-    )
-    assert props.get("key2") == 1, (
-        f"JSON-Patch 'move' must create Datastream.properties.key2=1; got {props!r}"
-    )
+    assert (
+        props.get("keyCopy1") == 1
+    ), f"JSON-Patch 'copy' must create Datastream.properties.keyCopy1=1; got {props!r}"
+    assert (
+        props.get("key1") is None
+    ), f"JSON-Patch 'move' must remove Datastream.properties.key1; got {props!r}"
+    assert (
+        props.get("key2") == 1
+    ), f"JSON-Patch 'move' must create Datastream.properties.key2=1; got {props!r}"
 
 
 # ===========================================================================
@@ -381,6 +397,7 @@ def test_jsonpatch_datastream_copy_then_move(client, unique_name, cleanup):
 # all 6 ops are therefore required.  Asserting the spec; will pass once [B9]
 # is fixed by api-fixer.
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_jsonpatch_thing_remove(client, unique_name, cleanup):
@@ -399,9 +416,10 @@ def test_jsonpatch_thing_remove(client, unique_name, cleanup):
 
     # Pre-condition
     pre = client.patch(url, json={"properties": {"key0": "zero", "key1": 1}})
-    assert pre.status_code in (200, 204), (
-        f"Pre-condition PATCH failed: {pre.status_code} {pre.text[:200]}"
-    )
+    assert pre.status_code in (
+        200,
+        204,
+    ), f"Pre-condition PATCH failed: {pre.status_code} {pre.text[:200]}"
 
     ops = [{"op": "remove", "path": "/properties/key0"}]
     resp = json_patch(client, url, ops)
@@ -414,12 +432,12 @@ def test_jsonpatch_thing_remove(client, unique_name, cleanup):
 
     after = client.nav(url)
     props = after.get("properties") or {}
-    assert "key0" not in props, (
-        f"'remove' must delete properties.key0; got {props!r}"
-    )
-    assert props.get("key1") == 1, (
-        f"'remove' must leave properties.key1 intact; got {props!r}"
-    )
+    assert (
+        "key0" not in props
+    ), f"'remove' must delete properties.key0; got {props!r}"
+    assert (
+        props.get("key1") == 1
+    ), f"'remove' must leave properties.key1 intact; got {props!r}"
 
 
 # ===========================================================================
@@ -429,6 +447,7 @@ def test_jsonpatch_thing_remove(client, unique_name, cleanup):
 # the server advertises update-entity-jsonpatch.  Asserting the spec; will
 # pass once [B9] is fixed by api-fixer.
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_jsonpatch_thing_test_op(client, unique_name, cleanup):
@@ -454,9 +473,10 @@ def test_jsonpatch_thing_test_op(client, unique_name, cleanup):
 
     # Pre-condition: set a known value
     pre = client.patch(url, json={"properties": {"key1": 42}})
-    assert pre.status_code in (200, 204), (
-        f"Pre-condition PATCH failed: {pre.status_code} {pre.text[:200]}"
-    )
+    assert pre.status_code in (
+        200,
+        204,
+    ), f"Pre-condition PATCH failed: {pre.status_code} {pre.text[:200]}"
 
     # 'test' op: value matches → patch succeeds, entity unchanged
     ops = [{"op": "test", "path": "/properties/key1", "value": 42}]
@@ -470,6 +490,6 @@ def test_jsonpatch_thing_test_op(client, unique_name, cleanup):
 
     after = client.nav(url)
     props = after.get("properties") or {}
-    assert props.get("key1") == 42, (
-        f"After a passing 'test' op, properties.key1 must remain 42; got {props!r}"
-    )
+    assert (
+        props.get("key1") == 42
+    ), f"After a passing 'test' op, properties.key1 must remain 42; got {props!r}"
