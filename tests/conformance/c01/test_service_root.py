@@ -5,10 +5,10 @@ Covers:
   req/service/root-uri     §9.1  service root document + serverSettings
   req/request-data/status-code  §9.3.1  valid GET → 200
 """
+
 from __future__ import annotations
 
 import pytest
-
 from client import format_id
 
 pytestmark = pytest.mark.c01
@@ -63,6 +63,7 @@ CORE_CONFORMANCE_URIS = {
 # 1. Service root document
 # ============================================================================
 
+
 class TestServiceRoot:
     """req/service/root-uri — the service root document.
 
@@ -75,9 +76,9 @@ class TestServiceRoot:
     def test_service_root_status_200(self, client):
         """req/service/root — GET / returns HTTP 200."""
         resp = client.get("")
-        assert resp.status_code == 200, (
-            f"Expected 200 for service root, got {resp.status_code}"
-        )
+        assert (
+            resp.status_code == 200
+        ), f"Expected 200 for service root, got {resp.status_code}"
 
     def test_service_root_has_value_array(self, client):
         """req/service/root — response body contains a `value` array."""
@@ -90,9 +91,9 @@ class TestServiceRoot:
         data = client.get_json("")
         names = {entry["name"] for entry in data["value"]}
         missing = set(COLLECTION_NAMES) - names
-        assert not missing, (
-            f"Service root 'value' is missing collection entries: {missing}"
-        )
+        assert (
+            not missing
+        ), f"Service root 'value' is missing collection entries: {missing}"
 
     def test_service_root_collection_entries_have_name_and_url(self, client):
         """req/service/root — each entry in `value[]` has 'name' and 'url'."""
@@ -100,9 +101,9 @@ class TestServiceRoot:
         for entry in data["value"]:
             assert "name" in entry, f"Entry missing 'name': {entry}"
             assert "url" in entry, f"Entry missing 'url': {entry}"
-            assert entry["url"].startswith("http"), (
-                f"Collection URL should be absolute: {entry['url']}"
-            )
+            assert entry["url"].startswith(
+                "http"
+            ), f"Collection URL should be absolute: {entry['url']}"
 
     def test_service_root_collection_urls_are_reachable(self, client):
         """req/service/root — each collection URL in value[] returns 200."""
@@ -111,16 +112,16 @@ class TestServiceRoot:
             if entry["name"] not in COLLECTION_NAMES:
                 continue
             resp = client.get(entry["url"])
-            assert resp.status_code == 200, (
-                f"Collection URL {entry['url']} returned {resp.status_code}"
-            )
+            assert (
+                resp.status_code == 200
+            ), f"Collection URL {entry['url']} returned {resp.status_code}"
 
     def test_service_root_has_server_settings(self, client):
         """req/service/server-settings — v1.1 root has 'serverSettings' object."""
         data = client.get_json("")
-        assert "serverSettings" in data, (
-            "Service root must have 'serverSettings' (required in v1.1)"
-        )
+        assert (
+            "serverSettings" in data
+        ), "Service root must have 'serverSettings' (required in v1.1)"
         assert isinstance(data["serverSettings"], dict)
 
     def test_service_root_conformance_array(self, client):
@@ -128,7 +129,9 @@ class TestServiceRoot:
         data = client.get_json("")
         conf = data.get("serverSettings", {}).get("conformance")
         assert conf is not None, "serverSettings.conformance must be present"
-        assert isinstance(conf, list), "serverSettings.conformance must be a JSON array"
+        assert isinstance(
+            conf, list
+        ), "serverSettings.conformance must be a JSON array"
 
     def test_service_root_conformance_lists_core_uris(self, client):
         """req/datamodel/entity-control-information, req/resource-path —
@@ -146,6 +149,7 @@ class TestServiceRoot:
 # ============================================================================
 # 19. req/request-data/status-code — valid requests return HTTP 200
 # ============================================================================
+
 
 class TestRequestDataStatusCode:
     """req/request-data/status-code — a successful GET request MUST return

@@ -6,10 +6,10 @@ tests/conformance/conftest.py.  The three fixtures below derive single ids
 from the seed dataset; making them session-scoped avoids repeated HTTP calls
 and is safe because `seed` is already session-scoped.
 """
+
 from __future__ import annotations
 
 import pytest
-
 from client import entity_id, format_id
 
 

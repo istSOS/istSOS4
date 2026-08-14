@@ -9,7 +9,6 @@ All assertions scope to network_seed (by id or the unique tagged name).
 from __future__ import annotations
 
 import pytest
-
 from client import entity_id, format_id
 
 pytestmark = pytest.mark.network
@@ -34,7 +33,11 @@ def test_network_control_info(client, network_seed):
     Datastreams navigation link."""
     doc = client.by_id("Networks", network_seed.net_a_id)
     assert doc["@iot.id"] == network_seed.net_a_id
-    assert doc["@iot.selfLink"].rstrip("/").endswith(f"Networks({format_id(network_seed.net_a_id)})")
+    assert (
+        doc["@iot.selfLink"]
+        .rstrip("/")
+        .endswith(f"Networks({format_id(network_seed.net_a_id)})")
+    )
     assert "Datastreams@iot.navigationLink" in doc
 
 
@@ -58,8 +61,11 @@ def test_network_select_name(client, network_seed):
 
 def test_networks_filter_by_name(client, network_seed):
     """$filter=name eq '<seed net>' returns exactly the one seeded network
-    (name is uniquely tagged, so the result is deterministic on a shared DB)."""
-    doc = client.collection("Networks", {"$filter": f"name eq '{network_seed.net_a_name}'"})
+    (name is uniquely tagged, so the result is deterministic on a shared DB).
+    """
+    doc = client.collection(
+        "Networks", {"$filter": f"name eq '{network_seed.net_a_name}'"}
+    )
     ids = [entity_id(n) for n in doc["value"]]
     assert ids == [network_seed.net_a_id]
 

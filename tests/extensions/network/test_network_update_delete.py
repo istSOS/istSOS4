@@ -16,19 +16,37 @@ Routes verified to exist under NETWORK=1:
 from __future__ import annotations
 
 import pytest
-
 from client import entity_id, format_id, id_from_self_link
 
 pytestmark = pytest.mark.network
 
-OM_MEASUREMENT = "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"
-_UOM = {"name": "Lumen", "symbol": "lm", "definition": "http://example.org/lumen"}
+OM_MEASUREMENT = (
+    "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"
+)
+_UOM = {
+    "name": "Lumen",
+    "symbol": "lm",
+    "definition": "http://example.org/lumen",
+}
 
 
 def _purge(client, tag):
-    for coll in ("Things", "Networks", "Locations", "Sensors", "ObservedProperties", "FeaturesOfInterest"):
+    for coll in (
+        "Things",
+        "Networks",
+        "Locations",
+        "Sensors",
+        "ObservedProperties",
+        "FeaturesOfInterest",
+    ):
         try:
-            doc = client.collection(coll, {"$filter": f"substringof('{tag}',name)", "$select": "@iot.id"})
+            doc = client.collection(
+                coll,
+                {
+                    "$filter": f"substringof('{tag}',name)",
+                    "$select": "@iot.id",
+                },
+            )
         except Exception:
             continue
         for e in doc.get("value", []):
@@ -41,18 +59,34 @@ def _purge(client, tag):
 def _datastream_in_network(client, tag, network_id):
     """Deep-insert a Thing whose single Datastream is linked to network_id; return ds id."""
     tree = {
-        "name": f"{tag}-thing", "description": "d",
-        "Datastreams": [{
-            "name": f"{tag}-ds", "description": "d", "observationType": OM_MEASUREMENT,
-            "unitOfMeasurement": _UOM,
-            "Network": {"@iot.id": network_id},
-            "ObservedProperty": {"name": f"{tag}-op", "definition": f"http://example.org/op/{tag}", "description": "o"},
-            "Sensor": {"name": f"{tag}-s", "description": "s", "encodingType": "application/pdf", "metadata": "m"},
-        }],
+        "name": f"{tag}-thing",
+        "description": "d",
+        "Datastreams": [
+            {
+                "name": f"{tag}-ds",
+                "description": "d",
+                "observationType": OM_MEASUREMENT,
+                "unitOfMeasurement": _UOM,
+                "Network": {"@iot.id": network_id},
+                "ObservedProperty": {
+                    "name": f"{tag}-op",
+                    "definition": f"http://example.org/op/{tag}",
+                    "description": "o",
+                },
+                "Sensor": {
+                    "name": f"{tag}-s",
+                    "description": "s",
+                    "encodingType": "application/pdf",
+                    "metadata": "m",
+                },
+            }
+        ],
     }
     rt = client.create("Things", tree)
     assert rt.status_code == 201, rt.text
-    return entity_id(client.nav(f"{client.location_of(rt)}/Datastreams")["value"][0])
+    return entity_id(
+        client.nav(f"{client.location_of(rt)}/Datastreams")["value"][0]
+    )
 
 
 def test_patch_network(client, unique_name):
@@ -62,8 +96,13 @@ def test_patch_network(client, unique_name):
         r = client.create("Networks", {"name": f"{tag}-net"})
         assert r.status_code == 201, r.text
         nid = id_from_self_link(client.location_of(r))
-        pr = client.patch(f"Networks({format_id(nid)})", json={"name": f"{tag}-net-renamed"})
-        assert pr.status_code in (200, 204), f"{pr.status_code}: {pr.text[:200]}"
+        pr = client.patch(
+            f"Networks({format_id(nid)})", json={"name": f"{tag}-net-renamed"}
+        )
+        assert pr.status_code in (
+            200,
+            204,
+        ), f"{pr.status_code}: {pr.text[:200]}"
         assert client.by_id("Networks", nid)["name"] == f"{tag}-net-renamed"
     finally:
         _purge(client, tag)
@@ -77,7 +116,10 @@ def test_delete_network_then_404(client, unique_name):
         assert r.status_code == 201, r.text
         nid = id_from_self_link(client.location_of(r))
         dr = client.delete(f"Networks({format_id(nid)})")
-        assert dr.status_code in (200, 204), f"{dr.status_code}: {dr.text[:200]}"
+        assert dr.status_code in (
+            200,
+            204,
+        ), f"{dr.status_code}: {dr.text[:200]}"
         assert client.get(f"Networks({format_id(nid)})").status_code == 404
     finally:
         _purge(client, tag)
@@ -95,8 +137,14 @@ def test_patch_datastream_relink_network(client, unique_name):
         n2 = id_from_self_link(client.location_of(r2))
         ds_id = _datastream_in_network(client, tag, n1)
 
-        pr = client.patch(f"Datastreams({format_id(ds_id)})", json={"Network": {"@iot.id": n2}})
-        assert pr.status_code in (200, 204), f"{pr.status_code}: {pr.text[:200]}"
+        pr = client.patch(
+            f"Datastreams({format_id(ds_id)})",
+            json={"Network": {"@iot.id": n2}},
+        )
+        assert pr.status_code in (
+            200,
+            204,
+        ), f"{pr.status_code}: {pr.text[:200]}"
         net = client.nav(f"Datastreams({format_id(ds_id)})/Network")
         assert entity_id(net) == n2
     finally:
@@ -118,24 +166,40 @@ def test_post_to_network_datastreams_navlink(client, unique_name):
         rn = client.create("Networks", {"name": f"{tag}-net"})
         assert rn.status_code == 201, rn.text
         nid = id_from_self_link(client.location_of(rn))
-        rt = client.create("Things", {"name": f"{tag}-thing", "description": "d"})
+        rt = client.create(
+            "Things", {"name": f"{tag}-thing", "description": "d"}
+        )
         assert rt.status_code == 201, rt.text
         tid = entity_id(client.nav(client.location_of(rt)))
-        rs = client.create("Sensors", {"name": f"{tag}-s", "description": "s",
-                                        "encodingType": "application/pdf", "metadata": "m"})
+        rs = client.create(
+            "Sensors",
+            {
+                "name": f"{tag}-s",
+                "description": "s",
+                "encodingType": "application/pdf",
+                "metadata": "m",
+            },
+        )
         assert rs.status_code == 201, rs.text
         sid = id_from_self_link(client.location_of(rs))
-        ro = client.create("ObservedProperties", {"name": f"{tag}-op",
-                                                   "definition": f"http://example.org/op/{tag}",
-                                                   "description": "o"})
+        ro = client.create(
+            "ObservedProperties",
+            {
+                "name": f"{tag}-op",
+                "definition": f"http://example.org/op/{tag}",
+                "description": "o",
+            },
+        )
         assert ro.status_code == 201, ro.text
         oid = id_from_self_link(client.location_of(ro))
 
         r = client.post(
             f"Networks({format_id(nid)})/Datastreams",
             json={
-                "name": f"{tag}-navlink-ds", "description": "d",
-                "observationType": OM_MEASUREMENT, "unitOfMeasurement": _UOM,
+                "name": f"{tag}-navlink-ds",
+                "description": "d",
+                "observationType": OM_MEASUREMENT,
+                "unitOfMeasurement": _UOM,
                 "Thing": {"@iot.id": tid},
                 "ObservedProperty": {"@iot.id": oid},
                 "Sensor": {"@iot.id": sid},
@@ -148,7 +212,9 @@ def test_post_to_network_datastreams_navlink(client, unique_name):
         # Verify the link: the created Datastream resolves to the path Network.
         ds_id = id_from_self_link(loc)
         net = client.nav(f"Datastreams({format_id(ds_id)})/Network")
-        assert entity_id(net) == nid, f"created datastream linked to {entity_id(net)}, expected {nid}"
+        assert (
+            entity_id(net) == nid
+        ), f"created datastream linked to {entity_id(net)}, expected {nid}"
     finally:
         _purge(client, tag)
 
@@ -162,8 +228,13 @@ def test_put_replace_network(client, unique_name):
         r = client.create("Networks", {"name": f"{tag}-net"})
         assert r.status_code == 201, r.text
         nid = id_from_self_link(client.location_of(r))
-        pr = client.put(f"Networks({format_id(nid)})", json={"name": f"{tag}-net-put"})
-        assert pr.status_code in (200, 204), f"{pr.status_code}: {pr.text[:200]}"
+        pr = client.put(
+            f"Networks({format_id(nid)})", json={"name": f"{tag}-net-put"}
+        )
+        assert pr.status_code in (
+            200,
+            204,
+        ), f"{pr.status_code}: {pr.text[:200]}"
         doc = client.by_id("Networks", nid)
         assert doc["name"] == f"{tag}-net-put", doc
         assert entity_id(doc) == nid, doc
@@ -180,7 +251,9 @@ def test_put_network_missing_name(client, unique_name):
         r = client.create("Networks", {"name": f"{tag}-net"})
         assert r.status_code == 201, r.text
         nid = id_from_self_link(client.location_of(r))
-        pr = client.put(f"Networks({format_id(nid)})", json={"description": "no name"})
+        pr = client.put(
+            f"Networks({format_id(nid)})", json={"description": "no name"}
+        )
         assert pr.status_code == 400, f"{pr.status_code}: {pr.text[:200]}"
         assert "name" in pr.json().get("message", ""), pr.text[:200]
     finally:

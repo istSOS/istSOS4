@@ -38,7 +38,7 @@ PAYLOAD_EXAMPLE = {
     "username": "cp1",
     "password": "qwertz",
     "uri": "https://orcid.org/0000-0004-3456-7890",
-    "role": "viewer",  # viewer, editor, obs_manager, sensor, custom
+    "role": "viewer",  # viewer, editor, obs_manager, sensor, qc, custom
 }
 
 
@@ -137,6 +137,15 @@ async def create_user(
                         "user_id": user["id"],
                     }
                     await insert_commit(connection, commit, "CREATE")
+
+                elif payload["role"] == "qc":
+                    commit = {
+                        "message": "QC data",
+                        "author": user["uri"],
+                        "encodingType": "text/plain",
+                        "user_id": user["id"],
+                    }
+                    await insert_commit(connection, commit, "UPDATE")
 
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")

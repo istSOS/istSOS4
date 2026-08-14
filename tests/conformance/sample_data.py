@@ -104,7 +104,9 @@ from pathlib import Path
 # Stays valid after test files move into c01/ c02/ … subfolders (this file does not move).
 _TESTS_DIR = Path(__file__).resolve().parents[1]
 ENTITIES_DEFAULT_PATH = Path(
-    os.environ.get("STA_SEED_FILE", _TESTS_DIR / "docs" / "entitiesDefault.json")
+    os.environ.get(
+        "STA_SEED_FILE", _TESTS_DIR / "docs" / "entitiesDefault.json"
+    )
 )
 
 
@@ -141,7 +143,7 @@ DS2_RESULTS = [5, 6]
 DS2_TIMES = ["2015-03-05T00:00:00Z", "2015-03-06T00:00:00Z"]
 
 # Across the whole Thing.
-ALL_RESULTS = DS1_RESULTS + DS2_RESULTS                # [3, 4, 5, 6]
+ALL_RESULTS = DS1_RESULTS + DS2_RESULTS  # [3, 4, 5, 6]
 ALL_TIMES = DS1_TIMES + DS2_TIMES
 
 SEED_POINT = {"type": "Point", "coordinates": LOCATION_COORDINATES}
@@ -156,7 +158,9 @@ FAR_POINT_WKT = "POINT(0 0)"
 # encodingType constants reused by c02's own-entity payloads.
 GEOJSON = "application/vnd.geo+json"
 SENSOR_PDF = "application/pdf"
-OM_MEASUREMENT = "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"
+OM_MEASUREMENT = (
+    "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"
+)
 
 
 def unit_lumen() -> dict:
@@ -208,7 +212,9 @@ def minimal_observed_property(tag: str) -> dict:
     }
 
 
-def minimal_datastream(tag: str, thing_id, sensor_id, observed_property_id) -> dict:
+def minimal_datastream(
+    tag: str, thing_id, sensor_id, observed_property_id
+) -> dict:
     return {
         "name": f"{tag} Datastream",
         "description": "conformance datastream",
@@ -220,8 +226,9 @@ def minimal_datastream(tag: str, thing_id, sensor_id, observed_property_id) -> d
     }
 
 
-def minimal_observation(tag: str, datastream_id, result=3,
-                        phenomenon_time="2015-03-03T00:00:00Z") -> dict:
+def minimal_observation(
+    tag: str, datastream_id, result=3, phenomenon_time="2015-03-03T00:00:00Z"
+) -> dict:
     return {
         "phenomenonTime": phenomenon_time,
         "result": result,
@@ -238,7 +245,9 @@ def minimal_feature_of_interest(tag: str) -> dict:
     }
 
 
-def minimal_historical_location(tag: str, thing_id, time="2015-03-03T00:00:00Z") -> dict:
+def minimal_historical_location(
+    tag: str, thing_id, time="2015-03-03T00:00:00Z"
+) -> dict:
     return {
         "time": time,
         "Thing": {"@iot.id": thing_id},

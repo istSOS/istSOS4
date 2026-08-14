@@ -22,10 +22,11 @@ import uuid
 from dataclasses import dataclass, field
 
 import pytest
-
 from client import entity_id, format_id, id_from_self_link
 
-OM_MEASUREMENT = "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"
+OM_MEASUREMENT = (
+    "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"
+)
 
 
 def _datastream(tag: str, suffix: str, network_id, results: list) -> dict:
@@ -67,9 +68,9 @@ class NetworkSeed:
     net_a_name: str
     net_b_id: object
     net_b_name: str
-    a_ds_ids: list          # datastream ids in Network A (ordered by name)
+    a_ds_ids: list  # datastream ids in Network A (ordered by name)
     a_ds_names: list
-    a_ds_results: list      # flattened results in Network A
+    a_ds_results: list  # flattened results in Network A
     b_ds_ids: list
     b_ds_names: list
     sensor_ids: list = field(default_factory=list)
@@ -87,10 +88,14 @@ def network_seed(client) -> NetworkSeed:
 
     # 1. two Networks
     ra = client.create("Networks", {"name": f"{tag}-netA"})
-    assert ra.status_code == 201, f"create Network A failed: {ra.status_code} {ra.text[:300]}"
+    assert (
+        ra.status_code == 201
+    ), f"create Network A failed: {ra.status_code} {ra.text[:300]}"
     net_a_id = id_from_self_link(client.location_of(ra))
     rb = client.create("Networks", {"name": f"{tag}-netB"})
-    assert rb.status_code == 201, f"create Network B failed: {rb.status_code} {rb.text[:300]}"
+    assert (
+        rb.status_code == 201
+    ), f"create Network B failed: {rb.status_code} {rb.text[:300]}"
     net_b_id = id_from_self_link(client.location_of(rb))
 
     # 2. one Thing (+ Location) owning 3 Datastreams: 2 -> A, 1 -> B (Network inline)
@@ -112,7 +117,9 @@ def network_seed(client) -> NetworkSeed:
         ],
     }
     rt = client.create("Things", tree)
-    assert rt.status_code == 201, f"seed deep-insert failed: {rt.status_code} {rt.text[:400]}"
+    assert (
+        rt.status_code == 201
+    ), f"seed deep-insert failed: {rt.status_code} {rt.text[:400]}"
     thing_url = client.location_of(rt)
     thing_id = entity_id(client.nav(thing_url))
 
@@ -124,10 +131,12 @@ def network_seed(client) -> NetworkSeed:
         {
             "$orderby": "name asc",
             "$expand": "Network,Sensor,ObservedProperty,"
-                       "Observations($expand=FeatureOfInterest)",
+            "Observations($expand=FeatureOfInterest)",
         },
     )["value"]
-    assert len(ds_docs) == 3, f"expected 3 seed datastreams, got {len(ds_docs)}"
+    assert (
+        len(ds_docs) == 3
+    ), f"expected 3 seed datastreams, got {len(ds_docs)}"
 
     a_ids, a_names, a_results, b_ids, b_names = [], [], [], [], []
     sensor_ids, op_ids, foi = [], [], set()
@@ -147,9 +156,9 @@ def network_seed(client) -> NetworkSeed:
             b_ids.append(entity_id(ds))
             b_names.append(ds["name"])
 
-    assert len(a_ids) == 2 and len(b_ids) == 1, (
-        f"network grouping wrong: A={a_ids} B={b_ids}"
-    )
+    assert (
+        len(a_ids) == 2 and len(b_ids) == 1
+    ), f"network grouping wrong: A={a_ids} B={b_ids}"
 
     data = NetworkSeed(
         tag=tag,

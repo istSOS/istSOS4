@@ -15,7 +15,6 @@ Coverage:
 from __future__ import annotations
 
 import pytest
-
 import sample_data
 
 pytestmark = pytest.mark.c02
@@ -25,6 +24,7 @@ pytestmark = pytest.mark.c02
 # UPDATE 11 – PUT full replacement
 #   req/create-update-delete/update-entity-put  (18-088 §10.3)
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_put_replace_thing(client, unique_name, cleanup):
@@ -61,7 +61,10 @@ def test_put_replace_thing(client, unique_name, cleanup):
     # PUT: full replacement WITHOUT 'properties' field
     put_resp = client.put(
         url,
-        json={"name": f"{tag} replaced", "description": "replaced-description"},
+        json={
+            "name": f"{tag} replaced",
+            "description": "replaced-description",
+        },
     )
     assert put_resp.status_code in (200, 204), (
         f"req/create-update-delete/update-entity-put: PUT should return 200 or 204; "
@@ -71,12 +74,12 @@ def test_put_replace_thing(client, unique_name, cleanup):
     after = client.nav(url)
 
     # Name and description must be updated
-    assert after["name"] == f"{tag} replaced", (
-        "PUT must update the 'name' property"
-    )
-    assert after["description"] == "replaced-description", (
-        "PUT must update the 'description' property"
-    )
+    assert (
+        after["name"] == f"{tag} replaced"
+    ), "PUT must update the 'name' property"
+    assert (
+        after["description"] == "replaced-description"
+    ), "PUT must update the 'description' property"
 
     # Optional 'properties' not in PUT body → must be reset to null/absent (full replace)
     props = after.get("properties")
@@ -86,9 +89,9 @@ def test_put_replace_thing(client, unique_name, cleanup):
     )
 
     # @iot.id must be immutable across PUT
-    assert after["@iot.id"] == original_id, (
-        f"@iot.id must not change after PUT: was {original_id!r}, now {after['@iot.id']!r}"
-    )
+    assert (
+        after["@iot.id"] == original_id
+    ), f"@iot.id must not change after PUT: was {original_id!r}, now {after['@iot.id']!r}"
     # @iot.selfLink must be preserved (same absolute URL)
     assert after["@iot.selfLink"] == original_self_link, (
         f"@iot.selfLink must be preserved after PUT: "
@@ -120,9 +123,9 @@ def test_put_missing_mandatory_property_thing(client, unique_name, cleanup):
         f"return 400; got {bad_resp.status_code}: {bad_resp.text[:300]}"
     )
     # The error body must not be a server error (5xx content is unacceptable)
-    assert bad_resp.status_code < 500, (
-        f"Server must return a structured 4xx client error, not 5xx; got {bad_resp.status_code}"
-    )
+    assert (
+        bad_resp.status_code < 500
+    ), f"Server must return a structured 4xx client error, not 5xx; got {bad_resp.status_code}"
 
 
 @pytest.mark.c02
@@ -182,18 +185,20 @@ def test_put_optional_property_reset(client, unique_name, cleanup):
 
     # Confirm 'properties' is set before PUT
     before = client.nav(url)
-    assert before.get("properties") not in (None, {}), (
-        "Pre-condition: 'properties' must be set before PUT"
-    )
+    assert before.get("properties") not in (
+        None,
+        {},
+    ), "Pre-condition: 'properties' must be set before PUT"
 
     # PUT with only mandatory fields (no 'properties')
     put_resp = client.put(
         url,
         json={"name": f"{tag} Thing", "description": "without-properties"},
     )
-    assert put_resp.status_code in (200, 204), (
-        f"PUT must succeed; got {put_resp.status_code}: {put_resp.text[:300]}"
-    )
+    assert put_resp.status_code in (
+        200,
+        204,
+    ), f"PUT must succeed; got {put_resp.status_code}: {put_resp.text[:300]}"
 
     after = client.nav(url)
     props = after.get("properties")

@@ -48,14 +48,6 @@ if VERSIONING or AUTHORIZATION:
         "never deleting the whole collection."
     ),
     status_code=status.HTTP_200_OK,
-    # OpenAPI-only: document the mandatory $filter query parameter, mirroring the
-    # collection GET's $filter (read/query_parameters.py: name "$filter", type
-    # string, description "A filter query"). Declared via openapi_extra — NOT a
-    # Query(...) function param — so the handler keeps reading request.query_params
-    # and returns its custom 400 ("$filter is required for collection delete") when
-    # $filter is missing. A required Query param would make FastAPI raise 422 at the
-    # framework layer, breaking that documented 400 safeguard. required=True reflects
-    # that an absent $filter is rejected. Zero runtime/behaviour change.
     openapi_extra={
         "parameters": [
             {
@@ -74,13 +66,6 @@ async def delete_observations_filtered(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    # --- SAFEGUARD FIRST (before any parsing) -----------------------------
-    # SECURITY (deliberate divergence from the FROST "Filtered Delete"
-    # extension, which deletes the WHOLE collection when $filter is omitted):
-    # istSOS4 NEVER does an unbounded collection delete. A missing $filter is a
-    # client error, not a "delete everything" instruction. We inspect the raw
-    # query params here, before invoking the translator, so an absent $filter
-    # can never reach the delete statement.
     if "$filter" not in request.query_params:
         return error_response(
             status.HTTP_400_BAD_REQUEST,
@@ -91,15 +76,6 @@ async def delete_observations_filtered(
     if request.url.query:
         full_path += "?" + request.url.query
 
-    # Reuse the GET filter translator: build a SELECT DISTINCT id query with the
-    # SAME $filter parsing + cross-entity semi-join the GET path uses (mirrors
-    # read/observation.py calling convert_query). No LIMIT/OFFSET, so the FULL
-    # match set is collected — not just one $top page.
-    #
-    # A malformed/invalid $filter makes the translator raise. We catch that HERE
-    # and return 400 — exactly the GET contract (never 500 for a bad filter) —
-    # while keeping the DB work in a separate try so that genuine internal
-    # errors there still map to 500, not 400.
     ids_query = sta2rest.STA2REST.convert_filter_to_ids_query(full_path)
 
     async with pool.acquire() as connection:
@@ -120,9 +96,6 @@ async def delete_observations_filtered(
                     content={"deleted": 0},
                 )
 
-            # Single bulk DELETE (NOT a per-id loop). RETURNING the
-            # datastream_id lets us recompute datastream aggregates once per
-            # DISTINCT touched datastream below.
             deleted_rows = await connection.fetch(
                 """
                 DELETE FROM sensorthings."Observation"
@@ -137,19 +110,11 @@ async def delete_observations_filtered(
                 row["datastream_id"] for row in deleted_rows
             }
 
-            # Post-delete maintenance — aggregated equivalent of the
-            # single-entity delete's per-row fix-up, run ONCE per DISTINCT
-            # touched datastream. We recompute phenomenonTime/resultTime from
-            # the REMAINING observations (FoI variant) and the observedArea.
-            # We deliberately do NOT touch FeaturesOfInterest / gen_foi_id:
-            # deleting Observations does not delete their FoI.
             for datastream_id in touched_datastreams:
                 await update_datastream_phenomenon_time_from_foi(
                     connection, datastream_id
                 )
-                await update_datastream_observedArea(
-                    connection, datastream_id
-                )
+                await update_datastream_observedArea(connection, datastream_id)
 
             if current_user is not None:
                 await connection.execute("RESET ROLE;")

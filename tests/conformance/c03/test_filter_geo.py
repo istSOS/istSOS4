@@ -19,7 +19,6 @@ is the only variable: a true predicate -> the seed entity, false -> empty set.
 from __future__ import annotations
 
 import pytest
-
 import sample_data
 from client import format_id
 
@@ -34,9 +33,9 @@ SEED_PT = f"geography'POINT({PX} {PY})'"
 
 def fetch(client, path, params=None) -> dict:
     r = client.get(path, params=params)
-    assert r.status_code == 200, (
-        f"GET {path} params={params} -> {r.status_code}: {r.text[:400]}"
-    )
+    assert (
+        r.status_code == 200
+    ), f"GET {path} params={params} -> {r.status_code}: {r.text[:400]}"
     return r.json()
 
 
@@ -50,15 +49,21 @@ def ids_of(doc) -> list:
 
 def loc_predicate(client, seed, pred) -> dict:
     """Seed Location iff the geo predicate is true (scoped by location id)."""
-    return fetch(client, "Locations",
-                 {"$filter": f"id eq {format_id(seed.location_id)} and {pred}"})
+    return fetch(
+        client,
+        "Locations",
+        {"$filter": f"id eq {format_id(seed.location_id)} and {pred}"},
+    )
 
 
 def foi_predicate(client, seed, pred) -> dict:
     assert seed.foi_ids, "seed produced no FeatureOfInterest"
     fid = seed.foi_ids[0]
-    return fetch(client, "FeaturesOfInterest",
-                 {"$filter": f"id eq {format_id(fid)} and {pred}"})
+    return fetch(
+        client,
+        "FeaturesOfInterest",
+        {"$filter": f"id eq {format_id(fid)} and {pred}"},
+    )
 
 
 # ===========================================================================
@@ -67,28 +72,39 @@ def foi_predicate(client, seed, pred) -> dict:
 def test_geo_intersects_positive(client, seed):
     """req/request-data/built-in-query-functions -- geo.intersects(Point,Polygon): the
     seed point lies inside the containing polygon."""
-    assert ids_of(loc_predicate(client, seed, f"geo.intersects(location,{CONT})")) == [seed.location_id]
+    assert ids_of(
+        loc_predicate(client, seed, f"geo.intersects(location,{CONT})")
+    ) == [seed.location_id]
 
 
 def test_geo_intersects_negative(client, seed):
     """req/request-data/built-in-query-functions -- geo.intersects with a disjoint polygon -> empty."""
-    assert values(loc_predicate(client, seed, f"geo.intersects(location,{DISJ})")) == []
+    assert (
+        values(loc_predicate(client, seed, f"geo.intersects(location,{DISJ})"))
+        == []
+    )
 
 
 def test_geo_distance_far(client, seed):
     """req/request-data/built-in-query-functions -- geo.distance(Point,Point): the seed
     point is far from (0,0)."""
-    assert ids_of(loc_predicate(client, seed, f"geo.distance(location,{FAR}) gt 1")) == [seed.location_id]
+    assert ids_of(
+        loc_predicate(client, seed, f"geo.distance(location,{FAR}) gt 1")
+    ) == [seed.location_id]
 
 
 def test_geo_distance_self_zero(client, seed):
     """req/request-data/built-in-query-functions -- geo.distance to the identical point is 0."""
-    assert ids_of(loc_predicate(client, seed, f"geo.distance(location,{SEED_PT}) lt 1")) == [seed.location_id]
+    assert ids_of(
+        loc_predicate(client, seed, f"geo.distance(location,{SEED_PT}) lt 1")
+    ) == [seed.location_id]
 
 
 def test_geo_length_point_is_zero(client, seed):
     """req/request-data/built-in-query-functions -- geo.length of a Point property is 0."""
-    assert ids_of(loc_predicate(client, seed, "geo.length(location) lt 1")) == [seed.location_id]
+    assert ids_of(
+        loc_predicate(client, seed, "geo.length(location) lt 1")
+    ) == [seed.location_id]
 
 
 def test_geo_length_literal_linestring(client, seed):
@@ -96,7 +112,9 @@ def test_geo_length_literal_linestring(client, seed):
     geography per the 18-088 Table 23 example (geography'LINESTRING(...)'). The line
     LINESTRING(0 0, 0 1) has length > 0, so the (always-true) predicate selects the
     id-scoped seed location."""
-    doc = loc_predicate(client, seed, "geo.length(geography'LINESTRING(0 0, 0 1)') gt 0")
+    doc = loc_predicate(
+        client, seed, "geo.length(geography'LINESTRING(0 0, 0 1)') gt 0"
+    )
     assert ids_of(doc) == [seed.location_id]
 
 
@@ -105,73 +123,111 @@ def test_geo_length_literal_linestring(client, seed):
 # ===========================================================================
 def test_st_within_positive(client, seed):
     """req/request-data/built-in-query-functions -- st_within(point, containing polygon)."""
-    assert ids_of(loc_predicate(client, seed, f"st_within(location,{CONT})")) == [seed.location_id]
+    assert ids_of(
+        loc_predicate(client, seed, f"st_within(location,{CONT})")
+    ) == [seed.location_id]
 
 
 def test_st_within_negative(client, seed):
     """req/request-data/built-in-query-functions -- st_within(point, disjoint polygon) -> empty."""
-    assert values(loc_predicate(client, seed, f"st_within(location,{DISJ})")) == []
+    assert (
+        values(loc_predicate(client, seed, f"st_within(location,{DISJ})"))
+        == []
+    )
 
 
 def test_st_intersects(client, seed):
     """req/request-data/built-in-query-functions -- st_intersects(point, containing polygon)."""
-    assert ids_of(loc_predicate(client, seed, f"st_intersects(location,{CONT})")) == [seed.location_id]
+    assert ids_of(
+        loc_predicate(client, seed, f"st_intersects(location,{CONT})")
+    ) == [seed.location_id]
 
 
 def test_st_disjoint_positive(client, seed):
     """req/request-data/built-in-query-functions -- st_disjoint(point, far polygon)."""
-    assert ids_of(loc_predicate(client, seed, f"st_disjoint(location,{DISJ})")) == [seed.location_id]
+    assert ids_of(
+        loc_predicate(client, seed, f"st_disjoint(location,{DISJ})")
+    ) == [seed.location_id]
 
 
 def test_st_disjoint_negative(client, seed):
     """req/request-data/built-in-query-functions -- st_disjoint with the containing polygon -> empty."""
-    assert values(loc_predicate(client, seed, f"st_disjoint(location,{CONT})")) == []
+    assert (
+        values(loc_predicate(client, seed, f"st_disjoint(location,{CONT})"))
+        == []
+    )
 
 
 def test_st_equals_positive(client, seed):
     """req/request-data/built-in-query-functions -- st_equals(point, identical point)."""
-    assert ids_of(loc_predicate(client, seed, f"st_equals(location,{SEED_PT})")) == [seed.location_id]
+    assert ids_of(
+        loc_predicate(client, seed, f"st_equals(location,{SEED_PT})")
+    ) == [seed.location_id]
 
 
 def test_st_equals_negative(client, seed):
     """req/request-data/built-in-query-functions -- st_equals with a different point -> empty."""
-    assert values(loc_predicate(client, seed, f"st_equals(location,{FAR})")) == []
+    assert (
+        values(loc_predicate(client, seed, f"st_equals(location,{FAR})")) == []
+    )
 
 
 def test_st_contains(client, seed):
     """req/request-data/built-in-query-functions -- st_contains(prop, geography) per Table 23
     example order; a point contains the identical point."""
-    assert ids_of(loc_predicate(client, seed, f"st_contains(location,{SEED_PT})")) == [seed.location_id]
+    assert ids_of(
+        loc_predicate(client, seed, f"st_contains(location,{SEED_PT})")
+    ) == [seed.location_id]
 
 
 def test_st_touches_false(client, seed):
     """req/request-data/built-in-query-functions -- st_touches: an interior point does not
     touch the polygon boundary -> correctly false (empty)."""
-    assert values(loc_predicate(client, seed, f"st_touches(location,{CONT})")) == []
+    assert (
+        values(loc_predicate(client, seed, f"st_touches(location,{CONT})"))
+        == []
+    )
 
 
 def test_st_overlaps_false(client, seed):
     """req/request-data/built-in-query-functions -- st_overlaps: a point cannot overlap a
     polygon (different dimensions) -> correctly false (empty)."""
-    assert values(loc_predicate(client, seed, f"st_overlaps(location,{CONT})")) == []
+    assert (
+        values(loc_predicate(client, seed, f"st_overlaps(location,{CONT})"))
+        == []
+    )
 
 
 def test_st_crosses_false(client, seed):
     """req/request-data/built-in-query-functions -- st_crosses: a point does not cross a
     polygon -> correctly false (empty)."""
-    assert values(loc_predicate(client, seed, f"st_crosses(location,{CONT})")) == []
+    assert (
+        values(loc_predicate(client, seed, f"st_crosses(location,{CONT})"))
+        == []
+    )
 
 
 def test_st_relate_positive(client, seed):
     """req/request-data/built-in-query-functions -- st_relate with a DE-9IM intersection
     pattern; two identical points' interiors intersect -> matches."""
-    assert ids_of(loc_predicate(client, seed, f"st_relate(location,{SEED_PT},'T********')")) == [seed.location_id]
+    assert ids_of(
+        loc_predicate(
+            client, seed, f"st_relate(location,{SEED_PT},'T********')"
+        )
+    ) == [seed.location_id]
 
 
 def test_st_relate_negative(client, seed):
     """req/request-data/built-in-query-functions -- st_relate intersection pattern against a
     far point -> no match (empty)."""
-    assert values(loc_predicate(client, seed, f"st_relate(location,{FAR},'T********')")) == []
+    assert (
+        values(
+            loc_predicate(
+                client, seed, f"st_relate(location,{FAR},'T********')"
+            )
+        )
+        == []
+    )
 
 
 # ===========================================================================
@@ -181,16 +237,22 @@ def test_geo_intersects_feature_positive(client, seed):
     """req/request-data/built-in-query-functions -- geo.intersects on FeatureOfInterest/feature
     (the auto FoI shares the seed point geometry)."""
     fid = seed.foi_ids[0]
-    assert ids_of(foi_predicate(client, seed, f"geo.intersects(feature,{CONT})")) == [fid]
+    assert ids_of(
+        foi_predicate(client, seed, f"geo.intersects(feature,{CONT})")
+    ) == [fid]
 
 
 def test_st_within_feature_negative(client, seed):
     """req/request-data/built-in-query-functions -- st_within on FoI/feature with a disjoint
     polygon -> empty."""
-    assert values(foi_predicate(client, seed, f"st_within(feature,{DISJ})")) == []
+    assert (
+        values(foi_predicate(client, seed, f"st_within(feature,{DISJ})")) == []
+    )
 
 
 def test_st_equals_feature_positive(client, seed):
     """req/request-data/built-in-query-functions -- st_equals on FoI/feature (identical point)."""
     fid = seed.foi_ids[0]
-    assert ids_of(foi_predicate(client, seed, f"st_equals(feature,{SEED_PT})")) == [fid]
+    assert ids_of(
+        foi_predicate(client, seed, f"st_equals(feature,{SEED_PT})")
+    ) == [fid]

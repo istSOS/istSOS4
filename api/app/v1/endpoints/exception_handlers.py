@@ -59,8 +59,6 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_sta_error(request: Request, exc: STAError):
-    # Domain error raised deliberately by endpoint/helper code; it carries the
-    # HTTP status it maps to and a controlled, client-safe message.
     return error_response(exc.status_code, str(exc))
 
 
@@ -79,24 +77,18 @@ async def handle_unique_violation(request: Request, exc: Exception):
 
 
 async def handle_db_unavailable(request: Request, exc: Exception):
-    # conformance: req/request-data/status-code -- DB unavailable is 503, not 400.
     return error_response(
         status.HTTP_503_SERVICE_UNAVAILABLE, "Database temporarily unavailable"
     )
 
 
 async def handle_foreign_key(request: Request, exc: Exception):
-    # conformance: a bad @iot.id reference is a client error (400); controlled
-    # message, never raw Postgres text.
     return error_response(
         status.HTTP_400_BAD_REQUEST, "Referenced entity does not exist."
     )
 
 
 async def handle_integrity_violation(request: Request, exc: Exception):
-    # conformance: a payload that violates a NOT NULL / CHECK / data constraint
-    # is a client error (400), not a 500. Unique (409) and FK (400) are handled
-    # by their own more-specific handlers above.
     return error_response(
         status.HTTP_400_BAD_REQUEST,
         "Invalid entity: a required value is missing or not allowed.",
@@ -104,14 +96,10 @@ async def handle_integrity_violation(request: Request, exc: Exception):
 
 
 async def handle_value_error(request: Request, exc: Exception):
-    # A stray ValueError is treated as a controlled client-error message. New
-    # code should prefer raising BadRequest; this stays as a safety net.
     return error_response(status.HTTP_400_BAD_REQUEST, str(exc))
 
 
 async def handle_internal_error(request: Request, exc: Exception):
-    # conformance: req/request-data/status-code -- internal errors are 500 with
-    # no stacktrace in the body. Log the real exception for operators.
     logger.exception(
         "Unhandled error in %s %s", request.method, request.url.path
     )

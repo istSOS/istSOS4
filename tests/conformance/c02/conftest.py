@@ -15,16 +15,15 @@ Public API:
 from __future__ import annotations
 
 import pytest
-
 import sample_data
 from client import entity_id, format_id, id_from_self_link
-
 
 # ---------------------------------------------------------------------------
 # Cleanup fixture – tracks absolute URL strings; deletes in reverse order on
 # teardown so dependents are removed before parents.  Tolerates 404 because
 # cascade deletes may have already removed some entities.
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def cleanup(client):
@@ -49,6 +48,7 @@ def cleanup(client):
 # +Datastream tree for tests that need a ready Datastream.
 # ---------------------------------------------------------------------------
 
+
 def create_datastream_tree(client, unique_name, cleanup):
     """Create the minimal subtree required to post Observations.
 
@@ -63,9 +63,9 @@ def create_datastream_tree(client, unique_name, cleanup):
         "Locations": [sample_data.minimal_location(tag)],
     }
     t_resp = client.create("Things", thing_payload)
-    assert t_resp.status_code == 201, (
-        f"setup Thing failed: {t_resp.status_code} {t_resp.text[:300]}"
-    )
+    assert (
+        t_resp.status_code == 201
+    ), f"setup Thing failed: {t_resp.status_code} {t_resp.text[:300]}"
     thing_url = client.location_of(t_resp)
     thing_data = client.nav(thing_url, params={"$expand": "Locations"})
     t_id = entity_id(thing_data)
@@ -74,17 +74,19 @@ def create_datastream_tree(client, unique_name, cleanup):
 
     # Sensor
     s_resp = client.create("Sensors", sample_data.minimal_sensor(tag))
-    assert s_resp.status_code == 201, (
-        f"setup Sensor failed: {s_resp.status_code} {s_resp.text[:300]}"
-    )
+    assert (
+        s_resp.status_code == 201
+    ), f"setup Sensor failed: {s_resp.status_code} {s_resp.text[:300]}"
     sensor_url = client.location_of(s_resp)
     s_id = id_from_self_link(sensor_url)
 
     # ObservedProperty
-    op_resp = client.create("ObservedProperties", sample_data.minimal_observed_property(tag))
-    assert op_resp.status_code == 201, (
-        f"setup ObservedProperty failed: {op_resp.status_code} {op_resp.text[:300]}"
+    op_resp = client.create(
+        "ObservedProperties", sample_data.minimal_observed_property(tag)
     )
+    assert (
+        op_resp.status_code == 201
+    ), f"setup ObservedProperty failed: {op_resp.status_code} {op_resp.text[:300]}"
     op_url = client.location_of(op_resp)
     op_id = id_from_self_link(op_url)
 
@@ -93,9 +95,9 @@ def create_datastream_tree(client, unique_name, cleanup):
         "Datastreams",
         sample_data.minimal_datastream(tag, t_id, s_id, op_id),
     )
-    assert ds_resp.status_code == 201, (
-        f"setup Datastream failed: {ds_resp.status_code} {ds_resp.text[:300]}"
-    )
+    assert (
+        ds_resp.status_code == 201
+    ), f"setup Datastream failed: {ds_resp.status_code} {ds_resp.text[:300]}"
     ds_url = client.location_of(ds_resp)
     ds_id = id_from_self_link(ds_url)
 

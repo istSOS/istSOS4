@@ -17,9 +17,9 @@ import re
 from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
 from app import EPSG, HOSTNAME, SUBPATH, TOP_VALUE, VERSION
+from app.v1.endpoints.exceptions import BadRequest
 from asyncpg.types import Range
 from dateutil import parser
-from app.v1.endpoints.exceptions import BadRequest
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,63}$")
 
@@ -53,7 +53,6 @@ def require_json_content_type(request):
     media_type = content_type.split(";", 1)[0].strip().lower()
 
     if media_type != "application/json":
-        # conformance: uniform validation errors raise ValueError (not bare Exception)
         raise ValueError("Only content-type application/json is supported.")
 
 
@@ -120,10 +119,6 @@ def handle_datetime_fields(payload, datastream=False):
     """
     for key in list(payload.keys()):
         if "time" in key.lower():
-            # conformance: req/create-update-delete/update-entity-put — a PUT
-            # that omits an optional time property resets it to null. A null
-            # value has no datetime to parse, so leave it as-is (the column is
-            # set to NULL) instead of crashing on `"/" in None`.
             if payload[key] is None:
                 continue
             is_observation_phenomenon = (
@@ -146,7 +141,6 @@ def handle_datetime_fields(payload, datastream=False):
                         end_time,
                         upper_inc=True,
                     )
-                # Else invalid datetime range
                 else:
                     payload[key] = None
             else:
@@ -322,10 +316,6 @@ def build_nextLink(full_path, count_links):
         query_params["$skip"] = [str(skip_value + new_top_value)]
     else:
         query_params["$skip"] = [str(new_top_value)]
-
-    # nextLink = urlunparse(
-    #     parsed._replace(query=urlencode(query_params, doseq=True))
-    # )
 
     new_query = urlencode(query_params, doseq=True, quote_via=quote)
 
