@@ -19,12 +19,12 @@ from app.utils.utils import (
     validate_payload_keys,
     validate_required_keys,
 )
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
 from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import Response
 
 from .functions import insert_thing_entity, set_commit
-from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 

@@ -319,8 +319,6 @@ class FilterVisitor(visitor.NodeVisitor):
         same attribute. Returns None when `segment` is not a navigation property
         on `model` (i.e. it is a column).
         """
-        # Deferred import: breaks the sta2rest <-> visitors <-> filter_visitor
-        # import cycle that a module-level import would create.
         from .sta2rest import STA2REST
 
         attr_name = STA2REST.ENTITY_MAPPING.get(segment, segment)
@@ -352,8 +350,6 @@ class FilterVisitor(visitor.NodeVisitor):
         return column
 
     def visit_Attribute(self, node: ast.Attribute) -> ColumnClause:
-        # Flatten the navigation path into ordered segments, e.g.
-        # Datastreams/Sensor/id -> ["Datastreams", "Sensor", "id"].
         attributes = []
         owner = node.owner
         while not isinstance(owner, ast.Identifier):
@@ -361,12 +357,6 @@ class FilterVisitor(visitor.NodeVisitor):
             owner = owner.owner
         segments = [owner.name] + attributes[::-1] + [node.attr]
 
-        # Walk the leading relationship hops, emitting one JOIN per hop, until a
-        # segment is no longer a navigation property. SensorThings allows direct
-        # multi-hop traversal in $filter (e.g.
-        # Things?$filter=Datastreams/Sensor/id eq 1) without any()/all(), so
-        # every relationship segment is joined. The final segment is always the
-        # column, hence the `len(segments) - 1` bound.
         model = globals()[self.root_model]
         index = 0
         while index < len(segments) - 1:
@@ -379,8 +369,6 @@ class FilterVisitor(visitor.NodeVisitor):
             model = inspect(rel_attr).property.mapper.class_
             index += 1
 
-        # Remaining segments are a column on the reached entity plus an optional
-        # JSON sub-path.
         return self.resolve_path_column(model, segments[index:])
 
     def visit_BinOp(self, node: ast.BinOp) -> Any:
@@ -411,10 +399,6 @@ class FilterVisitor(visitor.NodeVisitor):
         return op(left, right)
 
     def visit_UnaryOp(self, node: ast.UnaryOp) -> ClauseElement:
-        # req/request-data/built-in-filter-operations: apply the unary operator
-        # (logical `not` -> SQL NOT, arithmetic `-` -> negation) to its operand.
-        # Without this, UnaryOp nodes fell through to generic_visit which
-        # returned None, so `not (...)` produced an empty/always-false filter.
         operand = self.visit(node.operand)
         op = self.visit(node.op)
         return op(operand)
@@ -573,13 +557,6 @@ class FilterVisitor(visitor.NodeVisitor):
         if isinstance(field, ast.Identifier) and field.name == "result":
             identifier = getattr(globals()[self.root_model], "result_string")
             return identifier.contains(self.visit(substr))
-        # conformance: req/request-data/built-in-query-functions — substringof
-        # OData/STA Table 23 semantics: substringof(p0, p1) means "p1 contains
-        # p0", i.e. the SECOND argument (field/haystack) must contain the FIRST
-        # (substr/needle). This emits p1 LIKE '%' || p0 || '%' through the same
-        # .contains() machinery used by startswith/endswith. The previous code
-        # swapped the operands (built "needle LIKE %haystack%"), so a valid
-        # substring matched only on equality and otherwise returned [].
         return self.substr_function(field, substr, "contains")
 
     def func_endswith(
@@ -804,8 +781,6 @@ class FilterVisitor(visitor.NodeVisitor):
         return self.visit(arg)
 
     def func_geolength(self, field: ast._Node) -> functions.Function:
-        # conformance: req/request-data/built-in-query-functions — geo.length
-        # accepts either a geometry property or a geography literal argument.
         return functions.func.ST_Length(self.geo_argument(field))
 
     def func_geointersects(
