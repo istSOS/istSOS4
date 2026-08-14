@@ -1,6 +1,6 @@
 services:
   database:
-    image: ghcr.io/istsos/istsos4/database:1.11
+    image: ghcr.io/istsos/istsos4/database:1.12
     restart: always
     container_name: istsos4-database
     environment:
@@ -32,7 +32,7 @@ services:
       - istsos4-network
 
   api:
-    image: ghcr.io/istsos/istsos4/api:1.27
+    image: ghcr.io/istsos/istsos4/api:1.28
     restart: always
     container_name: istsos4-api
     depends_on:
@@ -81,7 +81,7 @@ services:
       - istsos4-network
 
   dummy_data:
-    image: ghcr.io/istsos/istsos4/dummy_data:1.9
+    image: ghcr.io/istsos/istsos4/dummy_data:1.10
     restart: on-failure
     container_name: istsos4-dummy-data
     environment:
@@ -97,6 +97,9 @@ services:
       CLEAR_DATA: ${CLEAR_DATA}
       N_THINGS: ${N_THINGS}
       N_OBSERVED_PROPERTIES: ${N_OBSERVED_PROPERTIES}
+      CENTER_LAT: ${CENTER_LAT}
+      CENTER_LON: ${CENTER_LON}
+      SPREAD_DEG: ${SPREAD_DEG}
       INTERVAL: ${INTERVAL}
       FREQUENCY: ${FREQUENCY}
       START_DATETIME: ${START_DATETIME}
