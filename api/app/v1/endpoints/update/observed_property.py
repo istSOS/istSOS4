@@ -16,6 +16,7 @@ from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
 from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import Response
@@ -27,7 +28,6 @@ from .functions import (
 )
 from .json_patch import apply_json_patch_to_entity, normalize_patch_body
 from .put import handle_put_replace, request_body_openapi_example
-from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 
@@ -91,8 +91,6 @@ async def update_observed_property(
                     "Observed Property ID not found.",
                 )
 
-            # req/create-update-delete/update-entity-jsonpatch: resolve an
-            # RFC 6902 array body into a merge dict; dict bodies pass through.
             payload = await apply_json_patch_to_entity(
                 connection,
                 "ObservedProperty",
@@ -127,10 +125,6 @@ async def update_observed_property(
     return Response(status_code=status.HTTP_200_OK)
 
 
-# conformance: req/create-update-delete/update-entity-put — mandatory
-# ObservedProperty properties (also NOT NULL in the schema); "properties" is
-# optional and is reset to null when a PUT omits it. The Datastreams relation is
-# left untouched when absent so existing links are not orphaned.
 REQUIRED_PUT_KEYS = ["name", "definition", "description"]
 OPTIONAL_PUT_KEYS = ["properties"]
 
@@ -151,7 +145,6 @@ async def replace_observed_property(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    # conformance: req/create-update-delete/update-entity-put (18-088 §10.3)
     return await handle_put_replace(
         pool=pool,
         request=request,

@@ -15,6 +15,7 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role, update_datastream_observedArea
 from fastapi import APIRouter, Depends, Header, status
 from fastapi.responses import Response
@@ -24,7 +25,6 @@ from .functions import (
     set_commit,
     update_datastream_phenomenon_time,
 )
-from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 
@@ -90,9 +90,7 @@ async def delete_observation(
                     obs_result_time,
                 )
 
-                await update_datastream_observedArea(
-                    connection, datastream_id
-                )
+                await update_datastream_observedArea(connection, datastream_id)
 
             if id_deleted is None:
                 if current_user is not None:

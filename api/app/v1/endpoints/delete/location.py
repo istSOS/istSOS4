@@ -16,12 +16,12 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
 from fastapi import APIRouter, Depends, Header, status
 from fastapi.responses import Response
 
 from .functions import delete_entity, set_commit
-from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 

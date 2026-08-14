@@ -15,12 +15,12 @@
 from app import AUTHORIZATION, NETWORK, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import require_json_content_type, validate_payload_keys
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
 from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import Response
 
 from .functions import insert_datastream_entity, set_commit
-from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 
@@ -64,13 +64,9 @@ ALLOWED_KEYS = [
     "Observations",
 ]
 
-# conformance: NETWORK extension — the "Network" relation is a mandatory
-# Datastream association that exists exactly when the NETWORK extension is
-# enabled (NETWORK=1), independent of AUTHORIZATION. Gating it on AUTHORIZATION
-# wrongly rejected "Network" under NETWORK=1/AUTHORIZATION=0 with
-# "Invalid keys in payload: Network".
 if NETWORK:
     ALLOWED_KEYS.append("Network")
+    PAYLOAD_EXAMPLE["Network"] = {"@iot.id": 1}
 
 
 @v1.api_route(
@@ -242,14 +238,6 @@ async def create_datastream_for_sensor(
     )
 
 
-# conformance: NETWORK extension — POST /Networks(id)/Datastreams creates a
-# Datastream already linked to the Network of the URL path, mirroring
-# POST /Things(id)/Datastreams. This route is registered ONLY when the NETWORK
-# flag is set (the create_datastream.v1 router is included unconditionally in
-# api.py, so the route itself must be gated here, matching the Network entity
-# routes which api.py gates inside its `if NETWORK:` block). Per Table 24 a
-# Datastream SHALL also link Thing + Sensor + ObservedProperty; those arrive in
-# the request body by @iot.id, while the path supplies only the Network.
 if NETWORK:
 
     PAYLOAD_EXAMPLE_NETWORK = {
@@ -287,9 +275,6 @@ if NETWORK:
         if not network_id:
             raise ValueError("Network ID is required.")
 
-        # The path id is the Network association; the redundant relation
-        # object is dropped inside handle_associations (network_id branch),
-        # so create_entity never sees a non-existent "Network" column.
         payload["Network"] = {"@iot.id": network_id}
 
         validate_payload_keys(payload, ALLOWED_KEYS)
