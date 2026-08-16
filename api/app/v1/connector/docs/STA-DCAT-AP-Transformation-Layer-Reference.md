@@ -29,11 +29,11 @@ The Datastream is the correct Dataset pivot for the same reason it is the correc
   - `/dcat/orphan/catalog.ttl` is the **orphan scope**: Things that have at least one Datastream with `network_id IS NULL`, same grouping logic as a Network scope, just keyed on `network_id IS NULL` instead of a specific id, not a special case grafted on top.
 
 **Authentication and Access Control.**
-When `AUTHORIZATION=1` and `ANONYMOUS_VIEWER=0` (strict mode), access to DCAT routes is gated by `auth_gate.py`:
-- `OPEN_CATALOG_METADATA` (default `1`): controls public access to shallow DCAT routes (`/dcat/root`, `/dcat/root.ttl`). When set to `0`, unauthenticated requests return `401 Unauthorized` (`WWW-Authenticate: Bearer`).
-- Deep tier routes (`/dcat/orphan`, `/dcat/orphan.ttl`, `/dcat/{network_id}`, `/dcat/{network_id}.ttl`): always require authentication in strict mode (`401 Unauthorized` if unauthenticated).
-- `CATALOG_CLOSED_NETWORKS`: comma-separated list of network IDs whose existence must be hidden from unauthenticated callers. Any route (shallow or deep) matching a closed network ID returns `404 Not Found` when unauthenticated.
-- **Root catalog link omission:** During harvest time, `dcat_transformer.py` omits `dct:hasPart` and `dcat:catalog` triples on the root graph for any network ID listed in `CATALOG_CLOSED_NETWORKS`. This ensures anonymous clients fetching the root DCAT catalog cannot discover closed networks from response triples.
+When `AUTHORIZATION=1` and `ANONYMOUS_VIEWER=0` (strict mode), every DCAT route -- `/dcat/root`, `/dcat/root.ttl`, `/dcat/orphan`, `/dcat/orphan.ttl`, `/dcat/{network_id}`, `/dcat/{network_id}.ttl` -- is gated by the same `auth_gate.gate()` dependency the STAC routes use. There is no shallow/deep tier split, root and network/orphan routes are gated identically:
+- `OPEN_CATALOG_METADATA` (default `1`): controls public access uniformly across root, orphan, and network-scoped routes. When set to `0`, unauthenticated requests return `401 Unauthorized` (`WWW-Authenticate: Bearer`).
+- `CATALOG_CLOSED_NETWORKS`: comma-separated list of network IDs whose existence must be hidden from unauthenticated callers. `gate()` reads `network_id` straight off the path parameter, so a route matching a closed network ID returns `404 Not Found` when unauthenticated, checked before `OPEN_CATALOG_METADATA` even comes into play.
+- **Root catalog link omission and reveal:** During harvest time, `dcat_transformer.py` writes two variants of the root graph: `root` omits `dct:hasPart` and `dcat:catalog` triples for any network ID in `CATALOG_CLOSED_NETWORKS`; `root:all` (cache key `dcat:graph:root:all`, plus its JSON-LD sibling) includes them. `dcat_root` / `dcat_root_ttl` in `api.py` serve `root:all` whenever the request carries a valid token and fall back to the public `root` scope otherwise, mirroring `stac_root`'s `closed_network_ids` re-add pattern on the STAC side. An anonymous client fetching the root DCAT catalog cannot discover closed networks from response triples; an authenticated one can, the same way it already could from `/stac`.
+- **Single gate, by design.** `gate()` used to be a `shallow_gate`/`deep_gate` split, removed after it caused a bug where `/dcat/orphan` and `/dcat/{network_id}` bypassed `OPEN_CATALOG_METADATA` entirely and returned `401` in strict mode no matter what the flag said. `tests/connector/test_dcat_gate_parity.py` pins both the single-gate structure (every gated route, STAC or DCAT, must depend on the same `gate` callable) and STAC/DCAT status-code parity across every `AUTHORIZATION` / `ANONYMOUS_VIEWER` / `OPEN_CATALOG_METADATA` combination. `tests/connector/test_dcat_root_reveal.py` separately pins the `root`/`root:all` reveal behavior above.
 
 `network_id` lives on `Datastream`, never on `Thing`, identical to the STAC design. A Thing has no scope of its own, a Thing's presence in a given scope is entirely a function of which of its Datastreams happen to fall into that scope (network). One consequence: a **Dataset never appears in more than one scope's graph**, since `network_id` is single-valued per row. Only **DatasetSeries** can appear in more than one scope, when a Thing's Datastreams are split across buckets, each scoped appearance is a distinct partial view of that Thing containing only the Datasets that fall into that scope.
 
@@ -47,7 +47,7 @@ Three approaches were evaluated:
 
 DatasetSeries `dct:identifier` stays `thing-{id}` in every scope it appears in, it does not get a scope suffix. Uniqueness is enforced by which graph the triples live in, not by the identifier literal, the same principle STAC applies with href instead of id. Because each scoped DatasetSeries variant sees a different Dataset subset, its `dct:spatial` and `dct:temporal` must be computed per scope from that scope's own Datasets, not once globally and reused, the same physical Thing can legitimately have a different bbox and time interval depending on which scope's graph it is read from.
 
-Consequence for `cache.py`, noted here since it originates from this design, actual key scheme is owned by the caching layer doc: the existing Redis key pattern needs to carry scope, `dcat:graph:{scope}:{id}`, mirroring the `stac:collection:{scope}:{id}` convention. `scope` is `net-{network_id}` for a Network view or a fixed sentinel (for example `orphan`) for the orphan view. Each scope's serialized Turtle is cached whole, there is no cross-scope merge to invalidate.
+Consequence for `cache.py`, noted here since it originates from this design, actual key scheme is owned by the caching layer doc: the implemented Redis key pattern is `dcat:graph:{scope}` (plus a `:jsonld` sibling per key for the JSON-LD serialization), one key per whole scope graph rather than per-id, since each scope is cached and served as a single Turtle/JSON-LD document, not entity-by-entity the way `stac:collection:{scope}:{id}` is on the STAC side. `scope` is `net-{network_id}` for a Network view, `orphan` for the orphan view, and `root` / `root:all` for the two root variants (see Authentication and Access Control above). Each scope's serialized document is cached whole, there is no cross-scope merge to invalidate.
 
 An optional aggregate "everything in one file" endpoint can be added later by unioning the independent per-scope graphs at serialize time only, never cached merged. 
 
@@ -129,25 +129,22 @@ Mandatory:
 |---|---|---|---|
 | `rdf:type` | Fixed | `dcat:DatasetSeries` | Always asserted |
 | `dct:identifier` | `Thing.@iot.id` | `f"thing-{thing.id}"` | Same identifier used in every scope the Thing appears in. Uniqueness by which graph holds it, see Design section above |
-| `dct:description` | `Thing.description` | `thing.description or f"DCAT DatasetSeries for SensorThings Thing: {thing.name}"` | Fallback composes Thing name into a minimal description |
+| `dct:title` | `Thing.name` | direct map | Always asserted, unlike the Recommended-tier title fallback pattern used elsewhere |
 | `dct:spatial` | Derived from this scope's Dataset geometries only | `dct:Location` node with a bbox-derived geometry literal | Computed per scope, not globally. World bbox fallback if none found in this scope |
 | `dct:temporal` | Derived from this scope's Dataset `phenomenonTime` values only | `dct:PeriodOfTime` node with `dcat:startDate` / `dcat:endDate` | `dcat:endDate` absent for live / open-ended deployments |
-| `dcat:hasPart` | Constructed manually | one triple per member Dataset in this scope | DCAT equivalent of STAC's `item` link |
+| `dcat:seriesMember` | Constructed manually | one triple per member Dataset in this scope | DCAT-AP 3.0's dedicated series-membership predicate, not `dcat:hasPart` |
 
 Recommended:
 
 | DCAT-AP property | STA source | Construction | Notes |
 |---|---|---|---|
-| `dct:title` | `Thing.name` | direct map | Omitted if `None` |
-| `dcat:keyword` | `Thing.name` + union of `ObservedProperty.name` across this scope's Datastreams | one triple per keyword | `ObservedProperty.name` follows `category:subcategory:phenomenon_id` in dummy data, split on `:` and include each part |
+| `dct:description` | `Thing.description` | `thing.description`, only when truthy | No fallback text: omitted entirely, not asserted with placeholder text, when the Thing has no description |
+| `dcat:keyword` | `Thing.name` + union of `ObservedProperty.name` across this scope's Datastreams (split on `:`) + `Datastream.properties["keywords"]` | one triple per keyword, deduplicated | Same `_extract_keywords()` logic as the Dataset's own keywords, unioned across this scope's Datastreams |
 | `dct:isPartOf` | Owning Network catalog for this scope | one triple pointing to the owning sub-catalog URI, points to the orphan catalog URI for the orphan scope | Not load-bearing for scope isolation, kept as a convenience for a consumer who has pulled one Dataset URI out of context |
+| `owl:sameAs` / `foaf:homepage` | `Thing.@iot.id` self-link | two triples pointing to the constructed STA Thing URI | Round-trip navigation back to the STA entity |
+| `dct:publisher` | Root publisher Agent | one triple pointing to the same Agent node as the Catalog, when configured | Only asserted if a publisher Agent node was built |
 
-Optional:
-
-| DCAT-AP property | STA source | Notes |
-|---|---|---|
-| `dct:license` | `Thing.properties["license"]` if set, else `config.DCAT_DEFAULT_LICENSE` | Must resolve to a valid license URI, not the literal string `"other"` |
-| `dct:accessRights` | NONE | External config, one per deployment |
+`dct:license` and `dct:accessRights` are not asserted on the DatasetSeries node at all, only on the Dataset node (see below) and on the Catalog node, see the Catalog table above.
 
 **dcat:Dataset field mapping** (one node per Datastream, in exactly one scope)
 
@@ -169,15 +166,19 @@ Recommended:
 
 | DCAT-AP property | STA source | Construction | Notes |
 |---|---|---|---|
-| `dct:isPartOf` | Owning DatasetSeries in this scope | one triple pointing to the DatasetSeries URI | Round-trip navigation back to the parent Thing |
-| `dcat:theme` / `dct:subject` | `ObservedProperty.name` | one triple per phenomenon segment | Same split-on-`:` logic as DatasetSeries keywords |
-| `owl:sameAs` | `Datastream.@iot.id` self-link | points to the constructed STA URI `f"{base_url}/v1.1/Datastreams({ds['id']})"` | Round-trip navigation back to the STA entity, DCAT equivalent of STAC's `sta_datastream` link |
+| `dct:isPartOf` / `dcat:inSeries` | Owning DatasetSeries in this scope | two triples pointing to the DatasetSeries URI (`dct:isPartOf` and DCAT-AP 3.0's own `dcat:inSeries`) | Round-trip navigation back to the parent Thing |
+| `dcat:keyword` | `ObservedProperty.name` split on `:`, `Thing.name`, `Datastream.properties["keywords"]` | one triple per keyword, deduplicated | Same source order as DatasetSeries keywords |
+| `dcat:theme` / `dct:subject` | `ObservedProperty.definition` | asserted only when `definition` is a resolvable `http(s)` URI; that URI is also typed `skos:Concept` | Placeholder strings in dummy data don't qualify, so this resolves once real OGC definition URIs are harvested. Not the same source as `dcat:keyword` above |
+| `owl:sameAs` / `dcat:landingPage` | `Datastream.@iot.id` self-link | two triples pointing to the constructed STA URI `f"{HOSTNAME}{SUBPATH}{VERSION}/Datastreams({ds_id})"`; the URI is also typed `foaf:Document` | Round-trip navigation back to the STA entity, DCAT equivalent of STAC's `sta_datastream` link |
+| `dct:publisher` | Root publisher Agent | one triple pointing to the same Agent node as the Catalog, when configured | Only asserted if a publisher Agent node was built |
 
 Optional:
 
 | DCAT-AP property | STA source | Notes |
 |---|---|---|
 | `dct:conformsTo` | `Datastream.observationType` URI | e.g. `"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"` |
+| `dct:license` | `Datastream.properties["license"]` if set, else `config.DCAT_DEFAULT_LICENSE` | Must resolve to a valid license URI, not the literal string `"other"`. Per-Dataset, not inherited from the DatasetSeries or Catalog |
+| `dct:accessRights` | `Datastream.properties["accessRights"]` if set, else `config.DCAT_DEFAULT_ACCESS_RIGHTS` | Must resolve to a `dct:RightsStatement` URI |
 | Any extra property | `Datastream.properties[key]` | Pass through non-reserved keys as `dct:relation` or a custom predicate. Do not pass through `observedArea`, `phenomenonTime`, `@iot.*` |
 
 **dcat:Distribution field mapping** (constructed from `ds["id"]`, Distribution URLs built the same way as STAC Asset hrefs)
@@ -202,6 +203,8 @@ Recommended (per Distribution):
 | `dct:title` | `Datastream.name` + access-mode suffix | Disambiguation across the Dataset's Distributions |
 | `dct:format` | Fixed per mode | IANA media type as a `dct:MediaTypeOrExtent` |
 | `dct:description` | Fixed per mode | Short description of what the Distribution serves |
+| `dcat:downloadURL` | Same URL as `dcat:accessURL` | CSV Distribution only, since it is a direct bulk-export file rather than a live query endpoint |
+| `dct:license` | Same Dataset-level license (see `dct:license` under the Dataset's Optional table) | Asserted on every Distribution of a Dataset when a license URI resolves, not just the Dataset node itself |
 
 **Fallback chains:**
 
@@ -229,8 +232,9 @@ Temporal (DatasetSeries `dct:temporal`, computed per scope):
 
 **Public interface:**
 ```python
-def transform_to_dcat(catalog: HarvestedCatalog) -> dict[str, Graph | dict]: ...
+def build_dcat_catalog(catalog: HarvestedCatalog) -> dict[str, Graph]: ...
+def build_dcat_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -> dict[str, Union[Graph, dict[int, Graph]]]: ...
 ```
-`transform_to_dcat()` builds every scope's Catalog, DatasetSeries, and Dataset triples directly into independent `rdflib.Graph` objects, computing all relations, extents, and Dataset entries per scope as described above, and returns one dict keyed by scope. Under `NETWORK=0` the return shape is `{"root": Graph}`, a single scope holding the full unscoped catalog, identical in content to the original pre-Network design. Under `NETWORK=1` the return shape is `{"root": Graph (orphan + structural root), "networks": {network_id: Graph, ...}}`. `cache.py` calls this function directly and caches each scope's serialized Turtle under its own key prefix; `api.py` reads from cache and serves the appropriate scope's Turtle per endpoint. Raises `ValueError` if `DCAT_ROOT_HREF` is unset. Does not touch Postgres, Redis, or the STA HTTP API.
+`build_dcat_catalog()` (NETWORK=0) and `build_dcat_catalog_with_networks()` (NETWORK=1) build every scope's Catalog, DatasetSeries, and Dataset triples directly into independent `rdflib.Graph` objects, computing all relations, extents, and Dataset entries per scope as described above, mirroring `build_stac_catalog()` / `build_stac_catalog_with_networks()` on the STAC side. Under `NETWORK=0` the return shape is `{"root": Graph}`, a single scope holding the full unscoped catalog, identical in content to the original pre-Network design. Under `NETWORK=1` the return shape is `{"root": Graph, "root_all": Graph, "orphan": Graph, "networks": {network_id: Graph, ...}}`, `root` and `root_all` are the closed-network-omitted and closed-network-included variants described under Authentication and Access Control above, both structural only (no Dataset/DatasetSeries content), the DCAT root deliberately does not collapse the orphan scope into itself the way `build_stac_catalog_with_networks()` does on the STAC side. `cache.py` calls these functions directly and caches each scope's serialized Turtle and JSON-LD under its own key prefix (`dcat:graph:{scope}`, `dcat:graph:{scope}:jsonld`); `api.py` reads from cache and serves the appropriate scope's document per endpoint. `DCAT_ROOT_HREF` is derived automatically from the same `HOSTNAME` / `SUBPATH` / `VERSION` constants the STAC transformer uses, not a required env var, missing mandatory identity fields (`DCAT_CATALOG_TITLE`, `DCAT_CATALOG_DESCRIPTION`, `DCAT_PUBLISHER_NAME`, tracked by `settings.has_mandatory_dcat_fields`) produce a logged warning rather than a raised error, the graph is still built and served with fallback values. Neither function touches Postgres, Redis, or the STA HTTP API -- both are pure transforms.
 
 ---
