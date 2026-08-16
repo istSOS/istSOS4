@@ -897,6 +897,8 @@ def build_dcat_catalog_with_networks(
     part_uris: list[tuple[URIRef, Optional[str], str]] = [
         (orphan_catalog_uri, orphan_title, orphan_description),
     ]
+    # Same, but for closed networks only -- used to build root_g_all below.
+    closed_part_uris: list[tuple[URIRef, Optional[str], str]] = []
 
     # --- per-Network graphs ---
     network_graphs: dict[int, Graph] = {}
@@ -929,20 +931,23 @@ def build_dcat_catalog_with_networks(
         # (authenticated callers reach them by id), just not linked.
         if net.id not in CATALOG_CLOSED_NETWORKS:
             part_uris.append((net_catalog_uri, net_title, net_description))
+        else:
+            closed_part_uris.append((net_catalog_uri, net_title, net_description))
 
     # --- root graph: structural only, no Dataset/DatasetSeries content ---
+    root_description = (
+        f"{settings.DCAT_DEPLOYMENT_NAME} deployment: {len(network_catalog.networks)} "
+        f"Networks, harvested at {network_catalog.harvested_at}. Datastreams with no "
+        "assigned Network are served from the orphan sub-catalog."
+    )
+    root_catalog_uri = _catalog_uri()
+
     root_g = Graph()
     _bind_namespaces(root_g)
     root_pub = _add_publisher_agent(root_g, settings)
-    root_catalog_uri = _catalog_uri()
-
     _add_root_catalog_and_service(
         root_g, settings, root_pub,
-        description=(
-            f"{settings.DCAT_DEPLOYMENT_NAME} deployment: {len(network_catalog.networks)} "
-            f"Networks, harvested at {network_catalog.harvested_at}. Datastreams with no "
-            "assigned Network are served from the orphan sub-catalog."
-        ),
+        description=root_description,
         catalog_uri=root_catalog_uri,
         part_uris=part_uris,
     )
@@ -951,6 +956,26 @@ def build_dcat_catalog_with_networks(
     for net in network_catalog.networks:
         if net.id not in CATALOG_CLOSED_NETWORKS:
             root_g.add((root_catalog_uri, DCAT.catalog, _catalog_uri(network_id=net.id)))
+
+    # Second root graph variant: same as root_g but with closed networks
+    # included in hasPart/catalog too. Built once here at harvest time
+    # (structural-only, so cheap to duplicate) and served only to
+    # authenticated callers -- see api.py's dcat_root/dcat_root_ttl, which
+    # mirrors stac_transformer.py's closed_network_ids/stac_root pattern
+    # rather than doing per-request RDF surgery on every request.
+    root_g_all = Graph()
+    _bind_namespaces(root_g_all)
+    root_pub_all = _add_publisher_agent(root_g_all, settings)
+    _add_root_catalog_and_service(
+        root_g_all, settings, root_pub_all,
+        description=root_description,
+        catalog_uri=root_catalog_uri,
+        part_uris=part_uris + closed_part_uris,
+    )
+    root_g_all.add((root_catalog_uri, DCAT.service, root_catalog_uri))
+    root_g_all.add((root_catalog_uri, DCAT.catalog, orphan_catalog_uri))
+    for net in network_catalog.networks:
+        root_g_all.add((root_catalog_uri, DCAT.catalog, _catalog_uri(network_id=net.id)))
 
     logger.info(
         "DCAT network transform complete: %d Networks, %d DatasetSeries, "
