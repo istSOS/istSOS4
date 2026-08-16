@@ -49,16 +49,64 @@ DCAT_TRANSFORMER: bool = os.getenv("DCAT_TRANSFORMER", "0").strip() == "1"
 # /collections, /dcat/root etc.).
 OPEN_CATALOG_METADATA: bool = os.getenv("OPEN_CATALOG_METADATA", "1").strip() == "1"
 
-# Comma-separated integer network ids whose existence must not be leaked
-# to unauthenticated callers (returns 404, not 401). Only meaningful when
-# AUTHORIZATION=1 and ANONYMOUS_VIEWER=0. Malformed tokens are logged and
-# skipped rather than raising, same warn-and-continue style as
-# resolve_license_uri below.
-def _parse_closed_networks() -> frozenset[int]:
+# Comma-separated network ids and/or names whose existence must not be
+# leaked to unauthenticated callers (returns 404, not 401). Only meaningful
+# when AUTHORIZATION=1 and ANONYMOUS_VIEWER=0.
+#
+# Tokens may be either a literal integer network id (applied immediately,
+# no DB round trip needed) or a Network name (e.g. "Rain Gauges"), which is
+# resolved to an id by a single query against sensorthings."Network" --
+# see resolve_closed_networks() below. Names let operators write
+# CATALOG_CLOSED_NETWORKS without knowing/looking up ids first, and keep
+# working across environments where the same Network name may have a
+# different id (e.g. staging vs prod restored from different dumps).
+#
+# CATALOG_CLOSED_NETWORKS itself is a small mutable registry (see
+# _ClosedNetworksRegistry), not a plain frozenset. Every module that does
+# `from app.v1.connector.config import CATALOG_CLOSED_NETWORKS` binds the
+# *object*, so resolve_closed_networks() can update its contents in place
+# once the name lookup finishes, and every importer sees the update --
+# without that, only config.py's own copy of the name would change,
+# exactly the trap tests/connector/conftest.py's docstring warns about for
+# plain module-level constants. Every consumer only ever does
+# `x in CATALOG_CLOSED_NETWORKS`, so this is a drop-in replacement for the
+# old frozenset (a plain frozenset -- as tests monkeypatch in -- still
+# satisfies that same `in` contract).
+class _ClosedNetworksRegistry:
+    """Mutable set-like container so in-place updates are visible to every
+    module that imported CATALOG_CLOSED_NETWORKS by name."""
+
+    def __init__(self, initial: frozenset[int] = frozenset()) -> None:
+        self._ids = initial
+
+    def __contains__(self, network_id: object) -> bool:
+        return network_id in self._ids
+
+    def __iter__(self):
+        return iter(self._ids)
+
+    def __len__(self) -> int:
+        return len(self._ids)
+
+    def __repr__(self) -> str:
+        return f"ClosedNetworks({sorted(self._ids)!r})"
+
+    def set(self, ids: frozenset[int]) -> None:
+        self._ids = frozenset(ids)
+
+
+def _parse_closed_network_tokens() -> tuple[frozenset[int], frozenset[str]]:
+    """
+    Split CATALOG_CLOSED_NETWORKS into literal ids (usable immediately) and
+    name tokens (need resolve_closed_networks() to become ids). Empty
+    tokens are silently skipped; nothing here can raise.
+    """
     raw = os.getenv("CATALOG_CLOSED_NETWORKS", "").strip()
     if not raw:
-        return frozenset()
+        return frozenset(), frozenset()
+
     ids: set[int] = set()
+    names: set[str] = set()
     for token in raw.split(","):
         token = token.strip()
         if not token:
@@ -66,14 +114,63 @@ def _parse_closed_networks() -> frozenset[int]:
         try:
             ids.add(int(token))
         except ValueError:
-            logger.warning(
-                "CATALOG_CLOSED_NETWORKS: ignoring malformed token %r (expected an integer network id)",
-                token,
-            )
-    return frozenset(ids)
+            names.add(token)
+    return frozenset(ids), frozenset(names)
 
 
-CATALOG_CLOSED_NETWORKS: frozenset[int] = _parse_closed_networks()
+_CLOSED_NETWORK_LITERAL_IDS, _CLOSED_NETWORK_NAMES = _parse_closed_network_tokens()
+
+CATALOG_CLOSED_NETWORKS = _ClosedNetworksRegistry(_CLOSED_NETWORK_LITERAL_IDS)
+
+_NETWORK_NAME_LOOKUP_QUERY = 'SELECT id, name FROM sensorthings."Network" WHERE name = ANY($1::text[]);'
+
+
+async def resolve_closed_networks(pool) -> None:
+    """
+    Resolve the name tokens in CATALOG_CLOSED_NETWORKS (e.g.
+    "Rain Gauges,Snow Stations") against sensorthings."Network" and fold
+    the resulting ids into CATALOG_CLOSED_NETWORKS in place.
+
+    Call once at startup, after the Postgres pool exists (main.py's
+    lifespan, alongside start_scheduler()) and before requests are served.
+    No-op, no DB call at all, when CATALOG_CLOSED_NETWORKS was only ever
+    given integer ids -- the common case pays nothing extra.
+
+    Same warn-and-continue style as the rest of this module: a name with
+    no matching Network is logged and skipped rather than raising, so one
+    typo doesn't take the whole gate (and every id it protects) down.
+    """
+    if not _CLOSED_NETWORK_NAMES:
+        return
+
+    try:
+        rows = await pool.fetch(_NETWORK_NAME_LOOKUP_QUERY, list(_CLOSED_NETWORK_NAMES))
+    except Exception:
+        logger.exception(
+            "CATALOG_CLOSED_NETWORKS: failed to resolve network names %s to ids -- "
+            "these names will NOT be treated as closed until this is fixed and the "
+            "app restarted",
+            sorted(_CLOSED_NETWORK_NAMES),
+        )
+        return
+
+    resolved: dict[str, int] = {row["name"]: row["id"] for row in rows}
+
+    unmatched = _CLOSED_NETWORK_NAMES - resolved.keys()
+    if unmatched:
+        logger.warning(
+            "CATALOG_CLOSED_NETWORKS: no Network found with name(s) %s -- "
+            "ignoring (check spelling/case, names must match sensorthings.\"Network\".name exactly)",
+            sorted(unmatched),
+        )
+
+    CATALOG_CLOSED_NETWORKS.set(_CLOSED_NETWORK_LITERAL_IDS | set(resolved.values()))
+
+    logger.info(
+        "CATALOG_CLOSED_NETWORKS resolved: %d id(s) direct, %d name(s) -> %d id(s), %d total",
+        len(_CLOSED_NETWORK_LITERAL_IDS), len(_CLOSED_NETWORK_NAMES), len(resolved),
+        len(_CLOSED_NETWORK_LITERAL_IDS) + len(resolved),
+    )
 
 # Human-readable text embedded in the STAC authentication extension's
 # auth:schemes entry (see stac_transformer._auth_scheme), telling a catalog
