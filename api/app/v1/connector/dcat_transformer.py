@@ -357,7 +357,7 @@ def _add_distributions(
     dist_json = _distribution_uri(ds_id, "observations-json")
     g.add((dataset_uri, DCAT.distribution, dist_json))
     g.add((dist_json, RDF.type, DCAT.Distribution))
-    g.add((dist_json, DCT.title, Literal(f"{ds_name} \u2014 JSON observations feed")))
+    g.add((dist_json, DCT.title, Literal(f"{ds_name} - JSON observations feed")))
     g.add((dist_json, DCT.description, Literal(
         f"Live OGC SensorThings Observations feed for Datastream: {ds_name}"
     )))
@@ -372,7 +372,7 @@ def _add_distributions(
     dist_csv = _distribution_uri(ds_id, "observations-csv")
     g.add((dataset_uri, DCAT.distribution, dist_csv))
     g.add((dist_csv, RDF.type, DCAT.Distribution))
-    g.add((dist_csv, DCT.title, Literal(f"{ds_name} \u2014 CSV export")))
+    g.add((dist_csv, DCT.title, Literal(f"{ds_name} - CSV export")))
     g.add((dist_csv, DCT.description, Literal(
         f"CSV bulk export of Observations for Datastream: {ds_name}"
     )))
@@ -443,7 +443,7 @@ def _build_dataset(
     g.add((dataset_uri, RDF.type, DCAT.Dataset))
     g.add((dataset_uri, DCT.identifier, Literal(f"datastream-{ds_id}")))
 
-    title = f"{thing.name} \u2014 {ds.get('name', '')}"
+    title = f"{thing.name} - {ds.get('name', '')}"
     g.add((dataset_uri, DCT.title, Literal(title, lang=lang)))
     g.add((dataset_uri, DCT.description, Literal(_compose_dataset_description(ds, thing), lang=lang)))
 
@@ -845,11 +845,14 @@ def build_dcat_catalog_with_networks(
     """
     Build the NETWORK=1 DCAT-AP 3.0 graphs:
 
-        Graph (root)   -- Catalog + DataService + Agents + hasPart links only
-        Graph (orphan) -- its own Catalog, orphan Things/Datastreams
+        Graph (root)     -- Catalog + DataService + Agents + hasPart links only
+        Graph (root_all) -- same as root, but hasPart/catalog also lists closed
+                             Networks. Served only to authenticated callers --
+                             see api.py's dcat_root/dcat_root_ttl.
+        Graph (orphan)   -- its own Catalog, orphan Things/Datastreams
         Graph (per Network) -- its own Catalog, that Network's Things/Datastreams
 
-    Returns {"root": Graph, "orphan": Graph, "networks": {network_id: Graph, ...}}.
+    Returns {"root": Graph, "root_all": Graph, "orphan": Graph, "networks": {network_id: Graph, ...}}.
 
     Deliberately does NOT collapse orphan into root the way
     build_stac_catalog_with_networks() serves its orphan scope directly from
@@ -983,4 +986,4 @@ def build_dcat_catalog_with_networks(
         len(network_catalog.networks), total_series, total_datasets, total_skipped,
     )
 
-    return {"root": root_g, "orphan": orphan_g, "networks": network_graphs}
+    return {"root": root_g, "root_all": root_g_all, "orphan": orphan_g, "networks": network_graphs}

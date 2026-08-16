@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-import os
 
 import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -42,7 +41,7 @@ from app.v1.connector.cache import (
     write_dcat_catalog,
     write_dcat_catalog_with_networks,
 )
-from app.v1.connector.config import get_settings, STAC_TRANSFORMER, DCAT_TRANSFORMER
+from app.v1.connector.config import get_settings, NETWORK, STAC_TRANSFORMER, DCAT_TRANSFORMER
 from app.v1.connector.harvester import harvest, harvest_with_networks
 from app.v1.connector.stac_transformer import build_stac_catalog, build_stac_catalog_with_networks
 from app.v1.connector.dcat_transformer import build_dcat_catalog, build_dcat_catalog_with_networks
@@ -50,7 +49,6 @@ from app.v1.connector.dcat_transformer import build_dcat_catalog, build_dcat_cat
 logger = logging.getLogger(__name__)
 
 _HARVEST_LOCK_KEY = 726419950_1
-NETWORK = bool(os.getenv("NETWORK"))  # read once at startup, matches every other config constant
 
 _dcat_misconfig_warned = False
 

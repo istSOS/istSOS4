@@ -51,6 +51,8 @@ from app.v1.connector.cache import (
     get_dcat_metadata,
     get_dcat_root,
     get_dcat_root_jsonld,
+    get_dcat_root_all,
+    get_dcat_root_all_jsonld,
     get_dcat_orphan,
     get_dcat_orphan_jsonld,
     get_dcat_network,
@@ -64,7 +66,7 @@ from fastapi import APIRouter, Depends, status, Request
 from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
-cache = get_settings()
+settings = get_settings()
 
 
 _STAC_ROOT_HREF = f"{HOSTNAME}{SUBPATH}{VERSION}/connector/stac"
@@ -150,13 +152,13 @@ async def get_connector_root(request: Request):
         "stac_url": f"{base_url}{current_path}/stac",
 
         "dcat_enabled": DCAT_TRANSFORMER,
-        "dcat_mandatory_fields_set": cache.has_mandatory_dcat_fields,
+        "dcat_mandatory_fields_set": settings.has_mandatory_dcat_fields,
         "dcat_availability": dcat_meta["dcat_availability"],
         "dcat_url_jsonld": f"{base_url}{current_path}/dcat/root",
         "dcat_url_ttl": f"{base_url}{current_path}/dcat/root.ttl",
         "dcat_network_ids": dcat_meta["network_ids"],
 
-        "harvester_interval_minutes": cache.HARVEST_INTERVAL_MINUTES,
+        "harvester_interval_minutes": settings.HARVEST_INTERVAL_MINUTES,
         "last_fetch": stac_meta["last_fetch"] or dcat_meta["last_fetch"],
     }
 
@@ -421,17 +423,30 @@ _turtle_not_found = _not_found
         "this carries every DatasetSeries and Dataset directly. Under "
         "NETWORK=1 this is structural only (Catalog + DataService + "
         "dct:hasPart links) -- fetch /dcat/orphan and /dcat/{network_id} "
-        "for the scopes that carry Dataset content. See /dcat/root.ttl "
-        "for the same document as Turtle."
+        "for the scopes that carry Dataset content. Closed Networks are "
+        "omitted from hasPart/dcat:catalog unless the caller is "
+        "authenticated (same reveal rule as /stac's root Catalog). "
+        "See /dcat/root.ttl for the same document as Turtle."
     ),
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
 @catch_errors
-async def dcat_root(gate_result: Optional[JSONResponse] = Depends(gate)):
+async def dcat_root(
+    gate_result: Optional[JSONResponse] = Depends(gate),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
+):
     if gate_result is not None:
         return gate_result
-    jsonld = await get_dcat_root_jsonld()
+    jsonld = None
+    if current_user is not None:
+        # NETWORK=1 writes a "root:all" scope for exactly this case; under
+        # NETWORK=0 no such scope exists (no Networks to hide in the first
+        # place), so this falls through to the plain root below -- same
+        # content either way when nothing is closed.
+        jsonld = await get_dcat_root_all_jsonld()
+    if jsonld is None:
+        jsonld = await get_dcat_root_jsonld()
     if jsonld is None:
         return _turtle_unavailable(
             "DCAT catalog has not been generated yet. "
@@ -450,10 +465,17 @@ async def dcat_root(gate_result: Optional[JSONResponse] = Depends(gate)):
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
 @catch_errors
-async def dcat_root_ttl(gate_result: Optional[JSONResponse] = Depends(gate)):
+async def dcat_root_ttl(
+    gate_result: Optional[JSONResponse] = Depends(gate),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
+):
     if gate_result is not None:
         return gate_result
-    turtle = await get_dcat_root()
+    turtle = None
+    if current_user is not None:
+        turtle = await get_dcat_root_all()
+    if turtle is None:
+        turtle = await get_dcat_root()
     if turtle is None:
         return _turtle_unavailable(
             "DCAT catalog has not been generated yet. "
