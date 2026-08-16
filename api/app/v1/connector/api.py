@@ -39,6 +39,7 @@ from typing import Optional
 
 from app import HOSTNAME, SUBPATH, VERSION
 from app.v1.connector.auth_gate import gate
+from app.oauth import get_current_user_optional
 from app.v1.connector.cache import (
     get_catalog,
     get_collection,
@@ -174,7 +175,10 @@ async def get_connector_root(request: Request):
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
 @catch_errors
-async def stac_root(gate_result: Optional[JSONResponse] = Depends(gate)):
+async def stac_root(
+    gate_result: Optional[JSONResponse] = Depends(gate),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
+):
     if gate_result is not None:
         return gate_result
     catalog = await get_catalog()
@@ -184,7 +188,22 @@ async def stac_root(gate_result: Optional[JSONResponse] = Depends(gate)):
             "Try again after the next scheduled harvest cycle."
         )
 
-    return {k: v for k, v in catalog.items() if k not in ("collection_ids", "network_ids")}
+    result = {k: v for k, v in catalog.items() if k not in ("collection_ids", "network_ids", "closed_network_ids")}
+
+    # Closed networks are stripped from "links" at cache-write time (no
+    # per-request auth context there); an authenticated caller still gets
+    # the same closed-network gate bypass everywhere else (see
+    # auth_gate.gate), so re-add their child links here for consistency --
+    # otherwise an authenticated user could reach /stac/{id} directly but
+    # never discover it existed from root.
+    if current_user is not None:
+        closed_links = [
+            {"rel": "child", "href": f"{_STAC_ROOT_HREF}/{nid}", "type": "application/json"}
+            for nid in catalog.get("closed_network_ids", [])
+        ]
+        result["links"] = [*result.get("links", []), *closed_links]
+
+    return result
 
 
 @v1.api_route(

@@ -195,6 +195,8 @@ def _apply_catalog_auth_extension(catalog_dict: dict) -> None:
     catalog_dict["auth:schemes"] = _auth_schemes()
 
 
+
+
 def _resolve_item_geometry(
     thing: HarvestedThing, ds: dict
 ) -> tuple[Optional[dict], Optional[list[float]]]:
@@ -837,9 +839,16 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
     # Filter closed network ids from the root catalog's public metadata.
     # The closed networks' subcatalogs are still built and cached normally
     # (so authenticated callers can reach them by id), they are just not
-    # advertised from root.
+    # advertised from root -- unless the caller is authenticated, in which
+    # case api.py's stac_root re-adds these links at request time using
+    # closed_network_ids (see there for why this can't be baked into the
+    # cached "links" list itself: the cache is written once per harvest
+    # cycle with no per-request auth context).
     visible_network_ids = [
         nid for nid in network_ids if nid not in CATALOG_CLOSED_NETWORKS
+    ]
+    closed_network_ids = [
+        nid for nid in network_ids if nid in CATALOG_CLOSED_NETWORKS
     ]
     root_catalog = {
         "type": "Catalog",
@@ -855,6 +864,7 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
         "links": _catalog_nav_links(orphan_ids, network_ids=visible_network_ids),
         "collection_ids": orphan_ids,
         "network_ids": visible_network_ids,
+        "closed_network_ids": closed_network_ids,
     }
     if settings.STAC_CATALOG_TITLE:
         root_catalog["title"] = settings.STAC_CATALOG_TITLE
