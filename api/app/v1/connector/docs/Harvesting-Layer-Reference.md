@@ -12,7 +12,7 @@
 
 ---
 
-## Scheduling model (confirmed June 15 mentor meeting)
+## Scheduling model
 
 **The cycle, end to end:**
 
@@ -21,13 +21,15 @@ flowchart TD
     A["APScheduler fires\nevery HARVEST_INTERVAL_MINUTES"] --> B["Try advisory lock"]
     B -->|not acquired| C["Skip this cycle"]
     B -->|acquired| D["harvest(pool)\nrun JOIN, build HarvestedCatalog"]
-    D --> E["transform_to_stac(catalog)"]
-    D --> F["transform_to_dcat(catalog)"]
-    E --> G["Write stac:catalog to Redis"]
-    F --> H["Write dcat:catalog to Redis"]
+    D --> E["build_stac_catalog(catalog)"]
+    D --> F["build_dcat_catalog(catalog)"]
+    E --> G["write_stac_catalog()\nflattens into stac:catalog / stac:collection:* / stac:item:*"]
+    F --> H["write_dcat_catalog()\nserializes into dcat:graph:root (+ :jsonld)"]
     G --> I["Release advisory lock"]
     H --> I
 ```
+
+Each standard is written independently -- a DCAT write failing does not roll back the STAC write that just succeeded in the same cycle, and vice versa. Under `NETWORK=1`, `harvest_with_networks()` and the `*_with_networks()` transformer/writer variants run instead, producing the extra `stac:network:*` and `dcat:graph:orphan` / `dcat:graph:net-{id}` keys documented in the connector README's cache scheme section.
 
 Redis keys carry no TTL of their own. They simply hold "the latest valid cache" and are overwritten every cycle. If a cycle fails partway, the previous valid cache remains in Redis until the next successful cycle replaces it.
 
@@ -231,8 +233,14 @@ async def scheduled_harvest_job(pool: asyncpg.Pool, redis: Redis) -> None:
 `v1/connector/cache.py` exposes simple reads for the API layer:
 
 ```python
-async def get_stac(redis: Redis) -> dict | None: ...
-async def get_dcat(redis: Redis) -> bytes | None: ...
+# cache.py's actual reader surface (per-scope, not one big get_stac/get_dcat):
+async def get_catalog() -> dict | None: ...
+async def get_collection(collection_id: str) -> dict | None: ...
+async def get_item(collection_id: str, item_id: str) -> dict | None: ...
+async def get_dcat_root() -> str | None: ...
+async def get_dcat_root_jsonld() -> str | None: ...
+# ...and the NETWORK=1 / closed-network-reveal siblings of each -- see
+# the connector README's Redis cache scheme section for the full key list.
 ```
 
 These never trigger a harvest. If Redis has no value yet (first boot, before the first scheduled cycle completes), the API layer returns a 503 rather than blocking on a synchronous harvest.
@@ -247,10 +255,10 @@ These never trigger a harvest. If Redis has no value yet (first boot, before the
 4. Every `HarvestedThing.id` is unique within a `HarvestedCatalog`.
 5. Every Datastream dict `id` is globally unique across all Things in the catalog.
 6. `geometry` in a Location dict, if not `None`, is a dict with at minimum a `"type"` key. Not validated as well-formed GeoJSON.
-7. `phenomenon_time` in a Datastream dict, if not `None`, is a string in `"start/end"` format where start and end are ISO 8601 instants. Not parsed.
+7. `phenomenon_time` in a Datastream dict, if not `None`, is either an `asyncpg.Range` (the native decoding of the Postgres `tstzrange` column, the common case) or a string in `"start/end"` format (accepted as a fallback, e.g. for manually-constructed test dicts). Not parsed into datetimes here -- that happens in `utils.parse_phenomenon_time`, called by both transformers.
 8. `observed_area` in a Datastream dict, if not `None`, is a dict with at minimum a `"type"` key.
 9. `name` on `HarvestedThing` is never `None`. Defaults to `""` with a warning if the Postgres row returns null. Same applies to `name` inside Location, Datastream, ObservedProperty, and Sensor dicts.
-10. Redis is never left holding a partially written cache cycle -- both `stac:catalog` and `dcat:catalog` are written together within one `scheduled_harvest_job()` run, or neither is, since a failure before both writes complete leaves the previous valid cache untouched.
+10. Redis is never left holding a partially written cache cycle for a given standard -- but the two standards are independent of each other. `write_stac_catalog()` purges and rewrites every `stac:*` key as one unit, and `write_dcat_catalog()` does the same for `dcat:*`; a DCAT write failing partway does not roll back a STAC write that already succeeded in the same cycle, and vice versa (see `_run_cycle` in `scheduler.py`).
 11. `HarvestedCatalog.harvested_at` is a valid ISO 8601 UTC string.
 12. `HarvestedCatalog` and its nested structures must not be mutated by the transformer.
 
@@ -262,4 +270,4 @@ One environment variable used, defined in `v1/connector/config.py`:
 
 | Variable | Default | Notes |
 |---|---|---|
-| `HARVEST_INTERVAL_MINUTES` | `15` | How often `scheduled_harvest_job()` fires.|
+| `HARVEST_INTERVAL_MINUTES` | `5` | How often `scheduled_harvest_job()` fires.|
