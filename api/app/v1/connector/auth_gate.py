@@ -29,10 +29,17 @@ from fastapi.responses import JSONResponse
 from app import AUTHORIZATION, ANONYMOUS_VIEWER
 from app.oauth import get_current_user_optional
 from app.v1.connector.config import CATALOG_CLOSED_NETWORKS, OPEN_CATALOG_METADATA
+from app.v1.connector.utils import error_response
 
 
 def _login_required(detail: str = "Login required.") -> JSONResponse:
-    """Return a 401 Unauthorized response with WWW-Authenticate header."""
+    """Return a 401 Unauthorized response with WWW-Authenticate header.
+
+    Deliberately a different envelope shape ({"detail": ...}) than
+    error_response's {"code", "type", "message"} -- this is the shape
+    FastAPI/OAuth2 clients expect from a 401, so it's kept separate
+    rather than forced into the connector's own envelope.
+    """
     return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,
         content={"detail": detail},
@@ -41,15 +48,8 @@ def _login_required(detail: str = "Login required.") -> JSONResponse:
 
 
 def _hidden(detail: str = "Not found.") -> JSONResponse:
-    """Return a 404 Not Found response matching api.py's _not_found shape."""
-    return JSONResponse(
-        status_code=status.HTTP_404_NOT_FOUND,
-        content={
-            "code": 404,
-            "type": "error",
-            "message": detail,
-        },
-    )
+    """404 response, same envelope as api.py's error_response-based helpers."""
+    return error_response(status.HTTP_404_NOT_FOUND, detail)
 
 
 async def gate(

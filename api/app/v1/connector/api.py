@@ -57,6 +57,7 @@ from app.v1.connector.cache import (
 )
 
 from app.v1.connector.config import get_settings, STAC_TRANSFORMER, DCAT_TRANSFORMER
+from app.v1.connector.utils import catch_errors, error_response
 
 from fastapi import APIRouter, Depends, status, Request
 from fastapi.responses import JSONResponse, Response
@@ -74,25 +75,11 @@ def _cache_unavailable(detail: str) -> JSONResponse:
     by a harvest cycle -- not an error, just "ask again after the next
     scheduled run."
     """
-    return JSONResponse(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        content={
-            "code": 503,
-            "type": "error",
-            "message": detail,
-        },
-    )
+    return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, detail)
 
 
 def _not_found(detail: str) -> JSONResponse:
-    return JSONResponse(
-        status_code=status.HTTP_404_NOT_FOUND,
-        content={
-            "code": 404,
-            "type": "error",
-            "message": detail,
-        },
-    )
+    return error_response(status.HTTP_404_NOT_FOUND, detail)
 
 
 def _disabled(env_var: str) -> JSONResponse:
@@ -186,24 +173,18 @@ async def get_connector_root(request: Request):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
+@catch_errors
 async def stac_root(gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        catalog = await get_catalog()
-        if catalog is None:
-            return _cache_unavailable(
-                "STAC catalog has not been generated yet. "
-                "Try again after the next scheduled harvest cycle."
-            )
-
-        return {k: v for k, v in catalog.items() if k not in ("collection_ids", "network_ids")}
-
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
+    if gate_result is not None:
+        return gate_result
+    catalog = await get_catalog()
+    if catalog is None:
+        return _cache_unavailable(
+            "STAC catalog has not been generated yet. "
+            "Try again after the next scheduled harvest cycle."
         )
+
+    return {k: v for k, v in catalog.items() if k not in ("collection_ids", "network_ids")}
 
 
 @v1.api_route(
@@ -218,46 +199,41 @@ async def stac_root(gate_result: Optional[JSONResponse] = Depends(gate)):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
+@catch_errors
 async def stac_collections(gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        catalog = await get_catalog()
-        if catalog is None:
-            return _cache_unavailable(
-                "STAC catalog has not been generated yet. "
-                "Try again after the next scheduled harvest cycle."
-            )
-
-        collection_ids = catalog.get("collection_ids", [])
-
-        collections = []
-        for cid in collection_ids:
-            coll = await get_collection(cid)
-            if coll is None:
-                # Transient mid-write miss: skip rather than 503 the whole
-                # response. The next harvest cycle will make it consistent.
-                continue
-
-            collections.append(
-                {k: v for k, v in coll.items() if k != "item_ids"}
-            )
-
-        return {
-            "collections": collections,
-            "links": [
-                {
-                    "rel": "self",
-                    "href": f"{_STAC_ROOT_HREF}/collections",
-                    "type": "application/json",
-                }
-            ],
-        }
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
+    if gate_result is not None:
+        return gate_result
+    catalog = await get_catalog()
+    if catalog is None:
+        return _cache_unavailable(
+            "STAC catalog has not been generated yet. "
+            "Try again after the next scheduled harvest cycle."
         )
+
+    collection_ids = catalog.get("collection_ids", [])
+
+    collections = []
+    for cid in collection_ids:
+        coll = await get_collection(cid)
+        if coll is None:
+            # Transient mid-write miss: skip rather than 503 the whole
+            # response. The next harvest cycle will make it consistent.
+            continue
+
+        collections.append(
+            {k: v for k, v in coll.items() if k != "item_ids"}
+        )
+
+    return {
+        "collections": collections,
+        "links": [
+            {
+                "rel": "self",
+                "href": f"{_STAC_ROOT_HREF}/collections",
+                "type": "application/json",
+            }
+        ],
+    }
 
 
 @v1.api_route(
@@ -269,13 +245,11 @@ async def stac_collections(gate_result: Optional[JSONResponse] = Depends(gate)):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
+@catch_errors
 async def stac_collection(collection_id: str, gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        return await _collection_envelope(await get_collection(collection_id), collection_id)
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    return await _collection_envelope(await get_collection(collection_id), collection_id)
 
 
 @v1.api_route(
@@ -290,15 +264,13 @@ async def stac_collection(collection_id: str, gate_result: Optional[JSONResponse
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
+@catch_errors
 async def stac_items(collection_id: str, gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        coll = await get_collection(collection_id)
-        collection_href = f"{_STAC_ROOT_HREF}/collections/{collection_id}"
-        return await _items_envelope(coll, collection_id, collection_href, item_fetch=lambda iid: get_item(collection_id, iid))
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    coll = await get_collection(collection_id)
+    collection_href = f"{_STAC_ROOT_HREF}/collections/{collection_id}"
+    return await _items_envelope(coll, collection_id, collection_href, item_fetch=lambda iid: get_item(collection_id, iid))
 
 
 @v1.api_route(
@@ -310,14 +282,12 @@ async def stac_items(collection_id: str, gate_result: Optional[JSONResponse] = D
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
+@catch_errors
 async def stac_item(collection_id: str, item_id: str, gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        coll = await get_collection(collection_id)
-        return await _item_envelope(coll, collection_id, item_id, item_fetch=lambda iid: get_item(collection_id, iid))
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    coll = await get_collection(collection_id)
+    return await _item_envelope(coll, collection_id, item_id, item_fetch=lambda iid: get_item(collection_id, iid))
 
 
 # Network paths
@@ -332,59 +302,51 @@ async def stac_item(collection_id: str, item_id: str, gate_result: Optional[JSON
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
+@catch_errors
 async def stac_network_root(network_id: int, gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        net_catalog = await get_network_catalog(network_id)
-        if net_catalog is None:
-            return _not_found(f"Network '{network_id}' not found.")
-        return {k: v for k, v in net_catalog.items() if k != "collection_ids"}
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    net_catalog = await get_network_catalog(network_id)
+    if net_catalog is None:
+        return _not_found(f"Network '{network_id}' not found.")
+    return {k: v for k, v in net_catalog.items() if k != "collection_ids"}
 
 
 @v1.api_route("/stac/{network_id}/collections/{collection_id}", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
+@catch_errors
 async def stac_network_collection(network_id: int, collection_id: str, gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        coll = await get_network_collection(network_id, collection_id)
-        return await _collection_envelope(coll, collection_id)
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    coll = await get_network_collection(network_id, collection_id)
+    return await _collection_envelope(coll, collection_id)
 
 
 @v1.api_route("/stac/{network_id}/collections/{collection_id}/items", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
+@catch_errors
 async def stac_network_items(network_id: int, collection_id: str, gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        coll = await get_network_collection(network_id, collection_id)
-        collection_href = f"{_STAC_ROOT_HREF}/{network_id}/collections/{collection_id}"
-        return await _items_envelope(
-            coll, collection_id, collection_href,
-            item_fetch=lambda iid: get_network_item(network_id, collection_id, iid),
-        )
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    coll = await get_network_collection(network_id, collection_id)
+    collection_href = f"{_STAC_ROOT_HREF}/{network_id}/collections/{collection_id}"
+    return await _items_envelope(
+        coll, collection_id, collection_href,
+        item_fetch=lambda iid: get_network_item(network_id, collection_id, iid),
+    )
 
 
 @v1.api_route("/stac/{network_id}/collections/{collection_id}/items/{item_id}", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
+@catch_errors
 async def stac_network_item(network_id: int, collection_id: str, item_id: str, gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        coll = await get_network_collection(network_id, collection_id)
-        return await _item_envelope(
-            coll, collection_id, item_id,
-            item_fetch=lambda iid: get_network_item(network_id, collection_id, iid),
-        )
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    coll = await get_network_collection(network_id, collection_id)
+    return await _item_envelope(
+        coll, collection_id, item_id,
+        item_fetch=lambda iid: get_network_item(network_id, collection_id, iid),
+    )
 
 
 # DCAT-AP 3.0 routes
@@ -422,18 +384,12 @@ def _jsonld_response(body: str) -> Response:
     return Response(content=body, media_type=_JSONLD_MEDIA_TYPE, status_code=status.HTTP_200_OK)
 
 
-def _turtle_unavailable(detail: str) -> JSONResponse:
-    return JSONResponse(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        content={"code": 503, "type": "error", "message": detail},
-    )
-
-
-def _turtle_not_found(detail: str) -> JSONResponse:
-    return JSONResponse(
-        status_code=status.HTTP_404_NOT_FOUND,
-        content={"code": 404, "type": "error", "message": detail},
-    )
+# DCAT's cache-miss/not-found responses are the exact same envelope shape
+# as STAC's above (503 "not written yet" / 404 "not found") -- they used
+# to be separate byte-for-byte-identical functions (_turtle_unavailable,
+# _turtle_not_found); aliased instead of duplicated now.
+_turtle_unavailable = _cache_unavailable
+_turtle_not_found = _not_found
 
 
 @v1.api_route(
@@ -452,19 +408,17 @@ def _turtle_not_found(detail: str) -> JSONResponse:
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
+@catch_errors
 async def dcat_root(gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        jsonld = await get_dcat_root_jsonld()
-        if jsonld is None:
-            return _turtle_unavailable(
-                "DCAT catalog has not been generated yet. "
-                "Try again after the next scheduled harvest cycle."
-            )
-        return _jsonld_response(jsonld)
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    jsonld = await get_dcat_root_jsonld()
+    if jsonld is None:
+        return _turtle_unavailable(
+            "DCAT catalog has not been generated yet. "
+            "Try again after the next scheduled harvest cycle."
+        )
+    return _jsonld_response(jsonld)
 
 
 @v1.api_route(
@@ -476,19 +430,17 @@ async def dcat_root(gate_result: Optional[JSONResponse] = Depends(gate)):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
+@catch_errors
 async def dcat_root_ttl(gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        turtle = await get_dcat_root()
-        if turtle is None:
-            return _turtle_unavailable(
-                "DCAT catalog has not been generated yet. "
-                "Try again after the next scheduled harvest cycle."
-            )
-        return _turtle_response(turtle)
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    turtle = await get_dcat_root()
+    if turtle is None:
+        return _turtle_unavailable(
+            "DCAT catalog has not been generated yet. "
+            "Try again after the next scheduled harvest cycle."
+        )
+    return _turtle_response(turtle)
 
 
 @v1.api_route(
@@ -505,20 +457,18 @@ async def dcat_root_ttl(gate_result: Optional[JSONResponse] = Depends(gate)):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
+@catch_errors
 async def dcat_orphan(gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        jsonld = await get_dcat_orphan_jsonld()
-        if jsonld is None:
-            return _turtle_not_found(
-                "No orphan DCAT catalog is available. This deployment may "
-                "be running with NETWORK=0, or no harvest cycle has "
-                "completed yet."
-            )
-        return _jsonld_response(jsonld)
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    jsonld = await get_dcat_orphan_jsonld()
+    if jsonld is None:
+        return _turtle_not_found(
+            "No orphan DCAT catalog is available. This deployment may "
+            "be running with NETWORK=0, or no harvest cycle has "
+            "completed yet."
+        )
+    return _jsonld_response(jsonld)
 
 
 @v1.api_route(
@@ -530,20 +480,18 @@ async def dcat_orphan(gate_result: Optional[JSONResponse] = Depends(gate)):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
+@catch_errors
 async def dcat_orphan_ttl(gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        turtle = await get_dcat_orphan()
-        if turtle is None:
-            return _turtle_not_found(
-                "No orphan DCAT catalog is available. This deployment may "
-                "be running with NETWORK=0, or no harvest cycle has "
-                "completed yet."
-            )
-        return _turtle_response(turtle)
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    turtle = await get_dcat_orphan()
+    if turtle is None:
+        return _turtle_not_found(
+            "No orphan DCAT catalog is available. This deployment may "
+            "be running with NETWORK=0, or no harvest cycle has "
+            "completed yet."
+        )
+    return _turtle_response(turtle)
 
 
 @v1.api_route(
@@ -555,16 +503,14 @@ async def dcat_orphan_ttl(gate_result: Optional[JSONResponse] = Depends(gate)):
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
+@catch_errors
 async def dcat_network_ttl(network_id: int, gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        turtle = await get_dcat_network(network_id)
-        if turtle is None:
-            return _turtle_not_found(f"Network '{network_id}' not found.")
-        return _turtle_response(turtle)
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    turtle = await get_dcat_network(network_id)
+    if turtle is None:
+        return _turtle_not_found(f"Network '{network_id}' not found.")
+    return _turtle_response(turtle)
 
 
 @v1.api_route(
@@ -581,13 +527,11 @@ async def dcat_network_ttl(network_id: int, gate_result: Optional[JSONResponse] 
     status_code=status.HTTP_200_OK,
 )
 @_require_enabled(DCAT_TRANSFORMER, "DCAT_TRANSFORMER")
+@catch_errors
 async def dcat_network(network_id: int, gate_result: Optional[JSONResponse] = Depends(gate)):
-    try:
-        if gate_result is not None:
-            return gate_result
-        jsonld = await get_dcat_network_jsonld(network_id)
-        if jsonld is None:
-            return _turtle_not_found(f"Network '{network_id}' not found.")
-        return _jsonld_response(jsonld)
-    except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"code": 400, "type": "error", "message": str(e)})
+    if gate_result is not None:
+        return gate_result
+    jsonld = await get_dcat_network_jsonld(network_id)
+    if jsonld is None:
+        return _turtle_not_found(f"Network '{network_id}' not found.")
+    return _jsonld_response(jsonld)

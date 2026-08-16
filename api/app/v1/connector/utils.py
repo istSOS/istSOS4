@@ -13,24 +13,46 @@
 # limitations under the License.
 
 """
-Cache-key flattening utilities for the STAC catalog.
+Shared helpers for the connector package.
 
-Converts a deeply nested STAC catalog tree into a flat dictionary of keys and 
-values. This allows the API to fetch individual Catalogs, Collections, or Items 
-instantly without needing to load or parse the entire catalog tree.
+Two unrelated groups of helpers live here, kept in one small module rather
+than one apiece because neither is big enough to justify its own file:
 
-Cache key scheme:
-    stac:catalog
-    stac:collection:{collection_id}
-    stac:item:{collection_id}:{item_id}
+1. Cache-key flattening for the STAC catalog (flatten_stac_catalog,
+   CATALOG_KEY) -- converts a deeply nested STAC catalog tree into a flat
+   dictionary of keys and values, so the API can fetch individual
+   Catalogs, Collections, or Items instantly without loading or parsing
+   the entire tree. Cache key scheme:
+       stac:catalog
+       stac:collection:{collection_id}
+       stac:item:{collection_id}:{item_id}
+   Items are namespaced under their parent collection ID for fast lookups
+   without a secondary index or slow search scans.
 
-Items are intentionally namespaced under their parent collection ID to ensure 
-fast lookups without requiring a secondary index or slow search scans.
+2. STA-to-{STAC,DCAT} shared transform helpers (temporal/spatial parsing,
+   href builders) -- these were previously defined twice, once in
+   stac_transformer.py and once in dcat_transformer.py, byte-for-byte
+   identical in every case except _union_bboxes (dcat_transformer.py's
+   version additionally guarded the empty-list case; that guard is kept
+   here since it's strictly safer and every existing call site already
+   checks non-emptiness first anyway, so this changes no behavior).
+   Consolidated here so a fix to, say, phenomenon_time parsing only needs
+   to happen once and can't quietly drift between the two standards.
 """
 
 from __future__ import annotations
 
-from typing import Any
+import functools
+import logging
+from datetime import datetime, timezone
+from typing import Any, Optional, Union
+
+from fastapi import status
+from fastapi.responses import JSONResponse
+
+from app import HOSTNAME, SUBPATH, VERSION
+
+logger = logging.getLogger(__name__)
 
 CATALOG_KEY = "stac:catalog"
 
@@ -85,3 +107,46 @@ def flatten_stac_catalog(root_dict: dict) -> dict[str, Any]:
     flat[CATALOG_KEY] = catalog_entry
 
     return flat
+
+
+# HTTP error envelope helpers
+#
+# api.py had this exact shape -- JSONResponse with a
+# {"code", "type": "error", "message"} body -- built ad hoc in ~15 places:
+# a try/except Exception around every route body returning a 400 this way,
+# plus _cache_unavailable (503)/_not_found (404) in api.py and _hidden
+# (404) in auth_gate.py already hand-rolling the same envelope. Worse,
+# _turtle_unavailable/_turtle_not_found in api.py were byte-for-byte
+# identical to _cache_unavailable/_not_found under different names.
+# Centralized here so there is exactly one place that defines what an
+# error response looks like.
+
+def error_response(status_code: int, detail: str) -> JSONResponse:
+    """Standard connector error envelope: {"code", "type": "error", "message"}."""
+    return JSONResponse(
+        status_code=status_code,
+        content={"code": status_code, "type": "error", "message": detail},
+    )
+
+
+def catch_errors(func):
+    """
+    Route decorator: run the handler, and if it raises, return the
+    standard error_response(400, str(e)) instead of letting FastAPI turn
+    it into a 500 -- replaces the identical try/except Exception block
+    every connector route used to repeat individually.
+
+    Composes with _require_enabled the same way every route already
+    stacked its try/except beneath that decorator: put @catch_errors
+    below @_require_enabled (i.e. closer to `async def`), so a
+    disabled-standard 404 short-circuits before catch_errors is even
+    entered.
+    """
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            return error_response(status.HTTP_400_BAD_REQUEST, str(e))
+    return wrapper
+
