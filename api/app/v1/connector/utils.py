@@ -109,6 +109,130 @@ def flatten_stac_catalog(root_dict: dict) -> dict[str, Any]:
     return flat
 
 
+# Shared STA-to-{STAC,DCAT} transform helpers
+#
+# Moved here verbatim from stac_transformer.py / dcat_transformer.py, which
+# each defined every one of these independently. See module docstring for
+# the one intentional behavior change (_union_bboxes now guards the empty
+# list, which no existing call site could actually trigger).
+
+# Temporal helpers
+def parse_iso(value: Optional[str]) -> Optional[datetime]:
+    """
+    Parse an ISO 8601 string to a timezone-aware datetime, or return None.
+
+    Handles the common STA format with a trailing 'Z' (e.g. 2020-01-01T00:00:00Z).
+    Strings that cannot be parsed are logged and returned as None.
+    """
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        logger.warning("Could not parse ISO 8601 datetime: %r", value)
+        return None
+
+
+def parse_phenomenon_time(
+    phenomenon_time: Union[Any, str, None],
+) -> tuple[Optional[datetime], Optional[datetime]]:
+    """
+    Parse a Datastream phenomenon_time value into (start, end) datetimes.
+
+    Datastream.phenomenon_time is sourced from the istSOS4 Postgres column
+    sensorthings."Datastream"."phenomenonTime", which is a tstzrange.
+    asyncpg decodes tstzrange natively into an asyncpg.Range object;
+    both bounds may already be timezone-aware datetimes (or None for an
+    unbounded side). A plain str is also accepted as a fallback (covers
+    manually-constructed dicts in tests, or a "start/.." / "start/end" form).
+
+    Returns (None, None) when phenomenon_time is None, empty, or start
+    itself is unparseable/missing.
+    """
+    if phenomenon_time is None:
+        return None, None
+
+    if isinstance(phenomenon_time, str):
+        parts = phenomenon_time.split("/", 1)
+        start_str = parts[0].strip()
+        end_str = parts[1].strip() if len(parts) > 1 else ""
+        start = parse_iso(start_str)
+        end = parse_iso(end_str) if end_str and end_str != ".." else None
+        return start, end
+
+    # asyncpg.Range (or any object with .lower/.upper/.isempty)
+    if getattr(phenomenon_time, "isempty", False):
+        return None, None
+
+    start = phenomenon_time.lower
+    end = phenomenon_time.upper
+
+    if start is not None and start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end is not None and end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+
+    return start, end
+
+
+# Spatial helpers
+def extract_all_coordinates(geometry: dict) -> list[list[float]]:
+    """
+    Recursively extract all leaf [lon, lat] coordinate pairs from a GeoJSON
+    geometry dict. Handles Point, MultiPoint, LineString, Polygon,
+    MultiPolygon, and GeometryCollection.
+    """
+    geom_type = geometry.get("type", "")
+    coords = geometry.get("coordinates")
+
+    if geom_type == "Point" and coords:
+        return [coords[:2]]
+    if geom_type in ("MultiPoint", "LineString") and coords:
+        return [c[:2] for c in coords]
+    if geom_type == "Polygon" and coords:
+        return [c[:2] for c in coords[0]]
+    if geom_type == "MultiPolygon" and coords:
+        result: list[list[float]] = []
+        for polygon in coords:
+            result.extend(c[:2] for c in polygon[0])
+        return result
+    if geom_type == "GeometryCollection":
+        result = []
+        for geom in geometry.get("geometries", []):
+            result.extend(extract_all_coordinates(geom))
+        return result
+    return []
+
+
+def bbox_from_geometry(geometry: Optional[dict]) -> Optional[list[float]]:
+    """
+    Derive a [minx, miny, maxx, maxy] bbox from a GeoJSON geometry dict.
+    Returns None when geometry is None or no coordinates are extractable.
+    """
+    if geometry is None:
+        return None
+    coords = extract_all_coordinates(geometry)
+    if not coords:
+        return None
+    lons = [c[0] for c in coords]
+    lats = [c[1] for c in coords]
+    return [min(lons), min(lats), max(lons), max(lats)]
+
+
+def union_bboxes(bboxes: list[list[float]]) -> Optional[list[float]]:
+    """Compute the union bounding box from a list of [minx, miny, maxx, maxy]
+    bboxes. Returns None for an empty input (every current call site already
+    checks non-emptiness first, this is just a safe default for future ones)."""
+    if not bboxes:
+        return None
+    return [
+        min(b[0] for b in bboxes),
+        min(b[1] for b in bboxes),
+        max(b[2] for b in bboxes),
+        max(b[3] for b in bboxes),
+    ]
+
+
 # HTTP error envelope helpers
 #
 # api.py had this exact shape -- JSONResponse with a
@@ -150,3 +274,18 @@ def catch_errors(func):
             return error_response(status.HTTP_400_BAD_REQUEST, str(e))
     return wrapper
 
+
+# STA href reconstruction
+def datastream_href(ds_id) -> str:
+    """
+    Build the absolute STA href for a Datastream entity.
+
+    Uses HOSTNAME/SUBPATH/VERSION from app/__init__.py -- the same constants
+    main.py uses for every STA entity link. The harvested Datastream dict
+    has no self_link field (the harvester contract is deliberate about this).
+    """
+    return f"{HOSTNAME}{SUBPATH}{VERSION}/Datastreams({ds_id})"
+
+
+def thing_href(thing_id) -> str:
+    return f"{HOSTNAME}{SUBPATH}{VERSION}/Things({thing_id})"

@@ -55,10 +55,9 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Union
 
-import asyncpg
 from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCTERMS, FOAF, OWL, RDFS, SKOS, XSD
 
@@ -71,6 +70,14 @@ from app.v1.connector.config import (
     resolve_license_uri,
 )
 from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
+from app.v1.connector.utils import (
+    bbox_from_geometry as _bbox_from_geometry,
+    datastream_href as _datastream_href,
+    parse_iso as _parse_iso,
+    parse_phenomenon_time as _parse_phenomenon_time,
+    thing_href as _thing_href,
+    union_bboxes as _union_bboxes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,101 +125,6 @@ def _bind_namespaces(g: Graph) -> None:
     g.bind("owl", OWL)
     g.bind("adms", ADMS)
     g.bind("xsd", XSD)
-
-
-# Temporal helpers (duplicated from stac_transformer.py's logic on purpose --
-# both transformers consume the exact same phenomenon_time shape from the
-# harvester, but are kept independent so neither imports the other)
-
-
-def _parse_iso(value: str) -> Optional[datetime]:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except (ValueError, TypeError):
-        logger.warning("Could not parse ISO 8601 datetime: %r", value)
-        return None
-
-
-def _parse_phenomenon_time(
-    phenomenon_time: Union["asyncpg.Range", str, None],
-) -> tuple[Optional[datetime], Optional[datetime]]:
-    """
-    Parse a Datastream phenomenon_time value into (start, end) datetimes.
-    Returns (None, None) when unusable -- see stac_transformer.py's
-    _parse_phenomenon_time for the full rationale on asyncpg.Range handling.
-    """
-    if phenomenon_time is None:
-        return None, None
-
-    if isinstance(phenomenon_time, str):
-        parts = phenomenon_time.split("/", 1)
-        start_str = parts[0].strip()
-        end_str = parts[1].strip() if len(parts) > 1 else ""
-        start = _parse_iso(start_str)
-        end = _parse_iso(end_str) if end_str and end_str != ".." else None
-        return start, end
-
-    if getattr(phenomenon_time, "isempty", False):
-        return None, None
-
-    start = phenomenon_time.lower
-    end = phenomenon_time.upper
-    if start is not None and start.tzinfo is None:
-        start = start.replace(tzinfo=timezone.utc)
-    if end is not None and end.tzinfo is None:
-        end = end.replace(tzinfo=timezone.utc)
-    return start, end
-
-
-# Spatial helpers (bbox math duplicated from stac_transformer.py, same
-# independence rationale as the temporal helpers above)
-
-
-def _extract_all_coordinates(geometry: dict) -> list[list[float]]:
-    geom_type = geometry.get("type", "")
-    coords = geometry.get("coordinates")
-
-    if geom_type == "Point" and coords:
-        return [coords[:2]]
-    if geom_type in ("MultiPoint", "LineString") and coords:
-        return [c[:2] for c in coords]
-    if geom_type == "Polygon" and coords:
-        return [c[:2] for c in coords[0]]
-    if geom_type == "MultiPolygon" and coords:
-        result: list[list[float]] = []
-        for polygon in coords:
-            result.extend(c[:2] for c in polygon[0])
-        return result
-    if geom_type == "GeometryCollection":
-        result = []
-        for geom in geometry.get("geometries", []):
-            result.extend(_extract_all_coordinates(geom))
-        return result
-    return []
-
-
-def _bbox_from_geometry(geometry: Optional[dict]) -> Optional[list[float]]:
-    if geometry is None:
-        return None
-    coords = _extract_all_coordinates(geometry)
-    if not coords:
-        return None
-    lons = [c[0] for c in coords]
-    lats = [c[1] for c in coords]
-    return [min(lons), min(lats), max(lons), max(lats)]
-
-
-def _union_bboxes(bboxes: list[list[float]]) -> Optional[list[float]]:
-    if not bboxes:
-        return None
-    return [
-        min(b[0] for b in bboxes),
-        min(b[1] for b in bboxes),
-        max(b[2] for b in bboxes),
-        max(b[3] for b in bboxes),
-    ]
 
 
 def _bbox_to_polygon(bbox: list[float]) -> dict:
@@ -349,20 +261,6 @@ def _compose_dataset_description(ds: dict, thing: HarvestedThing) -> str:
     if sensor and sensor.get("description"):
         parts.append(sensor["description"])
     return " | ".join(p for p in parts if p) or ds.get("name", "")
-
-
-# STA href reconstruction (duplicated from stac_transformer.py -- the
-# harvested dicts carry no self_link field by design; see harvester.py's
-# contract. Both transformers derive the same URL from the same HOSTNAME /
-# SUBPATH / VERSION constants, so there is no risk of the two disagreeing
-# even without importing one from the other.)
-
-def _datastream_href(ds_id) -> str:
-    return f"{HOSTNAME}{SUBPATH}{VERSION}/Datastreams({ds_id})"
-
-
-def _thing_href(thing_id) -> str:
-    return f"{HOSTNAME}{SUBPATH}{VERSION}/Things({thing_id})"
 
 
 # DCAT resource URI builders
