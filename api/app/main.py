@@ -14,6 +14,7 @@
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 import asyncpg
@@ -24,6 +25,12 @@ from app.v1 import api
 from app.v1.connector.config import resolve_closed_networks
 from app.v1.connector.scheduler import start_scheduler
 from fastapi import FastAPI
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").strip().upper()
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 logger = logging.getLogger(__name__)
 

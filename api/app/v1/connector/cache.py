@@ -233,11 +233,12 @@ def write_stac_catalog(root_dict: dict) -> None:
         redis.delete(*stale_keys)
 
     flat = flatten_stac_catalog(root_dict)
+    pipe = redis.pipeline(transaction=False)
     for key, value in flat.items():
-        redis.set(key, json.dumps(value, default=str))
-
-    redis.set("stac:meta:availability", json.dumps(True))
-    redis.set("stac:meta:last_fetch", datetime.now(timezone.utc).isoformat())
+        pipe.set(key, json.dumps(value, default=str))
+    pipe.set("stac:meta:availability", json.dumps(True))
+    pipe.set("stac:meta:last_fetch", datetime.now(timezone.utc).isoformat())
+    pipe.execute()
 
     logger.info(
         "STAC cache written to Redis: %d keys (1 catalog, %d collections, %d items)",
@@ -296,11 +297,12 @@ def write_stac_catalog_with_networks(root_dict: dict) -> None:
             flat[_network_collection_key(nid, cid)] = {k: v for k, v in coll.items() if k != "items"}
             net_collections += 1
 
+    pipe = redis.pipeline(transaction=False)
     for key, value in flat.items():
-        redis.set(key, json.dumps(value, default=str))
-
-    redis.set("stac:meta:availability", json.dumps(True))
-    redis.set("stac:meta:last_fetch", datetime.now(timezone.utc).isoformat())
+        pipe.set(key, json.dumps(value, default=str))
+    pipe.set("stac:meta:availability", json.dumps(True))
+    pipe.set("stac:meta:last_fetch", datetime.now(timezone.utc).isoformat())
+    pipe.execute()
 
     logger.info(
         "STAC network cache written to Redis: %d keys (1 catalog, %d orphan collections, "

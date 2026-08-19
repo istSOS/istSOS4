@@ -28,7 +28,9 @@ Public interface:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from datetime import datetime
 
 import asyncpg
@@ -180,16 +182,33 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
         _dcat_misconfig_warned = True
 
     if NETWORK:
+        t0 = time.monotonic()
         network_catalog = await harvest_with_networks(connection)
+        logger.info("Harvest stage: %.3fs", time.monotonic() - t0)
 
         if STAC_TRANSFORMER:
-            stac_dict = build_stac_catalog_with_networks(network_catalog)
-            write_stac_catalog_with_networks(stac_dict)
+            t0 = time.monotonic()
+            stac_dict = await asyncio.to_thread(
+                build_stac_catalog_with_networks, network_catalog
+            )
+            logger.info("STAC build stage: %.3fs", time.monotonic() - t0)
+
+            t0 = time.monotonic()
+            await asyncio.to_thread(write_stac_catalog_with_networks, stac_dict)
+            logger.info("STAC write stage: %.3fs", time.monotonic() - t0)
 
         if dcat_ready:
             try:
-                dcat_dict = build_dcat_catalog_with_networks(network_catalog)
-                write_dcat_catalog_with_networks(dcat_dict)
+                t0 = time.monotonic()
+                dcat_dict = await asyncio.to_thread(
+                    build_dcat_catalog_with_networks, network_catalog
+                )
+                logger.info("DCAT build stage: %.3fs", time.monotonic() - t0)
+
+                t0 = time.monotonic()
+                await asyncio.to_thread(write_dcat_catalog_with_networks, dcat_dict)
+                logger.info("DCAT write stage: %.3fs", time.monotonic() - t0)
+
                 logger.info(
                     "DCAT cache written: %d Networks, harvested at %s",
                     len(network_catalog.networks), network_catalog.harvested_at,
@@ -200,16 +219,29 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
                     "unaffected, previous DCAT cache left untouched"
                 )
     else:
+        t0 = time.monotonic()
         catalog = await harvest(connection)
+        logger.info("Harvest stage: %.3fs", time.monotonic() - t0)
 
         if STAC_TRANSFORMER:
-            stac_dict = build_stac_catalog(catalog)
-            write_stac_catalog(stac_dict)
+            t0 = time.monotonic()
+            stac_dict = await asyncio.to_thread(build_stac_catalog, catalog)
+            logger.info("STAC build stage: %.3fs", time.monotonic() - t0)
+
+            t0 = time.monotonic()
+            await asyncio.to_thread(write_stac_catalog, stac_dict)
+            logger.info("STAC write stage: %.3fs", time.monotonic() - t0)
 
         if dcat_ready:
             try:
-                dcat_dict = build_dcat_catalog(catalog)
-                write_dcat_catalog(dcat_dict)
+                t0 = time.monotonic()
+                dcat_dict = await asyncio.to_thread(build_dcat_catalog, catalog)
+                logger.info("DCAT build stage: %.3fs", time.monotonic() - t0)
+
+                t0 = time.monotonic()
+                await asyncio.to_thread(write_dcat_catalog, dcat_dict)
+                logger.info("DCAT write stage: %.3fs", time.monotonic() - t0)
+
                 logger.info("DCAT cache written: %d Things", catalog.thing_count)
             except Exception:
                 logger.exception(
