@@ -14,6 +14,7 @@
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 import asyncpg
@@ -21,7 +22,15 @@ from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.settings import serverSettings, tables
 from app.v1 import api
+from app.v1.connector.config import resolve_closed_networks
+from app.v1.connector.scheduler import start_scheduler
 from fastapi import FastAPI
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").strip().upper()
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +67,13 @@ async def initialize_pool():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await initialize_pool()
+    pool = await get_pool()
+    # Resolve any Network *names* in CATALOG_CLOSED_NETWORKS to ids before
+    # the scheduler/API start serving -- see config.resolve_closed_networks.
+    await resolve_closed_networks(pool)
+    scheduler = start_scheduler(pool)
     yield
+    scheduler.shutdown()
 
 
 app = FastAPI(

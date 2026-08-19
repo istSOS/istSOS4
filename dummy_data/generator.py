@@ -20,12 +20,11 @@ from datetime import datetime, time
 
 import asyncpg
 import isodate
-from asyncpg.types import Range
 
 hostname = os.getenv("HOSTNAME", "http://localhost:8018")
 subpath = os.getenv("SUBPATH", "/istsos4")
 version = os.getenv("VERSION", "/v1.1")
-versioning = int(os.getenv("VERSIONING"), 0)
+versioning = int(os.getenv("VERSIONING", 0))
 pg_db = os.getenv("POSTGRES_DB", "istsos")
 pg_user = os.getenv("ISTSOS_ADMIN", "admin")
 pg_password = os.getenv("ISTSOS_ADMIN_PASSWORD", "admin")
@@ -489,7 +488,8 @@ async def generate_featuresofinterest(conn, commit_id):
 
 async def insert_observations(conn, observations, commit_id):
     cols = [
-        "phenomenonTime",
+        "phenomenonTimeStart",
+        "phenomenonTimeEnd",
         "resultTime",
         "resultNumber",
         "resultType",
@@ -521,8 +521,9 @@ async def insert_observations(conn, observations, commit_id):
 
 
 async def update_datastream_phenomenon_time(conn, observations, datastream_id):
-    phenomenon_times = [record[0].lower for record in observations]
-    result_times = [record[1] for record in observations]
+    phenomenon_starts = [record[0] for record in observations]
+    phenomenon_ends = [record[1] for record in observations]
+    result_times = [record[2] for record in observations]
     update_sql = """
         UPDATE sensorthings."Datastream"
         SET "phenomenonTime" = tstzrange(
@@ -539,8 +540,8 @@ async def update_datastream_phenomenon_time(conn, observations, datastream_id):
     """
     await conn.execute(
         update_sql,
-        min(phenomenon_times),
-        max(phenomenon_times),
+        min(phenomenon_starts),
+        max(phenomenon_ends),
         min(result_times),
         max(result_times),
         datastream_id,
@@ -605,18 +606,15 @@ async def generate_observations(conn, commit_id):
         None
     """
 
-    observations = []
     for j in range(1, n_things * n_observed_properties + 1):
+        observations = []
         phenomenonTime = date
         check_date = date
 
         while phenomenonTime < (date + interval):
             phenomenonTime += frequency
-            phenomenonTimeRange = Range(
-                phenomenonTime,
-                phenomenonTime,
-                upper_inc=True,
-            )
+            phenomenonTimeStart = phenomenonTime
+            phenomenonTimeEnd = phenomenonTime
             resultTime = phenomenonTime
             resultNumber = random.randint(1, 100)
             resultType = 0
@@ -626,7 +624,8 @@ async def generate_observations(conn, commit_id):
             if commit_id is not None:
                 observations.append(
                     (
-                        phenomenonTimeRange,
+                        phenomenonTimeStart,
+                        phenomenonTimeEnd,
                         resultTime,
                         resultNumber,
                         resultType,
@@ -638,7 +637,8 @@ async def generate_observations(conn, commit_id):
             else:
                 observations.append(
                     (
-                        phenomenonTimeRange,
+                        phenomenonTimeStart,
+                        phenomenonTimeEnd,
                         resultTime,
                         resultNumber,
                         resultType,
@@ -654,11 +654,11 @@ async def generate_observations(conn, commit_id):
                 check_date = phenomenonTime
                 observations = []
 
-    if observations:
-        await insert_observations(conn, observations, commit_id)
-        await update_datastream_phenomenon_time(
-            conn, observations, datastream_id
-        )
+        if observations:
+            await insert_observations(conn, observations, commit_id)
+            await update_datastream_phenomenon_time(
+                conn, observations, datastream_id
+            )
 
     await update_datastream_observed_area(conn)
 
@@ -737,7 +737,10 @@ async def delete_data():
         async with pool.acquire() as conn:
             try:
                 if authorization:
-                    await conn.execute('DELETE FROM sensorthings."User"')
+                    await conn.execute(
+                        'DELETE FROM sensorthings."User" WHERE username != $1',
+                        pg_user,
+                    )
                 if versioning or authorization:
                     await conn.execute('DELETE FROM sensorthings."Commit"')
 

@@ -1,0 +1,7 @@
+# Conformance test suite dependencies (OGC SensorThings API v1.1).
+# Install into an isolated venv, e.g.:
+#   uv venv tests/conformance/.venv && \
+#   uv pip install --python tests/conformance/.venv/bin/python -r tests/conformance/requirements.txt
+pytest>=8.0
+httpx>=0.27
+pytest-xdist>=3.5

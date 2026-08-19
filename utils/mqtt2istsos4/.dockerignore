@@ -1,0 +1,6 @@
+.env
+config.yaml
+.venv
+__pycache__
+*.pyc
+.git

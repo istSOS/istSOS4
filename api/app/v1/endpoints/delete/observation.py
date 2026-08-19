@@ -14,16 +14,17 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.functions import set_role, update_datastream_observedArea
-from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Depends, Header, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from .functions import (
     delete_entity,
     set_commit,
     update_datastream_phenomenon_time,
 )
+from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 
@@ -53,72 +54,55 @@ async def delete_observation(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        if not observation_id:
-            raise Exception("Observation ID not provided")
+    if not observation_id:
+        raise BadRequest("Observation ID not provided")
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                await set_commit(
+            await set_commit(
+                connection,
+                commit_message,
+                current_user,
+                "Observation",
+                observation_id,
+            )
+
+            id_deleted = None
+            deleted = await delete_entity(
+                connection, "Observation", observation_id, True
+            )
+
+            if deleted:
+                id_deleted = deleted["id"]
+                obs_phenomenon_start = deleted["phenomenonTimeStart"]
+                obs_phenomenon_end = deleted["phenomenonTimeEnd"]
+                obs_result_time = deleted["resultTime"]
+                datastream_id = deleted["datastream_id"]
+
+                await update_datastream_phenomenon_time(
                     connection,
-                    commit_message,
-                    current_user,
-                    "Observation",
-                    observation_id,
+                    obs_phenomenon_start,
+                    obs_phenomenon_end,
+                    datastream_id,
+                    obs_result_time,
                 )
 
-                id_deleted = None
-                deleted = await delete_entity(
-                    connection, "Observation", observation_id, True
+                await update_datastream_observedArea(
+                    connection, datastream_id
                 )
 
-                if deleted:
-                    id_deleted = deleted["id"]
-                    obs_phenomenon_time = deleted["phenomenonTime"]
-                    obs_result_time = deleted["resultTime"]
-                    datastream_id = deleted["datastream_id"]
-
-                    await update_datastream_phenomenon_time(
-                        connection,
-                        obs_phenomenon_time,
-                        datastream_id,
-                        obs_result_time,
-                    )
-
-                    await update_datastream_observedArea(
-                        connection, datastream_id
-                    )
-
-                if id_deleted is None:
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
-                    return JSONResponse(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        content={
-                            "code": 404,
-                            "type": "error",
-                            "message": f"Observation with id {observation_id} not found",
-                        },
-                    )
-
+            if id_deleted is None:
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
+                return error_response(
+                    status.HTTP_404_NOT_FOUND,
+                    f"Observation with id {observation_id} not found",
+                )
 
-        return Response(status_code=status.HTTP_200_OK)
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={
-                "code": 401,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+
+    return Response(status_code=status.HTTP_200_OK)

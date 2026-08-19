@@ -15,6 +15,7 @@
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 CREATE SCHEMA sensorthings;
 
@@ -206,8 +207,9 @@ CREATE OR REPLACE FUNCTION "Observations@iot.navigationLink"(sensorthings."Featu
 $$ LANGUAGE SQL;
 
 CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
-    "id" BIGSERIAL NOT NULL PRIMARY KEY,
-    "phenomenonTime" tstzrange DEFAULT tstzrange(NOW(), NOW(), '[]'),
+    "id" BIGSERIAL NOT NULL,
+    "phenomenonTimeStart" TIMESTAMPTZ DEFAULT NOW(),
+    "phenomenonTimeEnd" TIMESTAMPTZ DEFAULT NOW(),
     "resultTime" TIMESTAMPTZ DEFAULT NULL,
     "resultType" INT NOT NULL,
     "resultString" TEXT,
@@ -218,13 +220,19 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "validTime" tstzrange DEFAULT NULL,
     "parameters" jsonb DEFAULT NULL,
     "datastream_id" BIGINT NOT NULL REFERENCES sensorthings."Datastream"(id) ON DELETE CASCADE,
-    "featuresofinterest_id" BIGINT NOT NULL REFERENCES sensorthings."FeaturesOfInterest"(id) ON DELETE CASCADE
+    "featuresofinterest_id" BIGINT NOT NULL REFERENCES sensorthings."FeaturesOfInterest"(id) ON DELETE CASCADE,
+    PRIMARY KEY ("id", "phenomenonTimeStart")
 );
 
 CREATE INDEX IF NOT EXISTS "idx_observation_datastream_id" ON sensorthings."Observation" USING btree ("datastream_id" ASC NULLS LAST) TABLESPACE pg_default;
 CREATE INDEX IF NOT EXISTS "idx_observation_featuresofinterest_id" ON sensorthings."Observation" USING btree ("featuresofinterest_id" ASC NULLS LAST) TABLESPACE pg_default;
 CREATE INDEX IF NOT EXISTS "idx_observation_observation_id_datastream_id" ON sensorthings."Observation" USING btree ("datastream_id" ASC NULLS LAST, "id" ASC NULLS LAST) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS "idx_observation_datastream_id_phtime" ON sensorthings."Observation" USING btree ("datastream_id" ASC NULLS LAST, "phenomenonTime" ASC NULLS LAST, "id" ASC NULLS LAST) TABLESPACE pg_default WHERE "datastream_id" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "idx_observation_datastream_id_phtime" ON sensorthings."Observation" USING btree ("datastream_id" ASC NULLS LAST, "phenomenonTimeStart" ASC NULLS LAST, "id" ASC NULLS LAST) TABLESPACE pg_default WHERE "datastream_id" IS NOT NULL;
+
+SELECT create_hypertable(
+    'sensorthings."Observation"',
+    by_range('phenomenonTimeStart', INTERVAL '30 days')
+);
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Observation") RETURNS text AS $$
     SELECT '/Observations(' || $1.id || ')';
@@ -273,7 +281,7 @@ BEGIN
         ADD CONSTRAINT unique_featuresOfInterest_name UNIQUE ("name");
 
         ALTER TABLE sensorthings."Observation"
-        ADD CONSTRAINT unique_observation_phenomenonTime_datastreamId UNIQUE ("phenomenonTime", "datastream_id");
+        ADD CONSTRAINT unique_observation_phenomenonTime_datastreamId UNIQUE ("phenomenonTimeStart", "phenomenonTimeEnd", "datastream_id");
     END IF;
 END $$;
 

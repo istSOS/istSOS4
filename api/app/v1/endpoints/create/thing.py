@@ -20,11 +20,11 @@ from app.utils.utils import (
     validate_required_keys,
 )
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from .functions import insert_thing_entity, set_commit
+from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 
@@ -66,56 +66,37 @@ REQUIRED_KEYS = ["name"]
 )
 async def create_thing(
     request: Request,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        require_json_content_type(request)
+    require_json_content_type(request)
 
-        validate_payload_keys(payload, ALLOWED_KEYS)
-        validate_required_keys(payload, REQUIRED_KEYS)
+    validate_payload_keys(payload, ALLOWED_KEYS)
+    validate_required_keys(payload, REQUIRED_KEYS)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                commit_id = await set_commit(
-                    connection, commit_message, current_user
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
 
-                _, header = await insert_thing_entity(
-                    connection, payload, commit_id
-                )
+            _, header = await insert_thing_entity(
+                connection, payload, commit_id
+            )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
-    except InsufficientPrivilegeError as e:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )
 
 
 @v1.api_route(
@@ -129,59 +110,40 @@ async def create_thing(
 async def create_thing_for_location(
     request: Request,
     location_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        require_json_content_type(request)
+    require_json_content_type(request)
 
-        if not location_id:
-            raise Exception("No location ID provided")
+    if not location_id:
+        raise BadRequest("No location ID provided")
 
-        payload["Locations"] = [{"@iot.id": location_id}]
+    payload["Locations"] = [{"@iot.id": location_id}]
 
-        validate_payload_keys(payload, ALLOWED_KEYS)
-        validate_required_keys(payload, REQUIRED_KEYS)
+    validate_payload_keys(payload, ALLOWED_KEYS)
+    validate_required_keys(payload, REQUIRED_KEYS)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                commit_id = await set_commit(
-                    connection, commit_message, current_user
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
 
-                _, header = await insert_thing_entity(
-                    connection, payload, commit_id
-                )
+            _, header = await insert_thing_entity(
+                connection, payload, commit_id
+            )
 
-                if current_user is not None:
-                    payload["user_id"] = current_user["id"]
+            if current_user is not None:
+                payload["user_id"] = current_user["id"]
 
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )

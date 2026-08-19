@@ -12,19 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.utils.utils import safe_parse_datetime
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from .functions import create_entity, set_commit, update_datastream_last_foi_id
 
 v1 = APIRouter()
+
 
 user = Header(default=None, include_in_schema=False)
 message = Header(default=None, alias="commit-message", include_in_schema=False)
@@ -79,112 +81,60 @@ PAYLOAD_EXAMPLE = [
     status_code=status.HTTP_201_CREATED,
 )
 async def bulk_observations(
-    payload: list = Body(example=PAYLOAD_EXAMPLE),
+    payload: list = Body(examples=[PAYLOAD_EXAMPLE]),
     commit_message=message,
     current_user=user,
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        async with pgpool.acquire() as conn:
-            async with conn.transaction():
-                if current_user is not None:
-                    await set_role(conn, current_user)
+    async with pgpool.acquire() as conn:
+        async with conn.transaction():
+            if current_user is not None:
+                await set_role(conn, current_user)
 
-                try:
-                    commit_id = await set_commit(
-                        conn, commit_message, current_user
+            commit_id = await set_commit(
+                conn, commit_message, current_user
+            )
+
+            for observation_set in payload:
+                datastream_id = observation_set.get("Datastream", {}).get(
+                    "@iot.id"
+                )
+                components = observation_set.get("components", [])
+                data_array = observation_set.get("dataArray", [])
+
+                if not datastream_id:
+                    raise ValueError(
+                        "Missing 'datastream_id' in Datastream."
                     )
-                except InsufficientPrivilegeError:
-                    return JSONResponse(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        content={
-                            "code": 403,
-                            "type": "error",
-                            "message": "Insufficient privileges.",
-                        },
+
+                # Check that at least phenomenonTime and result are present
+                if (
+                    "phenomenonTime" not in components
+                    or "result" not in components
+                ):
+                    raise ValueError(
+                        "Missing required properties 'phenomenonTime' or 'result' in components."
+                    )
+                if "featureOfInterest" in components:
+                    raise ValueError(
+                        "This method does not support 'featureOfInterest' in components. It will support in future."
                     )
 
-                for observation_set in payload:
-                    datastream_id = observation_set.get("Datastream", {}).get(
-                        "@iot.id"
-                    )
-                    components = observation_set.get("components", [])
-                    data_array = observation_set.get("dataArray", [])
+                foi_id = await get_foi_id(
+                    datastream_id, conn, commit_id=commit_id
+                )
+                await insertBulkObservation(
+                    data_array,
+                    conn,
+                    foi_id,
+                    datastream_id=datastream_id,
+                    components=components,
+                    commit_id=commit_id,
+                )
 
-                    if not datastream_id:
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Missing 'datastream_id' in Datastream.",
-                            },
-                        )
-
-                    # Check that at least phenomenonTime and result are present
-                    if (
-                        "phenomenonTime" not in components
-                        or "result" not in components
-                    ):
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Missing required properties 'phenomenonTime' or 'result' in components.",
-                            },
-                        )
-                    if "featureOfInterest" in components:
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "This method does not support 'featureOfInterest' in components. It will support in future.",
-                            },
-                        )
-                    try:
-                        foi_id = await get_foi_id(
-                            datastream_id, conn, commit_id=commit_id
-                        )
-                        await insertBulkObservation(
-                            data_array,
-                            conn,
-                            foi_id,
-                            datastream_id=datastream_id,
-                            components=components,
-                            commit_id=commit_id,
-                        )
-                    except InsufficientPrivilegeError:
-                        return JSONResponse(
-                            status_code=status.HTTP_403_FORBIDDEN,
-                            content={
-                                "code": 403,
-                                "type": "error",
-                                "message": "Insufficient privileges.",
-                            },
-                        )
-                    except Exception as e:
-                        if current_user is not None:
-                            await conn.execute("RESET ROLE;")
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": str(e),
-                            },
-                        )
-
-                if current_user is not None:
-                    await conn.execute("RESET ROLE;")
-        return Response(status_code=status.HTTP_201_CREATED)
-
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
+            if current_user is not None:
+                await conn.execute("RESET ROLE;")
+    return Response(status_code=status.HTTP_201_CREATED)
 
 
 async def insertBulkObservation(
@@ -230,7 +180,8 @@ async def insertBulkObservation(
             ph_idx = 0
 
         data = []
-        ph_interval = None
+        ph_min_start = None
+        ph_max_end = None
         rt_interval = None
         for obs in payload:
             if result_time_idx > -1:
@@ -252,45 +203,21 @@ async def insertBulkObservation(
                         )
             if "/" in obs[ph_idx]:
                 ph_time = obs[ph_idx].split("/")
-                obs[ph_idx] = Range(
-                    ph_time[0],
-                    ph_time[1],
-                    upper_inc=True,
-                )
+                ph_start = safe_parse_datetime(ph_time[0])
+                ph_end = safe_parse_datetime(ph_time[1])
             else:
-                obs[ph_idx] = Range(
-                    obs[ph_idx],
-                    obs[ph_idx],
-                    upper_inc=True,
-                )
-            if ph_interval is None:
-                ph_interval = Range(
-                    obs[ph_idx].lower,
-                    obs[ph_idx].upper,
-                    upper_inc=True,
-                )
-            else:
-                if safe_parse_datetime(
-                    ph_interval.lower
-                ) > safe_parse_datetime(obs[ph_idx].lower):
-                    ph_interval = Range(
-                        obs[ph_idx].lower,
-                        ph_interval.upper,
-                        upper_inc=True,
-                    )
-                if safe_parse_datetime(
-                    ph_interval.upper
-                ) < safe_parse_datetime(obs[ph_idx].upper):
-                    ph_interval = Range(
-                        ph_interval.lower,
-                        obs[ph_idx].upper,
-                        upper_inc=True,
-                    )
-            obs[ph_idx] = Range(
-                safe_parse_datetime(obs[ph_idx].lower),
-                safe_parse_datetime(obs[ph_idx].upper),
-                upper_inc=True,
-            )
+                ph_start = safe_parse_datetime(obs[ph_idx])
+                ph_end = ph_start
+            obs[ph_idx : ph_idx + 1] = [ph_start, ph_end]
+
+            if ph_start is not None and (
+                ph_min_start is None or ph_start < ph_min_start
+            ):
+                ph_min_start = ph_start
+            if ph_end is not None and (
+                ph_max_end is None or ph_end > ph_max_end
+            ):
+                ph_max_end = ph_end
 
             default_obs = [result_type, datastream_id, foi_id]
 
@@ -298,11 +225,6 @@ async def insertBulkObservation(
                 default_obs.append(commit_id)
 
             data.append(obs + default_obs)
-        ph_interval = Range(
-            safe_parse_datetime(ph_interval.lower),
-            safe_parse_datetime(ph_interval.upper),
-            upper_inc=True,
-        )
 
         observation_types = [
             ot
@@ -315,7 +237,8 @@ async def insertBulkObservation(
             if ot != observation_type
         ]
         cols = observation_types + [
-            "phenomenonTime",
+            "phenomenonTimeStart",
+            "phenomenonTimeEnd",
             observation_type,
             "resultType",
             "datastream_id",
@@ -328,6 +251,12 @@ async def insertBulkObservation(
                 if c == "result":
                     components[idx] = observation_type
                 idx += 1
+
+            ph_components_idx = components.index("phenomenonTime")
+            components[ph_components_idx : ph_components_idx + 1] = [
+                "phenomenonTimeStart",
+                "phenomenonTimeEnd",
+            ]
 
             cols = (
                 observation_types
@@ -398,8 +327,8 @@ async def insertBulkObservation(
         """
         await conn.execute(
             update_query,
-            ph_interval.lower,
-            ph_interval.upper,
+            ph_min_start,
+            ph_max_end,
             rt_interval.lower if rt_interval else None,
             rt_interval.upper if rt_interval else None,
             datastream_id,
@@ -517,6 +446,18 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
 
                 return gen_foi_id
         else:
-            raise ValueError(
-                "Can not generate foi for Thing with no locations."
+            # Empty result has two distinct causes; the old message assumed only
+            # the second and misreported the first. Tell them apart.
+            datastream_exists = await conn.fetchval(
+                'SELECT 1 FROM sensorthings."Datastream" WHERE id = $1::bigint',
+                datastream_id,
+            )
+            if not datastream_exists:
+                raise BadRequest(
+                    f"Datastream {datastream_id} does not exist."
+                )
+            raise BadRequest(
+                "Cannot auto-generate a FeatureOfInterest: the Thing linked to "
+                f"Datastream {datastream_id} has no Location. Provide a "
+                "FeatureOfInterest explicitly or add a Location to the Thing."
             )

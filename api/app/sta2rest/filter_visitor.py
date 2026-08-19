@@ -35,6 +35,7 @@ from sqlalchemy import (
     Text,
     cast,
 )
+from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm.relationships import RelationshipProperty
@@ -76,7 +77,21 @@ SELECT_MAPPING = {
     "resultTime": "result_time",
     "resultQuality": "result_quality",
     "validTime": "valid_time",
+    "systemTimeValidity": "system_time_validity",
 }
+
+
+def resolve_field(model, name):
+    """Resolve a logical (snake_case) field name to a mapped column attribute.
+
+    The Observation phenomenonTime is split into two TIMESTAMPTZ columns; the
+    logical "phenomenon_time" resolves to the start column, which is the scalar
+    handle used for select / filter / orderby (output recombines start+end in
+    get_select_attr).
+    """
+    if name == "phenomenon_time" and not hasattr(model, "phenomenon_time"):
+        name = "phenomenon_time_start"
+    return getattr(model, name)
 
 
 class FilterVisitor(visitor.NodeVisitor):
@@ -170,10 +185,93 @@ class FilterVisitor(visitor.NodeVisitor):
     ) -> Callable[[ClauseElement], ClauseElement]:
         return operator.invert
 
+    def visit_USub(
+        self, node: ast.USub
+    ) -> Callable[[ClauseElement], ClauseElement]:
+        return operator.neg
+
     def visit_In(
         self, node: ast.In
     ) -> Callable[[ClauseElement, ClauseElement], BinaryExpression]:
         return lambda a, b: a.in_(b)
+
+    @staticmethod
+    def temporal_bound(column, bound):
+        """Resolve one bound of a temporal column's storage representation."""
+        table_name = getattr(getattr(column, "table", None), "name", None)
+        column_name = getattr(column, "name", None)
+
+        if column_name == "phenomenonTimeStart" and table_name in {
+            "Observation",
+            "Observation_traveltime",
+        }:
+            if bound == "lower":
+                return column
+            return column.table.c["phenomenonTimeEnd"]
+
+        if column_name == "resultTime" and table_name in {
+            "Observation",
+            "Observation_traveltime",
+        }:
+            return column
+
+        if isinstance(getattr(column, "type", None), TSTZRANGE):
+            return getattr(functions.func, bound)(column)
+
+        raise ex.ArgumentTypeException(
+            bound,
+            "datetime range field",
+            getattr(column, "name", type(column).__name__),
+        )
+
+    @classmethod
+    def phenomenon_time_bounds(cls, column):
+        """Return normalised start/end expressions for phenomenonTime."""
+        table_name = getattr(getattr(column, "table", None), "name", None)
+        column_name = getattr(column, "name", None)
+
+        is_datastream_range = (
+            column_name == "phenomenonTime"
+            and table_name in {"Datastream", "Datastream_traveltime"}
+        )
+        is_observation_bounds = (
+            column_name == "phenomenonTimeStart"
+            and table_name in {"Observation", "Observation_traveltime"}
+        )
+
+        if is_datastream_range or is_observation_bounds:
+            return (
+                cls.temporal_bound(column, "lower"),
+                cls.temporal_bound(column, "upper"),
+            )
+
+        return None
+
+    @staticmethod
+    def compare_phenomenon_time(bounds, instant, op):
+        """Compare a temporal interval with an instant.
+
+        Equality means that the instant is contained in the closed interval.
+        Ordering comparisons require the whole interval to be on the requested
+        side of the instant: gt/ge use the start, lt/le use the end.
+        """
+        start, end = bounds
+        op_name = getattr(op, "__name__", "")
+
+        if op_name == "eq":
+            return and_(start <= instant, end >= instant)
+        if op_name == "ne":
+            return operator.invert(and_(start <= instant, end >= instant))
+        if op_name == "gt":
+            return start > instant
+        if op_name == "ge":
+            return start >= instant
+        if op_name == "lt":
+            return end < instant
+        if op_name == "le":
+            return end <= instant
+
+        return None
 
     def visit_List(self, node: ast.List) -> list:
         return [self.visit(n) for n in node.val]
@@ -205,43 +303,85 @@ class FilterVisitor(visitor.NodeVisitor):
             for old_key, new_key in SELECT_MAPPING.items():
                 if old_key == node.name:
                     name = new_key
-            return getattr(globals()[self.root_model], name)
+            return resolve_field(globals()[self.root_model], name)
         except AttributeError:
             raise ex.InvalidFieldException(node.name)
 
+    @staticmethod
+    def resolve_relationship_attribute(model, segment):
+        """Resolve an OGC navigation property name to a relationship attribute.
+
+        The navigation name is mapped to the internal (singular, lower-case)
+        relationship attribute through the same table used by $expand
+        (STA2REST.ENTITY_MAPPING), so e.g. Thing/"Datastreams",
+        Datastream/"Sensor" and Observation/"FeatureOfInterest" all resolve, and
+        both the singular and the plural spelling of a collection map to the
+        same attribute. Returns None when `segment` is not a navigation property
+        on `model` (i.e. it is a column).
+        """
+        # Deferred import: breaks the sta2rest <-> visitors <-> filter_visitor
+        # import cycle that a module-level import would create.
+        from .sta2rest import STA2REST
+
+        attr_name = STA2REST.ENTITY_MAPPING.get(segment, segment)
+        attr_name = attr_name.replace("TravelTime", "").lower()
+        candidate = getattr(model, attr_name, None)
+        if candidate is not None and isinstance(
+            getattr(candidate, "property", None), RelationshipProperty
+        ):
+            return candidate
+        return None
+
+    @staticmethod
+    def resolve_path_column(model, segments):
+        """Resolve a column on `model`, with an optional trailing JSON path.
+
+        `segments[0]` is the column; any further segments index into it as a
+        JSON path (`#>`), matching the existing properties/<key> behaviour.
+        """
+        col_name = segments[0]
+        name = col_name.lower() if col_name[0].isupper() else col_name
+        name = SELECT_MAPPING.get(col_name, name)
+        try:
+            column = resolve_field(model, name)
+        except AttributeError:
+            raise ex.InvalidFieldException(col_name)
+        if len(segments) > 1:
+            path = "{" + ", ".join(segments[1:]) + "}"
+            column = column.op("#>")(path)
+        return column
+
     def visit_Attribute(self, node: ast.Attribute) -> ColumnClause:
+        # Flatten the navigation path into ordered segments, e.g.
+        # Datastreams/Sensor/id -> ["Datastreams", "Sensor", "id"].
         attributes = []
         owner = node.owner
-
         while not isinstance(owner, ast.Identifier):
             attributes.append(owner.attr)
             owner = owner.owner
+        segments = [owner.name] + attributes[::-1] + [node.attr]
 
-        name = owner.name
-        attributes = attributes[::-1]
-        rel_attr = self.visit(owner)
-        prop_inspect = inspect(rel_attr).property
-        table_attr = None
-
-        if isinstance(prop_inspect, RelationshipProperty):
+        # Walk the leading relationship hops, emitting one JOIN per hop, until a
+        # segment is no longer a navigation property. SensorThings allows direct
+        # multi-hop traversal in $filter (e.g.
+        # Things?$filter=Datastreams/Sensor/id eq 1) without any()/all(), so
+        # every relationship segment is joined. The final segment is always the
+        # column, hence the `len(segments) - 1` bound.
+        model = globals()[self.root_model]
+        index = 0
+        while index < len(segments) - 1:
+            rel_attr = self.resolve_relationship_attribute(
+                model, segments[index]
+            )
+            if rel_attr is None:
+                break
             self.join_relationships.append(rel_attr)
-            owner_cls = prop_inspect.entity.class_
-            if attributes:
-                table_attr = getattr(owner_cls, attributes[0])
-                path = "{" + ", ".join(attributes[1:] + [node.attr]) + "}"
-                table_attr = table_attr.op("#>")(path)
-            else:
-                table_attr = getattr(owner_cls, node.attr)
-        else:
-            name = SELECT_MAPPING.get(name, name)
-            table_attr = getattr(globals()[str(rel_attr.table.name)], name)
-            path = "{" + ", ".join(attributes + [node.attr]) + "}"
-            table_attr = table_attr.op("#>")(path)
+            model = inspect(rel_attr).property.mapper.class_
+            index += 1
 
-        if table_attr is None:
-            raise ex.InvalidFieldException(node.attr)
-
-        return table_attr
+        # Remaining segments are a column on the reached entity plus an optional
+        # JSON sub-path.
+        return self.resolve_path_column(model, segments[index:])
 
     def visit_BinOp(self, node: ast.BinOp) -> Any:
         left = self.visit(node.left)
@@ -270,23 +410,76 @@ class FilterVisitor(visitor.NodeVisitor):
         op = self.visit(node.op)
         return op(left, right)
 
+    def visit_UnaryOp(self, node: ast.UnaryOp) -> ClauseElement:
+        # req/request-data/built-in-filter-operations: apply the unary operator
+        # (logical `not` -> SQL NOT, arithmetic `-` -> negation) to its operand.
+        # Without this, UnaryOp nodes fell through to generic_visit which
+        # returned None, so `not (...)` produced an empty/always-false filter.
+        operand = self.visit(node.operand)
+        op = self.visit(node.op)
+        return op(operand)
+
     def visit_Compare(self, node: ast.Compare) -> BinaryExpression:
         left = self.visit(node.left)
         right = self.visit(node.right)
         op = self.visit(node.comparator)
 
-        if (
-            isinstance(node.left, ast.Identifier)
-            and "systemTimeValidity" in left.name
-        ):
-            if getattr(op, "__name__", "") == "eq":
+        if getattr(left, "name", None) == "systemTimeValidity":
+            op_name = getattr(op, "__name__", "")
+            if op_name in {"eq", "ne"}:
                 if isinstance(right, list):
                     right = functions.func.tstzrange(
                         functions.func.timestamptz(right[0]),
                         functions.func.timestamptz(right[1]),
                     )
-                    return left.op("&&")(right)
-                return left.op("@>")(functions.func.timestamptz(right))
+                    expression = left.op("&&")(right)
+                else:
+                    expression = left.op("@>")(
+                        functions.func.timestamptz(right)
+                    )
+                if op_name == "ne":
+                    return operator.invert(expression)
+                return expression
+
+            if isinstance(right, list):
+                raise ex.ArgumentTypeException(
+                    "systemTimeValidity",
+                    "datetime",
+                    "list",
+                )
+
+            raise ex.ArgumentTypeException(
+                "systemTimeValidity",
+                "eq/ne or lower(systemTimeValidity)/upper(systemTimeValidity)",
+            )
+
+        left_phenomenon_bounds = self.phenomenon_time_bounds(left)
+        right_phenomenon_bounds = self.phenomenon_time_bounds(right)
+
+        if left_phenomenon_bounds and isinstance(node.right, ast.Null):
+            return op(left, right)
+
+        if right_phenomenon_bounds and isinstance(node.left, ast.Null):
+            return op(left, right)
+
+        if left_phenomenon_bounds and not right_phenomenon_bounds:
+            return self.compare_phenomenon_time(
+                left_phenomenon_bounds, right, op
+            )
+
+        if right_phenomenon_bounds and not left_phenomenon_bounds:
+            reverse_op = {
+                "eq": operator.eq,
+                "ne": operator.ne,
+                "gt": operator.lt,
+                "ge": operator.le,
+                "lt": operator.gt,
+                "le": operator.ge,
+            }.get(getattr(op, "__name__", ""))
+            if reverse_op is not None:
+                return self.compare_phenomenon_time(
+                    right_phenomenon_bounds, left, reverse_op
+                )
 
         if isinstance(node.left, ast.Attribute) and not isinstance(
             node.right, ast.Attribute
@@ -349,10 +542,20 @@ class FilterVisitor(visitor.NodeVisitor):
         return handler(*node.args)
 
     ####################################################################################
+    # Date/time range functions
+    ####################################################################################
+
+    def func_lower(self, field: ast._Node) -> ClauseElement:
+        return self.temporal_bound(self.visit(field), "lower")
+
+    def func_upper(self, field: ast._Node) -> ClauseElement:
+        return self.temporal_bound(self.visit(field), "upper")
+
+    ####################################################################################
     # String Functions
     ####################################################################################
 
-    def _substr_function(
+    def substr_function(
         self, field: ast._Node, substr: ast._Node, func: str
     ) -> ClauseElement:
         identifier = self.visit(field)
@@ -370,10 +573,14 @@ class FilterVisitor(visitor.NodeVisitor):
         if isinstance(field, ast.Identifier) and field.name == "result":
             identifier = getattr(globals()[self.root_model], "result_string")
             return identifier.contains(self.visit(substr))
-        if isinstance(substr, ast.Identifier):
-            return self._substr_function(field, substr, "contains")
-        if isinstance(field, ast.Identifier):
-            return self._substr_function(substr, field, "contains")
+        # conformance: req/request-data/built-in-query-functions — substringof
+        # OData/STA Table 23 semantics: substringof(p0, p1) means "p1 contains
+        # p0", i.e. the SECOND argument (field/haystack) must contain the FIRST
+        # (substr/needle). This emits p1 LIKE '%' || p0 || '%' through the same
+        # .contains() machinery used by startswith/endswith. The previous code
+        # swapped the operands (built "needle LIKE %haystack%"), so a valid
+        # substring matched only on equality and otherwise returned [].
+        return self.substr_function(field, substr, "contains")
 
     def func_endswith(
         self, field: ast._Node, substr: ast._Node
@@ -385,9 +592,9 @@ class FilterVisitor(visitor.NodeVisitor):
             identifier = getattr(globals()[self.root_model], "result_string")
             return self.visit(field).endswith(identifier)
         if isinstance(field, ast.Identifier):
-            return self._substr_function(field, substr, "endswith")
+            return self.substr_function(field, substr, "endswith")
         if isinstance(substr, ast.Identifier):
-            return self._substr_function(substr, field, "endswith")
+            return self.substr_function(substr, field, "endswith")
 
     def func_startswith(
         self, field: ast._Node, substr: ast._Node
@@ -399,9 +606,9 @@ class FilterVisitor(visitor.NodeVisitor):
             identifier = getattr(globals()[self.root_model], "result_string")
             return self.visit(field).startswith(identifier)
         if isinstance(field, ast.Identifier):
-            return self._substr_function(field, substr, "startswith")
+            return self.substr_function(field, substr, "startswith")
         if isinstance(substr, ast.Identifier):
-            return self._substr_function(substr, field, "startswith")
+            return self.substr_function(substr, field, "startswith")
 
     def func_length(self, arg: ast._Node) -> functions.Function:
         if isinstance(arg, ast.Identifier) and arg.name == "result":
@@ -577,13 +784,29 @@ class FilterVisitor(visitor.NodeVisitor):
             WKTElement(geography.val, srid=EPSG),
         )
 
-    def func_geolength(self, field: ast.Identifier) -> functions.Function:
-        return functions.func.ST_Length(
-            getattr(
+    def geo_argument(self, arg: ast._Node):
+        """Resolve a geospatial-function argument to a column or geometry.
+
+        conformance: req/request-data/built-in-query-functions — a geo.* function
+        argument may be a geometry PROPERTY (ast.Identifier -> mapped column) or
+        an inline geography LITERAL (ast.Geography -> WKT geometry). The literal
+        form (e.g. geo.length(geography'LINESTRING(...)'), the Table 23 example)
+        previously crashed with "'Geography' object has no attribute 'name'"
+        because only the property form was handled.
+        """
+        if isinstance(arg, ast.Geography):
+            return WKTElement(arg.val, srid=EPSG)
+        if isinstance(arg, ast.Identifier):
+            return getattr(
                 globals()[self.root_model],
-                SELECT_MAPPING.get(field.name, field.name),
+                SELECT_MAPPING.get(arg.name, arg.name),
             )
-        )
+        return self.visit(arg)
+
+    def func_geolength(self, field: ast._Node) -> functions.Function:
+        # conformance: req/request-data/built-in-query-functions — geo.length
+        # accepts either a geometry property or a geography literal argument.
+        return functions.func.ST_Length(self.geo_argument(field))
 
     def func_geointersects(
         self, field: ast.Identifier, geography: ast.Geography

@@ -1,0 +1,878 @@
+# Copyright 2025 SUPSI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+STA to STAC 1.0 transformer.
+
+Consumes a HarvestedCatalog from app.v1.connector.harvester and builds a
+complete STAC 1.0 Catalog as plain Python dicts -- no pystac object graph.
+
+Output shape (written to Redis by cache.py via flatten_stac_catalog):
+    {
+        "catalog": {
+            ...catalog metadata...
+            "collection_ids": ["thing-1", "thing-2", ...]   # tracking list
+        },
+        "collections": [
+            {
+                ...collection metadata...
+                "item_ids": ["datastream-10", ...]           # tracking list
+                "items":   [{...item dict...}, ...]          # full items
+            },
+            ...
+        ]
+    }    
+
+Mapping decisions: docs/STA-STAC-Mapping-Reference.md
+
+Public interface:
+    build_stac_catalog(catalog) -> dict
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+from typing import Optional
+
+from app import ANONYMOUS_VIEWER, AUTHORIZATION, HOSTNAME, SUBPATH, VERSION
+from app.settings import serverSettings
+from app.v1.connector.config import CATALOG_CLOSED_NETWORKS, STAC_AUTH_DESCRIPTION, get_settings
+from app.v1.connector.harvester import HarvestedCatalog, HarvestedNetworkCatalog, HarvestedThing
+from app.v1.connector.utils import (
+    bbox_from_geometry as _bbox_from_geometry,
+    datastream_href as _datastream_href,
+    parse_iso as _parse_iso,
+    parse_phenomenon_time as _parse_phenomenon_time,
+    thing_href as _thing_href,
+    union_bboxes as _union_bboxes,
+)
+
+logger = logging.getLogger(__name__)
+
+
+_STAC_VERSION = "1.0.0"
+_MEDIA_JSON = "application/json"
+_MEDIA_GEOJSON = "application/geo+json"
+_MEDIA_CSV = "text/csv"
+_MEDIA_CONFORMANCE = "application/json"
+
+# STAC API conformance classes this deployment satisfies. api.py exposes a
+# root Catalog + Collections + Items over plain GET routes (no item search,
+# no filter/query extension) -- so only core/features/collections are
+# claimed. pystac-client and the stac-api-validator both gate feature
+# detection on this array before calling any other route, so extend this
+# list the moment api.py grows item-search or filter support.
+#
+# This is deliberately separate from serverSettings["conformance"] in
+# app.settings: that list is the underlying SensorThings API's own
+# conformance (OGC iot_sensing 1.1 requirement classes), which is a
+# different spec surface. It is exposed on the root Catalog as
+# "sta_conformsTo" below so a client can see what the bridged STA source
+# supports, without polluting the STAC "conformsTo" array that
+# pystac-client/stac-api-validator actually gate behavior on.
+_CONFORMANCE_CLASSES = [
+    "https://api.stacspec.org/v1.0.0/core",
+    "https://api.stacspec.org/v1.0.0/ogcapi-features",
+    "https://api.stacspec.org/v1.0.0/collections",
+]
+
+# Catalog id/title, deployment name, and default license all come from
+# config.py's Settings singleton -- see STAC_CATALOG_ID, STAC_CATALOG_TITLE,
+# STAC_DEPLOYMENT_NAME, STAC_DEFAULT_LICENSE. Nothing here is a module-level
+# constant anymore; each is read via get_settings() at build time so a
+# second deployment only needs a different .env, never a code change.
+
+STAC_ROOT_HREF = f"{HOSTNAME}{SUBPATH}{VERSION}/connector/stac"
+
+# stac-extensions/authentication -- declares HOW to satisfy the 401 a client
+# hits when it follows an Item asset href (Observations, Datastream) into
+# the underlying STA API. This is orthogonal to auth_gate.py: auth_gate
+# controls whether the *connector's own* catalog/item JSON is visible at
+# all (shallow/deep tier, per-network 404-hiding); this controls what a
+# client is told once it's looking at an Item whose data assets sit behind
+# istSOS's own Login flow. The two can and do disagree -- an Item can be
+# openly visible while its assets still need a token.
+#
+# The STA API gates read routes with one global dependency (see
+# app/v1/endpoints/read/read.py: `user = Depends(get_current_user)` iff
+# AUTHORIZATION and not ANONYMOUS_VIEWER), not per-network, so whether an
+# asset needs a token is a single deployment-wide flag, not something
+# computed per Item.
+#
+# Two schemes are declared, both describing the exact same real endpoint,
+# because no single scheme type serves both audiences:
+#   - "oauth2" (password grant) is the spec-accurate description of what
+#     app/oauth.py actually does (OAuth2PasswordBearer(tokenUrl="Login")).
+#     A script (pystac-client, a custom stac-asset auth plugin) that already
+#     knows how to drive a password grant can use this without guessing.
+#   - "apiKey" (header "Authorization") is there for STAC Browser: per its
+#     own docs, it only ever renders an interactive login box for "apiKey"
+#     or "openIdConnect" -- everything else ("oauth2", "http") is reported
+#     as "Unsupported" no matter how it's declared here. Even apiKey only
+#     lights up once the *browser* is deployed with a matching authConfig
+#     (a STAC Browser-side setting, not something this catalog can set) --
+#     see the reply where this is wired up.
+# Assets reference both ids in auth:refs; each client picks whichever it
+# understands and ignores the other.
+_AUTH_EXTENSION_URI = "https://stac-extensions.github.io/authentication/v1.1.0/schema.json"
+_AUTH_SCHEME_ID_OAUTH2 = "istsosLogin"
+_AUTH_SCHEME_ID_APIKEY = "istsosBearerToken"
+_AUTH_SCHEME_IDS = [_AUTH_SCHEME_ID_OAUTH2, _AUTH_SCHEME_ID_APIKEY]
+_STA_DATA_REQUIRES_AUTH = bool(AUTHORIZATION) and not bool(ANONYMOUS_VIEWER)
+
+
+def _auth_schemes() -> dict:
+    """
+    Both auth:schemes entries this deployment ever emits, keyed by id.
+    Same underlying endpoint (app/oauth.py's OAuth2PasswordBearer(
+    tokenUrl="Login")) described two ways -- see the module-level comment
+    above for why both exist.
+    """
+    login_url = f"{HOSTNAME}{SUBPATH}{VERSION}/Login"
+    oauth2_instructions = (
+        f"{STAC_AUTH_DESCRIPTION} (POST {login_url} with your "
+        "username/password to obtain one.)"
+    )
+    # apiKey with in:header sends this field's value VERBATIM as the
+    # Authorization header. STAC Browser (and any other apiKey-driven
+    # client) will not prepend "Bearer " for you, so the paste-target
+    # value has to include it or every request 401s with a token that
+    # is otherwise valid. Say so imperatively, not as a formatted-header
+    # example a user can skim past.
+    apikey_instructions = (
+        f"Paste this EXACT format into the field: Bearer <token> "
+        f"(the word 'Bearer', one space, then your token -- pasting the "
+        f"token alone will fail). Get a token by sending a POST request "
+        f"to {login_url} with your username/password."
+    )
+    return {
+        _AUTH_SCHEME_ID_OAUTH2: {
+            "type": "oauth2",
+            "description": oauth2_instructions,
+            "flows": {
+                "password": {
+                    "tokenUrl": login_url,
+                    "scopes": {},
+                }
+            },
+        },
+        _AUTH_SCHEME_ID_APIKEY: {
+            "type": "apiKey",
+            "in": "header",
+            "name": "Authorization",
+            "description": apikey_instructions,
+        },
+    }
+
+
+def _apply_catalog_auth_extension(catalog_dict: dict) -> None:
+    """
+    In place, declare auth:schemes on a Catalog or Collection dict when STA
+    data endpoints require a bearer token. No-op when AUTHORIZATION=0 or
+    ANONYMOUS_VIEWER=1 -- assets are fetchable as-is, nothing to declare.
+
+    Applied to every Catalog/sub-Catalog/Collection this module builds, not
+    just the root: STAC JSON-schema validation treats each document as
+    self-contained (it never walks the "root" link to resolve refs defined
+    elsewhere), so a document that declares the extension has to carry its
+    own auth:schemes to validate on its own.
+    """
+    if not _STA_DATA_REQUIRES_AUTH:
+        return
+    catalog_dict.setdefault("stac_extensions", []).append(_AUTH_EXTENSION_URI)
+    catalog_dict["auth:schemes"] = _auth_schemes()
+
+
+
+
+def _resolve_item_geometry(
+    thing: HarvestedThing, ds: dict
+) -> tuple[Optional[dict], Optional[list[float]]]:
+    """
+    Resolve the geometry and bbox for a STAC Item.
+
+    Fallback chain:
+      1. Datastream.observed_area (preferred -- per-variable spatial footprint)
+      2. First Thing.locations[0].geometry (fallback when observed_area is None)
+      3. None (emitted as geometry:null; WARNING logged with IDs)
+    """
+    observed_area = ds.get("observed_area")
+    if observed_area is not None:
+        return observed_area, _bbox_from_geometry(observed_area)
+
+    if thing.locations:
+        first_geom = thing.locations[0].get("geometry")
+        if first_geom is not None:
+            return first_geom, _bbox_from_geometry(first_geom)
+
+    logger.warning(
+        "Datastream %s in Thing %s has no observed_area and Thing has no "
+        "Locations -- Item will be emitted with geometry:null",
+        ds.get("id"), thing.id,
+    )
+    return None, None
+
+
+# Keyword extraction
+def _extract_collection_keywords(thing: HarvestedThing) -> list[str]:
+    """
+    Build the deduplicated keyword list for a Collection from a Thing and
+    its Datastreams.
+
+    Sources:
+      - Thing.name (always first)
+      - ObservedProperty.name from each Datastream -- split on ":" so a
+        category:subcategory:phenomenon_id naming convention emits each part
+      - Datastream.properties["keywords"] list
+
+    Preserves insertion order while deduplicating.
+    """
+    seen: set[str] = set()
+    keywords: list[str] = []
+
+    def _add(kw: str) -> None:
+        kw = kw.strip()
+        if kw and kw not in seen:
+            seen.add(kw)
+            keywords.append(kw)
+
+    _add(thing.name)
+    for ds in thing.datastreams:
+        op = ds.get("observed_property")
+        if op and op.get("name"):
+            for part in op["name"].split(":"):
+                _add(part)
+        for kw in (ds.get("properties") or {}).get("keywords", []):
+            if isinstance(kw, str):
+                _add(kw)
+
+    return keywords
+
+
+# Description composer
+def _compose_item_description(ds: dict, thing: HarvestedThing) -> str:
+    """
+    Compose the Item description from a Datastream and its parent Thing.
+
+    Datastream.description is primary. ObservedProperty and Sensor
+    descriptions are appended as supplementary context. Falls back to
+    Datastream.name when all description fields are empty.
+    """
+    parts: list[str] = []
+    if ds.get("description"):
+        parts.append(ds["description"])
+    op = ds.get("observed_property")
+    if op and op.get("description"):
+        parts.append(op["description"])
+    sensor = ds.get("sensor")
+    if sensor and sensor.get("description"):
+        parts.append(sensor["description"])
+    return " | ".join(p for p in parts if p) or ds.get("name", "")
+
+
+# Link builders
+def _collections_base_href(network_id: Optional[int] = None) -> str:
+    if network_id is None:
+        return f"{STAC_ROOT_HREF}/collections"
+    return f"{STAC_ROOT_HREF}/{network_id}/collections"
+
+
+def _network_catalog_href(network_id: int) -> str:
+    return f"{STAC_ROOT_HREF}/{network_id}"
+
+
+def _item_nav_links(item_id: str, collection_id: str, network_id: Optional[int] = None) -> list[dict]:
+    """
+    Build the complete set of STAC navigation links for an Item.
+
+    Required by STAC 1.0: self, root, parent, collection.
+    The sta_datastream cross-reference is appended last as a custom rel.
+    """
+    collection_href = f"{_collections_base_href(network_id)}/{collection_id}"
+    item_href = f"{collection_href}/items/{item_id}"
+    return [
+        {"rel": "self",       "href": item_href,       "type": _MEDIA_GEOJSON},
+        {"rel": "root",       "href": STAC_ROOT_HREF,  "type": _MEDIA_JSON},
+        {"rel": "parent",     "href": collection_href, "type": _MEDIA_JSON},
+        {"rel": "collection", "href": collection_href, "type": _MEDIA_JSON},
+    ]
+
+
+def _collection_nav_links(
+    collection_id: str, item_ids: list[str], network_id: Optional[int] = None
+) -> list[dict]:
+    collection_href = f"{_collections_base_href(network_id)}/{collection_id}"
+    parent_href = _network_catalog_href(network_id) if network_id is not None else STAC_ROOT_HREF
+    links = [
+        {"rel": "self",   "href": collection_href, "type": _MEDIA_JSON},
+        {"rel": "root",   "href": STAC_ROOT_HREF,  "type": _MEDIA_JSON},
+        {"rel": "parent", "href": parent_href,     "type": _MEDIA_JSON},
+    ]
+    for iid in item_ids:
+        links.append({"rel": "item", "href": f"{collection_href}/items/{iid}", "type": _MEDIA_GEOJSON})
+    return links
+
+
+def _catalog_nav_links(
+    collection_ids: list[str], network_ids: Optional[list[int]] = None
+) -> list[dict]:
+    """
+    Root catalog nav links. collection_ids -> rel=child to each Collection
+    (all of them in NETWORK=0 mode, orphan-only in NETWORK=1 mode).
+    network_ids -> rel=child to each Network subcatalog, only passed in
+    NETWORK=1 mode.
+
+    Also emits conformance/data link rels required of a STAC API landing
+    page (root Catalog doubles as the landing page here). service-desc is
+    deliberately not emitted -- it points at an OpenAPI document, and none
+    exists yet. api.py needs a matching GET /conformance route that returns
+    {"conformsTo": _CONFORMANCE_CLASSES} for the conformance href below to
+    resolve to anything.
+    """
+    links = [
+        {"rel": "self",         "href": STAC_ROOT_HREF,                     "type": _MEDIA_JSON},
+        {"rel": "root",         "href": STAC_ROOT_HREF,                     "type": _MEDIA_JSON},
+        {"rel": "conformance",  "href": f"{STAC_ROOT_HREF}/conformance",    "type": _MEDIA_CONFORMANCE},
+        {"rel": "data",         "href": _collections_base_href(),          "type": _MEDIA_JSON},
+    ]
+    base = _collections_base_href()
+    for cid in collection_ids:
+        links.append({"rel": "child", "href": f"{base}/{cid}", "type": _MEDIA_JSON})
+    for nid in (network_ids or []):
+        if nid in CATALOG_CLOSED_NETWORKS:
+            continue
+        links.append({"rel": "child", "href": _network_catalog_href(nid), "type": _MEDIA_JSON})
+    return links
+
+
+def _network_subcatalog_nav_links(network_id: int, collection_ids: list[str]) -> list[dict]:
+    """Nav links for one Network's subcatalog. Required: self, root, parent(=root), one rel=child per Collection."""
+    self_href = _network_catalog_href(network_id)
+    base = _collections_base_href(network_id)
+    links = [
+        {"rel": "self",   "href": self_href,      "type": _MEDIA_JSON},
+        {"rel": "root",   "href": STAC_ROOT_HREF, "type": _MEDIA_JSON},
+        {"rel": "parent", "href": STAC_ROOT_HREF, "type": _MEDIA_JSON},
+    ]
+    for cid in collection_ids:
+        links.append({"rel": "child", "href": f"{base}/{cid}", "type": _MEDIA_JSON})
+    return links
+
+
+# Item builder
+_RESERVED_DS_PROPS = frozenset({
+    "observedArea", "phenomenonTime", "resultTime",
+    "created", "updated", "platform", "resolution",
+    "instruments", "keywords", "license", "providers",
+})
+
+
+def _build_item_dict(
+    thing: HarvestedThing,
+    ds: dict,
+    collection_id: str,
+    network_id: Optional[int] = None,
+) -> Optional[dict]:
+    """
+    Build a STAC Item as a plain dict for one Datastream.
+
+    Returns None (with WARNING) when Datastream has no parseable
+    phenomenon_time -- a STAC Item without datetime is invalid.
+    Items with null geometry are emitted (geometry:null is valid GeoJSON).
+
+    Datetime rule (STAC 1.0 spec):
+      - Closed interval (start + end both known):  datetime = null,
+        start_datetime and end_datetime carry the interval.
+      - Open-ended / live stream (no end):         datetime = start,
+        start_datetime = start, end_datetime = null.
+      - No parseable phenomenon_time:              Item is skipped entirely.
+
+    Links: all navigation links (self, root, parent, collection) plus the
+    sta_datastream cross-reference are written here and cached verbatim.
+    api.py serves Item dicts from cache without any link injection.
+    """
+    start, end = _parse_phenomenon_time(ds.get("phenomenon_time"))
+    if start is None:
+        logger.warning(
+            "Skipping Datastream %s in Thing %s: no usable phenomenon_time -- "
+            "a STAC Item without datetime is invalid",
+            ds.get("id"), thing.id,
+        )
+        return None
+
+    geometry, bbox = _resolve_item_geometry(thing, ds)
+    item_id = f"datastream-{ds['id']}"
+
+    # STAC 1.0: datetime must be null when start+end interval is present.
+    if end is not None:
+        item_datetime = None
+        start_dt_str = start.isoformat()
+        end_dt_str = end.isoformat()
+    else:
+        # Open-ended stream: datetime = start, end_datetime = null.
+        item_datetime = start.strftime("%Y-%m-%dT%H:%M:%SZ")
+        start_dt_str = start.isoformat()
+        end_dt_str = None
+
+    properties: dict = {
+        "datetime":       item_datetime,
+        "start_datetime": start_dt_str,
+        "end_datetime":   end_dt_str,
+        "title":          f"{thing.name} - {ds.get('name', '')}",
+        "description":    _compose_item_description(ds, thing),
+        "thing_id":       thing.id,
+        "thing_name":     thing.name,
+        "datastream_id":  ds.get("id"),
+    }
+
+    uom = ds.get("unit_of_measurement")
+    if uom:
+        properties["unit_of_measurement"] = uom
+
+    obs_type = ds.get("observation_type")
+    if obs_type:
+        properties["observation_type"] = obs_type
+
+    op = ds.get("observed_property")
+    if op is not None:
+        if op.get("name"):
+            properties["observed_property"] = op["name"]
+        if op.get("id") is not None:
+            properties["observed_property_id"] = op["id"]
+        if op.get("definition") is not None:
+            properties["observed_property_definition"] = op["definition"]
+    else:
+        logger.warning(
+            "Datastream %s in Thing %s has no ObservedProperty -- "
+            "observed_property fields will be absent from Item properties",
+            ds.get("id"), thing.id,
+        )
+
+    sensor = ds.get("sensor")
+    if sensor is not None:
+        if sensor.get("name"):
+            properties["sensor_name"] = sensor["name"]
+        if sensor.get("id") is not None:
+            properties["sensor_id"] = sensor["id"]
+        if sensor.get("metadata") is not None:
+            properties["sensor_metadata"] = sensor["metadata"]
+    else:
+        logger.warning(
+            "Datastream %s in Thing %s has no Sensor -- "
+            "sensor fields will be absent from Item properties",
+            ds.get("id"), thing.id,
+        )
+
+    ds_props = ds.get("properties") or {}
+    for key in ("created", "updated", "platform", "resolution"):
+        value = ds_props.get(key)
+        if value:
+            properties[key] = str(value)
+    instruments = ds_props.get("instruments")
+    if instruments:
+        properties["instruments"] = (
+            instruments if isinstance(instruments, list) else [str(instruments)]
+        )
+    for k, v in ds_props.items():
+        if k not in _RESERVED_DS_PROPS and k not in properties:
+            properties[k] = v
+
+    base_href = _datastream_href(ds.get("id"))
+    ds_name = ds.get("name", "")
+
+    assets = {
+        "observations_json": {
+            "href":        f"{base_href}/Observations",
+            "type":        _MEDIA_JSON,
+            "title":       f"{ds_name} -- JSON observations feed",
+            "roles":       ["data"],
+            "description": f"Live OGC SensorThings Observations feed for Datastream: {ds_name}",
+        },
+        "observations_csv": {
+            "href":        f"{base_href}/Observations?$resultFormat=CSV",
+            "type":        _MEDIA_CSV,
+            "title":       f"{ds_name} -- CSV export",
+            "roles":       ["data"],
+            "description": f"CSV bulk export of Observations for Datastream: {ds_name}",
+        },
+        "datastream": {
+            "href":        base_href,
+            "type":        _MEDIA_JSON,
+            "title":       f"STA Datastream: {ds_name}",
+            "roles":       ["metadata"],
+            "description": f"OGC SensorThings Datastream entity for: {ds_name}",
+        },
+    }
+
+    # All three assets above point at the STA API, which gates every read
+    # route behind the same single flag -- see _STA_DATA_REQUIRES_AUTH.
+    # Tag them so a client following the href straight into a bare 401
+    # knows what scheme to satisfy and where, instead of guessing.
+    #
+    # auth:schemes has to be repeated here in Item Properties, not just on
+    # the root Catalog: STAC JSON-schema validation (and most client-side
+    # resolution) treats each document as self-contained -- validators
+    # check the Item in isolation, they don't walk the "root" link to find
+    # schemes declared elsewhere. Per the extension spec, Item-level
+    # auth:schemes belongs in Properties, not at the Item's top level.
+    item_stac_extensions: list[str] = []
+    if _STA_DATA_REQUIRES_AUTH:
+        item_stac_extensions.append(_AUTH_EXTENSION_URI)
+        properties["auth:schemes"] = _auth_schemes()
+        for asset in assets.values():
+            asset["auth:refs"] = list(_AUTH_SCHEME_IDS)
+
+    # Navigation links built here -- served from cache as-is by api.py.
+    # sta_datastream appended after nav links as a custom cross-reference rel.
+    links = _item_nav_links(item_id, collection_id, network_id) + [
+        {
+            "rel":   "sta_datastream",
+            "href":  base_href,
+            "type":  _MEDIA_JSON,
+            "title": f"STA Datastream: {ds_name}",
+        }
+    ]
+
+    return {
+        "type":            "Feature",
+        "stac_version":    _STAC_VERSION,
+        "stac_extensions": item_stac_extensions,
+        "id":              item_id,
+        "geometry":        geometry,
+        "bbox":            bbox,
+        "properties":      properties,
+        "links":           links,
+        "assets":          assets,
+        "collection":      collection_id,
+    }
+
+
+# Collection builder
+def _build_collection_dict(
+    thing: HarvestedThing,
+    items: list[dict],
+    network_id: Optional[int] = None,
+    default_license: str = "proprietary",
+) -> dict:
+    """
+    Build a STAC Collection as a plain dict for one Thing.
+
+    Extent is computed bottom-up from the pre-built Item dicts.
+    The "item_ids" tracking list and "items" list are written here for
+    cache.py (flatten_stac_catalog reads both). api.py strips "item_ids"
+    and "items" before serving -- the full navigation links are already
+    in the cached "links" array.
+
+    default_license is the Settings.STAC_DEFAULT_LICENSE fallback, used
+    only when the Thing itself carries no "license" property. STAC 1.0
+    only sanctions an SPDX identifier, "various" (multiple differing
+    licenses across the included data), or "proprietary" (all rights
+    reserved / terms unclear, consult the provider) -- config.py validates
+    this at startup so an invalid value never reaches here.
+
+    Temporal extent rule:
+      - collection_end is null if ANY item stream is still open (no end_datetime).
+        This correctly signals "ongoing" to STAC clients.
+      - collection_end is the maximum end_datetime only when ALL items are closed.
+    """
+    collection_id = f"thing-{thing.id}"
+
+    # Spatial extent
+    bboxes: list[list[float]] = [
+        item["bbox"] for item in items if item.get("bbox") is not None
+    ]
+    if not bboxes:
+        for loc in thing.locations:
+            geom = loc.get("geometry")
+            if geom:
+                bbox = _bbox_from_geometry(geom)
+                if bbox:
+                    bboxes.append(bbox)
+    if bboxes:
+        spatial_bbox = _union_bboxes(bboxes)
+    else:
+        # ERROR, not WARNING: a world bbox here is indistinguishable in the
+        # API response from a Collection that genuinely spans the globe.
+        # Nobody will notice until a map renders wrong, so this needs to be
+        # loud enough to show up in prod log monitoring, not just local runs.
+        logger.error(
+            "Thing %s (%s) has no spatial metadata from Items or Locations "
+            "-- Collection will use world bbox fallback [-180,-90,180,90], "
+            "which is indistinguishable from a genuinely global extent",
+            thing.id, thing.name,
+        )
+        spatial_bbox = [-180.0, -90.0, 180.0, 90.0]
+
+    # Temporal extent
+    # Pull start/end strings directly from already-built item properties --
+    # they are always ISO strings at this point (never asyncpg.Range).
+    starts: list[datetime] = []
+    ends: list[Optional[datetime]] = []
+    for item in items:
+        s = item["properties"].get("start_datetime")
+        e = item["properties"].get("end_datetime")
+        if s:
+            dt = _parse_iso(s)
+            if dt:
+                starts.append(dt)
+        ends.append(_parse_iso(e) if e else None)
+
+    collection_start = min(starts).isoformat() if starts else None
+
+    # null end = at least one stream is still open (ongoing).
+    any_open = any(e is None for e in ends)
+    collection_end = None if any_open else (
+        max(ends).isoformat() if ends else None  # type: ignore[arg-type]
+    )
+
+    # Summaries
+    keywords = _extract_collection_keywords(thing)
+    op_defs: list[str] = []
+    unit_symbols: list[str] = []
+    for ds in thing.datastreams:
+        op = ds.get("observed_property")
+        if op and op.get("definition") is not None:
+            op_defs.append(str(op["definition"]))
+        uom = ds.get("unit_of_measurement")
+        if uom and uom.get("symbol"):
+            unit_symbols.append(uom["symbol"])
+
+    thing_props = thing.properties or {}
+
+    item_ids = [item["id"] for item in items]
+
+    # Navigation links built here -- served from cache as-is by api.py.
+    # sta_thing appended after nav links as a custom cross-reference rel.
+    links = _collection_nav_links(collection_id, item_ids, network_id) + [
+        {
+            "rel":   "sta_thing",
+            "href":  _thing_href(thing.id),
+            "type":  _MEDIA_JSON,
+            "title": f"STA Thing: {thing.name}",
+        }
+    ]
+
+    coll: dict = {
+        "type":         "Collection",
+        "stac_version": _STAC_VERSION,
+        "id":           collection_id,
+        "title":        thing.name or None,
+        "description":  (
+            thing.description
+            or f"STAC Collection for SensorThings Thing: {thing.name}"
+        ),
+        "keywords": keywords,
+        "extent": {
+            "spatial":  {"bbox": [spatial_bbox]},
+            "temporal": {"interval": [[collection_start, collection_end]]},
+        },
+        "links":            links,
+        "license":          default_license,
+        "thing_id":         thing.id,
+        "thing_properties": thing.properties,
+        "summaries": {
+            "observed_property_definitions": list(dict.fromkeys(op_defs)),
+            "unit_symbols":                  list(dict.fromkeys(unit_symbols)),
+        },
+    }
+
+    if thing_props.get("license"):
+        coll["license"] = thing_props["license"]
+    if thing_props.get("providers"):
+        coll["providers"] = thing_props["providers"]
+
+    # Tracking lists consumed by cache.py / api.py -- not part of STAC spec.
+    coll["item_ids"] = item_ids
+    coll["items"] = items
+
+    _apply_catalog_auth_extension(coll)
+
+    return coll
+
+
+def _build_things_collections(
+    things: list[HarvestedThing],
+    network_id: Optional[int],
+    default_license: str = "proprietary",
+) -> tuple[list[dict], int]:
+    """Build Collection dicts (with nested Items) for a list of Things, scoped
+    to network_id (None = orphan/unscoped). Returns (collections, skipped_items)."""
+    collections: list[dict] = []
+    skipped_items = 0
+    for thing in things:
+        items: list[dict] = []
+        for ds in thing.datastreams:
+            item = _build_item_dict(thing, ds, f"thing-{thing.id}", network_id=network_id)
+            if item is not None:
+                items.append(item)
+            else:
+                skipped_items += 1
+        if not items and thing.datastreams:
+            logger.warning(
+                "Thing %s (%s): all %d Datastreams were skipped -- Collection will have no Items",
+                thing.id, thing.name, len(thing.datastreams),
+            )
+        collections.append(
+            _build_collection_dict(thing, items, network_id=network_id, default_license=default_license)
+        )
+    return collections, skipped_items
+
+
+# Public interface
+def build_stac_catalog(catalog: HarvestedCatalog) -> dict:
+    """
+    Build a complete STAC 1.0 Catalog from a HarvestedCatalog and return it
+    as a plain dict ready for cache.py to flatten into Redis.
+
+    Output shape:
+        {
+            "catalog": { ...metadata..., "collection_ids": [...], "links": [...] },
+            "collections": [
+                { ...metadata..., "item_ids": [...], "items": [...], "links": [...] },
+                ...
+            ]
+        }
+
+    All STAC navigation links are built here at transform time and stored in
+    the cache. api.py serves cached objects as-is -- it does not inject or
+    reconstruct any links. Only the FeatureCollection and /collections
+    envelope-level links in api.py are assembled at serve time (those are
+    wrappers, not cached entities).
+
+    Called exactly once per harvest cycle by scheduler.py. Does not touch
+    Postgres, Redis, or disk.
+    """
+    settings = get_settings()
+    collections, skipped_items = _build_things_collections(
+        catalog.things, network_id=None, default_license=settings.STAC_DEFAULT_LICENSE
+    )
+    collection_ids = [c["id"] for c in collections]
+
+    root_catalog = {
+        "type": "Catalog",
+        "stac_version": _STAC_VERSION,
+        "id": settings.STAC_CATALOG_ID,
+        "description": (
+            f"{settings.STAC_DEPLOYMENT_NAME} deployment: {catalog.thing_count} "
+            f"Things, harvested at {catalog.harvested_at}."
+        ),
+        "conformsTo": _CONFORMANCE_CLASSES,
+        "sta_conformsTo": serverSettings["conformance"],
+        "links": _catalog_nav_links(collection_ids),
+        "collection_ids": collection_ids,
+    }
+    if settings.STAC_CATALOG_TITLE:
+        root_catalog["title"] = settings.STAC_CATALOG_TITLE
+    _apply_catalog_auth_extension(root_catalog)
+
+    logger.info(
+        "STAC transform complete: %d Collections, %d Items, %d skipped",
+        len(collections), sum(len(c["item_ids"]) for c in collections), skipped_items,
+    )
+    return {"catalog": root_catalog, "collections": collections}
+
+
+def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -> dict:
+    """
+    Build the NETWORK=1 hierarchy:
+
+        Catalog (root, serves orphan scope directly)
+          Catalog (1 per Network, subcatalog)
+            Collection (1 per Thing w/ >=1 Datastream in that Network)
+              Item (1 per Datastream in that Network)
+          Collection (1 per Thing w/ >=1 orphan Datastream)
+            Item (1 per orphan Datastream)
+
+    Output shape:
+        {
+            "catalog": {...root..., "collection_ids": [...orphan...], "network_ids": [...]},
+            "collections": [...orphan collections, same shape build_stac_catalog uses...],
+            "networks": [
+                {"network_id": int, "catalog": {...subcatalog...}, "collections": [...scoped...]},
+                ...
+            ]
+        }
+    """
+    settings = get_settings()
+    orphan_collections, skipped = _build_things_collections(
+        network_catalog.orphan_things, network_id=None, default_license=settings.STAC_DEFAULT_LICENSE
+    )
+    orphan_ids = [c["id"] for c in orphan_collections]
+
+    network_blocks: list[dict] = []
+    total_items = sum(len(c["item_ids"]) for c in orphan_collections)
+
+    for net in network_catalog.networks:
+        things = network_catalog.things_by_network.get(net.id, [])
+        collections, net_skipped = _build_things_collections(
+            things, network_id=net.id, default_license=settings.STAC_DEFAULT_LICENSE
+        )
+        skipped += net_skipped
+        collection_ids = [c["id"] for c in collections]
+        total_items += sum(len(c["item_ids"]) for c in collections)
+
+        sub_catalog = {
+            "type": "Catalog",
+            "stac_version": _STAC_VERSION,
+            "id": f"network-{net.id}",
+            "title": net.name or None,
+            "description": f"istSOS4 Network subcatalog: {net.name} ({len(collection_ids)} Things).",
+            "links": _network_subcatalog_nav_links(net.id, collection_ids),
+            "collection_ids": collection_ids,
+        }
+        _apply_catalog_auth_extension(sub_catalog)
+        network_blocks.append({"network_id": net.id, "catalog": sub_catalog, "collections": collections})
+
+    network_ids = [net.id for net in network_catalog.networks]
+    # Filter closed network ids from the root catalog's public metadata.
+    # The closed networks' subcatalogs are still built and cached normally
+    # (so authenticated callers can reach them by id), they are just not
+    # advertised from root -- unless the caller is authenticated, in which
+    # case api.py's stac_root re-adds these links at request time using
+    # closed_network_ids (see there for why this can't be baked into the
+    # cached "links" list itself: the cache is written once per harvest
+    # cycle with no per-request auth context).
+    visible_network_ids = [
+        nid for nid in network_ids if nid not in CATALOG_CLOSED_NETWORKS
+    ]
+    closed_network_ids = [
+        nid for nid in network_ids if nid in CATALOG_CLOSED_NETWORKS
+    ]
+    root_catalog = {
+        "type": "Catalog",
+        "stac_version": _STAC_VERSION,
+        "id": settings.STAC_CATALOG_ID,
+        "description": (
+            f"{settings.STAC_DEPLOYMENT_NAME} deployment: {len(network_ids)} Networks, "
+            f"harvested at {network_catalog.harvested_at}. Datastreams with no assigned "
+            "Network are served directly from this root."
+        ),
+        "conformsTo": _CONFORMANCE_CLASSES,
+        "sta_conformsTo": serverSettings["conformance"],
+        "links": _catalog_nav_links(orphan_ids, network_ids=visible_network_ids),
+        "collection_ids": orphan_ids,
+        "network_ids": visible_network_ids,
+        "closed_network_ids": closed_network_ids,
+    }
+    if settings.STAC_CATALOG_TITLE:
+        root_catalog["title"] = settings.STAC_CATALOG_TITLE
+    _apply_catalog_auth_extension(root_catalog)
+
+    logger.info(
+        "STAC network transform complete: %d Networks, %d orphan Collections, %d total Items, %d skipped",
+        len(network_ids), len(orphan_collections), total_items, skipped,
+    )
+
+    return {"catalog": root_catalog, "collections": orphan_collections, "networks": network_blocks}
