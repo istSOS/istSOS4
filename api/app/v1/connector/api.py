@@ -37,6 +37,7 @@ served verbatim, no reconstruction.
 import functools
 from typing import Optional
 
+from app.v1.connector.stac_transformer import _CONFORMANCE_CLASSES
 from app import HOSTNAME, SUBPATH, VERSION
 from app.v1.connector.auth_gate import gate
 from app.oauth import get_current_user_optional
@@ -206,6 +207,21 @@ async def stac_root(
         result["links"] = [*result.get("links", []), *closed_links]
 
     return result
+
+
+@v1.api_route(
+    "/stac/conformance",
+    methods=["GET"],
+    tags=["STAC"],
+    summary="STAC API conformance classes",
+    status_code=status.HTTP_200_OK,
+)
+@_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
+@catch_errors
+async def stac_conformance(gate_result: Optional[JSONResponse] = Depends(gate)):
+    if gate_result is not None:
+        return gate_result
+    return {"conformsTo": _CONFORMANCE_CLASSES}
 
 
 @v1.api_route(
