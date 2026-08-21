@@ -200,10 +200,14 @@ async def stac_root(
     # otherwise an authenticated user could reach /stac/{id} directly but
     # never discover it existed from root.
     if current_user is not None:
-        closed_links = [
-            {"rel": "child", "href": f"{_STAC_ROOT_HREF}/{nid}", "type": "application/json"}
-            for nid in catalog.get("closed_network_ids", [])
-        ]
+        closed_links = []
+        for nid in catalog.get("closed_network_ids", []):
+            closed_links.append(
+                {"rel": "child", "href": f"{_STAC_ROOT_HREF}/{nid}", "type": "application/json"}
+            )
+            closed_links.append(
+                {"rel": "data", "href": f"{_STAC_ROOT_HREF}/{nid}/collections", "type": "application/json"}
+            )
         result["links"] = [*result.get("links", []), *closed_links]
 
     return result

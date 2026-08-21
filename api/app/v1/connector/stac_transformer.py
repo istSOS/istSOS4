@@ -340,13 +340,32 @@ def _catalog_nav_links(
     exists yet. api.py needs a matching GET /conformance route that returns
     {"conformsTo": _CONFORMANCE_CLASSES} for the conformance href below to
     resolve to anything.
+
+    "data" rel: in NETWORK=0 mode (network_ids is None) this is the single
+    flat /stac/collections href, which is genuinely where all Collections
+    live. In NETWORK=1 mode, Datastreams can no longer be orphaned, so
+    collection_ids here is always empty and the flat /stac/collections
+    route never has anything to serve -- advertising it as "data" would
+    point clients at a permanently empty endpoint. Emit one "data" rel per
+    visible Network instead, each pointing at that Network's real
+    /stac/{network_id}/collections.
     """
     links = [
         {"rel": "self",         "href": STAC_ROOT_HREF,                     "type": _MEDIA_JSON},
         {"rel": "root",         "href": STAC_ROOT_HREF,                     "type": _MEDIA_JSON},
         {"rel": "conformance",  "href": f"{STAC_ROOT_HREF}/conformance",    "type": _MEDIA_CONFORMANCE},
-        {"rel": "data",         "href": _collections_base_href(),          "type": _MEDIA_JSON},
     ]
+    if network_ids:
+        for nid in network_ids:
+            if nid in CATALOG_CLOSED_NETWORKS:
+                continue
+            links.append(
+                {"rel": "data", "href": _collections_base_href(nid), "type": _MEDIA_JSON}
+            )
+    else:
+        links.append(
+            {"rel": "data", "href": _collections_base_href(), "type": _MEDIA_JSON}
+        )
     base = _collections_base_href()
     for cid in collection_ids:
         links.append({"rel": "child", "href": f"{base}/{cid}", "type": _MEDIA_JSON})
