@@ -20,7 +20,7 @@ from app.v1.api import v1
 from app.v1.connector.harvester import HarvestedNetwork, HarvestedNetworkCatalog, HarvestedThing
 import app.v1.connector.stac_transformer as stac_transformer
 import app.v1.connector.dcat_transformer as dcat_transformer
-from app.v1.connector.cache import get_harvest_network_ids
+from app.v1.connector.cache import get_dcat_metadata
 
 
 @pytest.fixture
@@ -31,8 +31,6 @@ def mock_cache(monkeypatch):
     monkeypatch.setattr("app.v1.connector.api.get_network_catalog", AsyncMock(return_value={"id": "network-1", "type": "Catalog"}))
     monkeypatch.setattr("app.v1.connector.api.get_dcat_root", AsyncMock(return_value="@prefix dcat: <http://www.w3.org/ns/dcat#> ."))
     monkeypatch.setattr("app.v1.connector.api.get_dcat_root_jsonld", AsyncMock(return_value='{"@type": "dcat:Catalog"}'))
-    monkeypatch.setattr("app.v1.connector.api.get_dcat_orphan", AsyncMock(return_value="@prefix dcat: <http://www.w3.org/ns/dcat#> ."))
-    monkeypatch.setattr("app.v1.connector.api.get_dcat_orphan_jsonld", AsyncMock(return_value='{"@type": "dcat:Catalog"}'))
     monkeypatch.setattr("app.v1.connector.api.get_dcat_network", AsyncMock(return_value="@prefix dcat: <http://www.w3.org/ns/dcat#> ."))
     monkeypatch.setattr("app.v1.connector.api.get_dcat_network_jsonld", AsyncMock(return_value='{"@type": "dcat:Catalog"}'))
 
@@ -54,7 +52,7 @@ async def test_authorization_disabled(mock_cache, set_connector_flags):
         res_shallow = await ac.get("/connector/stac")
         assert res_shallow.status_code == 200
 
-        res_deep = await ac.get("/connector/dcat/orphan")
+        res_deep = await ac.get("/connector/dcat/1")
         assert res_deep.status_code == 200
 
 
@@ -67,7 +65,7 @@ async def test_authorization_anonymous_viewer(mock_cache, set_connector_flags):
         res_shallow = await ac.get("/connector/stac")
         assert res_shallow.status_code == 200
 
-        res_deep = await ac.get("/connector/dcat/orphan")
+        res_deep = await ac.get("/connector/dcat/1")
         assert res_deep.status_code == 200
 
 
@@ -75,7 +73,7 @@ async def test_authorization_anonymous_viewer(mock_cache, set_connector_flags):
 async def test_strict_mode_open_metadata(mock_cache, set_connector_flags):
     """AUTHORIZATION=1, ANONYMOUS_VIEWER=0, OPEN_CATALOG_METADATA=1:
     every connector route is public, STAC and DCAT alike (no route is
-    gated purely by being a network/orphan sub-catalog -- see
+    gated purely by being a network sub-catalog -- see
     test_dcat_gate_parity.py for the regression this guards)."""
     set_connector_flags(
         authorization=1, anonymous_viewer=0, open_catalog_metadata=True, closed_networks=[]
@@ -84,9 +82,6 @@ async def test_strict_mode_open_metadata(mock_cache, set_connector_flags):
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
         res_stac = await ac.get("/connector/stac")
         assert res_stac.status_code == 200
-
-        res_dcat_orphan = await ac.get("/connector/dcat/orphan")
-        assert res_dcat_orphan.status_code == 200
 
         res_dcat_network = await ac.get("/connector/dcat/1")
         assert res_dcat_network.status_code == 200
@@ -106,9 +101,9 @@ async def test_strict_mode_closed_metadata(mock_cache, valid_auth_headers, set_c
         res_stac_auth = await ac.get("/connector/stac", headers=valid_auth_headers)
         assert res_stac_auth.status_code == 200
 
-        res_dcat_anon = await ac.get("/connector/dcat/orphan")
+        res_dcat_anon = await ac.get("/connector/dcat/1")
         assert res_dcat_anon.status_code == 401
-        res_dcat_auth = await ac.get("/connector/dcat/orphan", headers=valid_auth_headers)
+        res_dcat_auth = await ac.get("/connector/dcat/1", headers=valid_auth_headers)
         assert res_dcat_auth.status_code == 200
 
 
@@ -154,7 +149,6 @@ async def test_root_catalog_link_leak_check(set_connector_flags):
     # Sample harvested network catalog containing network 1 and closed network 7.
     net_cat = HarvestedNetworkCatalog(
         harvested_at="2026-08-11T12:00:00Z",
-        orphan_things=[],
         networks=[
             HarvestedNetwork(id=1, name="Network 1"),
             HarvestedNetwork(id=7, name="Network 7 (Closed)"),
@@ -181,22 +175,22 @@ async def test_root_catalog_link_leak_check(set_connector_flags):
 
 @pytest.mark.asyncio
 async def test_connector_summary_endpoint_closed_network(mock_cache, monkeypatch, set_connector_flags):
-    """GET /connector: closed network id is absent from top-level network_ids."""
+    """GET /connector: closed network id is absent from dcat_network_ids."""
     set_connector_flags(closed_networks=[7])
 
-    # Mock Redis returning raw network_ids [1, 7, 2] from the shared harvest-level key.
-    monkeypatch.setattr("app.v1.connector.cache.redis.get", lambda key: b'[1, 7, 2]' if key == "connector:meta:network_ids" else None)
+    # Mock Redis returning raw network_ids [1, 7, 2].
+    monkeypatch.setattr("app.v1.connector.cache.redis.get", lambda key: b'[1, 7, 2]' if key == "dcat:meta:network_ids" else None)
 
-    network_ids = get_harvest_network_ids()
-    assert 7 not in network_ids
-    assert network_ids == [1, 2]
+    dcat_meta = get_dcat_metadata()
+    assert 7 not in dcat_meta["network_ids"]
+    assert dcat_meta["network_ids"] == [1, 2]
 
     # Same check through the route handler.
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
         res = await ac.get("/connector")
         assert res.status_code == 200
         data = res.json()
-        assert 7 not in data["network_ids"]
+        assert 7 not in data["dcat_network_ids"]
 
 
 @pytest.mark.asyncio
@@ -206,6 +200,6 @@ async def test_garbage_token_returns_401(mock_cache, set_connector_flags):
 
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
         invalid_headers = {"Authorization": "Bearer invalid.garbage.jwt.token"}
-        res = await ac.get("/connector/dcat/orphan", headers=invalid_headers)
+        res = await ac.get("/connector/dcat/1", headers=invalid_headers)
         assert res.status_code == 401
         assert res.json()["detail"] == "Could not validate credentials"

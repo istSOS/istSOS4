@@ -1,11 +1,11 @@
 """
-Regression test for the bug where /dcat/orphan and /dcat/{network_id}
-were wired to a separate "deep_gate" that skipped OPEN_CATALOG_METADATA
-entirely and always returned 401 in strict mode, unlike every STAC route
-(including /stac/{network_id}) and unlike /dcat/root -- all of which
-respect OPEN_CATALOG_METADATA as the docs describe. With
-CATALOG_CLOSED_NETWORKS empty, that made every DCAT network/orphan
-request permanently gated no matter what OPEN_CATALOG_METADATA said.
+Regression test for the bug where /dcat/{network_id} was wired to a
+separate "deep_gate" that skipped OPEN_CATALOG_METADATA entirely and
+always returned 401 in strict mode, unlike every STAC route (including
+/stac/{network_id}) and unlike /dcat/root -- all of which respect
+OPEN_CATALOG_METADATA as the docs describe. With CATALOG_CLOSED_NETWORKS
+empty, that made every DCAT network request permanently gated no matter
+what OPEN_CATALOG_METADATA said.
 
 Two layers:
 - test_all_gated_routes_share_one_gate: structural check on the actual
@@ -57,8 +57,6 @@ def mock_all_cache_reads(monkeypatch):
         ("get_network_catalog", {"id": "network-1", "type": "Catalog"}),
         ("get_dcat_root", "@prefix dcat: <http://www.w3.org/ns/dcat#> ."),
         ("get_dcat_root_jsonld", '{"@type": "dcat:Catalog"}'),
-        ("get_dcat_orphan", "@prefix dcat: <http://www.w3.org/ns/dcat#> ."),
-        ("get_dcat_orphan_jsonld", '{"@type": "dcat:Catalog"}'),
         ("get_dcat_network", "@prefix dcat: <http://www.w3.org/ns/dcat#> ."),
         ("get_dcat_network_jsonld", '{"@type": "dcat:Catalog"}'),
     ]:
@@ -80,7 +78,7 @@ async def test_stac_and_dcat_network_routes_match_under_every_flag_combo(
 ):
     """For every flag combination, an unclosed network's STAC route and its
     DCAT route must return the same status -- there is no code-level reason
-    for DCAT network/orphan content to be gated any differently than the
+    for DCAT network content to be gated any differently than the
     equivalent STAC content."""
     set_connector_flags(
         authorization=authorization,
@@ -92,7 +90,6 @@ async def test_stac_and_dcat_network_routes_match_under_every_flag_combo(
     async with AsyncClient(transport=ASGITransport(app=root_router), base_url="http://test") as ac:
         res_stac_network = await ac.get("/connector/stac/1")
         res_dcat_network = await ac.get("/connector/dcat/1")
-        res_dcat_orphan = await ac.get("/connector/dcat/orphan")
 
         assert res_stac_network.status_code == res_dcat_network.status_code, (
             f"/connector/stac/1 -> {res_stac_network.status_code} but "
@@ -100,4 +97,3 @@ async def test_stac_and_dcat_network_routes_match_under_every_flag_combo(
             f"AUTHORIZATION={authorization}, ANONYMOUS_VIEWER={anonymous_viewer}, "
             f"OPEN_CATALOG_METADATA={open_catalog_metadata}"
         )
-        assert res_stac_network.status_code == res_dcat_orphan.status_code
