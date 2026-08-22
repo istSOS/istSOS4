@@ -48,7 +48,7 @@ Both transformers are off by default. Set `STAC_TRANSFORMER=1` and/or `DCAT_TRAN
 - `NETWORK=0`: one flat catalog. `/connector/stac` and `/connector/dcat/root` each serve everything directly.
 - `NETWORK=1`: the harvest additionally groups Datastreams by `network_id`.
 
-Datastreams with no `Network` land in an "orphan" scope; everything else gets its own sub-catalog at `/connector/stac/{network_id}` and `/connector/dcat/{network_id}`. On the DCAT side the root graph stays structural (Catalog + DataService + links to the other scopes) rather than carrying Dataset content itself -- fetch `/connector/dcat/orphan` and `/connector/dcat/{network_id}` for the scopes that actually hold data.
+Every Datastream is expected to carry a `network_id` once `NETWORK=1` is enabled -- there is no orphan/unassigned scope. Each Network gets its own sub-catalog at `/connector/stac/{network_id}` and `/connector/dcat/{network_id}`. On the DCAT side the root graph stays structural (Catalog + DataService + links to the Network sub-catalogs) rather than carrying Dataset content itself -- fetch `/connector/dcat/{network_id}` for the scopes that actually hold data.
 
 ### Authorization
 
@@ -85,7 +85,6 @@ DCAT-AP (each scope cached as one whole serialized document, Turtle and JSON-LD 
 ```
 dcat:graph:root                    structural root (Catalog + DataService), closed networks omitted
 dcat:graph:root:all                same root, closed networks included -- authenticated callers only
-dcat:graph:orphan                  Datastreams with no assigned Network      (NETWORK=1 only)
 dcat:graph:net-{network_id}        one per Network                            (NETWORK=1 only)
 dcat:meta:availability / dcat:meta:last_harvested_at
 ```

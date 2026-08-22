@@ -29,7 +29,7 @@ flowchart TD
     H --> I
 ```
 
-Each standard is written independently -- a DCAT write failing does not roll back the STAC write that just succeeded in the same cycle, and vice versa. Under `NETWORK=1`, `harvest_with_networks()` and the `*_with_networks()` transformer/writer variants run instead, producing the extra `stac:network:*` and `dcat:graph:orphan` / `dcat:graph:net-{id}` keys documented in the connector README's cache scheme section.
+Each standard is written independently -- a DCAT write failing does not roll back the STAC write that just succeeded in the same cycle, and vice versa. Under `NETWORK=1`, `harvest_with_networks()` and the `*_with_networks()` transformer/writer variants run instead, producing the extra `stac:network:*` and `dcat:graph:net-{id}` keys documented in the connector README's cache scheme section.
 
 Redis keys carry no TTL of their own. They simply hold "the latest valid cache" and are overwritten every cycle. If a cycle fails partway, the previous valid cache remains in Redis until the next successful cycle replaces it.
 

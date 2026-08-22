@@ -25,7 +25,7 @@ The Datastream is the correct Item pivot because it is the only STA entity that 
 - `NETWORK=0`: the original single-scope query runs, no `Network` join, no scoping logic. `/stac` is the one and only catalog, exactly as in the pre-Network design. This section's "scope" language below collapses to a single implicit scope in this mode.
 - `NETWORK=1`: the extended query runs (see the harvester reference doc, this document does not own the SQL). The connector now serves multiple scopes side by side:
   - `/stac/{network_id}` per Network, listing only Things that have at least one Datastream in that Network, with each Collection's Items filtered to that Network's Datastreams only.
-  - `/stac` itself becomes the **orphan scope**: Things that have at least one Datastream with `network_id IS NULL`, with each Collection's Items limited to those unassigned Datastreams. Root's `links` still carries one `child` entry per Network subcatalog (`subcatalog-1`, `subcatalog-2`, ...), alongside `self` and `root`, per the structure the mentors specified. The orphan scope is not a special case grafted on top, it is the same grouping logic as a Network scope, just keyed on `network_id IS NULL` instead of a specific id.
+  - `/stac` itself carries no directly-attached Collections in this mode -- root's `links` carries one `child` entry per Network subcatalog (`subcatalog-1`, `subcatalog-2`, ...), alongside `self` and `root`, per the structure the mentors specified. Every Datastream is expected to carry a `network_id` once `NETWORK=1` is enabled, so there is no unassigned/orphan scope for root to serve directly; `_build_network_catalog` (harvester.py) logs a warning and drops any row it encounters with `network_id IS NULL` rather than bucketing it, since that would indicate a data-integrity issue upstream.
 
 **Authentication and Access Control.**
 When `AUTHORIZATION=1` and `ANONYMOUS_VIEWER=0` (strict mode), access to STAC routes is gated by `auth_gate.py`:
@@ -33,11 +33,11 @@ When `AUTHORIZATION=1` and `ANONYMOUS_VIEWER=0` (strict mode), access to STAC ro
 - `CATALOG_CLOSED_NETWORKS`: comma-separated list of network IDs whose existence must be hidden from unauthenticated callers. Any route (shallow or deep) matching a closed network ID returns `404 Not Found` when unauthenticated.
 - **Root catalog link omission:** During harvest time, `stac_transformer.py` omits child links and `network_ids` references for any network ID listed in `CATALOG_CLOSED_NETWORKS`. This ensures anonymous clients fetching the root catalog `/stac` cannot discover closed networks from response links. An authenticated caller gets those links back, though: `stac_root` in `api.py` re-adds one `child` link per closed network (from the cached `closed_network_ids` list) whenever the request carries a valid token, so a closed network stays discoverable from root to anyone who can actually reach it, just not to an anonymous caller.
 
-`network_id` lives on `Datastream`, never on `Thing`. A Thing has no scope of its own, a Thing's presence in a given scope is entirely a function of which of its Datastreams happen to fall into that scope. One consequence: a **Datastream never appears in more than one scope**, since `network_id` is single-valued per row, it belongs to exactly one Network's bucket or the orphan bucket, never both. Only **Collections** can appear in more than one scope, when a Thing's Datastreams are split across buckets, each scoped appearance is a distinct partial view of that Thing containing only the Items that fall into that scope.
+`network_id` lives on `Datastream`, never on `Thing`. A Thing has no scope of its own, a Thing's presence in a given scope is entirely a function of which of its Datastreams happen to fall into that scope. One consequence: a **Datastream never appears in more than one scope**, since `network_id` is single-valued per row, it belongs to exactly one Network's bucket. Only **Collections** can appear in more than one scope, when a Thing's Datastreams are split across Networks, each scoped appearance is a distinct partial view of that Thing containing only the Items that fall into that scope.
 
-Collection `id` stays `thing-{id}` in every scope it appears in, it does not get a scope suffix. Uniqueness is enforced by href, not by id: `/stac/collections/thing-X` and `/stac/{network_id}/collections/thing-X` are distinct resources at distinct URLs, and nothing flattens every scope into one shared listing where an id collision would matter. This only becomes a problem if a future cross-scope `/stac/search?collections=thing-X` style endpoint gets built that flattens all scopes into one array; not a concern for the current design. Because each scoped Collection variant sees a different Item subset, its `extent.spatial` and `extent.temporal` must be computed per scope from that scope's own Items, not once globally and reused, the same physical Thing can legitimately have a different bbox and time range depending which scope it is viewed through.
+Collection `id` stays `thing-{id}` in every scope it appears in, it does not get a scope suffix. Uniqueness is enforced by href, not by id: `/stac/{network_id_a}/collections/thing-X` and `/stac/{network_id_b}/collections/thing-X` are distinct resources at distinct URLs, and nothing flattens every scope into one shared listing where an id collision would matter. This only becomes a problem if a future cross-scope `/stac/search?collections=thing-X` style endpoint gets built that flattens all scopes into one array; not a concern for the current design. Because each scoped Collection variant sees a different Item subset, its `extent.spatial` and `extent.temporal` must be computed per scope from that scope's own Items, not once globally and reused, the same physical Thing can legitimately have a different bbox and time range depending which scope it is viewed through.
 
-Consequence for `cache.py`, noted here since it originates from this design, actual key scheme is owned by the caching layer doc: the implemented Redis key pattern is `stac:network:{network_id}:collection:{collection_id}` (and `stac:network:{network_id}:item:{collection_id}:{item_id}`) for a Network view, keeping the orphan/root-scope keys (`stac:collection:{id}`, `stac:item:{collection_id}:{item_id}`) exactly as they were before Network support existed. This sidesteps the id-collision question entirely: a Network-scoped Collection lives under a different key prefix from its orphan-scope counterpart, so both can be cached simultaneously without either needing a synthetic scope suffix baked into the id itself.
+Consequence for `cache.py`, noted here since it originates from this design, actual key scheme is owned by the caching layer doc: the implemented Redis key pattern is `stac:network:{network_id}:collection:{collection_id}` (and `stac:network:{network_id}:item:{collection_id}:{item_id}`) for a Network view. Under `NETWORK=0`, the root-scope keys (`stac:collection:{id}`, `stac:item:{collection_id}:{item_id}`) hold the single flat catalog exactly as before Network support existed; under `NETWORK=1` those root-scope keys are simply never written, since root carries no directly-attached Collections in that mode.
 
 **Object hierarchy:**
 ```
@@ -48,14 +48,11 @@ Catalog dict        (1, root, from STA service root)
       Asset dict     (3 per Item)
 
 NETWORK=1:
-Catalog dict         (1, root -- serves the orphan scope directly)
+Catalog dict         (1, root -- links to each Network subcatalog only)
   Catalog dict       (1 per Network, subcatalog, linked as child from root)
     Collection dict  (1 per Thing with >=1 Datastream in that Network)
       Item dict      (1 per Datastream in that Network)
         Asset dict   (3 per Item)
-  Collection dict    (1 per Thing with >=1 orphan Datastream)
-    Item dict        (1 per orphan Datastream)
-      Asset dict     (3 per Item)
 ```
 
 **STA entity role summary:**
@@ -123,7 +120,7 @@ Recommended:
 | `keywords` | `Thing.name` + union of `ObservedProperty.name` across this scope's Datastreams | `{"keywords": keywords_list}` | `ObservedProperty.name` follows `category:subcategory:phenomenon_id` in dummy data; split on `:` and include each part |
 | `thing_id` | `Thing.@iot.id` | `{"thing_id": thing.id}` | Preserves numeric STA ID for round-trip lookup and STAC filter expressions |
 | `thing_properties` | `Thing.properties` | `{"thing_properties": thing.properties}` | Full STA properties bag passed through |
-| `network_id` | `Datastream.network_id` for this scope | `{"network_id": network.id}` if this is a Network-scoped Collection, omitted for the orphan scope | Only present on Network-scoped variants, lets a consumer identify which scope a given Collection JSON belongs to without parsing the href |
+| `network_id` | `Datastream.network_id` for this scope | `{"network_id": network.id}` if this is a Network-scoped Collection, omitted under NETWORK=0 | Only present on Network-scoped variants, lets a consumer identify which scope a given Collection JSON belongs to without parsing the href |
 | `summaries` | Derived from this scope's Datastreams | `{"summaries": {...}}` | Union of `ObservedProperty.definition` URIs and `unitOfMeasurement.symbol` values across this scope's Datastreams |
 
 Optional:
@@ -163,7 +160,7 @@ Recommended (properties fields):
 | `thing_id` | `Thing.@iot.id` | `thing.id` | For reverse lookup from Item to parent Thing in STAC filter queries |
 | `thing_name` | `Thing.name` | `thing.name` | Denormalized to avoid a Collection lookup to identify the station |
 | `datastream_id` | `Datastream.@iot.id` | `ds["id"]` | Explicit for STAC filter expressions, redundant with Item `id` |
-| `network_id` | `Datastream.network_id` | `ds["network_id"]` | `None` for an orphan-scope Item. Present so an Item is self-describing even outside its scope's href context |
+| `network_id` | `Datastream.network_id` | `ds["network_id"]` | `None` under NETWORK=0. Present so an Item is self-describing even outside its scope's href context |
 | `unit_of_measurement` | `Datastream.unitOfMeasurement` | `ds["unit_of_measurement"]` | Full object `{"name": ..., "symbol": ..., "definition": ...}`. `None` if absent |
 | `observation_type` | `Datastream.observationType` URI | `ds["observation_type"]` | e.g. `"http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement"` |
 | `observed_property` | `ObservedProperty.name` | `op["name"]` | Via Datastream inline expand |
@@ -236,4 +233,4 @@ Temporal (Collection extent, computed per scope):
 def build_stac_catalog(catalog: HarvestedCatalog) -> dict: ...
 def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -> dict: ...
 ```
-`build_stac_catalog()` (NETWORK=0) and `build_stac_catalog_with_networks()` (NETWORK=1) build every scope's Catalog and Collection dicts directly, computing all `links`, `extent`, and Item entries per scope as described above, and return one dict keyed by scope. Under `NETWORK=0` the return shape is `{"catalog": {...}, "collections": [...]}`, a single scope holding the full unscoped catalog. Under `NETWORK=1` the return shape is `{"catalog": {...orphan scope...}, "collections": [...orphan...], "networks": [{"network_id", "catalog", "collections"}, ...]}`. `cache.py`'s `write_stac_catalog()` / `write_stac_catalog_with_networks()` flatten this directly into the Redis key scheme documented in the connector README; `api.py` reads from cache and serves the appropriate scope and sub-key per endpoint. Neither function touches Postgres, Redis, or the STA HTTP API -- both are pure transforms.
+`build_stac_catalog()` (NETWORK=0) and `build_stac_catalog_with_networks()` (NETWORK=1) build every scope's Catalog and Collection dicts directly, computing all `links`, `extent`, and Item entries per scope as described above, and return one dict keyed by scope. Under `NETWORK=0` the return shape is `{"catalog": {...}, "collections": [...]}`, a single scope holding the full unscoped catalog. Under `NETWORK=1` the return shape is `{"catalog": {...root, no directly-attached Collections...}, "networks": [{"network_id", "catalog", "collections"}, ...]}`. `cache.py`'s `write_stac_catalog()` / `write_stac_catalog_with_networks()` flatten this directly into the Redis key scheme documented in the connector README; `api.py` reads from cache and serves the appropriate scope and sub-key per endpoint. Neither function touches Postgres, Redis, or the STA HTTP API -- both are pure transforms.
