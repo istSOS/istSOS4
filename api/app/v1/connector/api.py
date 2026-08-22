@@ -390,6 +390,53 @@ async def stac_network_root(network_id: int, gate_result: Optional[JSONResponse]
     return {k: v for k, v in net_catalog.items() if k != "collection_ids"}
 
 
+@v1.api_route(
+    "/stac/{network_id}/collections",
+    methods=["GET"],
+    tags=["STAC"],
+    summary="All STAC Collections in a Network",
+    description=(
+        "Returns the standard STAC Collections response envelope, scoped "
+        "to one Network -- one Collection per Thing with >=1 Datastream "
+        "in this Network. Same shape as /stac/collections, just filtered."
+    ),
+    status_code=status.HTTP_200_OK,
+)
+@_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
+@catch_errors
+async def stac_network_collections(network_id: int, gate_result: Optional[JSONResponse] = Depends(gate)):
+    if gate_result is not None:
+        return gate_result
+    net_catalog = await get_network_catalog(network_id)
+    if net_catalog is None:
+        return _not_found(f"Network '{network_id}' not found.")
+
+    collection_ids = net_catalog.get("collection_ids", [])
+
+    collections = []
+    for cid in collection_ids:
+        coll = await get_network_collection(network_id, cid)
+        if coll is None:
+            # Transient mid-write miss: skip rather than 503 the whole
+            # response. The next harvest cycle will make it consistent.
+            continue
+
+        collections.append(
+            {k: v for k, v in coll.items() if k != "item_ids"}
+        )
+
+    return {
+        "collections": collections,
+        "links": [
+            {
+                "rel": "self",
+                "href": f"{_STAC_ROOT_HREF}/{network_id}/collections",
+                "type": "application/json",
+            }
+        ],
+    }
+
+
 @v1.api_route("/stac/{network_id}/collections/{collection_id}", methods=["GET"], tags=["STAC"], status_code=status.HTTP_200_OK)
 @_require_enabled(STAC_TRANSFORMER, "STAC_TRANSFORMER")
 @catch_errors
