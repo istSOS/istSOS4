@@ -330,7 +330,8 @@ def _catalog_nav_links(
 ) -> list[dict]:
     """
     Root catalog nav links. collection_ids -> rel=child to each Collection
-    (all of them in NETWORK=0 mode, orphan-only in NETWORK=1 mode).
+    (all of them in NETWORK=0 mode; empty in NETWORK=1 mode, where the
+    root has no directly-attached Collections).
     network_ids -> rel=child to each Network subcatalog, only passed in
     NETWORK=1 mode.
 
@@ -340,32 +341,13 @@ def _catalog_nav_links(
     exists yet. api.py needs a matching GET /conformance route that returns
     {"conformsTo": _CONFORMANCE_CLASSES} for the conformance href below to
     resolve to anything.
-
-    "data" rel: in NETWORK=0 mode (network_ids is None) this is the single
-    flat /stac/collections href, which is genuinely where all Collections
-    live. In NETWORK=1 mode, Datastreams can no longer be orphaned, so
-    collection_ids here is always empty and the flat /stac/collections
-    route never has anything to serve -- advertising it as "data" would
-    point clients at a permanently empty endpoint. Emit one "data" rel per
-    visible Network instead, each pointing at that Network's real
-    /stac/{network_id}/collections.
     """
     links = [
         {"rel": "self",         "href": STAC_ROOT_HREF,                     "type": _MEDIA_JSON},
         {"rel": "root",         "href": STAC_ROOT_HREF,                     "type": _MEDIA_JSON},
         {"rel": "conformance",  "href": f"{STAC_ROOT_HREF}/conformance",    "type": _MEDIA_CONFORMANCE},
+        {"rel": "data",         "href": _collections_base_href(),          "type": _MEDIA_JSON},
     ]
-    if network_ids:
-        for nid in network_ids:
-            if nid in CATALOG_CLOSED_NETWORKS:
-                continue
-            links.append(
-                {"rel": "data", "href": _collections_base_href(nid), "type": _MEDIA_JSON}
-            )
-    else:
-        links.append(
-            {"rel": "data", "href": _collections_base_href(), "type": _MEDIA_JSON}
-        )
     base = _collections_base_href()
     for cid in collection_ids:
         links.append({"rel": "child", "href": f"{base}/{cid}", "type": _MEDIA_JSON})
@@ -727,7 +709,7 @@ def _build_things_collections(
     default_license: str = "proprietary",
 ) -> tuple[list[dict], int]:
     """Build Collection dicts (with nested Items) for a list of Things, scoped
-    to network_id (None = orphan/unscoped). Returns (collections, skipped_items)."""
+    to network_id (None = unscoped, NETWORK=0 mode). Returns (collections, skipped_items)."""
     collections: list[dict] = []
     skipped_items = 0
     for thing in things:
@@ -807,17 +789,17 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
     """
     Build the NETWORK=1 hierarchy:
 
-        Catalog (root, serves orphan scope directly)
+        Catalog (root -- links to each Network subcatalog only)
           Catalog (1 per Network, subcatalog)
             Collection (1 per Thing w/ >=1 Datastream in that Network)
               Item (1 per Datastream in that Network)
-          Collection (1 per Thing w/ >=1 orphan Datastream)
-            Item (1 per orphan Datastream)
+
+    Every Datastream is expected to carry a network_id when NETWORK=1 is
+    enabled, so there is no unassigned scope served directly from root.
 
     Output shape:
         {
-            "catalog": {...root..., "collection_ids": [...orphan...], "network_ids": [...]},
-            "collections": [...orphan collections, same shape build_stac_catalog uses...],
+            "catalog": {...root..., "network_ids": [...]},
             "networks": [
                 {"network_id": int, "catalog": {...subcatalog...}, "collections": [...scoped...]},
                 ...
@@ -825,13 +807,10 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
         }
     """
     settings = get_settings()
-    orphan_collections, skipped = _build_things_collections(
-        network_catalog.orphan_things, network_id=None, default_license=settings.STAC_DEFAULT_LICENSE
-    )
-    orphan_ids = [c["id"] for c in orphan_collections]
 
     network_blocks: list[dict] = []
-    total_items = sum(len(c["item_ids"]) for c in orphan_collections)
+    total_items = 0
+    skipped = 0
 
     for net in network_catalog.networks:
         things = network_catalog.things_by_network.get(net.id, [])
@@ -875,13 +854,11 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
         "id": settings.STAC_CATALOG_ID,
         "description": (
             f"{settings.STAC_DEPLOYMENT_NAME} deployment: {len(network_ids)} Networks, "
-            f"harvested at {network_catalog.harvested_at}. Datastreams with no assigned "
-            "Network are served directly from this root."
+            f"harvested at {network_catalog.harvested_at}."
         ),
         "conformsTo": _CONFORMANCE_CLASSES,
         "sta_conformsTo": serverSettings["conformance"],
-        "links": _catalog_nav_links(orphan_ids, network_ids=visible_network_ids),
-        "collection_ids": orphan_ids,
+        "links": _catalog_nav_links([], network_ids=visible_network_ids),
         "network_ids": visible_network_ids,
         "closed_network_ids": closed_network_ids,
     }
@@ -890,8 +867,8 @@ def build_stac_catalog_with_networks(network_catalog: HarvestedNetworkCatalog) -
     _apply_catalog_auth_extension(root_catalog)
 
     logger.info(
-        "STAC network transform complete: %d Networks, %d orphan Collections, %d total Items, %d skipped",
-        len(network_ids), len(orphan_collections), total_items, skipped,
+        "STAC network transform complete: %d Networks, %d total Items, %d skipped",
+        len(network_ids), total_items, skipped,
     )
 
-    return {"catalog": root_catalog, "collections": orphan_collections, "networks": network_blocks}
+    return {"catalog": root_catalog, "networks": network_blocks}

@@ -107,14 +107,15 @@ class HarvestedNetworkCatalog:
     """
     Complete harvested snapshot in NETWORK=1 mode.
 
-    orphan_things: Things with >=1 Datastream that has no assigned Network.
     things_by_network: network_id -> Things with >=1 Datastream in that
         Network. Every id in `networks` is present as a key, even with an
         empty list -- that's what lets an empty Network still round-trip
-        to a browsable empty subcatalog.
+        to a browsable empty subcatalog. A Datastream with no assigned
+        Network (network_id IS NULL) is not expected once NETWORK=1 is
+        enabled and is skipped with a warning rather than bucketed into
+        an orphan scope -- see _build_network_catalog.
     networks: every Network row, regardless of whether it owns any Datastreams.
     """
-    orphan_things: list[HarvestedThing]
     things_by_network: dict[int, list[HarvestedThing]]
     networks: list[HarvestedNetwork]
     harvested_at: str
@@ -405,10 +406,9 @@ def _new_thing_from_row(row: asyncpg.Record, thing_id: int) -> HarvestedThing:
 class _ThingAccumulator:
     """
     Incrementally builds a thing_id -> HarvestedThing map for one scope
-    bucket (the unscoped view, the orphan-Datastream view, or one
-    Network's view), deduplicating Locations and Datastreams by their own
-    id -- the Thing x Location x Datastream cross join repeats both across
-    rows within a Thing.
+    bucket (the unscoped view, or one Network's view), deduplicating
+    Locations and Datastreams by their own id -- the Thing x Location x
+    Datastream cross join repeats both across rows within a Thing.
     """
 
     def __init__(self) -> None:
@@ -481,23 +481,21 @@ def _build_network_catalog(
     networks: list[HarvestedNetwork],
 ) -> HarvestedNetworkCatalog:
     """
-    Groups the same flat rows into two disjoint scopes in one pass, keyed
-    off the Datastream's network_id rather than the Thing:
+    Groups the same flat rows into a per-Network scope, keyed off the
+    Datastream's network_id: Datastreams with network_id set, grouped by
+    (network_id, Thing).
 
-      - orphan scope:     Datastreams with network_id IS NULL, grouped by Thing.
-      - per-Network scope: Datastreams with network_id set, grouped by
-                            (network_id, Thing).
-
-    A Thing with zero Datastreams at all contributes to neither scope --
-    there's no Datastream to anchor it to a scope. A Thing with both
-    orphan and networked Datastreams appears in both places, each time
-    carrying only the Datastreams that belong there. No Datastream is
-    ever placed in more than one bucket, since network_id is fixed per
-    Datastream row. Locations are attached wherever the Thing appears
+    A Thing with zero Datastreams at all contributes nothing -- there's
+    no Datastream to anchor it to a scope. Every Datastream is expected
+    to carry a network_id once NETWORK=1 is enabled; a row that shows up
+    with network_id IS NULL here indicates a data-integrity issue (a
+    Datastream that was never assigned to a Network), not a legitimate
+    scope, so it's dropped with a warning rather than served from
+    anywhere. Locations are attached wherever the Thing appears
     (Locations aren't Datastream-scoped).
     """
-    orphan_acc = _ThingAccumulator()
     network_accs: dict[int, _ThingAccumulator] = {}
+    unassigned_ds = 0
 
     for row in rows:
         thing_id = row["thing_id"]
@@ -513,11 +511,20 @@ def _build_network_catalog(
         network_id = datastream.get("network_id")
 
         if network_id is None:
-            orphan_acc.add(row, thing_id, location, datastream)
-        else:
-            network_accs.setdefault(network_id, _ThingAccumulator()).add(
-                row, thing_id, location, datastream
-            )
+            unassigned_ds += 1
+            continue
+
+        network_accs.setdefault(network_id, _ThingAccumulator()).add(
+            row, thing_id, location, datastream
+        )
+
+    if unassigned_ds:
+        logger.warning(
+            "%d Datastream(s) with no assigned Network were skipped -- "
+            "every Datastream should belong to a Network when NETWORK=1 "
+            "is enabled. Check for a data-integrity issue upstream.",
+            unassigned_ds,
+        )
 
     things_by_network = {
         net.id: network_accs[net.id].things() if net.id in network_accs else []
@@ -525,7 +532,6 @@ def _build_network_catalog(
     }
 
     return HarvestedNetworkCatalog(
-        orphan_things=orphan_acc.things(),
         things_by_network=things_by_network,
         networks=networks,
         harvested_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -547,25 +553,21 @@ async def harvest(pool: asyncpg.Pool) -> HarvestedCatalog:
             bad SQL, permissions, pool exhausted, etc).
     """
     logger.info("Starting harvest")
+    start = time.monotonic()
 
-    fetch_start = time.monotonic()
     try:
         rows = await pool.fetch(_HARVEST_QUERY)
     except Exception as exc:
         raise HarvesterQueryError(f"Harvest query failed: {exc}") from exc
-    fetch_elapsed = time.monotonic() - fetch_start
 
-    build_start = time.monotonic()
     catalog = _build_catalog(rows)
-    build_elapsed = time.monotonic() - build_start
 
+    elapsed = time.monotonic() - start
     total_datastreams = sum(len(t.datastreams) for t in catalog.things)
 
     logger.info(
-        "Harvest complete: %d Things, %d total Datastreams -- "
-        "fetch=%.3fs, build=%.3fs, total=%.3fs",
-        catalog.thing_count, total_datastreams,
-        fetch_elapsed, build_elapsed, fetch_elapsed + build_elapsed,
+        "Harvest complete: %d Things, %d total Datastreams, elapsed=%.3fs",
+        catalog.thing_count, total_datastreams, elapsed,
     )
 
     return catalog
@@ -578,27 +580,22 @@ async def harvest_with_networks(pool: asyncpg.Pool) -> HarvestedNetworkCatalog:
     HarvesterQueryError on failure, no Redis/transformer calls.
     """
     logger.info("Starting network-scoped harvest")
+    start = time.monotonic()
 
-    fetch_start = time.monotonic()
     try:
         rows = await pool.fetch(_NETWORK_HARVEST_QUERY)
         network_rows = await pool.fetch(_NETWORK_LIST_QUERY)
     except Exception as exc:
         raise HarvesterQueryError(f"Network harvest query failed: {exc}") from exc
-    fetch_elapsed = time.monotonic() - fetch_start
 
-    build_start = time.monotonic()
     networks = [HarvestedNetwork(id=r["id"], name=r["name"] or "") for r in network_rows]
     catalog = _build_network_catalog(rows, networks)
-    build_elapsed = time.monotonic() - build_start
 
-    orphan_ds = sum(len(t.datastreams) for t in catalog.orphan_things)
+    elapsed = time.monotonic() - start
     networked_ds = sum(len(t.datastreams) for ts in catalog.things_by_network.values() for t in ts)
 
     logger.info(
-        "Network harvest complete: %d Networks, %d orphan Datastreams, "
-        "%d networked Datastreams -- fetch=%.3fs, build=%.3fs, total=%.3fs",
-        len(networks), orphan_ds, networked_ds,
-        fetch_elapsed, build_elapsed, fetch_elapsed + build_elapsed,
+        "Network harvest complete: %d Networks, %d networked Datastreams, elapsed=%.3fs",
+        len(networks), networked_ds, elapsed,
     )
     return catalog

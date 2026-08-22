@@ -18,9 +18,9 @@ STA to DCAT-AP 3.0 transformer.
 Consumes a HarvestedCatalog or HarvestedNetworkCatalog from
 app.v1.connector.harvester and builds one or more independent rdflib.Graph
 objects -- never a single quad store. Each returned Graph is a complete,
-self-contained DCAT-AP 3.0 record for one scope (root, orphan, or one
-Network) and is serialized and cached whole by cache.py; there is no
-cross-scope merge to invalidate.
+self-contained DCAT-AP 3.0 record for one scope (root, or one Network) and
+is serialized and cached whole by cache.py; there is no cross-scope merge
+to invalidate.
 
 Pivot rule (same as STAC, per STA-DCAT-AP-Transformation-Layer-Reference.md):
     Datastream  -> dcat:Dataset        (one per Datastream dict)
@@ -32,10 +32,10 @@ Scoping (NETWORK=1):
     root graph   -- Catalog + DataService + Agents + dcat:hasPart links only.
                     Carries no Dataset/DatasetSeries content itself, this is
                     the DCAT equivalent of the STAC root's child links.
-    orphan graph -- its own dcat:Catalog, all Datastreams with no assigned
-                    Network, grouped by Thing exactly like root does under
-                    NETWORK=0.
     network graph(s) -- one dcat:Catalog per Network, scoped the same way.
+
+    Every Datastream is expected to carry a network_id when NETWORK=1 is
+    enabled, so there is no unassigned/orphan scope to serve.
 
 A DatasetSeries (Thing) that has Datastreams split across scopes gets its
 own independent node -- with the same URI -- rebuilt once per scope with
@@ -92,7 +92,7 @@ ADMS = Namespace("http://www.w3.org/ns/adms#")
 ORG = Namespace("http://www.w3.org/ns/org#")
 
 # DCAT-AP 3.0 profile conformance URI, asserted as dct:conformsTo on every
-# Catalog node (root, orphan, and each Network sub-catalog).
+# Catalog node (root and each Network sub-catalog).
 _DCAT_AP_PROFILE_URI = URIRef("https://semiceu.github.io/DCAT-AP/releases/3.0.0/")
 
 # Same OGC SensorThings conformance URI stac_transformer.py's DataService
@@ -282,11 +282,9 @@ def _distribution_uri(ds_id, kind: str) -> URIRef:
     return URIRef(f"{DCAT_ROOT_HREF}/datasets/datastream-{ds_id}/distributions/{kind}")
 
 
-def _catalog_uri(network_id: Optional[int] = None, orphan: bool = False) -> URIRef:
+def _catalog_uri(network_id: Optional[int] = None) -> URIRef:
     if network_id is not None:
         return URIRef(f"{DCAT_ROOT_HREF}/{network_id}")
-    if orphan:
-        return URIRef(f"{DCAT_ROOT_HREF}/orphan")
     return URIRef(DCAT_ROOT_HREF)
 
 
@@ -730,7 +728,7 @@ def _add_root_catalog_and_service(
 
     for part_uri, part_title, part_description in part_uris:
         g.add((catalog_uri, DCT.hasPart, part_uri))
-        # Each part_uri is a Network (or orphan) sub-catalog, genuinely
+        # Each part_uri is a Network sub-catalog, genuinely
         # typed dcat:Catalog with its own title/description/publisher --
         # but those triples are asserted in that sub-catalog's own
         # graph/file (_add_sub_catalog, a separate Turtle document per the
@@ -765,8 +763,8 @@ def _add_sub_catalog(
 ) -> URIRef:
     """
     Add a plain dcat:Catalog node (no DataService typing) for a Network
-    sub-catalog or the orphan scope. Mirrors stac_transformer.py's Network
-    subcatalog dict one-for-one.
+    sub-catalog. Mirrors stac_transformer.py's Network subcatalog dict
+    one-for-one.
     """
     lang = settings.DCAT_LANGUAGE
 
@@ -849,15 +847,12 @@ def build_dcat_catalog_with_networks(
         Graph (root_all) -- same as root, but hasPart/catalog also lists closed
                              Networks. Served only to authenticated callers --
                              see api.py's dcat_root/dcat_root_ttl.
-        Graph (orphan)   -- its own Catalog, orphan Things/Datastreams
         Graph (per Network) -- its own Catalog, that Network's Things/Datastreams
 
-    Returns {"root": Graph, "root_all": Graph, "orphan": Graph, "networks": {network_id: Graph, ...}}.
+    Returns {"root": Graph, "root_all": Graph, "networks": {network_id: Graph, ...}}.
 
-    Deliberately does NOT collapse orphan into root the way
-    build_stac_catalog_with_networks() serves its orphan scope directly from
-    the root Catalog -- see the module docstring's scoping section for why
-    DCAT keeps root structurally empty of Dataset/DatasetSeries content.
+    Root stays structurally empty of Dataset/DatasetSeries content -- see
+    the module docstring's scoping section.
     """
     settings = get_settings()
 
@@ -872,34 +867,9 @@ def build_dcat_catalog_with_networks(
     total_datasets = 0
     total_skipped = 0
 
-    # --- orphan graph ---
-    orphan_g = Graph()
-    _bind_namespaces(orphan_g)
-    orphan_pub = _add_publisher_agent(orphan_g, settings)
-    orphan_catalog_uri = _catalog_uri(orphan=True)
-    orphan_title = "Unassigned Datastreams"
-    orphan_description = (
-        f"Datastreams with no assigned Network, harvested at "
-        f"{network_catalog.harvested_at}."
-    )
-    _add_sub_catalog(
-        orphan_g, settings, orphan_pub, orphan_catalog_uri,
-        identifier=f"{settings.DCAT_CATALOG_ID}-orphan",
-        title=orphan_title,
-        description=orphan_description,
-    )
-    o_series, o_datasets, o_skipped = _build_scope(
-        orphan_g, network_catalog.orphan_things, orphan_catalog_uri, orphan_pub, settings
-    )
-    total_series += o_series
-    total_datasets += o_datasets
-    total_skipped += o_skipped
-
     # (uri, title, description) per sub-catalog, fed to root_g below so it
     # can restate these mandatory CatalogShape fields on each stub node.
-    part_uris: list[tuple[URIRef, Optional[str], str]] = [
-        (orphan_catalog_uri, orphan_title, orphan_description),
-    ]
+    part_uris: list[tuple[URIRef, Optional[str], str]] = []
     # Same, but for closed networks only -- used to build root_g_all below.
     closed_part_uris: list[tuple[URIRef, Optional[str], str]] = []
 
@@ -940,8 +910,7 @@ def build_dcat_catalog_with_networks(
     # --- root graph: structural only, no Dataset/DatasetSeries content ---
     root_description = (
         f"{settings.DCAT_DEPLOYMENT_NAME} deployment: {len(network_catalog.networks)} "
-        f"Networks, harvested at {network_catalog.harvested_at}. Datastreams with no "
-        "assigned Network are served from the orphan sub-catalog."
+        f"Networks, harvested at {network_catalog.harvested_at}."
     )
     root_catalog_uri = _catalog_uri()
 
@@ -955,7 +924,6 @@ def build_dcat_catalog_with_networks(
         part_uris=part_uris,
     )
     root_g.add((root_catalog_uri, DCAT.service, root_catalog_uri))
-    root_g.add((root_catalog_uri, DCAT.catalog, orphan_catalog_uri))
     for net in network_catalog.networks:
         if net.id not in CATALOG_CLOSED_NETWORKS:
             root_g.add((root_catalog_uri, DCAT.catalog, _catalog_uri(network_id=net.id)))
@@ -976,7 +944,6 @@ def build_dcat_catalog_with_networks(
         part_uris=part_uris + closed_part_uris,
     )
     root_g_all.add((root_catalog_uri, DCAT.service, root_catalog_uri))
-    root_g_all.add((root_catalog_uri, DCAT.catalog, orphan_catalog_uri))
     for net in network_catalog.networks:
         root_g_all.add((root_catalog_uri, DCAT.catalog, _catalog_uri(network_id=net.id)))
 
@@ -986,4 +953,4 @@ def build_dcat_catalog_with_networks(
         len(network_catalog.networks), total_series, total_datasets, total_skipped,
     )
 
-    return {"root": root_g, "root_all": root_g_all, "orphan": orphan_g, "networks": network_graphs}
+    return {"root": root_g, "root_all": root_g_all, "networks": network_graphs}
