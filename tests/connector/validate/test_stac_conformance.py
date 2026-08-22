@@ -28,7 +28,7 @@ def stac_catalog(connector_base_url):
 
 def test_stac_catalog_has_collections_and_items(stac_catalog):
     collections = list(stac_catalog.get_all_collections())
-    items = list(stac_catalog.get_all_items())
+    items = list(stac_catalog.get_items(recursive=True))
     assert collections, "Expected at least one STAC Collection"
     assert items, "Expected at least one STAC Item"
 
