@@ -141,26 +141,43 @@ async def _item_envelope(coll: Optional[dict], collection_id: str, item_id: str,
 
 @v1.get("")
 async def get_connector_root(request: Request):
+    """
+    Summary/discovery envelope for the whole connector -- one stop for a
+    caller to learn what's on, what's cached, and where to go next for
+    each standard, without hitting /stac or /dcat/root first.
+
+    Grouped one block per standard rather than flat stac_*/dcat_*-prefixed
+    keys, since STAC and DCAT genuinely are two independent things that
+    happen to live under the same connector: each gets its own
+    last_harvested_at (previously a single top-level last_fetch that
+    silently preferred STAC's timestamp whenever it was set, even if DCAT
+    had harvested more recently).
+    """
     current_path = request.url.path.rstrip("/")
     base_url = f"{request.url.scheme}://{request.url.netloc}"
-    
+
     stac_meta = get_stac_metadata()
     dcat_meta = get_dcat_metadata()
 
     return {
-        "stac_enabled": STAC_TRANSFORMER,
-        "stac_availability": stac_meta["stac_availability"],
-        "stac_url": f"{base_url}{current_path}/stac",
+        "harvest_interval_minutes": settings.HARVEST_INTERVAL_MINUTES,
 
-        "dcat_enabled": DCAT_TRANSFORMER,
-        "dcat_mandatory_fields_set": settings.has_mandatory_dcat_fields,
-        "dcat_availability": dcat_meta["dcat_availability"],
-        "dcat_url_jsonld": f"{base_url}{current_path}/dcat/root",
-        "dcat_url_ttl": f"{base_url}{current_path}/dcat/root.ttl",
-        "dcat_network_ids": dcat_meta["network_ids"],
+        "stac": {
+            "enabled": bool(STAC_TRANSFORMER),
+            "available": stac_meta["stac_availability"],
+            "last_harvested_at": stac_meta["last_harvested_at"],
+            "url": f"{base_url}{current_path}/stac",
+        },
 
-        "harvester_interval_minutes": settings.HARVEST_INTERVAL_MINUTES,
-        "last_fetch": stac_meta["last_fetch"] or dcat_meta["last_fetch"],
+        "dcat": {
+            "enabled": bool(DCAT_TRANSFORMER),
+            "configured": settings.has_mandatory_dcat_fields,
+            "available": dcat_meta["dcat_availability"],
+            "last_harvested_at": dcat_meta["last_harvested_at"],
+            "url_jsonld": f"{base_url}{current_path}/dcat/root",
+            "url_ttl": f"{base_url}{current_path}/dcat/root.ttl",
+            "network_ids": dcat_meta["network_ids"],
+        },
     }
 
 

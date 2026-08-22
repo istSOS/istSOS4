@@ -547,21 +547,25 @@ async def harvest(pool: asyncpg.Pool) -> HarvestedCatalog:
             bad SQL, permissions, pool exhausted, etc).
     """
     logger.info("Starting harvest")
-    start = time.monotonic()
 
+    fetch_start = time.monotonic()
     try:
         rows = await pool.fetch(_HARVEST_QUERY)
     except Exception as exc:
         raise HarvesterQueryError(f"Harvest query failed: {exc}") from exc
+    fetch_elapsed = time.monotonic() - fetch_start
 
+    build_start = time.monotonic()
     catalog = _build_catalog(rows)
+    build_elapsed = time.monotonic() - build_start
 
-    elapsed = time.monotonic() - start
     total_datastreams = sum(len(t.datastreams) for t in catalog.things)
 
     logger.info(
-        "Harvest complete: %d Things, %d total Datastreams, elapsed=%.3fs",
-        catalog.thing_count, total_datastreams, elapsed,
+        "Harvest complete: %d Things, %d total Datastreams -- "
+        "fetch=%.3fs, build=%.3fs, total=%.3fs",
+        catalog.thing_count, total_datastreams,
+        fetch_elapsed, build_elapsed, fetch_elapsed + build_elapsed,
     )
 
     return catalog
@@ -574,24 +578,27 @@ async def harvest_with_networks(pool: asyncpg.Pool) -> HarvestedNetworkCatalog:
     HarvesterQueryError on failure, no Redis/transformer calls.
     """
     logger.info("Starting network-scoped harvest")
-    start = time.monotonic()
 
+    fetch_start = time.monotonic()
     try:
         rows = await pool.fetch(_NETWORK_HARVEST_QUERY)
         network_rows = await pool.fetch(_NETWORK_LIST_QUERY)
     except Exception as exc:
         raise HarvesterQueryError(f"Network harvest query failed: {exc}") from exc
+    fetch_elapsed = time.monotonic() - fetch_start
 
+    build_start = time.monotonic()
     networks = [HarvestedNetwork(id=r["id"], name=r["name"] or "") for r in network_rows]
     catalog = _build_network_catalog(rows, networks)
+    build_elapsed = time.monotonic() - build_start
 
-    elapsed = time.monotonic() - start
     orphan_ds = sum(len(t.datastreams) for t in catalog.orphan_things)
     networked_ds = sum(len(t.datastreams) for ts in catalog.things_by_network.values() for t in ts)
 
     logger.info(
         "Network harvest complete: %d Networks, %d orphan Datastreams, "
-        "%d networked Datastreams, elapsed=%.3fs",
-        len(networks), orphan_ds, networked_ds, elapsed,
+        "%d networked Datastreams -- fetch=%.3fs, build=%.3fs, total=%.3fs",
+        len(networks), orphan_ds, networked_ds,
+        fetch_elapsed, build_elapsed, fetch_elapsed + build_elapsed,
     )
     return catalog

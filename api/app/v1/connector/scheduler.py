@@ -182,9 +182,7 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
         _dcat_misconfig_warned = True
 
     if NETWORK:
-        t0 = time.monotonic()
         network_catalog = await harvest_with_networks(connection)
-        logger.info("Harvest stage: %.3fs", time.monotonic() - t0)
 
         if STAC_TRANSFORMER:
             t0 = time.monotonic()
@@ -205,23 +203,14 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
                 )
                 logger.info("DCAT build stage: %.3fs", time.monotonic() - t0)
 
-                t0 = time.monotonic()
                 await asyncio.to_thread(write_dcat_catalog_with_networks, dcat_dict)
-                logger.info("DCAT write stage: %.3fs", time.monotonic() - t0)
-
-                logger.info(
-                    "DCAT cache written: %d Networks, harvested at %s",
-                    len(network_catalog.networks), network_catalog.harvested_at,
-                )
             except Exception:
                 logger.exception(
                     "DCAT transform/write failed this cycle -- STAC write above is "
                     "unaffected, previous DCAT cache left untouched"
                 )
     else:
-        t0 = time.monotonic()
         catalog = await harvest(connection)
-        logger.info("Harvest stage: %.3fs", time.monotonic() - t0)
 
         if STAC_TRANSFORMER:
             t0 = time.monotonic()
@@ -238,11 +227,7 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
                 dcat_dict = await asyncio.to_thread(build_dcat_catalog, catalog)
                 logger.info("DCAT build stage: %.3fs", time.monotonic() - t0)
 
-                t0 = time.monotonic()
                 await asyncio.to_thread(write_dcat_catalog, dcat_dict)
-                logger.info("DCAT write stage: %.3fs", time.monotonic() - t0)
-
-                logger.info("DCAT cache written: %d Things", catalog.thing_count)
             except Exception:
                 logger.exception(
                     "DCAT transform/write failed this cycle -- STAC write above is "

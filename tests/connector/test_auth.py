@@ -181,7 +181,7 @@ async def test_root_catalog_link_leak_check(set_connector_flags):
 
 @pytest.mark.asyncio
 async def test_connector_summary_endpoint_closed_network(mock_cache, monkeypatch, set_connector_flags):
-    """GET /connector: closed network id is absent from dcat_network_ids."""
+    """GET /connector: closed network id is absent from dcat.network_ids."""
     set_connector_flags(closed_networks=[7])
 
     # Mock Redis returning raw network_ids [1, 7, 2].
@@ -196,7 +196,7 @@ async def test_connector_summary_endpoint_closed_network(mock_cache, monkeypatch
         res = await ac.get("/connector")
         assert res.status_code == 200
         data = res.json()
-        assert 7 not in data["dcat_network_ids"]
+        assert 7 not in data["dcat"]["network_ids"]
 
 
 @pytest.mark.asyncio

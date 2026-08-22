@@ -77,7 +77,7 @@ stac:item:{collection_id}:{item_id}         one Item        (item_id = "datastre
 stac:network:{network_id}                   Network subcatalog          (NETWORK=1 only)
 stac:network:{network_id}:collection:{cid}  Network-scoped Collection   (NETWORK=1 only)
 stac:network:{network_id}:item:{cid}:{iid}  Network-scoped Item         (NETWORK=1 only)
-stac:meta:availability / stac:meta:last_fetch
+stac:meta:availability / stac:meta:last_harvested_at
 ```
 
 DCAT-AP (each scope cached as one whole serialized document, Turtle and JSON-LD side by side under a `:jsonld` sibling key):
@@ -87,7 +87,7 @@ dcat:graph:root                    structural root (Catalog + DataService), clos
 dcat:graph:root:all                same root, closed networks included -- authenticated callers only
 dcat:graph:orphan                  Datastreams with no assigned Network      (NETWORK=1 only)
 dcat:graph:net-{network_id}        one per Network                            (NETWORK=1 only)
-dcat:meta:availability / dcat:meta:last_fetch / dcat:meta:network_ids
+dcat:meta:availability / dcat:meta:last_harvested_at / dcat:meta:network_ids
 ```
 
 Every write purges the previous cycle's keys (`SCAN` + `DELETE` on the relevant prefix) before writing the new set, so a reader hitting the cache mid-write sees a transient miss rather than a mix of old and new data.
