@@ -64,28 +64,53 @@ def get_stac_metadata() -> Dict[str, Any]:
 
 
 def get_dcat_metadata() -> Dict[str, Any]:
-    """Helper to fetch DCAT availability/last-harvested/network-id metadata
-    from Redis safely with defaults. Independent of get_stac_metadata -- the
-    two standards are harvested and cached on the same cycle but tracked as
+    """Helper to fetch DCAT availability/last-harvested metadata from Redis
+    safely with defaults. Independent of get_stac_metadata -- the two
+    standards are harvested and cached on the same cycle but tracked as
     separate availability flags, since one transformer failing should not
     be reported as if both did.
 
-    Closed network ids (CATALOG_CLOSED_NETWORKS) are filtered out of the
-    returned ``network_ids`` list so the ``/connector`` summary endpoint
-    never leaks their existence to unauthenticated callers.
+    Network ids are not part of this -- see get_harvest_network_ids(),
+    since which Networks exist is a harvest-level fact shared by both
+    standards, not a DCAT-owned one.
     """
     raw_avail = redis.get("dcat:meta:availability")
     raw_harvested_at = redis.get("dcat:meta:last_harvested_at")
-    raw_network_ids = redis.get("dcat:meta:network_ids")
-
-    all_ids = json.loads(raw_network_ids) if raw_network_ids else []
-    visible_ids = [nid for nid in all_ids if nid not in CATALOG_CLOSED_NETWORKS]
 
     return {
         "dcat_availability": json.loads(raw_avail) if raw_avail else False,
         "last_harvested_at": raw_harvested_at.decode("utf-8") if raw_harvested_at else None,
-        "network_ids": visible_ids,
     }
+
+
+def get_harvest_network_ids() -> list:
+    """
+    Return the ids of every Network the last harvest cycle saw (NETWORK=1
+    only), with closed networks (CATALOG_CLOSED_NETWORKS) filtered out so
+    the ``/connector`` summary endpoint never leaks their existence to
+    unauthenticated callers.
+
+    This is a harvest-level fact, not owned by either standard -- the same
+    Networks back both the STAC subcatalogs and the DCAT-AP Network
+    graphs, so it's written once per cycle by scheduler.py right after
+    harvest_with_networks(), independent of which of STAC_TRANSFORMER/
+    DCAT_TRANSFORMER are actually on. Returns [] if NETWORK=0 or no
+    harvest cycle has completed yet.
+    """
+    raw_network_ids = redis.get("connector:meta:network_ids")
+    all_ids = json.loads(raw_network_ids) if raw_network_ids else []
+    return [nid for nid in all_ids if nid not in CATALOG_CLOSED_NETWORKS]
+
+
+def write_harvest_network_ids(network_ids: list) -> None:
+    """
+    Write the raw (unfiltered) set of Network ids seen by the current
+    harvest cycle. Called once per cycle from scheduler.py under NETWORK=1,
+    regardless of which of STAC_TRANSFORMER/DCAT_TRANSFORMER are on --
+    this is what get_harvest_network_ids() reads back, filtering closed
+    networks at read time.
+    """
+    redis.set("connector:meta:network_ids", json.dumps(network_ids))
 
 
 def _dcat_root_key() -> str:
@@ -456,7 +481,6 @@ def write_dcat_catalog(result: Dict[str, Graph]) -> None:
     pipe.set(_dcat_root_jsonld_key(), root_jsonld)
     pipe.set("dcat:meta:availability", json.dumps(True))
     pipe.set("dcat:meta:last_harvested_at", datetime.now(timezone.utc).isoformat())
-    pipe.set("dcat:meta:network_ids", json.dumps([]))
     pipe.execute()
     write_elapsed = time.monotonic() - write_start
 
@@ -518,7 +542,6 @@ def write_dcat_catalog_with_networks(result: Dict[str, Any]) -> None:
 
     pipe.set("dcat:meta:availability", json.dumps(True))
     pipe.set("dcat:meta:last_harvested_at", datetime.now(timezone.utc).isoformat())
-    pipe.set("dcat:meta:network_ids", json.dumps(network_ids))
     pipe.execute()
     write_elapsed = time.monotonic() - write_start
 

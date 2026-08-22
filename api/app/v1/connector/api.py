@@ -50,6 +50,7 @@ from app.v1.connector.cache import (
     get_network_collection,
     get_network_item,
     get_dcat_metadata,
+    get_harvest_network_ids,
     get_dcat_root,
     get_dcat_root_jsonld,
     get_dcat_root_all,
@@ -61,6 +62,7 @@ from app.v1.connector.cache import (
 )
 
 from app.v1.connector.config import get_settings, STAC_TRANSFORMER, DCAT_TRANSFORMER
+from app.v1.connector.scheduler import NETWORK
 from app.v1.connector.utils import catch_errors, error_response
 
 from fastapi import APIRouter, Depends, status, Request
@@ -152,33 +154,51 @@ async def get_connector_root(request: Request):
     last_harvested_at (previously a single top-level last_fetch that
     silently preferred STAC's timestamp whenever it was set, even if DCAT
     had harvested more recently).
+
+    refresh_interval_minutes and network_ids sit outside the stac/dcat
+    blocks -- both are harvest-level facts (how often the shared harvest
+    cycle runs, which Networks it found), not owned by either standard.
+    network_ids in particular used to live under "dcat", which was
+    misleading: the same Networks back both STAC's subcatalogs and DCAT's
+    Network graphs, so it's read from a shared meta key instead (see
+    cache.get_harvest_network_ids), not DCAT's.
+
+    Both fields are omitted entirely -- not just null -- when neither
+    STAC_TRANSFORMER nor DCAT_TRANSFORMER is on, since nothing is being
+    harvested on any interval in that state and showing a number would
+    misrepresent that. network_ids is additionally omitted whenever
+    NETWORK=0, since there's no per-Network concept to report at all.
     """
     current_path = request.url.path.rstrip("/")
     base_url = f"{request.url.scheme}://{request.url.netloc}"
 
     stac_meta = get_stac_metadata()
     dcat_meta = get_dcat_metadata()
+    any_enabled = bool(STAC_TRANSFORMER) or bool(DCAT_TRANSFORMER)
 
-    return {
-        "harvest_interval_minutes": settings.HARVEST_INTERVAL_MINUTES,
+    response: dict = {}
+    if any_enabled:
+        response["refresh_interval_minutes"] = settings.HARVEST_INTERVAL_MINUTES
+        if NETWORK:
+            response["network_ids"] = get_harvest_network_ids()
 
-        "stac": {
-            "enabled": bool(STAC_TRANSFORMER),
-            "available": stac_meta["stac_availability"],
-            "last_harvested_at": stac_meta["last_harvested_at"],
-            "url": f"{base_url}{current_path}/stac",
-        },
-
-        "dcat": {
-            "enabled": bool(DCAT_TRANSFORMER),
-            "configured": settings.has_mandatory_dcat_fields,
-            "available": dcat_meta["dcat_availability"],
-            "last_harvested_at": dcat_meta["last_harvested_at"],
-            "url_jsonld": f"{base_url}{current_path}/dcat/root",
-            "url_ttl": f"{base_url}{current_path}/dcat/root.ttl",
-            "network_ids": dcat_meta["network_ids"],
-        },
+    response["stac"] = {
+        "enabled": bool(STAC_TRANSFORMER),
+        "available": stac_meta["stac_availability"],
+        "last_harvested_at": stac_meta["last_harvested_at"],
+        "url": f"{base_url}{current_path}/stac",
     }
+
+    response["dcat"] = {
+        "enabled": bool(DCAT_TRANSFORMER),
+        "configured": settings.has_mandatory_dcat_fields,
+        "available": dcat_meta["dcat_availability"],
+        "last_harvested_at": dcat_meta["last_harvested_at"],
+        "url_jsonld": f"{base_url}{current_path}/dcat/root",
+        "url_ttl": f"{base_url}{current_path}/dcat/root.ttl",
+    }
+
+    return response
 
 
 @v1.api_route(

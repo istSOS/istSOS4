@@ -20,7 +20,7 @@ from app.v1.api import v1
 from app.v1.connector.harvester import HarvestedNetwork, HarvestedNetworkCatalog, HarvestedThing
 import app.v1.connector.stac_transformer as stac_transformer
 import app.v1.connector.dcat_transformer as dcat_transformer
-from app.v1.connector.cache import get_dcat_metadata
+from app.v1.connector.cache import get_harvest_network_ids
 
 
 @pytest.fixture
@@ -181,22 +181,22 @@ async def test_root_catalog_link_leak_check(set_connector_flags):
 
 @pytest.mark.asyncio
 async def test_connector_summary_endpoint_closed_network(mock_cache, monkeypatch, set_connector_flags):
-    """GET /connector: closed network id is absent from dcat.network_ids."""
+    """GET /connector: closed network id is absent from top-level network_ids."""
     set_connector_flags(closed_networks=[7])
 
-    # Mock Redis returning raw network_ids [1, 7, 2].
-    monkeypatch.setattr("app.v1.connector.cache.redis.get", lambda key: b'[1, 7, 2]' if key == "dcat:meta:network_ids" else None)
+    # Mock Redis returning raw network_ids [1, 7, 2] from the shared harvest-level key.
+    monkeypatch.setattr("app.v1.connector.cache.redis.get", lambda key: b'[1, 7, 2]' if key == "connector:meta:network_ids" else None)
 
-    dcat_meta = get_dcat_metadata()
-    assert 7 not in dcat_meta["network_ids"]
-    assert dcat_meta["network_ids"] == [1, 2]
+    network_ids = get_harvest_network_ids()
+    assert 7 not in network_ids
+    assert network_ids == [1, 2]
 
     # Same check through the route handler.
     async with AsyncClient(transport=ASGITransport(app=v1), base_url="http://test") as ac:
         res = await ac.get("/connector")
         assert res.status_code == 200
         data = res.json()
-        assert 7 not in data["dcat"]["network_ids"]
+        assert 7 not in data["network_ids"]
 
 
 @pytest.mark.asyncio

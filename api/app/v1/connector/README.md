@@ -87,7 +87,13 @@ dcat:graph:root                    structural root (Catalog + DataService), clos
 dcat:graph:root:all                same root, closed networks included -- authenticated callers only
 dcat:graph:orphan                  Datastreams with no assigned Network      (NETWORK=1 only)
 dcat:graph:net-{network_id}        one per Network                            (NETWORK=1 only)
-dcat:meta:availability / dcat:meta:last_harvested_at / dcat:meta:network_ids
+dcat:meta:availability / dcat:meta:last_harvested_at
+```
+
+Network ids are tracked separately from either standard, since the same Networks back both STAC's subcatalogs and DCAT's Network graphs:
+
+```
+connector:meta:network_ids          all Network ids seen by the last harvest cycle (NETWORK=1 only)
 ```
 
 Every write purges the previous cycle's keys (`SCAN` + `DELETE` on the relevant prefix) before writing the new set, so a reader hitting the cache mid-write sees a transient miss rather than a mix of old and new data.

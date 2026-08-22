@@ -43,6 +43,7 @@ from app.v1.connector.cache import (
     write_stac_catalog_with_networks,
     write_dcat_catalog,
     write_dcat_catalog_with_networks,
+    write_harvest_network_ids,
 )
 from app.v1.connector.config import get_settings, STAC_TRANSFORMER, DCAT_TRANSFORMER
 from app.v1.connector.harvester import harvest, harvest_with_networks
@@ -161,6 +162,11 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
     harvest_with_networks() and the *_with_networks() variants for
     NETWORK=1. Both standards are built from the same single harvest call
     per cycle -- there is no second Postgres round trip for DCAT.
+
+    Under NETWORK=1, the set of Network ids seen this cycle is written
+    once via write_harvest_network_ids(), right after the harvest call and
+    before either transformer runs -- it's a harvest-level fact shared by
+    both standards, not owned by whichever transformer happens to be on.
     """
     global _dcat_misconfig_warned
 
@@ -183,6 +189,7 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
 
     if NETWORK:
         network_catalog = await harvest_with_networks(connection)
+        write_harvest_network_ids([net.id for net in network_catalog.networks])
 
         if STAC_TRANSFORMER:
             t0 = time.monotonic()
