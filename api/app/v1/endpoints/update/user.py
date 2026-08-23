@@ -19,11 +19,11 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.rbac_roles import validate_rbac_role
 from app.utils.utils import validate_payload_keys
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Body, Depends, Query, status
 from fastapi.responses import JSONResponse, Response
-from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 

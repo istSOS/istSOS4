@@ -24,7 +24,7 @@ from urllib.parse import quote
 
 import httpx
 
-DEFAULT_BASE_URL = "http://localhost:8018/v4/v1.1"
+DEFAULT_BASE_URL = "http://localhost:8018/istsos4/v1.1"
 
 # Characters left un-escaped in query VALUES. Space is deliberately excluded so
 # it becomes %20. Single quotes (string literals) and STA punctuation are kept
@@ -40,7 +40,9 @@ def encode_params(params) -> str:
         if value is None:
             parts.append(quote(str(key), safe="$"))
         else:
-            parts.append(f"{quote(str(key), safe='$')}={quote(str(value), safe=_SAFE_VALUE)}")
+            parts.append(
+                f"{quote(str(key), safe='$')}={quote(str(value), safe=_SAFE_VALUE)}"
+            )
     return "&".join(parts)
 
 
@@ -95,7 +97,9 @@ class STAClient:
     raise_for_status (use them for "this must succeed" reads).
     """
 
-    def __init__(self, base_url: str = DEFAULT_BASE_URL, timeout: float = 30.0):
+    def __init__(
+        self, base_url: str = DEFAULT_BASE_URL, timeout: float = 30.0
+    ):
         self.base_url = base_url.rstrip("/")
         self._http = httpx.Client(timeout=timeout, follow_redirects=True)
 

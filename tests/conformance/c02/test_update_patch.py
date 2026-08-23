@@ -14,10 +14,9 @@ Coverage:
 from __future__ import annotations
 
 import pytest
-
 import sample_data
-from client import entity_id, format_id, id_from_self_link
 from c02.conftest import create_datastream_tree
+from client import entity_id, format_id, id_from_self_link
 
 pytestmark = pytest.mark.c02
 
@@ -26,6 +25,7 @@ pytestmark = pytest.mark.c02
 # UPDATE 8 – PATCH scalar property on each entity type
 #   req/create-update-delete/update-entity
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_patch_thing(client, unique_name, cleanup):
@@ -41,13 +41,18 @@ def test_patch_thing(client, unique_name, cleanup):
     cleanup(url)
 
     patch_resp = client.patch(url, json={"description": "patched-description"})
-    assert patch_resp.status_code in (200, 204), (
-        f"PATCH should return 200 or 204, got {patch_resp.status_code}"
-    )
+    assert patch_resp.status_code in (
+        200,
+        204,
+    ), f"PATCH should return 200 or 204, got {patch_resp.status_code}"
 
     after = client.nav(url)
-    assert after["description"] == "patched-description", "PATCH must update description"
-    assert after["name"] == original["name"], "PATCH must not change unspecified properties"
+    assert (
+        after["description"] == "patched-description"
+    ), "PATCH must update description"
+    assert (
+        after["name"] == original["name"]
+    ), "PATCH must not change unspecified properties"
 
 
 @pytest.mark.c02
@@ -61,9 +66,10 @@ def test_patch_location(client, unique_name, cleanup):
     cleanup(url)
 
     patch_resp = client.patch(url, json={"description": "patched-location"})
-    assert patch_resp.status_code in (200, 204), (
-        f"PATCH should return 200 or 204, got {patch_resp.status_code}"
-    )
+    assert patch_resp.status_code in (
+        200,
+        204,
+    ), f"PATCH should return 200 or 204, got {patch_resp.status_code}"
 
     after = client.nav(url)
     assert after["description"] == "patched-location"
@@ -81,9 +87,10 @@ def test_patch_sensor(client, unique_name, cleanup):
     cleanup(url)
 
     patch_resp = client.patch(url, json={"description": "patched-sensor"})
-    assert patch_resp.status_code in (200, 204), (
-        f"PATCH should return 200 or 204, got {patch_resp.status_code}"
-    )
+    assert patch_resp.status_code in (
+        200,
+        204,
+    ), f"PATCH should return 200 or 204, got {patch_resp.status_code}"
 
     after = client.nav(url)
     assert after["description"] == "patched-sensor"
@@ -101,9 +108,10 @@ def test_patch_observed_property(client, unique_name, cleanup):
     cleanup(url)
 
     patch_resp = client.patch(url, json={"description": "patched-op"})
-    assert patch_resp.status_code in (200, 204), (
-        f"PATCH should return 200 or 204, got {patch_resp.status_code}"
-    )
+    assert patch_resp.status_code in (
+        200,
+        204,
+    ), f"PATCH should return 200 or 204, got {patch_resp.status_code}"
 
     after = client.nav(url)
     assert after["description"] == "patched-op"
@@ -118,10 +126,13 @@ def test_patch_datastream(client, unique_name, cleanup):
     ds_url = tree["ds_url"]
     original_ds = client.nav(ds_url)
 
-    patch_resp = client.patch(ds_url, json={"description": "patched-datastream"})
-    assert patch_resp.status_code in (200, 204), (
-        f"PATCH should return 200 or 204, got {patch_resp.status_code}"
+    patch_resp = client.patch(
+        ds_url, json={"description": "patched-datastream"}
     )
+    assert patch_resp.status_code in (
+        200,
+        204,
+    ), f"PATCH should return 200 or 204, got {patch_resp.status_code}"
 
     after = client.nav(ds_url)
     assert after["description"] == "patched-datastream"
@@ -152,15 +163,16 @@ def test_patch_observation(client, unique_name, cleanup):
         )
 
     patch_resp = client.patch(obs_url, json={"result": 99.9})
-    assert patch_resp.status_code in (200, 204), (
-        f"PATCH should return 200 or 204, got {patch_resp.status_code}"
-    )
+    assert patch_resp.status_code in (
+        200,
+        204,
+    ), f"PATCH should return 200 or 204, got {patch_resp.status_code}"
 
     after = client.nav(obs_url)
     assert after["result"] == 99.9, "result must be updated after PATCH"
-    assert after["phenomenonTime"] == obs_payload["phenomenonTime"], (
-        "phenomenonTime must not change after PATCH"
-    )
+    assert (
+        after["phenomenonTime"] == obs_payload["phenomenonTime"]
+    ), "phenomenonTime must not change after PATCH"
 
 
 @pytest.mark.c02
@@ -187,9 +199,10 @@ def test_patch_feature_of_interest(client, unique_name, cleanup):
             "feature": original["feature"],
         },
     )
-    assert patch_resp.status_code in (200, 204), (
-        f"PATCH should return 200 or 204, got {patch_resp.status_code}"
-    )
+    assert patch_resp.status_code in (
+        200,
+        204,
+    ), f"PATCH should return 200 or 204, got {patch_resp.status_code}"
 
     after = client.nav(url)
     assert after["description"] == "patched-foi"
@@ -219,8 +232,12 @@ def test_patch_foi_partial_update(client, unique_name, cleanup):
     )
 
     after = client.nav(url)
-    assert after["description"] == "partial-patch-foi", "description must be updated"
-    assert after["name"] == original["name"], "name must be unchanged by partial PATCH"
+    assert (
+        after["description"] == "partial-patch-foi"
+    ), "description must be updated"
+    assert (
+        after["name"] == original["name"]
+    ), "name must be unchanged by partial PATCH"
 
 
 @pytest.mark.c02
@@ -236,16 +253,19 @@ def test_patch_historical_location(client, unique_name, cleanup):
 
     hl_resp = client.create(
         "HistoricalLocations",
-        sample_data.minimal_historical_location(tag, t_id, time="2022-01-01T00:00:00Z"),
+        sample_data.minimal_historical_location(
+            tag, t_id, time="2022-01-01T00:00:00Z"
+        ),
     )
     assert hl_resp.status_code == 201
     hl_url = client.location_of(hl_resp)
     cleanup(hl_url)
 
     patch_resp = client.patch(hl_url, json={"time": "2022-06-01T00:00:00Z"})
-    assert patch_resp.status_code in (200, 204), (
-        f"PATCH should return 200 or 204, got {patch_resp.status_code}"
-    )
+    assert patch_resp.status_code in (
+        200,
+        204,
+    ), f"PATCH should return 200 or 204, got {patch_resp.status_code}"
 
     after = client.nav(hl_url)
     assert "2022-06-01" in after["time"], "time must be updated after PATCH"
@@ -255,6 +275,7 @@ def test_patch_historical_location(client, unique_name, cleanup):
 # UPDATE 9 – PATCH relation (re-link)
 #   req/create-update-delete/update-entity
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_patch_relation_relink_sensor(client, unique_name, cleanup):
@@ -282,15 +303,16 @@ def test_patch_relation_relink_sensor(client, unique_name, cleanup):
 
     # Re-link to Sensor 2
     patch_resp = client.patch(ds_url, json={"Sensor": {"@iot.id": s2_id}})
-    assert patch_resp.status_code in (200, 204), (
-        f"PATCH relation should return 200 or 204, got {patch_resp.status_code}: {patch_resp.text[:300]}"
-    )
+    assert patch_resp.status_code in (
+        200,
+        204,
+    ), f"PATCH relation should return 200 or 204, got {patch_resp.status_code}: {patch_resp.text[:300]}"
 
     # Verify relation changed
     ds_after = client.nav(ds_url, params={"$expand": "Sensor"})
-    assert entity_id(ds_after["Sensor"]) == s2_id, (
-        "Datastream must now reference the new Sensor after PATCH re-link"
-    )
+    assert (
+        entity_id(ds_after["Sensor"]) == s2_id
+    ), "Datastream must now reference the new Sensor after PATCH re-link"
 
 
 # ===========================================================================
@@ -298,22 +320,23 @@ def test_patch_relation_relink_sensor(client, unique_name, cleanup):
 #   req/create-update-delete/update-entity
 # ===========================================================================
 
+
 @pytest.mark.c02
 def test_patch_nonexistent_thing(client):
     """req/create-update-delete/update-entity — PATCH non-existent entity → 404."""
     resp = client.patch("Things(999999999)", json={"name": "ghost"})
-    assert resp.status_code == 404, (
-        f"PATCH on non-existent Thing must return 404, got {resp.status_code}"
-    )
+    assert (
+        resp.status_code == 404
+    ), f"PATCH on non-existent Thing must return 404, got {resp.status_code}"
 
 
 @pytest.mark.c02
 def test_patch_nonexistent_observation(client):
     """req/create-update-delete/update-entity — PATCH non-existent Observation → 404."""
     resp = client.patch("Observations(999999999)", json={"result": 0})
-    assert resp.status_code == 404, (
-        f"PATCH on non-existent Observation must return 404, got {resp.status_code}"
-    )
+    assert (
+        resp.status_code == 404
+    ), f"PATCH on non-existent Observation must return 404, got {resp.status_code}"
 
 
 # ===========================================================================
@@ -326,15 +349,19 @@ def test_patch_nonexistent_observation(client):
 # accepted (200). Regression: these inline-related cases used to raise a bare
 # Exception that the handler mapped to 500.
 
+
 @pytest.mark.c02
 def test_patch_thing_inline_location_returns_400(client, unique_name, cleanup):
     """req/create-update-delete/update-entity — PATCH Thing with an inline
     Location (no @iot.id) → 400, not 500."""
     tag = unique_name("patch-inline")
-    t_resp = client.create("Things", {
-        **sample_data.minimal_thing(tag),
-        "Locations": [sample_data.minimal_location(tag)],
-    })
+    t_resp = client.create(
+        "Things",
+        {
+            **sample_data.minimal_thing(tag),
+            "Locations": [sample_data.minimal_location(tag)],
+        },
+    )
     assert t_resp.status_code == 201, t_resp.text[:200]
     thing_url = client.location_of(t_resp)
     cleanup(thing_url)
@@ -342,17 +369,21 @@ def test_patch_thing_inline_location_returns_400(client, unique_name, cleanup):
 
     resp = client.patch(
         f"Things({format_id(thing_id)})",
-        json={"Locations": [sample_data.minimal_location(unique_name("inline"))]},
+        json={
+            "Locations": [sample_data.minimal_location(unique_name("inline"))]
+        },
     )
-    assert resp.status_code == 400, (
-        f"PATCH with inline Location must be 400, got {resp.status_code}: {resp.text[:200]}"
-    )
+    assert (
+        resp.status_code == 400
+    ), f"PATCH with inline Location must be 400, got {resp.status_code}: {resp.text[:200]}"
     body = resp.json()
     assert body.get("code") == 400 and body.get("type") == "error", body
 
 
 @pytest.mark.c02
-def test_patch_thing_inline_datastream_returns_400(client, unique_name, cleanup):
+def test_patch_thing_inline_datastream_returns_400(
+    client, unique_name, cleanup
+):
     """req/create-update-delete/update-entity — PATCH Thing with an inline
     Datastream (no @iot.id) → 400, not 500."""
     tag = unique_name("patch-inline-ds")
@@ -364,26 +395,32 @@ def test_patch_thing_inline_datastream_returns_400(client, unique_name, cleanup)
 
     resp = client.patch(
         f"Things({format_id(thing_id)})",
-        json={"Datastreams": [{"unitOfMeasurement": sample_data.unit_lumen()}]},
+        json={
+            "Datastreams": [{"unitOfMeasurement": sample_data.unit_lumen()}]
+        },
     )
-    assert resp.status_code == 400, (
-        f"PATCH with inline Datastream must be 400, got {resp.status_code}: {resp.text[:200]}"
-    )
+    assert (
+        resp.status_code == 400
+    ), f"PATCH with inline Datastream must be 400, got {resp.status_code}: {resp.text[:200]}"
     body = resp.json()
     assert body.get("code") == 400 and body.get("type") == "error", body
 
 
 @pytest.mark.c02
-def test_patch_datastream_inline_sensor_returns_400(client, unique_name, cleanup):
+def test_patch_datastream_inline_sensor_returns_400(
+    client, unique_name, cleanup
+):
     """req/create-update-delete/update-entity — PATCH Datastream with an inline
     Sensor (no @iot.id) → 400, not 500."""
     tree = create_datastream_tree(client, unique_name, cleanup)
     resp = client.patch(
         f"Datastreams({format_id(tree['ds_id'])})",
-        json={"Sensor": sample_data.minimal_sensor(unique_name("inline-sensor"))},
+        json={
+            "Sensor": sample_data.minimal_sensor(unique_name("inline-sensor"))
+        },
     )
-    assert resp.status_code == 400, (
-        f"PATCH with inline Sensor must be 400, got {resp.status_code}: {resp.text[:200]}"
-    )
+    assert (
+        resp.status_code == 400
+    ), f"PATCH with inline Sensor must be 400, got {resp.status_code}: {resp.text[:200]}"
     body = resp.json()
     assert body.get("code") == 400 and body.get("type") == "error", body

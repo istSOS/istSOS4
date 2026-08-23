@@ -439,8 +439,9 @@ BEGIN
         GRANT USAGE ON SCHEMA sensorthings TO "qc";
         GRANT SELECT ON ALL TABLES IN SCHEMA sensorthings TO "qc";
         GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sensorthings TO "qc";
-        GRANT UPDATE ON TABLE sensorthings."Observation" TO "qc";
+        GRANT UPDATE ("resultQuality", "commit_id") ON sensorthings."Observation" TO "qc";
         GRANT INSERT ON TABLE sensorthings."Commit" TO "qc";
+        REVOKE SELECT ON sensorthings."User" FROM "qc";
         GRANT "qc" TO "administrator" WITH ADMIN OPTION;
 
         SET ROLE "administrator";
@@ -506,6 +507,7 @@ BEGIN
                 'FeaturesOfInterest', 
                 'Observation'
             ];
+
             IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
                 tables := tables || ARRAY['Network'];
             END IF;
@@ -542,6 +544,7 @@ BEGIN
                 'FeaturesOfInterest', 
                 'Observation'
             ];
+
             IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
                 tables := tables || ARRAY['Network'];
             END IF;
@@ -578,6 +581,7 @@ BEGIN
                 'FeaturesOfInterest', 
                 'Observation'
             ];
+
             IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
                 tables := tables || ARRAY['Network'];
             END IF;
@@ -698,7 +702,8 @@ BEGIN
                 'Datastream', 
                 'FeaturesOfInterest'
             ];
- IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
+
+            IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
                 tables := tables || ARRAY['Network'];
             END IF;
 

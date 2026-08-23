@@ -17,11 +17,11 @@ import re
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.v1.endpoints.exceptions import BadRequest, Conflict
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import DuplicateObjectError, InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, status
 from fastapi.responses import JSONResponse, Response
-from app.v1.endpoints.exceptions import BadRequest, Conflict
 
 v1 = APIRouter()
 

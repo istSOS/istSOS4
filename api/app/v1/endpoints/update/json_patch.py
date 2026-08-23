@@ -197,17 +197,13 @@ def apply_operation(document, op):
         return remove_tokens(document, parse_pointer(op["path"]))
 
     if name == "replace":
-        return replace_tokens(
-            document, parse_pointer(op["path"]), op["value"]
-        )
+        return replace_tokens(document, parse_pointer(op["path"]), op["value"])
 
     if name in ("move", "copy"):
         from_tokens = parse_pointer(op["from"])
         path_tokens = parse_pointer(op["path"])
         value = get(document, from_tokens)
         if name == "move":
-            # RFC 6902 §4.4: the "from" location MUST NOT be a proper prefix of
-            # the "path" location (cannot move a value into one of its children).
             if from_tokens == path_tokens[: len(from_tokens)] and len(
                 from_tokens
             ) < len(path_tokens):
@@ -219,7 +215,6 @@ def apply_operation(document, op):
     if name == "test":
         actual = get(document, parse_pointer(op["path"]))
         if actual != op["value"]:
-            # RFC 6902 §4.6: a failed "test" aborts the whole patch.
             raise JsonPatchError("JSON Patch 'test' operation failed", 409)
         return document
 
@@ -310,9 +305,7 @@ async def apply_json_patch_to_entity(
 
     operations = payload.operations
     columns = referenced_columns(operations)
-    document = await load_document(
-        connection, entity_name, entity_id, columns
-    )
+    document = await load_document(connection, entity_name, entity_id, columns)
     patched = apply_patch(document, operations)
     # Only the columns the patch touched are written back. A column removed at
     # the top level is set to NULL.

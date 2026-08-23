@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from app import AUTHORIZATION, NETWORK, VERSIONING
-from app.v1.endpoints.exception_handlers import register_exception_handlers
 from app.v1.endpoints.create import bulk_observation, data_array_observation
 from app.v1.endpoints.create import datastream as create_datastream
 from app.v1.endpoints.create import (
@@ -52,6 +51,7 @@ from app.v1.endpoints.delete import policy as delete_policy
 from app.v1.endpoints.delete import sensor as delete_sensor
 from app.v1.endpoints.delete import thing as delete_thing
 from app.v1.endpoints.delete import user as delete_user
+from app.v1.endpoints.exception_handlers import register_exception_handlers
 from app.v1.endpoints.read import commit as read_commit
 from app.v1.endpoints.read import datastream as read_datastream
 from app.v1.endpoints.read import (
@@ -167,9 +167,6 @@ v1 = FastAPI(
     swagger_ui_parameters={"defaultModelsExpandDepth": -1},
 )
 
-# Canonical write-error handling for all endpoints on this sub-app. Endpoints
-# let asyncpg/ValueError exceptions propagate; these map them to STA error
-# bodies. See app/v1/endpoints/exception_handlers.py.
 register_exception_handlers(v1)
 
 # Register the authorization endpoints (login, user, policy)
