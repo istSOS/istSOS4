@@ -108,9 +108,7 @@ async def data_array_observation(
             if current_user is not None:
                 await set_role(conn, current_user)
 
-            commit_id = await set_commit(
-                conn, commit_message, current_user
-            )
+            commit_id = await set_commit(conn, commit_message, current_user)
 
             for observation_set in payload:
                 datastream_id = observation_set.get("Datastream", {}).get(
@@ -138,15 +136,11 @@ async def data_array_observation(
                 for data in data_array:
                     try:
                         observation_payload = {
-                            components[i]: (
-                                data[i] if i < len(data) else None
-                            )
+                            components[i]: (data[i] if i < len(data) else None)
                             for i in range(len(components))
                         }
 
-                        observation_payload["datastream_id"] = (
-                            datastream_id
-                        )
+                        observation_payload["datastream_id"] = datastream_id
 
                         if "FeatureOfInterest/id" in observation_payload:
                             observation_payload["FeatureOfInterest"] = {
@@ -182,7 +176,6 @@ async def data_array_observation(
                         asyncpg.PostgresConnectionError,
                         asyncpg.TooManyConnectionsError,
                     ):
-                        # conformance: req/request-data/status-code — DB unavailable is 503 (mirror read.py), not 400
                         return error_response(
                             status.HTTP_503_SERVICE_UNAVAILABLE,
                             "Database temporarily unavailable",
