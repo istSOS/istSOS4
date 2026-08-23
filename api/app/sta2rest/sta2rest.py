@@ -34,11 +34,6 @@ from .sta_parser.lexer import Lexer
 from .sta_parser.parser import Parser
 from .visitors import NodeVisitor
 
-try:
-    DEBUG = DEBUG
-except:
-    DEBUG = 0
-
 
 class STA2REST:
     """
@@ -710,11 +705,6 @@ class STA2REST:
 
         id_attr = getattr(getattr(models, main_entity), "id")
 
-        # Reuse the GET path's $filter translator verbatim:
-        # NodeVisitor.visit_FilterNode is the SAME method read.py drives through
-        # convert_query, so the OData lexer/parser + FilterVisitor produce an
-        # identical filter clause (and identical join_relationships for
-        # cross-entity filters). A bad filter raises here -> caller returns 400.
         visitor = NodeVisitor(main_entity)
         filter_clause, join_relationships = visitor.visit_FilterNode(
             query_ast.filter, main_entity
@@ -723,10 +713,6 @@ class STA2REST:
         id_query = select(distinct(id_attr))
 
         if join_relationships:
-            # Identical semi-join semantics to NodeVisitor.visit_QueryNode: a
-            # cross-entity filter must select main entities that HAVE a matching
-            # related row, without row multiplication. Build the join+filter
-            # subquery and restrict ids to it.
             id_subquery = select(id_attr)
             for relationship in join_relationships:
                 id_subquery = id_subquery.join(relationship)
@@ -788,8 +774,6 @@ class STA2REST:
         first_part = parts.pop(0)
         main_entity = STA2REST.parse_entity(first_part)
         if not main_entity:
-            # req/resource-path (18-088 §9.2): an unknown collection/entity is a
-            # client error (4xx/404), not a server error.
             raise InvalidCollectionException(first_part)
 
         # Check all the entities in the uri

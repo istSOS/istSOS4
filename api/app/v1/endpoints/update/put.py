@@ -37,12 +37,12 @@ import json
 
 from app.utils.utils import validate_payload_keys, validate_required_keys
 from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
 from fastapi import Request, status
 from fastapi.responses import Response
 
 from .functions import check_id_exists, set_commit
-from app.v1.endpoints.exceptions import BadRequest
 
 
 async def parse_put_body(request: Request) -> dict:
@@ -145,9 +145,7 @@ async def handle_put_replace(
                     status.HTTP_404_NOT_FOUND, not_found_message
                 )
 
-            payload = build_put_payload(
-                payload, required_keys, optional_keys
-            )
+            payload = build_put_payload(payload, required_keys, optional_keys)
 
             validate_payload_keys(payload, allowed_keys)
 
@@ -159,9 +157,7 @@ async def handle_put_replace(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            updated = await update_entity_fn(
-                connection, entity_id, payload
-            )
+            updated = await update_entity_fn(connection, entity_id, payload)
 
             if post_update is not None:
                 await post_update(connection, entity_id, payload, updated)

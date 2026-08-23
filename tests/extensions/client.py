@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 import httpx
 
-DEFAULT_BASE_URL = "http://localhost:8018/v4/v1.1"
+DEFAULT_BASE_URL = "http://localhost:8018/istsos4/v1.1"
 
 _SAFE_VALUE = "$()/:,'=;.-"
 
@@ -25,7 +25,9 @@ def _encode_params(params) -> str:
         if value is None:
             parts.append(quote(str(key), safe="$"))
         else:
-            parts.append(f"{quote(str(key), safe='$')}={quote(str(value), safe=_SAFE_VALUE)}")
+            parts.append(
+                f"{quote(str(key), safe='$')}={quote(str(value), safe=_SAFE_VALUE)}"
+            )
     return "&".join(parts)
 
 
@@ -62,7 +64,9 @@ def format_id(eid) -> str:
 class STAClient:
     """Minimal STA client. Verbs return raw httpx.Response; *_json helpers parse."""
 
-    def __init__(self, base_url: str = DEFAULT_BASE_URL, timeout: float = 30.0):
+    def __init__(
+        self, base_url: str = DEFAULT_BASE_URL, timeout: float = 30.0
+    ):
         self.base_url = base_url.rstrip("/")
         self._http = httpx.Client(timeout=timeout, follow_redirects=True)
 
