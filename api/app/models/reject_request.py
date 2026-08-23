@@ -26,7 +26,7 @@ Design decisions
   a string.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RejectRequest(BaseModel):
@@ -38,4 +38,26 @@ class RejectRequest(BaseModel):
             the AuditLog payload.
     """
 
-    reason: str | None = None
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [{"reason": "Affiliation could not be verified."}]
+        }
+    )
+
+    reason: str | None = Field(
+        default=None,
+        description=(
+            "Optional free text explaining the rejection, recorded in the "
+            "ADMIN_REJECTION audit event's payload. Never shown to the "
+            "applicant through this API."
+        ),
+        examples=["Affiliation could not be verified."],
+    )
+
+
+class RejectionResponse(BaseModel):
+    """Documentation-only: the body PATCH .../reject returns on success."""
+
+    message: str = Field(examples=["User 'jdoe' (id=42) has been rejected."])
+    user_id: int = Field(examples=[42])
+    status: str = Field(examples=["rejected"])

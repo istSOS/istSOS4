@@ -19,6 +19,7 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.utils.utils import pg_quote_ident, validate_payload_keys
 from app.v1.endpoints.functions import set_role
+from app.v1.endpoints.openapi_responses import merge
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Body, Depends, Query, status
 from fastapi.responses import JSONResponse, Response
@@ -55,8 +56,45 @@ def validate_policy_expression(value: str) -> str:
     methods=["PATCH"],
     tags=["Policies"],
     summary="Update a Policy",
-    description="Update a Policy",
+    description=(
+        "Add users to an existing policy, and/or change its USING/WITH "
+        "CHECK expression, identified by policy name via the `policy` "
+        "query parameter."
+    ),
     status_code=status.HTTP_200_OK,
+    responses=merge(
+        {
+            200: {"description": "Updated. Response body is empty."},
+            404: {
+                "description": "No policy exists with that name (raised via UndefinedObjectError).",
+                "content": {"application/json": {"example": {"message": "Policy not found"}}},
+            },
+            # See the identical note in create/policy.py: this handler's
+            # own except Exception catches everything first, including
+            # NotFound (a STAError subclass meant to reach the app-level
+            # handler with its own 404 + {"code","type","message"} body).
+            # It never gets there -- flattened to 400 {"message"} instead.
+            400: {
+                "description": (
+                    "Catch-all: an unrecognised payload key, an unsafe or "
+                    "empty policy expression, an unsupported policy "
+                    "command, or -- notably -- the policy name not being "
+                    "found when only `policy` (no `users`) is supplied. "
+                    "That last case is a NotFound (STAError) raised "
+                    "internally but caught here before it can reach its "
+                    "own handler, so it surfaces as 400, not 404."
+                ),
+                "content": {"application/json": {"example": {"message": "Policy 'demo' not found."}}},
+            },
+            401: {
+                "description": (
+                    "The caller is not an administrator. 401 here, not "
+                    "403 -- same inconsistency as update/user.py."
+                ),
+                "content": {"application/json": {"example": {"message": "Insufficient privileges."}}},
+            },
+        }
+    ),
 )
 async def update_policy(
     policy: str = Query(

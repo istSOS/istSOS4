@@ -24,8 +24,15 @@ Authorization rules
 import logging
 
 from app.db.password_crud import update_local_password
+from app.models.error import DetailError
 from app.models.password import PasswordUpdateRequest
 from app.oauth import get_current_user
+from app.v1.endpoints.openapi_responses import (
+    FORBIDDEN_ADMIN_OR_SELF,
+    NOT_FOUND_USER,
+    merge,
+    response,
+)
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 
@@ -46,6 +53,33 @@ logger = logging.getLogger(__name__)
         "may only update their own."
     ),
     status_code=status.HTTP_204_NO_CONTENT,
+    responses=merge(
+        {
+            204: {"description": "Password changed. No response body."},
+            # Two distinct causes share 401: no/invalid/expired bearer
+            # token (from the auth dependency), or a valid token whose
+            # current_password doesn't match (from update_local_password).
+            401: response(
+                DetailError,
+                "Either no valid bearer token was sent, or the supplied "
+                "current_password is wrong.",
+                {"detail": "Current password is incorrect."},
+            ),
+            400: response(
+                DetailError,
+                "The target account is an external identity (has no local "
+                "PostgreSQL password to change).",
+                {"detail": "External identities cannot update passwords locally."},
+            ),
+            500: response(
+                DetailError,
+                "The password hash update itself failed unexpectedly.",
+                {"detail": "Failed to update password."},
+            ),
+        },
+        FORBIDDEN_ADMIN_OR_SELF,
+        NOT_FOUND_USER,
+    ),
 )
 async def update_password(
     user_id: int,

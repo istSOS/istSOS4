@@ -18,6 +18,7 @@ from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.v1.endpoints.functions import set_role
+from app.v1.endpoints.openapi_responses import merge
 from asyncpg.exceptions import DuplicateObjectError, InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, status
 from fastapi.responses import JSONResponse, Response
@@ -32,7 +33,7 @@ PAYLOAD_EXAMPLE = {
     "users": ["cp1"],
     "name": "test",
     "permissions": {
-        "type": "viewer",  # viewer, editor, obs_manager, sensor, qc, custom
+        "type": "viewer",  # viewer, editor, obs_manager, sensor, qc, odrl_governed
     },
 }
 
@@ -57,8 +58,50 @@ PAYLOAD_EXAMPLE = {
     methods=["POST"],
     tags=["Policies"],
     summary="Create a Policy",
-    description="Create a Policy",
+    description=(
+        "Create a named row-level-security policy for the given users. "
+        "`permissions.type` selects a stored policy function (`viewer`, "
+        "`editor`, `obs_manager`, `sensor`, `qc`), or `custom` for a "
+        "hand-specified per-table, per-operation condition."
+    ),
     status_code=status.HTTP_201_CREATED,
+    responses=merge(
+        {
+            201: {"description": "Created. Response body is empty."},
+            # This handler's own `except Exception as e:` catches
+            # everything -- including BadRequest and Conflict, which are
+            # STAError subclasses meant to reach the app-level handler and
+            # produce {"code","type","message"} with their own status
+            # (409 for Conflict). Caught here first, every failure path
+            # -- malformed payload, duplicate policy, mismatched role --
+            # is flattened to 400 with a plain {"message"} body instead.
+            400: {
+                "description": (
+                    "Malformed payload, a user already has a policy, or a "
+                    "user's role doesn't match the policy type. All "
+                    "collapse to 400 here regardless of their semantic "
+                    "cause -- see the code comment above this response."
+                ),
+                "content": {
+                    "application/json": {
+                        "example": {"message": "User cp1 has already a policy."}
+                    }
+                },
+            },
+            403: {
+                "description": "The caller is not an administrator.",
+                "content": {
+                    "application/json": {"example": {"message": "Insufficient privileges."}}
+                },
+            },
+            409: {
+                "description": "The named policy already exists at the database level.",
+                "content": {
+                    "application/json": {"example": {"message": "Policy already exists."}}
+                },
+            },
+        }
+    ),
 )
 async def create_policy(
     payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),

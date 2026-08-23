@@ -26,6 +26,8 @@ from app import (
     POSTGRES_PORT,
     REDIS,
     SECRET_KEY,
+    SUBPATH,
+    VERSION,
 )
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
@@ -35,12 +37,21 @@ from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
 
 logger = logging.getLogger(__name__)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="Login")
+
+# Absolute path (not the bare "Login" this used to be) so Swagger UI's
+# Authorize dialog posts to the right place regardless of which page it was
+# opened from, or whether a reverse proxy rewrites the mount prefix.
+# Documentation-only: OAuth2PasswordBearer.__call__ never reads tokenUrl, so
+# this cannot change runtime behaviour -- it only affects what appears in
+# components.securitySchemes.OAuth2PasswordBearer.flows.password.tokenUrl.
+_TOKEN_URL = f"{SUBPATH}{VERSION}/Login"
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=_TOKEN_URL)
 # Optional variant: auto_error=False means FastAPI will NOT raise 401 when the
 # Authorization header is absent.  The token parameter will be None instead,
 # allowing get_optional_current_user to return None gracefully.
 oauth2_scheme_optional = OAuth2PasswordBearer(
-    tokenUrl="Login", auto_error=False
+    tokenUrl=_TOKEN_URL, auto_error=False
 )
 
 

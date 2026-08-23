@@ -33,8 +33,52 @@ v1 = APIRouter()
     methods=["DELETE"],
     tags=["Users"],
     summary="Delete a User",
-    description="Delete a User",
+    description=(
+        "Delete a user by username: removes the User row, detaches them "
+        "from any RLS policy, and drops the underlying PostgreSQL role. "
+        "Administrators cannot delete their own account. Administrator-only."
+    ),
     status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Deleted. Response body is empty."},
+        400: {
+            "description": (
+                "Invalid username format, or an attempt to delete the "
+                "currently authenticated account. Body shape varies by "
+                "which of the two duplicate self-delete checks fires -- "
+                "one uses {code,type,message}, the other {message} only."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 400,
+                        "type": "error",
+                        "message": "Deleting the currently authenticated user is not allowed.",
+                    }
+                }
+            },
+        },
+        403: {
+            "description": "The caller is not an administrator.",
+            "content": {"application/json": {"example": {"message": "Insufficient privileges"}}},
+        },
+        404: {
+            "description": "No user exists with that username.",
+            "content": {"application/json": {"example": {"message": "User not found"}}},
+        },
+        409: {
+            "description": "The user still owns dependent database objects (e.g. RLS policies) that block DROP ROLE.",
+            "content": {"application/json": {"example": {"message": "Dependent objects still exist"}}},
+        },
+        500: {
+            "description": "Unexpected error during deletion.",
+            "content": {
+                "application/json": {
+                    "example": {"code": 500, "type": "error", "message": "Unexpected error while deleting user"}
+                }
+            },
+        },
+    },
 )
 async def delete_user(
     user: str = Query(

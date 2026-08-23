@@ -14,7 +14,7 @@
 
 """Pydantic schema for the PATCH /Users/{id}/password endpoint."""
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.validators import validate_password_strength
 
@@ -32,8 +32,28 @@ class PasswordUpdateRequest(BaseModel):
             entry points can never silently drift apart again.
     """
 
-    current_password: str
-    new_password: str
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [{"current_password": "OldPass1!", "new_password": "NewPass2#"}]
+        }
+    )
+
+    current_password: str = Field(
+        description="The account's current password, verified before the update proceeds.",
+    )
+    # No min_length/pattern here on purpose: that would move a bad password
+    # from validate_password_strength's specific 422 message to Pydantic's
+    # generic one, changing what the caller sees for the same failure.
+    new_password: str = Field(
+        description=(
+            "The desired new password. Must be at least 8 characters and "
+            "contain at least one digit and at least one symbol "
+            "(non-alphanumeric character). Enforced by the same rule "
+            "applied to a brand-new account's initial password at "
+            "POST /Register, so the two entry points can't drift apart."
+        ),
+        examples=["NewPass2#"],
+    )
 
     @field_validator("new_password")
     @classmethod

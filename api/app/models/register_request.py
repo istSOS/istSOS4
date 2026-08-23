@@ -32,7 +32,7 @@ Design decisions
 
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.utils.utils import validate_username
 from app.validators import validate_password_strength
@@ -46,12 +46,21 @@ class ContactInfo(BaseModel):
     ``sensorthings."User".contact``.
     """
 
-    domain: Optional[str] = None
-    company: Optional[str] = None
-    address: Optional[str] = None
-    telephone: Optional[str] = None
-    telegram: Optional[str] = None
-    linkedin: Optional[str] = None
+    model_config = ConfigDict(
+        # A partially-filled example, deliberately -- makes "every field
+        # is optional" obvious at a glance rather than implying all six
+        # are expected together.
+        json_schema_extra={
+            "examples": [{"company": "SUPSI", "telegram": "@jdoe"}]
+        }
+    )
+
+    domain: Optional[str] = Field(default=None, description="Institutional or organizational domain, e.g. `supsi.ch`.")
+    company: Optional[str] = Field(default=None, description="Employer or affiliated organization.")
+    address: Optional[str] = Field(default=None, description="Postal or institutional address.")
+    telephone: Optional[str] = Field(default=None, description="Contact phone number.")
+    telegram: Optional[str] = Field(default=None, description="Telegram handle.")
+    linkedin: Optional[str] = Field(default=None, description="LinkedIn profile URL.")
 
 
 class RestrictedRegistrationRequest(BaseModel):
@@ -70,12 +79,57 @@ class RestrictedRegistrationRequest(BaseModel):
     contact_info:   Structured contact details for the applicant.
     """
 
-    username: str
-    password: str
-    dataset_id: str
-    odrl_policy_id: str
-    explanation: str
-    contact_info: ContactInfo
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "username": "jdoe",
+                    "password": "Str0ng!Pass",
+                    "dataset_id": "stac://alpine-snow-2024",
+                    "odrl_policy_id": "odrl:policy:cc-by-nc",
+                    "explanation": "Requesting access for a climate research project.",
+                    "contact_info": {"company": "SUPSI", "telegram": "@jdoe"},
+                }
+            ]
+        }
+    )
+
+    username: str = Field(
+        description="3-63 characters; letters, digits, and underscores only.",
+        examples=["jdoe"],
+    )
+    password: str = Field(
+        description=(
+            "At least 8 characters, with at least one digit and at least "
+            "one symbol (non-alphanumeric character). The same rule "
+            "applied to every password change after this one -- see "
+            "PATCH /Users/{id}/password."
+        ),
+        examples=["Str0ng!Pass"],
+    )
+    dataset_id: str = Field(
+        description=(
+            "Dataset the applicant is requesting access to. Persisted on "
+            "the User row (not just the audit log) so an administrator "
+            "reviewing the pending queue can see it, and forwarded to the "
+            "RESTRICTED_REQUEST audit event."
+        ),
+        examples=["stac://alpine-snow-2024"],
+    )
+    odrl_policy_id: str = Field(
+        description=(
+            "ODRL policy document identifier governing that dataset. Same "
+            "persistence as dataset_id; not parsed or resolved by this API."
+        ),
+        examples=["odrl:policy:cc-by-nc"],
+    )
+    explanation: str = Field(
+        description="Free-text justification, merged into the `contact` JSONB blob alongside contact_info.",
+        examples=["Requesting access for a climate research project."],
+    )
+    contact_info: ContactInfo = Field(
+        description="Structured contact details -- every field is individually optional.",
+    )
 
     @field_validator("username")
     @classmethod
@@ -104,3 +158,16 @@ class RestrictedRegistrationRequest(BaseModel):
         app.validators.validate_password_strength.
         """
         return validate_password_strength(v)
+
+
+class RegisterResponse(BaseModel):
+    """Documentation-only: the body POST /Register returns on success.
+
+    Built as a plain dict in the handler, not serialised through this
+    model -- see app/models/error.py for why (JSONResponse, not
+    response_model=).
+    """
+
+    id: int = Field(description="Primary key of the newly-created pending user.", examples=[42])
+    status: str = Field(description="Always 'pending' immediately after registration.", examples=["pending"])
+    message: str = Field(examples=["Registration submitted. Your account (id=42) is pending administrator approval."])

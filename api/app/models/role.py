@@ -14,15 +14,16 @@
 
 """Pydantic schema for the PATCH /Users/{id}/role endpoint."""
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.rbac_roles import validate_rbac_role
+from app.rbac_roles import ASSIGNABLE_ROLES, validate_rbac_role
 
 
 class RoleUpdateRequest(BaseModel):
     """Request body for an administrator-initiated role re-assignment.
 
-    Accepted values for ``role``: viewer, editor, obs_manager, sensor, custom.
+    Accepted values for ``role``: viewer, editor, obs_manager, sensor, qc,
+    odrl_governed.
 
     Why 'administrator' is intentionally blocked here
     -------------------------------------------------
@@ -45,14 +46,33 @@ class RoleUpdateRequest(BaseModel):
     any mutation.
     """
 
-    role: str
+    model_config = ConfigDict(
+        json_schema_extra={"examples": [{"role": "editor"}]}
+    )
+
+    role: str = Field(
+        description=(
+            "New application-layer role. `administrator` is bootstrap-only "
+            "and is rejected here (seeded once at deploy time via the "
+            "ISTSOS_ADMIN env var, never API-assignable); `pending` is an "
+            "internal waiting-room state and is also rejected."
+        ),
+        examples=["editor"],
+        # Documentation-only: json_schema_extra is inert at runtime, unlike
+        # a Literal/Enum type annotation would be. See the field_validator
+        # below -- it normalises with .strip().lower() *after* Pydantic's
+        # own type coercion runs, so retyping this as an enum would reject
+        # inputs like "Editor " with a generic 422 before that normalisation
+        # ever had a chance to run, silently tightening validation.
+        json_schema_extra={"enum": ASSIGNABLE_ROLES},
+    )
 
     @field_validator("role")
     @classmethod
     def validate_role(cls, v: str) -> str:
         """Delegate to the shared RBAC validator.
 
-        Accepts:  viewer, editor, obs_manager, sensor, custom.
+        Accepts:  viewer, editor, obs_manager, sensor, qc, odrl_governed.
         Rejects with ValueError (→ HTTP 422):
           - 'administrator' — bootstrap-only, never API-assignable.
           - 'pending'       — internal OIDC waiting-room state.

@@ -46,8 +46,17 @@ import logging
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.db.audit_crud import AUDIT_ACTION_ADMIN_REJECTION, log_audit_event
-from app.models.reject_request import RejectRequest
+from app.models.reject_request import RejectRequest, RejectionResponse
 from app.oauth import get_current_user
+from app.v1.endpoints.openapi_responses import (
+    ADMIN_ERRORS,
+    DB_TIMEOUT,
+    DB_UNAVAILABLE,
+    INTERNAL,
+    NOT_FOUND_PENDING_USER,
+    merge,
+    response,
+)
 from asyncpg.exceptions import (
     InsufficientPrivilegeError,
     PostgresConnectionError,
@@ -64,7 +73,7 @@ logger = logging.getLogger(__name__)
 @v1.api_route(
     "/Users/{target_user_id}/reject",
     methods=["PATCH"],
-    tags=["Users"],
+    tags=["Registration & Approval"],
     summary="Admin rejection: deny a pending user's access request",
     description=(
         "Reject a pending user's registration request. Sets status='rejected' "
@@ -74,6 +83,25 @@ logger = logging.getLogger(__name__)
         "re-apply via POST /Register."
     ),
     status_code=status.HTTP_200_OK,
+    responses=merge(
+        {
+            200: response(
+                RejectionResponse,
+                "Rejected. `role` stays 'pending' by design -- only "
+                "`status` moves to 'rejected'.",
+                {
+                    "message": "User 'jdoe' (id=42) has been rejected.",
+                    "user_id": 42,
+                    "status": "rejected",
+                },
+            )
+        },
+        ADMIN_ERRORS,
+        NOT_FOUND_PENDING_USER,
+        DB_UNAVAILABLE,
+        DB_TIMEOUT,
+        INTERNAL,
+    ),
 )
 async def patch_reject_user(
     target_user_id: int,

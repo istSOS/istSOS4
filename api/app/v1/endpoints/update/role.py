@@ -27,8 +27,17 @@ application-level role) and delegates all DB logic + edge-case guards to
 import logging
 
 from app.db.role_crud import update_user_role
+from app.models.error import DetailError
 from app.models.role import RoleUpdateRequest
 from app.oauth import get_current_user
+from app.v1.endpoints.openapi_responses import (
+    ADMIN_ERRORS,
+    BAD_REQUEST_PENDING_ROLE,
+    CONFLICT_LAST_ADMIN,
+    NOT_FOUND_USER,
+    merge,
+    response,
+)
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 
@@ -46,9 +55,29 @@ logger = logging.getLogger(__name__)
         "Restricted to administrators. "
         "Pending users must be activated first. "
         "The last administrator cannot be demoted. "
-        "Accepts: viewer, editor, obs_manager, sensor, custom."
+        "Accepts: viewer, editor, obs_manager, sensor, qc, odrl_governed."
     ),
     status_code=status.HTTP_204_NO_CONTENT,
+    responses=merge(
+        {
+            204: {
+                "description": (
+                    "Role changed. No response body. Also returned "
+                    "(with no database mutation) if the requested role "
+                    "matches the current one -- a deliberate no-op guard."
+                )
+            },
+            500: response(
+                DetailError,
+                "Unexpected database error during the role update.",
+                {"detail": "Internal server error."},
+            ),
+        },
+        ADMIN_ERRORS,
+        NOT_FOUND_USER,
+        BAD_REQUEST_PENDING_ROLE,
+        CONFLICT_LAST_ADMIN,
+    ),
 )
 async def patch_user_role(
     user_id: int,

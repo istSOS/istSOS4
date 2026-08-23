@@ -35,8 +35,39 @@ if AUTHORIZATION:
     methods=["GET"],
     tags=["Policies"],
     summary="Get Policies",
-    description="Get Policies",
+    description=(
+        "List PostgreSQL row-level-security policies, optionally filtered "
+        "by user, policy name, table, or operation. Administrator-only."
+    ),
     status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "description": "Matching policies, from pg_policies.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "value": [
+                            {
+                                "policyname": "jdoe_default",
+                                "tablename": "Datastream",
+                                "roles": ["jdoe"],
+                                "cmd": "SELECT",
+                                "qual": "true",
+                            }
+                        ]
+                    }
+                }
+            },
+        },
+        401: {
+            "description": "The caller is not an administrator.",
+            "content": {"application/json": {"example": {"message": "Insufficient privileges."}}},
+        },
+        400: {
+            "description": "Malformed filter parameters causing a query failure.",
+            "content": {"application/json": {"example": {"message": "..."}}},
+        },
+    },
 )
 async def get_policies(
     user: str = Query(
