@@ -142,14 +142,21 @@ async def normalize_claims(provider: str, token: dict, client) -> dict:
         }
 
     userinfo = token.get("userinfo") or {}
-    # preferred_username/name/email aren't guaranteed present on every
+    # preferred_username/email/name aren't guaranteed present on every
     # provider (e.g. ORCID's sub is the ORCID iD itself, with no
-    # preferred_username at all) -- sub is the one claim every OIDC
-    # provider is required to return, so it's the final fallback.
+    # preferred_username or email at all) -- sub is the one claim every
+    # OIDC provider is required to return, so it's the final fallback.
+    #
+    # email ranks above name: it's a stable, meaningful identifier when a
+    # provider shares it, versus name being a raw display string ("Kinshuk
+    # S") with no uniqueness guarantee at all. Whichever of these four
+    # wins still has to pass through sanitize_username() before storage --
+    # none of them (including email) match validate_username()'s
+    # ^[a-zA-Z0-9_]{3,63}$ rule on their own.
     username = (
         userinfo.get("preferred_username")
-        or userinfo.get("name")
         or userinfo.get("email")
+        or userinfo.get("name")
         or userinfo["sub"]
     )
     return {

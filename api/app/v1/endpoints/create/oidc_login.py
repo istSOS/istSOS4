@@ -55,6 +55,7 @@ from app.db.oidc_user_crud import (
 from app.oauth import create_access_token
 from app.oidc_providers import ENABLED_PROVIDERS, normalize_claims, oauth
 from app.rbac_roles import validate_rbac_role
+from app.utils.utils import sanitize_username
 from app.v1.endpoints.openapi_responses import (
     BAD_GATEWAY_PROVIDER_CLAIMS,
     BAD_REQUEST_OIDC_CALLBACK,
@@ -290,6 +291,18 @@ async def oidc_callback(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Identity provider returned an unexpected response.",
         )
+
+    # normalize_claims() derives "username" from whatever the provider
+    # sent (preferred_username/email/name/sub) with no format guarantee at
+    # all -- a Google display name with a space, an ORCID iD full of
+    # hyphens, an email address. There is no form step here for a real
+    # person to retype something invalid, unlike local registration, so
+    # this sanitizes into something validate_username() accepts instead of
+    # rejecting a sincere signup over formatting outside the applicant's
+    # control. See sanitize_username()'s own docstring for the algorithm.
+    claims["username"] = sanitize_username(
+        claims["username"], claims["external_sub_id"]
+    )
 
     # Pop rather than get: this session is single-use for this handshake,
     # and popping avoids a stale selection leaking into a second, unrelated
