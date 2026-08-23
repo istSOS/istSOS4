@@ -74,6 +74,5 @@ async def delete_sensor(
                     f"Sensor with id {sensor_id} not found",
                 )
 
-            if current_user is not None:
 
     return Response(status_code=status.HTTP_200_OK)

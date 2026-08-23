@@ -84,7 +84,6 @@ async def update_observed_property(
             if not await check_id_exists(
                 connection, "ObservedProperty", observed_property_id
             ):
-                if current_user is not None:
                 return error_response(
                     status.HTTP_404_NOT_FOUND,
                     "Observed Property ID not found.",
@@ -98,7 +97,6 @@ async def update_observed_property(
             )
 
             if not payload:
-                if current_user is not None:
                 return Response(status_code=status.HTTP_200_OK)
 
             validate_payload_keys(payload, ALLOWED_KEYS)
@@ -117,7 +115,6 @@ async def update_observed_property(
                 payload,
             )
 
-            if current_user is not None:
 
     return Response(status_code=status.HTTP_200_OK)
 

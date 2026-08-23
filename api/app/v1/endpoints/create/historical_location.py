@@ -78,7 +78,6 @@ async def create_historical_location(
                 connection, payload, commit_id
             )
 
-            if current_user is not None:
 
     return Response(
         status_code=status.HTTP_201_CREATED,
@@ -131,7 +130,6 @@ async def create_historical_location_for_thing(
                 connection, payload, commit_id
             )
 
-            if current_user is not None:
 
     return Response(
         status_code=status.HTTP_201_CREATED,
