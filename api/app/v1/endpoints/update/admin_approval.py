@@ -152,7 +152,7 @@ async def patch_policy_approval(
                 # ------------------------------------------------------
                 username_row = await conn.fetchrow(
                     """
-                    SELECT username, status
+                    SELECT username, status, requested_role
                     FROM sensorthings."User"
                     WHERE id = $1
                     """,
@@ -177,6 +177,21 @@ async def patch_policy_approval(
 
                 username: str = username_row["username"]
 
+                # request.assigned_role is the administrator's explicit
+                # choice and always wins; omitting it falls back to what
+                # the applicant themselves asked for at registration. Both
+                # missing means there is nothing to approve into.
+                target_role = request.assigned_role or username_row["requested_role"]
+                if target_role is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=(
+                            f"User '{username}' did not request a role at "
+                            "registration, so assigned_role must be "
+                            "specified explicitly."
+                        ),
+                    )
+
                 # ------------------------------------------------------
                 # 2b. UPDATE the User row — role + status.
                 #     The WHERE clause includes role = 'pending' so we
@@ -192,7 +207,7 @@ async def patch_policy_approval(
                       AND role = 'pending'
                     RETURNING id
                     """,
-                    request.assigned_role,
+                    target_role,
                     target_user_id,
                 )
 
@@ -225,7 +240,7 @@ async def patch_policy_approval(
                 #     and leaves the outer transaction (UPDATE + AuditLog)
                 #     in a healthy, committable state.
                 # ------------------------------------------------------
-                if request.assigned_role == "odrl_governed":
+                if target_role == "odrl_governed":
                     policyname = f"{username}_default"
                     try:
                         async with conn.transaction():
@@ -255,7 +270,7 @@ async def patch_policy_approval(
                     odrl_policy_id=request.odrl_policy_id,
                     payload={
                         "approved_user_id": target_user_id,
-                        "granted_role": request.assigned_role,
+                        "granted_role": target_role,
                     },
                 )
 
@@ -264,7 +279,7 @@ async def patch_policy_approval(
             "for dataset '%s' by admin id=%d.",
             username,
             target_user_id,
-            request.assigned_role,
+            target_role,
             request.dataset_id,
             current_user["id"],
         )
@@ -274,10 +289,10 @@ async def patch_policy_approval(
             content={
                 "message": (
                     f"User '{username}' (id={target_user_id}) has been approved "
-                    f"with role '{request.assigned_role}'."
+                    f"with role '{target_role}'."
                 ),
                 "user_id": target_user_id,
-                "granted_role": request.assigned_role,
+                "granted_role": target_role,
                 "dataset_id": request.dataset_id,
                 "odrl_policy_id": request.odrl_policy_id,
             },

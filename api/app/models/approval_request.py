@@ -39,28 +39,40 @@ class AdminApprovalRequest(BaseModel):
     Fields
     ------
     assigned_role:   The application-layer RBAC role to grant to the target
-                     user.  Must be one of the assignable roles defined in
-                     ``VALID_RBAC_ROLES`` (e.g. viewer, editor, obs_manager,
-                     sensor, custom).  The internal 'pending' state and
-                     'administrator' may NOT be set through this endpoint.
+                     user.  Optional -- if omitted, the endpoint falls back
+                     to the ``requested_role`` the applicant stated at
+                     registration (see register_request.py). Supplying a
+                     value here always overrides that default; the
+                     administrator is the final gatekeeper either way. Must
+                     be one of the assignable roles defined in
+                     ``VALID_RBAC_ROLES`` (viewer, editor, obs_manager,
+                     sensor, qc, odrl_governed) if given.  The internal
+                     'pending' state and 'administrator' may NOT be set
+                     through this endpoint.
     dataset_id:      Human-readable or URI identifier for the STAC dataset
                      to which access is being granted.  Forwarded to AuditLog.
     odrl_policy_id:  Identifier of the ODRL policy document that governs
                      access to the dataset.  Forwarded to AuditLog.
     """
 
-    assigned_role: str
+    assigned_role: str | None = None
     dataset_id: str
     odrl_policy_id: str
 
     @field_validator("assigned_role")
     @classmethod
-    def role_must_be_valid(cls, v: str) -> str:
-        """Pass the value through validate_rbac_role.
+    def role_must_be_valid(cls, v: str | None) -> str | None:
+        """Pass the value through validate_rbac_role, unless omitted.
+
+        None means "use the applicant's requested_role" -- resolved by the
+        endpoint handler, which has the DB row this model doesn't. Only a
+        supplied value is validated here.
 
         Raises ``ValueError`` (which Pydantic converts to a 422 response)
         if the role is not one of the permitted assignable roles.
         """
+        if v is None:
+            return None
         return validate_rbac_role(v)
 
 

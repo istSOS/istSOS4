@@ -93,6 +93,7 @@ async def create_pending_oidc_user(
     external_sub_id: str,
     dataset_id: str | None = None,
     odrl_policy_id: str | None = None,
+    requested_role: str | None = None,
 ) -> dict:
     """Insert a new OIDC-linked user in the 'pending' waiting room.
 
@@ -123,6 +124,13 @@ async def create_pending_oidc_user(
                          collected one.
         odrl_policy_id:  ODRL policy identifier tied to that dataset
                          selection. Same nullability as dataset_id.
+        requested_role:  RBAC role the user asked to be granted, collected
+                         the same way as dataset_id/odrl_policy_id (see
+                         oidc_login.py). An administrator reviewing the
+                         pending queue sees this as the default at
+                         activation time but can assign a different role —
+                         see activate_user.py. Same nullability as
+                         dataset_id.
 
     Returns:
         dict with keys ``id``, ``username``, ``role``, ``uri``,
@@ -154,9 +162,10 @@ async def create_pending_oidc_user(
                     """
                     INSERT INTO sensorthings."User"
                         (username, contact, role, auth_provider,
-                         external_sub_id, dataset_id, odrl_policy_id)
+                         external_sub_id, dataset_id, odrl_policy_id,
+                         requested_role)
                     VALUES
-                        ($1, $2::jsonb, $3, $4, $5, $6, $7)
+                        ($1, $2::jsonb, $3, $4, $5, $6, $7, $8)
                     RETURNING id, username, role, uri, auth_provider,
                         external_sub_id, dataset_id, odrl_policy_id;
                     """,
@@ -167,6 +176,7 @@ async def create_pending_oidc_user(
                     external_sub_id,
                     dataset_id,
                     odrl_policy_id,
+                    requested_role,
                 )
 
                 # Lazy import: audit_crud has no reverse dependency on this
@@ -183,7 +193,10 @@ async def create_pending_oidc_user(
                     actor_id=row["id"],
                     dataset_id=dataset_id,
                     odrl_policy_id=odrl_policy_id,
-                    payload={"auth_provider": auth_provider},
+                    payload={
+                        "auth_provider": auth_provider,
+                        "requested_role": requested_role,
+                    },
                 )
         except UniqueViolationError as exc:
             if exc.constraint_name == _USERNAME_UNIQUE_CONSTRAINT:
