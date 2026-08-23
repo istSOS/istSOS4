@@ -9,7 +9,7 @@ VALID_RBAC_ROLES = {
     "obs_manager",
     "sensor",
     "qc",
-    "custom",
+    "odrl_governed",
 }
 
 # Internal sentinel for OIDC users awaiting admin activation.
@@ -24,33 +24,32 @@ DB_ROLE_BY_RBAC_ROLE = {
     "obs_manager": "sensor",
     "sensor": "sensor",
     "qc": "qc",
-    "custom": "user",
+    "odrl_governed": "user",
 }
 
 # ---------------------------------------------------------------------------
-# WARNING: This static RBAC dictionary is legacy scaffolding. Data policies
-# and role grants are intended to be dynamically generated via the ODRL
-# engine. Do not extend this map for new use cases — treat it as a
-# placeholder pending that migration.
+# HISTORICAL NOTE: viewer/editor/obs_manager/sensor/qc used to each need a
+# CREATE POLICY call at approval time, dispatched through this map to a
+# stored function (viewer_policy(), editor_policy(), ...). Those functions
+# and that map are gone as of 007_session_scoped_rls_policies.sql: the
+# per-approval policies they created were scoped ``TO <username>``, but no
+# application code path has ever created an individual PostgreSQL login
+# role for a real user, so those policies could never match any real
+# session for any user, ever. Access control for these five roles is now
+# enforced by static policies created once by that migration, scoped to
+# the shared group role (see DB_ROLE_BY_RBAC_ROLE) plus a session claim
+# (app.current_user_id, set by set_role() in v1/endpoints/functions.py) —
+# approving or activating a user into one of these roles is now a plain
+# UPDATE, nothing else.
 #
-# Shared RLS policy function map.
-# Maps each assignable application role to the stored PostgreSQL policy
-# function that applies Row-Level Security rules for that role.
-#
-# 'administrator' and 'custom' are intentionally absent:
-#   - administrator bypasses RLS by database privilege, not by policy.
-#   - custom has no default policy; admins create one explicitly via
-#     POST /Policies after activation.
-#
-# This is the single source of truth — import it into any module that
-# needs to dispatch to a policy function (create/user.py, activate_user.py).
+# odrl_governed is the one role NOT covered by that migration — deferred
+# for future ODRL work, per explicit scope decision. It still needs a
+# dataset_id to mean anything, and update/admin_approval.py still calls
+# sensorthings.odrl_governed_policy() directly, per-approval, exactly as
+# before. create/user.py and activate_user.py still correctly skip policy
+# creation for it entirely (it needs a dataset_id neither of those flows
+# collects).
 # ---------------------------------------------------------------------------
-POLICY_FN_MAP = {
-    "viewer":      "sensorthings.viewer_policy",
-    "editor":      "sensorthings.editor_policy",
-    "obs_manager": "sensorthings.obs_manager_policy",
-    "sensor":      "sensorthings.sensor_policy",
-}
 
 
 def validate_rbac_role(role: str) -> str:
@@ -71,3 +70,10 @@ def validate_rbac_role(role: str) -> str:
 def get_db_role_for_rbac(role: str) -> str:
     """Return the PostgreSQL group role for a given RBAC role."""
     return DB_ROLE_BY_RBAC_ROLE[validate_rbac_role(role)]
+
+
+# Sorted, JSON-serialisable view of the assignable roles, for OpenAPI
+# schemas only (see app/models/role.py, app/models/approval_request.py).
+# Derived from VALID_RBAC_ROLES rather than duplicated, so the documented
+# enum can never drift from what validate_rbac_role() actually accepts.
+ASSIGNABLE_ROLES = sorted(VALID_RBAC_ROLES)

@@ -60,7 +60,15 @@ from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.db.audit_crud import AUDIT_ACTION_RESTRICTED_REQUEST, log_audit_event
 from app.db.password_crud import pwd_context
-from app.models.register_request import RestrictedRegistrationRequest
+from app.models.register_request import RegisterResponse, RestrictedRegistrationRequest
+from app.v1.endpoints.openapi_responses import (
+    CONFLICT_USERNAME,
+    DB_TIMEOUT,
+    DB_UNAVAILABLE,
+    INTERNAL,
+    merge,
+    response,
+)
 from asyncpg.exceptions import (
     PostgresConnectionError,
     QueryCanceledError,
@@ -76,7 +84,7 @@ logger = logging.getLogger(__name__)
 
 @v1.post(
     "/Register",
-    tags=["Users"],
+    tags=["Registration & Approval"],
     summary="Submit a restricted-access registration request",
     description=(
         "Public endpoint. Creates a new user account in the 'pending' role "
@@ -86,6 +94,24 @@ logger = logging.getLogger(__name__)
         "activates it via POST /Users/{id}/activate."
     ),
     status_code=status.HTTP_201_CREATED,
+    responses=merge(
+        {
+            201: response(
+                RegisterResponse,
+                "Registration accepted; account created in the pending state.",
+                {
+                    "id": 42,
+                    "status": "pending",
+                    "message": "Registration submitted. Your account "
+                    "(id=42) is pending administrator approval.",
+                },
+            )
+        },
+        CONFLICT_USERNAME,
+        DB_UNAVAILABLE,
+        DB_TIMEOUT,
+        INTERNAL,
+    ),
 )
 async def register_request(request: RestrictedRegistrationRequest):
     """Handle a restricted-access self-registration.
@@ -157,35 +183,48 @@ async def register_request(request: RestrictedRegistrationRequest):
 
                 if existing is not None:
                     # Re-application: overwrite the previously-rejected row.
+                    # dataset_id/odrl_policy_id are overwritten too -- a
+                    # re-applying user is explicitly allowed to request a
+                    # different dataset/policy than their rejected attempt.
                     row = await conn.fetchrow(
                         """
                         UPDATE sensorthings."User"
-                        SET password = $1,
-                            contact  = $2::jsonb,
-                            status   = 'active'
-                        WHERE id = $3
+                        SET password       = $1,
+                            contact        = $2::jsonb,
+                            status         = 'active',
+                            dataset_id     = $3,
+                            odrl_policy_id = $4
+                        WHERE id = $5
                         RETURNING id
                         """,
                         hashed_password,
                         contact_json,
+                        request.dataset_id,
+                        request.odrl_policy_id,
                         existing["id"],
                     )
                 else:
                     # 3a. INSERT the new User row.
                     #     role='pending'  → zero operational privileges.
                     #     status='active' → account exists and can be found by admin.
+                    #     dataset_id/odrl_policy_id persisted here (not just
+                    #     AuditLog) so an admin reviewing GET /Users can see
+                    #     what was actually requested without a manual join.
                     #     The RETURNING clause gives us the auto-assigned PK.
                     row = await conn.fetchrow(
                         """
                         INSERT INTO sensorthings."User"
-                            (username, password, role, status, contact)
+                            (username, password, role, status, contact,
+                             dataset_id, odrl_policy_id)
                         VALUES
-                            ($1, $2, 'pending', 'active', $3::jsonb)
+                            ($1, $2, 'pending', 'active', $3::jsonb, $4, $5)
                         RETURNING id
                         """,
                         request.username,
                         hashed_password,
                         contact_json,
+                        request.dataset_id,
+                        request.odrl_policy_id,
                     )
                 new_user_id: int = row["id"]
 

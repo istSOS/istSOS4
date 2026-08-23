@@ -69,7 +69,29 @@ services:
       ANONYMOUS_VIEWER: ${ANONYMOUS_VIEWER}
       NETWORK: ${NETWORK}
       ST_AGGREGATE: ${ST_AGGREGATE}
-    command: uvicorn --reload --host 0.0.0.0 --port 5000 app.main:app
+      # External identity providers (app/oidc_providers.py) -- a provider
+      # only registers if both its CLIENT_ID and CLIENT_SECRET resolve to
+      # a non-empty value, so it's safe to leave any of these unset.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET}
+      MICROSOFT_DISCOVERY_URL: ${MICROSOFT_DISCOVERY_URL}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      ORCID_CLIENT_ID: ${ORCID_CLIENT_ID}
+      ORCID_CLIENT_SECRET: ${ORCID_CLIENT_SECRET}
+      ORCID_DISCOVERY_URL: ${ORCID_DISCOVERY_URL}
+      EDUID_CLIENT_ID: ${EDUID_CLIENT_ID}
+      EDUID_CLIENT_SECRET: ${EDUID_CLIENT_SECRET}
+    # --proxy-headers + --forwarded-allow-ips="*" makes uvicorn trust
+    # X-Forwarded-Proto from a fronting proxy (e.g. ngrok, needed for ORCID
+    # testing since it only accepts HTTPS redirect URIs). Without this,
+    # uvicorn builds callback URLs as http:// even when the real inbound
+    # request was https://, and the identity provider rejects the mismatch.
+    # Safe for local dev; a real deployment should scope
+    # --forwarded-allow-ips to the actual reverse proxy's IP, not "*".
+    command: uvicorn --reload --host 0.0.0.0 --port 5000 --proxy-headers --forwarded-allow-ips="*" app.main:app
     ports:
       - ${EXTERNAL_PORT}:5000
     volumes:

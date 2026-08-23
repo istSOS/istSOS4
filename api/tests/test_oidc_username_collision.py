@@ -61,9 +61,19 @@ from app.db.oidc_user_crud import (  # noqa: E402
 )
 
 
+@asynccontextmanager
+async def _fake_transaction():
+    """conn.transaction() is a synchronous call returning something used
+    as `async with ...:` -- a bare AsyncMock treats it as awaitable
+    instead, which raises TypeError. Needs its own fake."""
+    yield None
+
+
 def _make_mock_pool(side_effect):
     mock_conn = AsyncMock()
     mock_conn.fetchrow = AsyncMock(side_effect=side_effect)
+    mock_conn.execute = AsyncMock(return_value=None)
+    mock_conn.transaction = MagicMock(side_effect=_fake_transaction)
 
     @asynccontextmanager
     async def mock_acquire():

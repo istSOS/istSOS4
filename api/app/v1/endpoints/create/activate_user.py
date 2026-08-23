@@ -35,8 +35,18 @@ import logging
 
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.models.error import MessageError
 from app.oauth import get_current_user
-from app.rbac_roles import PENDING_ROLE, POLICY_FN_MAP, validate_rbac_role
+from app.rbac_roles import PENDING_ROLE, validate_rbac_role
+from app.v1.endpoints.openapi_responses import (
+    DB_TIMEOUT,
+    DB_UNAVAILABLE,
+    INTERNAL,
+    MSG_FORBIDDEN_DB,
+    MSG_UNAUTHORIZED,
+    merge,
+    response,
+)
 from asyncpg.exceptions import (
     InsufficientPrivilegeError,
     PostgresConnectionError,
@@ -51,14 +61,15 @@ v1 = APIRouter()
 logger = logging.getLogger(__name__)
 
 ACTIVATE_PAYLOAD_EXAMPLE = {
-    "role": "viewer",  # one of: viewer, editor, obs_manager, sensor, custom
+    # one of: viewer, editor, obs_manager, sensor, qc, odrl_governed
+    "role": "viewer",
 }
 
 
 @v1.api_route(
     "/Users/{user_id}/activate",
     methods=["POST"],
-    tags=["Users"],
+    tags=["Registration & Approval"],
     summary="Activate a pending OIDC user",
     description=(
         "Promote a user from the 'pending' waiting room to a fully active "
@@ -66,10 +77,55 @@ ACTIVATE_PAYLOAD_EXAMPLE = {
         "Only accessible by an administrator.  No PostgreSQL DDL is issued."
     ),
     status_code=status.HTTP_200_OK,
+    responses=merge(
+        {
+            200: response(
+                MessageError,
+                "Activated with the requested role.",
+                {"message": "User 'jdoe' has been activated with role 'viewer'."},
+            ),
+            # Three distinct causes share 400: an unrecognised role string,
+            # a rejected applicant (role stays 'pending' by design, so the
+            # pending/404 checks alone wouldn't catch this), or
+            # 'odrl_governed' requested with no dataset_id on file.
+            400: response(
+                MessageError,
+                "One of: the requested role isn't one of the assignable "
+                "roles; the user's registration was rejected and must be "
+                "re-applied via POST /Register instead; or 'odrl_governed' "
+                "was requested but this user has no dataset_id on file "
+                "(only set via GET /auth/{provider}/login).",
+                {
+                    "message": "User 'jdoe' has no dataset_id on file, so "
+                    "they cannot be activated into 'odrl_governed'. They "
+                    "must restart login via /auth/{provider}/login with a "
+                    "dataset_id and odrl_policy_id selected."
+                },
+            ),
+        },
+        MSG_UNAUTHORIZED,
+        MSG_FORBIDDEN_DB,
+        {
+            404: response(
+                MessageError,
+                "No user exists with that id.",
+                {"message": "User with id=42 not found."},
+            ),
+            409: response(
+                MessageError,
+                "The target user is not currently 'pending' -- already "
+                "activated, or otherwise not eligible.",
+                {"message": "User 'jdoe' is not pending (current role: 'viewer')."},
+            ),
+        },
+        DB_UNAVAILABLE,
+        DB_TIMEOUT,
+        INTERNAL,
+    ),
 )
 async def activate_user(
     user_id: int,
-    payload: dict = Body(example=ACTIVATE_PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[ACTIVATE_PAYLOAD_EXAMPLE]),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
@@ -101,7 +157,7 @@ async def activate_user(
             # ----------------------------------------------------------
             user_row = await conn.fetchrow(
                 """
-                SELECT id, username, role, status
+                SELECT id, username, role, status, dataset_id
                 FROM sensorthings."User"
                 WHERE id = $1
                 """,
@@ -143,6 +199,24 @@ async def activate_user(
 
             username = user_row["username"]
 
+            if target_role == "odrl_governed" and user_row["dataset_id"] is None:
+                # This user never went through /auth/{provider}/login with
+                # a dataset_id/odrl_policy_id selection (see oidc_login.py)
+                # -- 'odrl_governed' has nothing to scope the RLS predicate
+                # to, so approving into it would be a silent no-op policy
+                # exactly like the old 'custom' role used to be.
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "message": (
+                            f"User '{username}' has no dataset_id on file, "
+                            "so they cannot be activated into 'odrl_governed'. "
+                            "They must restart login via /auth/{provider}/login "
+                            "with a dataset_id and odrl_policy_id selected."
+                        )
+                    },
+                )
+
             # ----------------------------------------------------------
             # 4. All mutations inside a single transaction so any
             #    failure leaves the user still 'pending' (no half-state).
@@ -161,31 +235,37 @@ async def activate_user(
                     user_id,
                 )
 
-                # 4b. Apply the default RLS policy for the target role.
-                #     'custom' has no default policy function; admin must
-                #     create one explicitly via POST /Policies.
-                #     POLICY_FN_MAP is the single source of truth — imported
-                #     from rbac_roles.py to stay in sync with create/user.py.
+                # 4b. odrl_governed is the one role that still needs a
+                #     per-activation CREATE POLICY call — it needs a
+                #     dataset_id to mean anything, and an OIDC-provisioned
+                #     user can actually have one now (collected at
+                #     /auth/{provider}/login, see oidc_login.py), read
+                #     straight off user_row. Mirrors
+                #     update/admin_approval.py's dispatch. Deliberately NOT
+                #     migrated to the static-policy scheme; ODRL work is
+                #     scoped for later.
                 #
-                #     The policy function issues CREATE POLICY ... TO
-                #     <username>, which requires a matching PostgreSQL
-                #     role. Self-registered users (/Register) have zero
-                #     DB footprint by design, so this raises
-                #     UndefinedObjectError for them. asyncpg marks the
-                #     entire outer transaction aborted on any caught
-                #     exception inside it, so a nested savepoint is used
-                #     to isolate the failure — the outer transaction
-                #     (role UPDATE) still commits. Mirrors the identical
-                #     pattern in update/admin_approval.py.
-                policy_fn = POLICY_FN_MAP.get(target_role)
-                if policy_fn:
+                #     Every other role needs no RLS DDL here at all as of
+                #     007_session_scoped_rls_policies.sql — their policies
+                #     are static, created once by that migration, not
+                #     per-activation. The role UPDATE above is the entire
+                #     grant.
+                #
+                #     IMPORTANT: asyncpg marks the entire transaction as
+                #     aborted on any caught exception inside it, so a
+                #     nested savepoint isolates UndefinedObjectError —
+                #     the outer transaction (role UPDATE) still commits.
+                #     Mirrors the identical pattern in
+                #     update/admin_approval.py.
+                if target_role == "odrl_governed":
                     policyname = f"{username}_default"
                     try:
                         async with conn.transaction():
                             await conn.execute(
-                                f"SELECT {policy_fn}($1, $2);",
+                                "SELECT sensorthings.odrl_governed_policy($1, $2, $3);",
                                 [username],
                                 policyname,
+                                user_row["dataset_id"],
                             )
                     except UndefinedObjectError:
                         logger.warning(

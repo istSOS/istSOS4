@@ -32,9 +32,9 @@ This endpoint is the "Path B" counterpart to POST /Register.  The
 registration endpoint creates a pending user; this endpoint is the
 administrator action that activates it and binds it to an ODRL policy.
 
-The RLS policy call mirrors the pattern in activate_user.py exactly:
-``SELECT {policy_fn}($1, $2)`` receives ``[username]`` and the policy name
-string as positional parameters.
+Only ``odrl_governed`` still needs an RLS call here — every other role's
+access is enforced by static policies created once (see
+007_session_scoped_rls_policies.sql), not per-approval.
 
 The entire mutation (UPDATE + RLS call + AuditLog INSERT) runs inside one
 ``conn.transaction()`` block so any failure leaves the user still pending
@@ -46,9 +46,19 @@ import logging
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.db.audit_crud import AUDIT_ACTION_ADMIN_APPROVAL, log_audit_event
-from app.models.approval_request import AdminApprovalRequest
+from app.models.approval_request import AdminApprovalRequest, ApprovalResponse
 from app.oauth import get_current_user
-from app.rbac_roles import POLICY_FN_MAP
+from app.v1.endpoints.openapi_responses import (
+    BAD_REQUEST_REJECTED,
+    DB_TIMEOUT,
+    DB_UNAVAILABLE,
+    FORBIDDEN_ADMIN,
+    INTERNAL,
+    NOT_FOUND_PENDING_USER,
+    UNAUTHORIZED,
+    merge,
+    response,
+)
 from asyncpg.exceptions import (
     InsufficientPrivilegeError,
     PostgresConnectionError,
@@ -66,7 +76,7 @@ logger = logging.getLogger(__name__)
 @v1.api_route(
     "/Users/{target_user_id}/policy-approval",
     methods=["PATCH"],
-    tags=["Users"],
+    tags=["Registration & Approval"],
     summary="Admin approval: activate a pending user with an ODRL policy",
     description=(
         "Promote a pending user to an active role and bind them to the specified "
@@ -75,6 +85,37 @@ logger = logging.getLogger(__name__)
         "Restricted to administrators.  The target user must be in the 'pending' state."
     ),
     status_code=status.HTTP_200_OK,
+    responses=merge(
+        {
+            200: response(
+                ApprovalResponse,
+                "Approved. The RLS policy for the granted role is applied "
+                "and an ADMIN_APPROVAL audit event is recorded, in the "
+                "same transaction as the role change.",
+                {
+                    "message": "User 'jdoe' (id=42) has been approved with role 'viewer'.",
+                    "user_id": 42,
+                    "granted_role": "viewer",
+                    "dataset_id": "stac://alpine-snow-2024",
+                    "odrl_policy_id": "odrl:policy:cc-by-nc",
+                },
+            )
+        },
+        UNAUTHORIZED,
+        {
+            # A second, differently-shaped 403 exists deeper in this
+            # handler for a PostgreSQL-privilege failure
+            # ({"message": "Insufficient database privileges."}) -- far
+            # rarer than this one, so it's not the documented example, but
+            # be aware both are possible on this code.
+            403: FORBIDDEN_ADMIN[403],
+        },
+        NOT_FOUND_PENDING_USER,
+        BAD_REQUEST_REJECTED,
+        DB_UNAVAILABLE,
+        DB_TIMEOUT,
+        INTERNAL,
+    ),
 )
 async def patch_policy_approval(
     target_user_id: int,
@@ -162,16 +203,20 @@ async def patch_policy_approval(
                     )
 
                 # ------------------------------------------------------
-                # 2c. Apply the default RLS policy for the assigned role.
-                #     'custom' has no default policy function; admins
-                #     create one explicitly via POST /Policies.
-                #     POLICY_FN_MAP is the single source of truth —
-                #     imported from rbac_roles.py.
+                # 2c. odrl_governed is the one role that still needs a
+                #     per-approval CREATE POLICY call -- it needs a
+                #     dataset_id to mean anything, and this is the one
+                #     endpoint that has one (request.dataset_id). Builds
+                #     USING (dataset_id = <value>) — see
+                #     005_odrl_dataset_scoping.sql. Deliberately NOT
+                #     migrated to the static-policy scheme below; ODRL
+                #     work is scoped for later.
                 #
-                #     Architecture note: the policy function issues
-                #     CREATE POLICY ... TO <username>, which requires a
-                #     matching PostgreSQL role.  Self-registered users
-                #     (/Register) have zero DB footprint by design.
+                #     Every other assignable role needs no RLS DDL here at
+                #     all as of 007_session_scoped_rls_policies.sql: their
+                #     policies are static, created once by that migration,
+                #     not per-approval. The UPDATE above is the entire
+                #     grant.
                 #
                 #     IMPORTANT: asyncpg marks the entire transaction as
                 #     aborted if *any* exception occurs inside it, even a
@@ -180,15 +225,15 @@ async def patch_policy_approval(
                 #     and leaves the outer transaction (UPDATE + AuditLog)
                 #     in a healthy, committable state.
                 # ------------------------------------------------------
-                policy_fn = POLICY_FN_MAP.get(request.assigned_role)
-                if policy_fn:
+                if request.assigned_role == "odrl_governed":
                     policyname = f"{username}_default"
                     try:
                         async with conn.transaction():
                             await conn.execute(
-                                f"SELECT {policy_fn}($1, $2);",
+                                "SELECT sensorthings.odrl_governed_policy($1, $2, $3);",
                                 [username],
                                 policyname,
+                                request.dataset_id,
                             )
                     except UndefinedObjectError:
                         logger.warning(

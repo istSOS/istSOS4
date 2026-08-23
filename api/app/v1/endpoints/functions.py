@@ -41,7 +41,8 @@ def _validate_role_identifier(role_name: str) -> str:
     return role_name
 
 async def set_role(connection, current_user):
-    """Switch to the correct PostgreSQL group role for this request.
+    """Switch to the correct PostgreSQL group role for this request, and
+    stamp the session with the caller's identity.
 
     Maps the application-layer role (e.g. 'viewer', 'editor') to its
     underlying PostgreSQL group role (e.g. 'user', 'sensor') using
@@ -51,6 +52,18 @@ async def set_role(connection, current_user):
     when the enclosing transaction commits or rolls back.  This eliminates
     the need for ``RESET ROLE`` calls and prevents pool leaks if a request
     is cancelled mid-stream.
+
+    Also sets the ``app.current_user_id`` session variable via
+    ``set_config(..., is_local=true)`` — same transaction-scoped lifetime
+    as the role switch. RLS policies read this back (see
+    sensorthings.current_app_user_role() / current_app_user_dataset_id() in
+    007_session_scoped_rls_policies.sql) to tell individual callers apart
+    even though several application roles share one PostgreSQL group role
+    — e.g. 'viewer' and 'editor' both run as "user". Group-role-scoped
+    ``TO <username>`` policies could never match any real session (no
+    application code path ever creates an individual login role for a
+    user); this session claim is what makes per-user/per-dataset filtering
+    actually work without needing one.
 
     Must be called **inside** an open ``connection.transaction()`` block.
     """
@@ -66,6 +79,17 @@ async def set_role(connection, current_user):
 
     pg_group_role = _validate_role_identifier(pg_group_role)
     await connection.execute(f"SET LOCAL ROLE {pg_quote_ident(pg_group_role)};")
+
+    user_id = current_user.get("id")
+    if user_id is not None:
+        # set_config, not raw SET LOCAL app.x = value: SET does not accept
+        # asyncpg bind parameters, and string-interpolating the id would
+        # reopen the same injection-safety question pg_quote_ident exists
+        # to close above. set_config() is the safe, parameterized form.
+        await connection.execute(
+            "SELECT set_config('app.current_user_id', $1, true);",
+            str(user_id),
+        )
 
 
 async def insert_commit(connection, payload, action):

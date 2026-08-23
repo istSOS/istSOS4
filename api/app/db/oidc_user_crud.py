@@ -65,13 +65,15 @@ async def get_user_by_provider_sub(
     """Look up an existing user by their external-provider subject identifier.
 
     Returns a dict with ``{id, username, role, uri, auth_provider,
-    external_sub_id}`` or ``None`` if no match is found.
+    external_sub_id, dataset_id, odrl_policy_id}`` or ``None`` if no match
+    is found.
     """
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT id, username, role, uri, auth_provider, external_sub_id
+            SELECT id, username, role, uri, auth_provider, external_sub_id,
+                dataset_id, odrl_policy_id
             FROM sensorthings."User"
             WHERE auth_provider = $1
               AND external_sub_id = $2
@@ -89,6 +91,8 @@ async def create_pending_oidc_user(
     email: str | None,
     auth_provider: str,
     external_sub_id: str,
+    dataset_id: str | None = None,
+    odrl_policy_id: str | None = None,
 ) -> dict:
     """Insert a new OIDC-linked user in the 'pending' waiting room.
 
@@ -112,10 +116,18 @@ async def create_pending_oidc_user(
                          ``"orcid"``, ``"keycloak"``.
         external_sub_id: The ``sub`` claim from the provider's JWT — globally
                          unique within that provider's namespace.
+        dataset_id:      Dataset the user selected before starting the OIDC
+                         handshake (see app.v1.endpoints.create.oidc_login),
+                         mirroring what POST /Register already collects for
+                         local accounts. May be ``None`` if the caller never
+                         collected one.
+        odrl_policy_id:  ODRL policy identifier tied to that dataset
+                         selection. Same nullability as dataset_id.
 
     Returns:
         dict with keys ``id``, ``username``, ``role``, ``uri``,
-        ``auth_provider``, ``external_sub_id``.
+        ``auth_provider``, ``external_sub_id``, ``dataset_id``,
+        ``odrl_policy_id``.
 
     Raises:
         OidcUsernameCollisionError: if ``username`` collides with an
@@ -133,22 +145,46 @@ async def create_pending_oidc_user(
 
     pool = await get_pool()
     async with pool.acquire() as conn:
-        # INSERT only — no DDL, no GRANT, no CREATE ROLE.
+        # INSERT + audit write share one transaction, same reasoning as
+        # create/register_request.py: a logging failure must not leave an
+        # unaudited pending account behind.
         try:
-            row = await conn.fetchrow(
-                """
-                INSERT INTO sensorthings."User"
-                    (username, contact, role, auth_provider, external_sub_id)
-                VALUES
-                    ($1, $2::jsonb, $3, $4, $5)
-                RETURNING id, username, role, uri, auth_provider, external_sub_id;
-                """,
-                username,
-                contact,
-                PENDING_ROLE,   # hardcoded — never accept from caller
-                auth_provider,
-                external_sub_id,
-            )
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """
+                    INSERT INTO sensorthings."User"
+                        (username, contact, role, auth_provider,
+                         external_sub_id, dataset_id, odrl_policy_id)
+                    VALUES
+                        ($1, $2::jsonb, $3, $4, $5, $6, $7)
+                    RETURNING id, username, role, uri, auth_provider,
+                        external_sub_id, dataset_id, odrl_policy_id;
+                    """,
+                    username,
+                    contact,
+                    PENDING_ROLE,   # hardcoded — never accept from caller
+                    auth_provider,
+                    external_sub_id,
+                    dataset_id,
+                    odrl_policy_id,
+                )
+
+                # Lazy import: audit_crud has no reverse dependency on this
+                # module, so this just avoids a module-load-order footgun
+                # rather than a real circular import.
+                from app.db.audit_crud import (
+                    AUDIT_ACTION_RESTRICTED_REQUEST,
+                    log_audit_event,
+                )
+
+                await log_audit_event(
+                    conn=conn,
+                    action_type=AUDIT_ACTION_RESTRICTED_REQUEST,
+                    actor_id=row["id"],
+                    dataset_id=dataset_id,
+                    odrl_policy_id=odrl_policy_id,
+                    payload={"auth_provider": auth_provider},
+                )
         except UniqueViolationError as exc:
             if exc.constraint_name == _USERNAME_UNIQUE_CONSTRAINT:
                 # TODO(product): decide the account-linking policy before
