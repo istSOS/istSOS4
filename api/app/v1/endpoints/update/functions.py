@@ -21,8 +21,8 @@ from app.utils.utils import (
     handle_result_field,
     validate_epsg,
 )
-from app.v1.endpoints.functions import insert_commit
 from app.v1.endpoints.exceptions import BadRequest, Forbidden
+from app.v1.endpoints.functions import insert_commit
 
 
 async def check_id_exists(connection, entity_name, entity_id):
@@ -38,11 +38,17 @@ async def set_commit(connection, commit_message, current_user):
     if not (VERSIONING or AUTHORIZATION):
         return None
 
-    if current_user and current_user["role"] == "sensor":
+    if current_user and current_user["role"] == "qc":
         if commit_message:
-            raise Forbidden("Sensor cannot provide commit message")
+            raise Forbidden("QC user cannot provide commit message")
 
-        return None
+        return await connection.fetchval(
+            """
+                SELECT id FROM sensorthings."Commit"
+                WHERE user_id = $1::bigint
+            """,
+            current_user["id"],
+        )
 
     if not commit_message:
         raise BadRequest("No commit message provided")
@@ -108,9 +114,6 @@ async def update_entity(
         key: json.dumps(value) if isinstance(value, dict) else value
         for key, value in payload.items()
     }
-    # Changing an Observation's phenomenonTime moves phenomenonTimeStart, the
-    # hypertable partition column; UPDATE can't move a row across chunks, so
-    # re-create the row instead.
     if obs and "phenomenonTimeStart" in payload:
         return await relocate_observation(connection, entity_id, payload)
 
@@ -400,10 +403,6 @@ async def update_datastream_entity(connection, datastream_id, payload):
 async def update_feature_of_interest_entity(
     connection, feature_of_interest_id, payload
 ):
-    # req/create-update-delete/update-entity (18-088 §10.3): PATCH is a partial
-    # merge, so only validate/transform "feature" when the body actually
-    # supplies it. Using payload["feature"] unconditionally raised KeyError
-    # (-> 400) whenever a partial PATCH omitted the geometry.
     if payload.get("feature"):
         validate_epsg(payload["feature"])
 

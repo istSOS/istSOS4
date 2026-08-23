@@ -30,7 +30,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import pytest
-
 import sample_data
 from client import entity_id, format_id, id_from_self_link
 
@@ -44,13 +43,16 @@ pytestmark = pytest.mark.filtered_delete
 class SubTree:
     """One self-contained subtree created by a test: Thing -> Location +
     Datastream(+ Sensor + ObservedProperty).  Ids resolved at runtime."""
+
     tag: str
     thing_id: object
     location_id: object
     ds_id: object
     sensor_id: object
     op_id: object
-    foi_ids: list = field(default_factory=list)  # explicitly-created FoIs to clean up
+    foi_ids: list = field(
+        default_factory=list
+    )  # explicitly-created FoIs to clean up
 
 
 def _build_subtree(client, tag: str) -> SubTree:
@@ -74,9 +76,9 @@ def _build_subtree(client, tag: str) -> SubTree:
         ],
     }
     resp = client.create("Things", payload)
-    assert resp.status_code == 201, (
-        f"subtree deep-insert failed: {resp.status_code} {resp.text[:400]}"
-    )
+    assert (
+        resp.status_code == 201
+    ), f"subtree deep-insert failed: {resp.status_code} {resp.text[:400]}"
     thing_url = client.location_of(resp)
     thing = client.nav(thing_url)
     thing_id = entity_id(thing)
@@ -89,7 +91,9 @@ def _build_subtree(client, tag: str) -> SubTree:
         f"{thing_url}/Datastreams",
         params={"$expand": "Sensor,ObservedProperty"},
     )["value"]
-    assert len(ds_docs) == 1, f"expected 1 subtree Datastream, got {len(ds_docs)}"
+    assert (
+        len(ds_docs) == 1
+    ), f"expected 1 subtree Datastream, got {len(ds_docs)}"
     ds = ds_docs[0]
 
     return SubTree(
@@ -105,7 +109,9 @@ def _build_subtree(client, tag: str) -> SubTree:
 def _cleanup(client, st: SubTree) -> None:
     """Best-effort teardown.  Deleting the Thing cascades its Datastream and any
     remaining Observations; Location/Sensor/ObservedProperty and explicitly
-    created FeaturesOfInterest are independent -> delete them too.  404s are fine."""
+    created FeaturesOfInterest are independent -> delete them too.  404s are fine.
+    """
+
     def _safe(path):
         try:
             client.delete(path)
@@ -151,9 +157,9 @@ def _post_obs(client, ds_id, result, time, foi_id=None):
     if foi_id is not None:
         payload["FeatureOfInterest"] = {"@iot.id": foi_id}
     resp = client.post("Observations", json=payload)
-    assert resp.status_code == 201, (
-        f"POST Observation -> {resp.status_code}: {resp.text[:300]}"
-    )
+    assert (
+        resp.status_code == 201
+    ), f"POST Observation -> {resp.status_code}: {resp.text[:300]}"
     return id_from_self_link(client.location_of(resp))
 
 
@@ -167,9 +173,9 @@ def _post_foi(client, st: SubTree, lon, lat):
         "feature": {"type": "Point", "coordinates": [lon, lat]},
     }
     resp = client.post("FeaturesOfInterest", json=payload)
-    assert resp.status_code == 201, (
-        f"POST FeatureOfInterest -> {resp.status_code}: {resp.text[:300]}"
-    )
+    assert (
+        resp.status_code == 201
+    ), f"POST FeatureOfInterest -> {resp.status_code}: {resp.text[:300]}"
     fid = id_from_self_link(client.location_of(resp))
     st.foi_ids.append(fid)
     return fid
@@ -184,7 +190,9 @@ def _scoped(ds_id, predicate=None) -> str:
 
 def _filtered_delete(client, ds_id, predicate):
     """DELETE /Observations?$filter=<scoped predicate>."""
-    return client.delete("Observations", params={"$filter": _scoped(ds_id, predicate)})
+    return client.delete(
+        "Observations", params={"$filter": _scoped(ds_id, predicate)}
+    )
 
 
 def _obs_results(client, ds_id):
@@ -199,7 +207,8 @@ def _obs_results(client, ds_id):
 
 def _obs_ids(client, ds_id, predicate=None):
     """Set of Observation @iot.ids matching a scoped predicate on ds_id, via
-    GET /Observations?$filter=...&$select=@iot.id.  This is the GET 'oracle'."""
+    GET /Observations?$filter=...&$select=@iot.id.  This is the GET 'oracle'.
+    """
     body = client.get(
         "Observations",
         params={
@@ -291,7 +300,9 @@ def test_deleted_set_equals_get_set(client, subtree):
 # ===========================================================================
 # 3. MAINTENANCE (key test) -- phenomenonTime AND observedArea recomputed
 # ===========================================================================
-def test_maintenance_recompute_phenomenontime_and_observedarea(client, subtree):
+def test_maintenance_recompute_phenomenontime_and_observedarea(
+    client, subtree
+):
     """FROST FilteredDelete extension -- after a filtered delete the touched
     Datastream's phenomenonTime AND observedArea are RECOMPUTED from the
     REMAINING Observations.  Seed the to-be-deleted ones (result < 10) with BOTH
@@ -339,8 +350,12 @@ def test_maintenance_recompute_phenomenontime_and_observedarea(client, subtree):
     after_bbox = _bbox(after["observedArea"])
 
     # --- phenomenonTime start moved FORWARD (no longer spans the 2000 obs) ---
-    assert before_start[:4] == "2000", f"before start should be 2000: {before_start}"
-    assert after_start[:4] == "2020", f"after start should be 2020: {after_start}"
+    assert (
+        before_start[:4] == "2000"
+    ), f"before start should be 2000: {before_start}"
+    assert (
+        after_start[:4] == "2020"
+    ), f"after start should be 2020: {after_start}"
     assert after_start[:10] > before_start[:10], (before_start, after_start)
 
     # --- observedArea bbox SHRANK in BOTH dimensions, recomputed from cluster ---
@@ -373,9 +388,9 @@ def test_no_filter_safeguard(client, subtree):
 
     resp = client.delete("Observations")
     assert resp.status_code == 400, f"-> {resp.status_code}: {resp.text[:300]}"
-    assert resp.json()["message"] == "$filter is required for collection delete", (
-        resp.text[:300]
-    )
+    assert (
+        resp.json()["message"] == "$filter is required for collection delete"
+    ), resp.text[:300]
 
     # Nothing was deleted.
     assert _obs_results(client, st.ds_id) == [1.0, 2.0, 3.0]
@@ -396,11 +411,13 @@ def test_malformed_filter_returns_400(client, subtree):
     # our own datastream -- but it must be rejected at parse time with 400.
     resp = client.delete(
         "Observations",
-        params={"$filter": f"Datastream/@iot.id eq {format_id(st.ds_id)} and result zz 5"},
+        params={
+            "$filter": f"Datastream/@iot.id eq {format_id(st.ds_id)} and result zz 5"
+        },
     )
-    assert resp.status_code == 400, (
-        f"malformed $filter must be 400 (not {resp.status_code}): {resp.text[:300]}"
-    )
+    assert (
+        resp.status_code == 400
+    ), f"malformed $filter must be 400 (not {resp.status_code}): {resp.text[:300]}"
     assert resp.status_code != 500
 
     # Nothing was deleted.
@@ -419,15 +436,22 @@ def test_single_entity_delete_still_works(client, subtree):
     oid = _post_obs(client, st.ds_id, 42, "2025-05-01T00:00:00Z")
 
     resp = client.delete(f"Observations({format_id(oid)})")
-    assert resp.status_code in (200, 204), f"-> {resp.status_code}: {resp.text[:300]}"
+    assert resp.status_code in (
+        200,
+        204,
+    ), f"-> {resp.status_code}: {resp.text[:300]}"
 
     # Confirm it is gone.
     got = client.get(f"Observations({format_id(oid)})")
-    assert got.status_code == 404, f"deleted obs should 404, got {got.status_code}"
+    assert (
+        got.status_code == 404
+    ), f"deleted obs should 404, got {got.status_code}"
 
     # The per-id route reports a now-missing id as 404 (route still live).
     again = client.delete(f"Observations({format_id(oid)})")
-    assert again.status_code == 404, f"re-delete should 404, got {again.status_code}"
+    assert (
+        again.status_code == 404
+    ), f"re-delete should 404, got {again.status_code}"
 
 
 # ===========================================================================
