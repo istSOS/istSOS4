@@ -15,12 +15,12 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import require_json_content_type, validate_payload_keys
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
 from fastapi import APIRouter, Body, Depends, Header, Request, status
 from fastapi.responses import Response
 
 from .functions import insert_observation_entity, set_commit
-from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 
@@ -184,11 +184,6 @@ async def create_observation_for_feature_of_interest(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            # conformance req/create-update-delete/create-entity (Req 33/34):
-            # pass the URL-supplied FoI under the parameter name that
-            # insert_observation_entity actually declares (plural
-            # `features_of_interest_id`); the previous singular kwarg raised
-            # TypeError -> swallowed as HTTP 500.
             _, header = await insert_observation_entity(
                 connection,
                 payload,

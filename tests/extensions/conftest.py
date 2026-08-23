@@ -23,7 +23,7 @@ import pytest
 # --import-mode=importlib (no package __init__.py needed).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from client import STAClient, DEFAULT_BASE_URL  # noqa: E402
+from client import DEFAULT_BASE_URL, STAClient  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -41,6 +41,8 @@ def client(base_url) -> STAClient:
 @pytest.fixture
 def unique_name():
     """Factory: unique_name('prefix') -> 'prefix-<uuid12>' for collision-free entities."""
+
     def _make(prefix: str = "ext") -> str:
         return f"{prefix}-{uuid.uuid4().hex[:12]}"
+
     return _make

@@ -8,10 +8,10 @@ Covers:
   req/request-data/top        §9.3 $top
   req/request-data/pagination §9.3 @iot.nextLink
 """
+
 from __future__ import annotations
 
 import pytest
-
 from client import entity_id, format_id
 
 pytestmark = pytest.mark.c01
@@ -20,6 +20,7 @@ pytestmark = pytest.mark.c01
 # ============================================================================
 # 8. One-to-many navigation
 # ============================================================================
+
 
 class TestNavigationOneToMany:
     """req/resource-path/resource-path-to-entities — navigating from a single
@@ -44,9 +45,9 @@ class TestNavigationOneToMany:
         assert "value" in data
         ids = [entity_id(e) for e in data["value"]]
         for ds_id in seed.datastream_ids:
-            assert ds_id in ids, (
-                f"Datastream {ds_id} not found in Things/<id>/Datastreams"
-            )
+            assert (
+                ds_id in ids
+            ), f"Datastream {ds_id} not found in Things/<id>/Datastreams"
 
     def test_thing_to_locations(self, client, seed):
         """req/resource-path — /Things(<id>)/Locations contains seed Location."""
@@ -101,9 +102,9 @@ class TestNavigationOneToMany:
         )
         ids = [entity_id(e) for e in resp.json()["value"]]
         for oid in seed.ds2.observation_ids:
-            assert oid not in ids, (
-                f"DS2 observation {oid} must not appear in DS1/Observations"
-            )
+            assert (
+                oid not in ids
+            ), f"DS2 observation {oid} must not appear in DS1/Observations"
 
     def test_location_to_things(self, client, seed):
         """req/resource-path — /Locations(<id>)/Things contains seed Thing."""
@@ -169,14 +170,15 @@ class TestNavigationOneToMany:
         assert "value" in data
         obs_ids = [entity_id(e) for e in data["value"]]
         matched = [oid for oid in seed.all_observation_ids if oid in obs_ids]
-        assert matched, (
-            "None of the seed observations found in FeaturesOfInterest/<id>/Observations"
-        )
+        assert (
+            matched
+        ), "None of the seed observations found in FeaturesOfInterest/<id>/Observations"
 
 
 # ============================================================================
 # 9. Many-to-one navigation
 # ============================================================================
+
 
 class TestNavigationManyToOne:
     """req/resource-path/resource-path-to-entities — navigating from an entity to
@@ -255,7 +257,9 @@ class TestNavigationManyToOne:
 
     def test_observation_to_foi(self, client, seed, obs_id):
         """req/resource-path — /Observations(<id>)/FeatureOfInterest → auto FOI."""
-        resp = client.get(f"Observations({format_id(obs_id)})/FeatureOfInterest")
+        resp = client.get(
+            f"Observations({format_id(obs_id)})/FeatureOfInterest"
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "@iot.id" in data
@@ -275,6 +279,7 @@ class TestNavigationManyToOne:
 # ============================================================================
 # 10. Deep resource paths
 # ============================================================================
+
 
 class TestDeepResourcePaths:
     """req/resource-path/resource-path-to-entities — the spec allows multi-hop
@@ -384,6 +389,7 @@ class TestDeepResourcePaths:
 # 13. @iot.count and @iot.nextLink semantics
 # ============================================================================
 
+
 class TestCountAndPagination:
     """req/request-data/count — $count=true adds @iot.count.
     req/request-data/top — $top limits results per page.
@@ -413,9 +419,9 @@ class TestCountAndPagination:
             params={"$count": "true"},
         )
         data = resp.json()
-        assert data["@iot.count"] == len(seed.ds1.observation_ids), (
-            f"@iot.count={data['@iot.count']} != expected {len(seed.ds1.observation_ids)}"
-        )
+        assert data["@iot.count"] == len(
+            seed.ds1.observation_ids
+        ), f"@iot.count={data['@iot.count']} != expected {len(seed.ds1.observation_ids)}"
 
     def test_count_equals_ds2_observation_count(self, client, seed):
         """req/request-data/count — @iot.count matches DS2 observation count (2)."""
@@ -443,9 +449,9 @@ class TestCountAndPagination:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data["value"]) <= 1, (
-            f"$top=1 should return at most 1 entity, got {len(data['value'])}"
-        )
+        assert (
+            len(data["value"]) <= 1
+        ), f"$top=1 should return at most 1 entity, got {len(data['value'])}"
 
     def test_next_link_present_when_results_exceed_top(self, client, seed):
         """req/request-data/pagination — @iot.nextLink present when $top < total.
@@ -456,9 +462,9 @@ class TestCountAndPagination:
             params={"$top": "1"},
         )
         data = resp.json()
-        assert "@iot.nextLink" in data, (
-            "@iot.nextLink must be present when $top (1) < total (2)"
-        )
+        assert (
+            "@iot.nextLink" in data
+        ), "@iot.nextLink must be present when $top (1) < total (2)"
 
     def test_next_link_resolves_to_next_page(self, client, seed):
         """req/request-data/pagination — following @iot.nextLink returns further results
@@ -473,9 +479,9 @@ class TestCountAndPagination:
         nxt = data1["@iot.nextLink"]
 
         resp2 = client.get(nxt)
-        assert resp2.status_code == 200, (
-            f"Following @iot.nextLink returned {resp2.status_code}"
-        )
+        assert (
+            resp2.status_code == 200
+        ), f"Following @iot.nextLink returned {resp2.status_code}"
         data2 = resp2.json()
         assert "value" in data2
         assert len(data2["value"]) > 0, "@iot.nextLink page is empty"
@@ -483,9 +489,9 @@ class TestCountAndPagination:
         ids1 = {entity_id(e) for e in data1["value"]}
         ids2 = {entity_id(e) for e in data2["value"]}
         overlap = ids1 & ids2
-        assert not overlap, (
-            f"Pages overlap — same ids on both pages: {overlap}"
-        )
+        assert (
+            not overlap
+        ), f"Pages overlap — same ids on both pages: {overlap}"
 
     def test_count_true_with_top_reflects_total_not_page(self, client, seed):
         """req/request-data/count — @iot.count reflects total regardless of $top."""
@@ -508,14 +514,15 @@ class TestCountAndPagination:
             params={"$top": "100"},
         )
         data = resp.json()
-        assert "@iot.nextLink" not in data, (
-            "@iot.nextLink must be absent when all results fit on one page"
-        )
+        assert (
+            "@iot.nextLink" not in data
+        ), "@iot.nextLink must be absent when all results fit on one page"
 
 
 # ============================================================================
 # 15. Bidirectional navigability (round-trip cross-checks)
 # ============================================================================
+
 
 class TestBidirectionalNavigation:
     """req/resource-path/resource-path-to-entities — all relations defined in
@@ -530,7 +537,8 @@ class TestBidirectionalNavigation:
         )
         assert thing_via_ds["@iot.id"] == seed.thing_id
         ds_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"Things({format_id(seed.thing_id)})/Datastreams"
             )
         ]
@@ -543,7 +551,8 @@ class TestBidirectionalNavigation:
         )
         assert thing_via_ds["@iot.id"] == seed.thing_id
         ds_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"Things({format_id(seed.thing_id)})/Datastreams"
             )
         ]
@@ -554,7 +563,8 @@ class TestBidirectionalNavigation:
         sensor = client.nav(f"Datastreams({format_id(seed.ds1.id)})/Sensor")
         assert sensor["@iot.id"] == seed.ds1.sensor_id
         ds_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"Sensors({format_id(seed.ds1.sensor_id)})/Datastreams"
             )
         ]
@@ -567,7 +577,8 @@ class TestBidirectionalNavigation:
         )
         assert op["@iot.id"] == seed.ds1.observed_property_id
         ds_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"ObservedProperties({format_id(seed.ds1.observed_property_id)})"
                 f"/Datastreams"
             )
@@ -579,7 +590,8 @@ class TestBidirectionalNavigation:
         ds = client.nav(f"Observations({format_id(obs_id)})/Datastream")
         assert ds["@iot.id"] == seed.ds1.id
         obs_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"Datastreams({format_id(seed.ds1.id)})/Observations"
             )
         ]
@@ -587,11 +599,14 @@ class TestBidirectionalNavigation:
 
     def test_observation_foi_roundtrip(self, client, seed, obs_id, foi_id):
         """Observation→FOI→Observations includes seed observation."""
-        foi = client.nav(f"Observations({format_id(obs_id)})/FeatureOfInterest")
+        foi = client.nav(
+            f"Observations({format_id(obs_id)})/FeatureOfInterest"
+        )
         linked_foi_id = foi["@iot.id"]
         assert linked_foi_id in seed.foi_ids
         obs_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"FeaturesOfInterest({format_id(linked_foi_id)})/Observations"
             )
         ]
@@ -600,13 +615,15 @@ class TestBidirectionalNavigation:
     def test_thing_location_roundtrip(self, client, seed):
         """Thing→Locations→Things round-trip."""
         loc_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"Things({format_id(seed.thing_id)})/Locations"
             )
         ]
         assert seed.location_id in loc_ids
         thing_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"Locations({format_id(seed.location_id)})/Things"
             )
         ]
@@ -615,7 +632,8 @@ class TestBidirectionalNavigation:
     def test_thing_historical_location_roundtrip(self, client, seed, hl_id):
         """Thing→HistoricalLocations→Thing round-trip."""
         hl_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"Things({format_id(seed.thing_id)})/HistoricalLocations"
             )
         ]
@@ -628,13 +646,15 @@ class TestBidirectionalNavigation:
     def test_location_historical_location_roundtrip(self, client, seed, hl_id):
         """Location→HistoricalLocations→Locations round-trip."""
         hl_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"Locations({format_id(seed.location_id)})/HistoricalLocations"
             )
         ]
         assert hl_id in hl_ids
         loc_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"HistoricalLocations({format_id(hl_id)})/Locations"
             )
         ]
@@ -645,7 +665,8 @@ class TestBidirectionalNavigation:
         sensor = client.nav(f"Datastreams({format_id(seed.ds2.id)})/Sensor")
         assert sensor["@iot.id"] == seed.ds2.sensor_id
         ds_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"Sensors({format_id(seed.ds2.sensor_id)})/Datastreams"
             )
         ]
@@ -658,7 +679,8 @@ class TestBidirectionalNavigation:
         )
         assert op["@iot.id"] == seed.ds2.observed_property_id
         ds_ids = [
-            entity_id(e) for e in client.values(
+            entity_id(e)
+            for e in client.values(
                 f"ObservedProperties({format_id(seed.ds2.observed_property_id)})"
                 f"/Datastreams"
             )
