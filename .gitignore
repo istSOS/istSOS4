@@ -12,3 +12,15 @@ env/
 .codex
 .vscode
 .python-version
+
+# Personal scratch/demo artifacts -- meeting prep and manual verification
+# scripts, not part of the real test suite (that's under api/tests/).
+# Never intended to be committed.
+MEETING_WALKTHROUGH.md
+EXTERNAL_AUTH_MEETING.md
+SWAGGER_DEMO_MEETING.md
+demo.py
+test_access_matrix.py
+test_admin_rejection.py
+test_dataset_scoping.py
+test_security_boundaries.py
