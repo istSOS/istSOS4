@@ -18,12 +18,12 @@ from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.utils.utils import pg_quote_ident, validate_payload_keys
+from app.v1.endpoints.exceptions import NotFound
 from app.v1.endpoints.functions import set_role
 from app.v1.endpoints.openapi_responses import merge
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Body, Depends, Query, status
 from fastapi.responses import JSONResponse, Response
-from app.v1.endpoints.exceptions import NotFound
 
 v1 = APIRouter()
 

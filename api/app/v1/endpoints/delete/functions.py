@@ -13,8 +13,8 @@
 # limitations under the License.
 
 from app import AUTHORIZATION, VERSIONING
-from app.v1.endpoints.functions import insert_commit
 from app.v1.endpoints.exceptions import BadRequest, Forbidden
+from app.v1.endpoints.functions import insert_commit
 
 
 async def set_commit(

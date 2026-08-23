@@ -182,6 +182,15 @@ async def create_user(
                     }
                     await insert_commit(connection, commit, "CREATE")
 
+                elif payload["role"] == "qc":
+                    commit = {
+                        "message": "QC data",
+                        "author": user["uri"],
+                        "encodingType": "text/plain",
+                        "user_id": user["id"],
+                    }
+                    await insert_commit(connection, commit, "UPDATE")
+
                 # No RLS DDL needed here: as of
                 # 007_session_scoped_rls_policies.sql, viewer/editor/
                 # obs_manager/sensor/qc access is enforced by static

@@ -35,7 +35,6 @@ group among the others without asserting any global totals).
 from __future__ import annotations
 
 import pytest
-
 from client import format_id, id_from_self_link
 
 pytestmark = pytest.mark.data_array
@@ -64,19 +63,21 @@ def get_data_array(client, ds, params=None) -> dict:
         qp.update(params)
     path = f"Datastreams({format_id(ds.id)})/Observations"
     r = client.get(path, params=qp)
-    assert r.status_code == 200, (
-        f"GET {path} {qp} -> {r.status_code}: {r.text[:300]}"
-    )
+    assert (
+        r.status_code == 200
+    ), f"GET {path} {qp} -> {r.status_code}: {r.text[:300]}"
     body = r.json()
-    assert isinstance(body.get("value"), list), "data-array response must have a 'value' list"
+    assert isinstance(
+        body.get("value"), list
+    ), "data-array response must have a 'value' list"
     assert len(body["value"]) == 1, (
         f"a Datastream-scoped data array must yield exactly one group, "
         f"got {len(body['value'])}"
     )
     group = body["value"][0]
-    assert "json" not in group, (
-        f"group must be the direct spec object, not wrapped in a 'json' key: {list(group.keys())}"
-    )
+    assert (
+        "json" not in group
+    ), f"group must be the direct spec object, not wrapped in a 'json' key: {list(group.keys())}"
     return group
 
 
@@ -103,28 +104,36 @@ def test_data_array_read_structure(client, seed):
     group = get_data_array(client, seed.ds1)
 
     # group object: exactly the four spec keys, no extras, no "json" wrapper.
-    assert set(group.keys()) == GROUP_KEYS, (
-        f"group keys must be exactly {sorted(GROUP_KEYS)}, got {sorted(group.keys())}"
-    )
+    assert (
+        set(group.keys()) == GROUP_KEYS
+    ), f"group keys must be exactly {sorted(GROUP_KEYS)}, got {sorted(group.keys())}"
 
     # components: a list including at least the mandatory id/phenomenonTime/result.
     comps = group["components"]
-    assert isinstance(comps, list) and comps, "components must be a non-empty list"
-    assert "commit_navigation_link" not in comps, (
-        "the default Data Array must not expose the internal commit navigation column"
-    )
+    assert (
+        isinstance(comps, list) and comps
+    ), "components must be a non-empty list"
+    assert (
+        "commit_navigation_link" not in comps
+    ), "the default Data Array must not expose the internal commit navigation column"
     for required in ("id", "phenomenonTime", "result"):
-        assert required in comps, f"components must include '{required}': {comps}"
+        assert (
+            required in comps
+        ), f"components must include '{required}': {comps}"
 
     # dataArray: a list of rows, each row a list with one value per component.
     data_array = group["dataArray"]
     assert isinstance(data_array, list), "dataArray must be a list"
-    assert data_array, "seed Datastream has Observations -> dataArray must be non-empty"
+    assert (
+        data_array
+    ), "seed Datastream has Observations -> dataArray must be non-empty"
     for row in data_array:
-        assert isinstance(row, list), f"each dataArray row must be a list, got {type(row)}"
-        assert len(row) == len(comps), (
-            f"row length {len(row)} must match components length {len(comps)}"
-        )
+        assert isinstance(
+            row, list
+        ), f"each dataArray row must be a list, got {type(row)}"
+        assert len(row) == len(
+            comps
+        ), f"row length {len(row)} must match components length {len(comps)}"
 
     # dataArray@iot.count == number of rows; the seed Datastream has 2 Observations.
     assert group["dataArray@iot.count"] == len(data_array), (
@@ -142,8 +151,10 @@ def test_data_array_read_values_ds1(client, seed):
     """req/data-array/data-array -- decoding each dataArray row by the components
     order yields the seed DS1 result values and Observation ids."""
     rows = rows_as_dicts(get_data_array(client, seed.ds1))
-    assert sorted(float(r["result"]) for r in rows) == [3.0, 4.0] == sorted(
-        float(x) for x in seed.ds1.results
+    assert (
+        sorted(float(r["result"]) for r in rows)
+        == [3.0, 4.0]
+        == sorted(float(x) for x in seed.ds1.results)
     )
     assert {r["id"] for r in rows} == set(seed.ds1.observation_ids)
 
@@ -151,8 +162,10 @@ def test_data_array_read_values_ds1(client, seed):
 def test_data_array_read_values_ds2(client, seed):
     """req/data-array/data-array -- same row-decoding check for seed DS2 [5,6]."""
     rows = rows_as_dicts(get_data_array(client, seed.ds2))
-    assert sorted(float(r["result"]) for r in rows) == [5.0, 6.0] == sorted(
-        float(x) for x in seed.ds2.results
+    assert (
+        sorted(float(r["result"]) for r in rows)
+        == [5.0, 6.0]
+        == sorted(float(x) for x in seed.ds2.results)
     )
     assert {r["id"] for r in rows} == set(seed.ds2.observation_ids)
 
@@ -165,9 +178,9 @@ def test_data_array_read_top(client, seed):
     """req/data-array/data-array -- $top=1 returns exactly one data-array row
     (and dataArray@iot.count reflects the returned rows)."""
     group = get_data_array(client, seed.ds1, {"$top": 1})
-    assert len(group["dataArray"]) == 1, (
-        f"$top=1 must return exactly 1 row, got {len(group['dataArray'])}"
-    )
+    assert (
+        len(group["dataArray"]) == 1
+    ), f"$top=1 must return exactly 1 row, got {len(group['dataArray'])}"
     assert group["dataArray@iot.count"] == 1
     # The single returned row is one of the seed's Observations.
     only = rows_as_dicts(group)[0]
@@ -182,14 +195,22 @@ def test_data_array_read_top(client, seed):
 def test_data_array_read_orderby(client, seed):
     """req/data-array/data-array -- $orderby=phenomenonTime asc/desc returns the
     data-array rows ordered by the phenomenonTime column accordingly."""
-    asc = column(get_data_array(client, seed.ds1, {"$orderby": "phenomenonTime asc"}),
-                 "phenomenonTime")
-    desc = column(get_data_array(client, seed.ds1, {"$orderby": "phenomenonTime desc"}),
-                  "phenomenonTime")
+    asc = column(
+        get_data_array(client, seed.ds1, {"$orderby": "phenomenonTime asc"}),
+        "phenomenonTime",
+    )
+    desc = column(
+        get_data_array(client, seed.ds1, {"$orderby": "phenomenonTime desc"}),
+        "phenomenonTime",
+    )
 
     # ISO-8601 UTC strings sort lexicographically == chronologically.
-    assert asc == sorted(asc), f"asc rows not ascending by phenomenonTime: {asc}"
-    assert desc == sorted(desc, reverse=True), f"desc rows not descending: {desc}"
+    assert asc == sorted(
+        asc
+    ), f"asc rows not ascending by phenomenonTime: {asc}"
+    assert desc == sorted(
+        desc, reverse=True
+    ), f"desc rows not descending: {desc}"
     assert asc == list(reversed(desc)), "asc and desc must be exact reverses"
     assert len(asc) == 2  # both seed DS1 Observations present
 
@@ -205,13 +226,23 @@ def test_data_array_collection_path(client, seed):
     DS1 group among the others (by navigationLink), assert ITS shape only."""
     # Generous $top so every Observation (hence the seed group) is included on
     # the page regardless of how full the shared DB is.
-    r = client.get("Observations", params={"$resultFormat": "dataArray", "$top": 100000})
-    assert r.status_code == 200, f"collection data-array -> {r.status_code}: {r.text[:300]}"
+    r = client.get(
+        "Observations", params={"$resultFormat": "dataArray", "$top": 100000}
+    )
+    assert (
+        r.status_code == 200
+    ), f"collection data-array -> {r.status_code}: {r.text[:300]}"
     groups = r.json()["value"]
-    assert isinstance(groups, list) and groups, "collection data-array must return groups"
+    assert (
+        isinstance(groups, list) and groups
+    ), "collection data-array must return groups"
 
     suffix = f"Datastreams({format_id(seed.ds1.id)})"
-    mine = [g for g in groups if g["Datastream@iot.navigationLink"].endswith(suffix)]
+    mine = [
+        g
+        for g in groups
+        if g["Datastream@iot.navigationLink"].endswith(suffix)
+    ]
     assert len(mine) == 1, (
         f"exactly one group must match {suffix}; found {len(mine)} among "
         f"{[g['Datastream@iot.navigationLink'] for g in groups]}"
@@ -222,8 +253,15 @@ def test_data_array_collection_path(client, seed):
     assert "json" not in group
     assert set(group.keys()) == GROUP_KEYS
     data_array = group["dataArray"]
-    assert all(isinstance(row, list) for row in data_array), "dataArray must be list-of-rows"
-    assert group["dataArray@iot.count"] == len(data_array) == len(seed.ds1.results) == 2, (
+    assert all(
+        isinstance(row, list) for row in data_array
+    ), "dataArray must be list-of-rows"
+    assert (
+        group["dataArray@iot.count"]
+        == len(data_array)
+        == len(seed.ds1.results)
+        == 2
+    ), (
         f"seed DS1 group count must be 2, got count={group['dataArray@iot.count']} "
         f"rows={len(data_array)}"
     )
@@ -261,18 +299,20 @@ def test_create_observations_data_array(client, seed):
     created_ids: list = []
     try:
         resp = client.post("CreateObservations", json=payload)
-        assert resp.status_code == 201, (
-            f"CreateObservations must return 201, got {resp.status_code}: {resp.text[:300]}"
-        )
+        assert (
+            resp.status_code == 201
+        ), f"CreateObservations must return 201, got {resp.status_code}: {resp.text[:300]}"
 
         links = resp.json()
-        assert isinstance(links, list), f"response must be a JSON list, got {type(links)}"
-        assert len(links) == len(posted), (
-            f"one selfLink per dataArray row expected ({len(posted)}), got {len(links)}: {links}"
-        )
-        assert all(isinstance(u, str) and "Observations(" in u for u in links), (
-            f"each element must be an Observation selfLink, got {links}"
-        )
+        assert isinstance(
+            links, list
+        ), f"response must be a JSON list, got {type(links)}"
+        assert len(links) == len(
+            posted
+        ), f"one selfLink per dataArray row expected ({len(posted)}), got {len(links)}: {links}"
+        assert all(
+            isinstance(u, str) and "Observations(" in u for u in links
+        ), f"each element must be an Observation selfLink, got {links}"
 
         created_ids = [id_from_self_link(u) for u in links]
 
@@ -287,8 +327,13 @@ def test_create_observations_data_array(client, seed):
             )
 
         # The created results now appear in the seed Datastream's data array.
-        all_results = {float(r["result"]) for r in rows_as_dicts(get_data_array(client, ds))}
-        assert {v for _, v in posted} <= all_results, (
+        all_results = {
+            float(r["result"])
+            for r in rows_as_dicts(get_data_array(client, ds))
+        }
+        assert {
+            v for _, v in posted
+        } <= all_results, (
             "created results must appear in the Datastream data array"
         )
     finally:
@@ -300,9 +345,9 @@ def test_create_observations_data_array(client, seed):
 
     # After cleanup the seed Datastream is back to its original 2 Observations.
     group = get_data_array(client, ds)
-    assert group["dataArray@iot.count"] == len(seed.ds1.results) == 2, (
-        "created Observations must be fully removed in teardown"
-    )
+    assert (
+        group["dataArray@iot.count"] == len(seed.ds1.results) == 2
+    ), "created Observations must be fully removed in teardown"
 
 
 # ===========================================================================
@@ -311,7 +356,8 @@ def test_create_observations_data_array(client, seed):
 # ===========================================================================
 def test_create_observations_missing_result_component(client, seed):
     """req/data-array/data-array -- a CreateObservations payload whose components
-    omit the mandatory 'result' is rejected with a client error (istSOS4: 400)."""
+    omit the mandatory 'result' is rejected with a client error (istSOS4: 400).
+    """
     payload = [
         {
             "Datastream": {"@iot.id": seed.ds1.id},
@@ -320,9 +366,9 @@ def test_create_observations_missing_result_component(client, seed):
         }
     ]
     resp = client.post("CreateObservations", json=payload)
-    assert 400 <= resp.status_code < 500, (
-        f"missing 'result' component must be a 4xx, got {resp.status_code}: {resp.text[:300]}"
-    )
+    assert (
+        400 <= resp.status_code < 500
+    ), f"missing 'result' component must be a 4xx, got {resp.status_code}: {resp.text[:300]}"
 
 
 def test_create_observations_missing_datastream(client, seed):
@@ -335,6 +381,6 @@ def test_create_observations_missing_datastream(client, seed):
         }
     ]
     resp = client.post("CreateObservations", json=payload)
-    assert 400 <= resp.status_code < 500, (
-        f"missing Datastream id must be a 4xx, got {resp.status_code}: {resp.text[:300]}"
-    )
+    assert (
+        400 <= resp.status_code < 500
+    ), f"missing Datastream id must be a 4xx, got {resp.status_code}: {resp.text[:300]}"

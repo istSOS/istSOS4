@@ -36,7 +36,7 @@ lead; test files are owned per the table above.
 
 ## Install
 
-The tests need `pytest`, `httpx`, `pytest-xdist`. Use an isolated venv:
+The tests need `pytest` and `httpx`. Use an isolated venv:
 
 ```bash
 uv venv tests/conformance/.venv --python 3.12
@@ -48,24 +48,27 @@ uv pip install --python tests/conformance/.venv/bin/python -r tests/conformance/
 ## Run
 
 The istSOS4 API must be running. Default target:
-`http://localhost:8018/v4/v1.1` (override with `STA_BASE_URL`).
+`http://localhost:8018/istsos4/v1.1` (the `SUBPATH` shipped in `.env.example`;
+override with `STA_BASE_URL`).
 
 ```bash
 PYBIN=tests/conformance/.venv/bin/python
 
 # one class at a time (three 18-088 classes)
-$PYBIN -m pytest tests/conformance -m c01          # 203 passed
-$PYBIN -m pytest tests/conformance -m c02          # 73 passed
+$PYBIN -m pytest tests/conformance -m c01          # 204 passed
+$PYBIN -m pytest tests/conformance -m c02          # 81 passed
 $PYBIN -m pytest tests/conformance -m c03          # 120 passed
 
 # or a single subfolder
-$PYBIN -m pytest tests/conformance/c01
+$PYBIN -m pytest tests/conformance/c01          # 204 passed
+$PYBIN -m pytest tests/conformance/c02          # 81 passed
+$PYBIN -m pytest tests/conformance/c03          # 120 passed
 
-# whole suite, in parallel (isolation must hold) -> 396 passed (18-088 only)
-$PYBIN -m pytest tests/conformance -n auto
+# whole suite -> 405 passed (18-088 only)
+$PYBIN -m pytest tests/conformance
 
 # point at another deployment
-STA_BASE_URL=http://host:port/v4/v1.1 $PYBIN -m pytest tests/conformance
+STA_BASE_URL=http://host:port/istsos4/v1.1 $PYBIN -m pytest tests/conformance
 ```
 
 `pytest tests/conformance` auto-selects this directory's `pytest.ini` (not the

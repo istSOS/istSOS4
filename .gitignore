@@ -1,17 +1,23 @@
-# Python stuff
-__pycache__/
+# Python
 *.py[cod]
-.cache/
+.cache
+
+# Local config & secrets
 .env
-*.pkl
+
+# Generated output
 docs/mkdocs/site
 database/schemaspy
+
+# Virtualenvs & toolchain
 .venv/
 venv/
 env/
-.codex
-.vscode
 .python-version
+
+# Editors
+.vscode
+.codex
 
 # Personal scratch/demo artifacts -- meeting prep and manual verification
 # scripts, not part of the real test suite (that's under api/tests/).
