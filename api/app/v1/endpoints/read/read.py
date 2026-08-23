@@ -153,8 +153,6 @@ async def catch_all_get(
 
         try:
             first_item = await anext(result)
-            # 18-088 §9.2 Usage 5: a $value response is the raw property literal,
-            # served as text/plain rather than the JSON media type.
             return StreamingResponse(
                 wrapped_result_generator(first_item, result),
                 media_type="text/plain" if value else "application/json",
@@ -208,9 +206,6 @@ async def catch_all_get(
     except HTTPException:
         raise
     except (InvalidFieldException, InvalidCollectionException) as e:
-        # req/resource-path (18-088 §9.2): an unknown collection / entity / a
-        # property that does not exist is a client error (4xx, normally 404),
-        # not a server error (5xx). OData 4.0 §9.5.1 specifies 404.
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={
@@ -312,14 +307,6 @@ async def asyncpg_stream_results(
             await connection.execute(f"DECLARE my_cursor CURSOR FOR {query}")
 
             if value:
-                # 18-088 §9.2 Usage 5 ($value): emit the raw scalar literal as
-                # text/plain (the query already extracts it with JSON ->> so it
-                # is unquoted text). No JSON envelope / quoting is applied.
-                # A row that EXISTS but whose property value is null still
-                # answers 200 with the literal `null` (OData 4.0 §11.2.3.1 /
-                # matches the reference instance); only a non-existent
-                # entity/property yields no row at all, which the caller maps to
-                # a 404. Hence yield the `null` literal instead of skipping it.
                 while True:
                     partition = await connection.fetch(
                         f"FETCH {PARTITION_CHUNK} FROM my_cursor"
@@ -344,6 +331,8 @@ async def asyncpg_stream_results(
                     .replace("+00:00", "Z")
                 )
 
+            total_rows = 0
+
             while True:
                 partition = await connection.fetch(
                     f"FETCH {PARTITION_CHUNK} FROM my_cursor"
@@ -352,10 +341,13 @@ async def asyncpg_stream_results(
                     break
 
                 partition_len = len(partition)
+                total_rows += partition_len
                 has_rows = True
 
-                if partition_len > top - 1:
+                if total_rows >= top:
                     partition = partition[:-1]
+                    if not partition and not is_first_partition:
+                        break
 
                 if (
                     VERSIONING
@@ -384,12 +376,6 @@ async def asyncpg_stream_results(
                     if partition_len > 0 and not single_result:
                         start_json = "{"
 
-                    next_link = build_nextLink(full_path, partition_len)
-                    next_link_json = (
-                        f'"@iot.nextLink": "{next_link}",'
-                        if next_link and not single_result
-                        else ""
-                    )
                     as_of = (
                         f'"@iot.as_of": "{as_of_value}",'
                         if VERSIONING
@@ -398,7 +384,7 @@ async def asyncpg_stream_results(
                         and not from_to_value
                         else ""
                     )
-                    start_json += as_of + iot_count + next_link_json
+                    start_json += as_of + iot_count
                     start_json += (
                         '"value": ['
                         if (partition_len > 0 and not single_result)
@@ -411,17 +397,18 @@ async def asyncpg_stream_results(
                     yield "," + partition_json
 
             if not has_rows and not single_result:
-                # conformance: req/request-data/count (18-088 §9.3.4, Req 28) —
-                # when $count=true the "@iot.count" annotation SHALL always be
-                # present, including the value 0 for an empty result set. The
-                # streaming branch above only emits iot_count alongside the first
-                # non-empty partition, so emit it explicitly here for the empty
-                # case. When $count is false/absent iot_count is "" and the
-                # response stays '{"value": []}' as before.
                 yield "{" + iot_count + '"value": []}'
 
             if has_rows and not single_result:
-                yield "]}"
+                next_link = (
+                    build_nextLink(full_path, total_rows)
+                    if total_rows >= top
+                    else None
+                )
+                next_link_json = (
+                    f',"@iot.nextLink": "{next_link}"' if next_link else ""
+                )
+                yield "]" + next_link_json + "}"
 
             await connection.execute("CLOSE my_cursor")
 

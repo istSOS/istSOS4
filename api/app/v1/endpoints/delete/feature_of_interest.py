@@ -15,6 +15,7 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import (
     get_datastreams_from_foi,
     set_role,
@@ -29,7 +30,6 @@ from .functions import (
     unlink_foi_from_location,
     update_datastream_phenomenon_time_from_foi,
 )
-from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 
@@ -85,9 +85,7 @@ async def delete_feature_of_interest(
                     connection, ds_id, feature_of_interest_id
                 )
 
-            await unlink_foi_from_location(
-                connection, feature_of_interest_id
-            )
+            await unlink_foi_from_location(connection, feature_of_interest_id)
 
             id_deleted = await delete_entity(
                 connection, "FeaturesOfInterest", feature_of_interest_id

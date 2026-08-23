@@ -4,11 +4,11 @@ OGC SensorThings API v1.1 — Sensing Core (c01): $ref association-link tests.
 Covers:
   req/resource-path/resource-path-to-entities  §9.2 Usage 7 /<navLink>/$ref
 """
+
 from __future__ import annotations
 
 import pytest
-
-from client import entity_id, format_id
+from client import format_id
 
 pytestmark = pytest.mark.c01
 
@@ -16,6 +16,7 @@ pytestmark = pytest.mark.c01
 # ============================================================================
 # 11. $ref — association links
 # ============================================================================
+
 
 class TestAssociationLinks:
     """req/resource-path/resource-path-to-entities (Usage 7) — /<navLink>/$ref
@@ -32,22 +33,26 @@ class TestAssociationLinks:
 
     def test_thing_datastreams_ref_is_collection(self, client, seed):
         """req/resource-path — /Things(<id>)/Datastreams/$ref → array of selfLinks."""
-        resp = client.get(f"Things({format_id(seed.thing_id)})/Datastreams/$ref")
+        resp = client.get(
+            f"Things({format_id(seed.thing_id)})/Datastreams/$ref"
+        )
         assert resp.status_code == 200
         data = resp.json()
-        assert "value" in data, "$ref for 1-to-many must return {'value': [...]}"
+        assert (
+            "value" in data
+        ), "$ref for 1-to-many must return {'value': [...]}"
         for entry in data["value"]:
             assert "@iot.selfLink" in entry
             non_ref = [k for k in entry if k != "@iot.selfLink"]
-            assert not non_ref, (
-                f"$ref entry must contain ONLY '@iot.selfLink', found: {non_ref}"
-            )
+            assert (
+                not non_ref
+            ), f"$ref entry must contain ONLY '@iot.selfLink', found: {non_ref}"
         # Both seed datastreams must appear
         self_links = [e["@iot.selfLink"] for e in data["value"]]
         for ds_id in seed.datastream_ids:
-            assert any(format_id(ds_id) in sl for sl in self_links), (
-                f"Datastream {ds_id} selfLink missing from Things/$ref"
-            )
+            assert any(
+                format_id(ds_id) in sl for sl in self_links
+            ), f"Datastream {ds_id} selfLink missing from Things/$ref"
 
     def test_observation_datastream_ref_is_single(self, client, seed, obs_id):
         """req/resource-path — /Observations(<id>)/Datastream/$ref → single selfLink."""
@@ -55,7 +60,9 @@ class TestAssociationLinks:
         assert resp.status_code == 200
         data = resp.json()
         assert "@iot.selfLink" in data
-        assert "value" not in data, "$ref for many-to-one must NOT have 'value' array"
+        assert (
+            "value" not in data
+        ), "$ref for many-to-one must NOT have 'value' array"
         assert format_id(seed.ds1.id) in data["@iot.selfLink"]
 
     def test_ds1_observations_ref_collection(self, client, seed):
@@ -68,9 +75,9 @@ class TestAssociationLinks:
         assert "value" in data
         self_links = [e["@iot.selfLink"] for e in data["value"]]
         for oid in seed.ds1.observation_ids:
-            assert any(format_id(oid) in sl for sl in self_links), (
-                f"Observation {oid} missing from DS1/Observations/$ref"
-            )
+            assert any(
+                format_id(oid) in sl for sl in self_links
+            ), f"Observation {oid} missing from DS1/Observations/$ref"
 
     def test_ds2_observations_ref_collection(self, client, seed):
         """req/resource-path — /Datastreams(<DS2>)/Observations/$ref → array."""
@@ -118,11 +125,15 @@ class TestAssociationLinks:
         assert resp.status_code == 200
         data = resp.json()
         assert "@iot.selfLink" in data
-        assert format_id(seed.ds1.observed_property_id) in data["@iot.selfLink"]
+        assert (
+            format_id(seed.ds1.observed_property_id) in data["@iot.selfLink"]
+        )
 
     def test_location_things_ref_collection(self, client, seed):
         """req/resource-path — /Locations(<id>)/Things/$ref → array."""
-        resp = client.get(f"Locations({format_id(seed.location_id)})/Things/$ref")
+        resp = client.get(
+            f"Locations({format_id(seed.location_id)})/Things/$ref"
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "value" in data
