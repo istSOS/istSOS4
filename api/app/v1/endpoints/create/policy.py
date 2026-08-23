@@ -33,24 +33,16 @@ PAYLOAD_EXAMPLE = {
     "users": ["cp1"],
     "name": "test",
     "permissions": {
-        "type": "viewer",  # viewer, editor, obs_manager, sensor, qc, odrl_governed
+        "type": "custom",
+        "policy": {
+            "datastream": {
+                "select": """
+                    network = 'IDROLOGIA'
+                """,
+            },
+        },
     },
 }
-
-# PAYLOAD_EXAMPLE = {
-#     "users": ["cp1"],
-#     "name": "test",
-#     "permissions": {
-#         "type": "custom",
-#         "policy": {
-#             "datastream": {
-#                 "select": """
-#                     network = 'IDROLOGIA'
-#                 """,
-#             },
-#         },
-#     },
-# }
 
 
 @v1.api_route(
@@ -59,10 +51,12 @@ PAYLOAD_EXAMPLE = {
     tags=["Policies"],
     summary="Create a Policy",
     description=(
-        "Create a named row-level-security policy for the given users. "
-        "`permissions.type` selects a stored policy function (`viewer`, "
-        "`editor`, `obs_manager`, `sensor`, `qc`), or `custom` for a "
-        "hand-specified per-table, per-operation condition."
+        "Create a named, hand-specified row-level-security policy for the "
+        "given users. `permissions.type` must be `custom` -- viewer, "
+        "editor, obs_manager, sensor and qc all receive row-level access "
+        "automatically from a static policy the moment their role is set "
+        "(see `007_session_scoped_rls_policies.sql`), so this endpoint has "
+        "nothing left to do for them."
     ),
     status_code=status.HTTP_201_CREATED,
     responses=merge(
@@ -73,12 +67,13 @@ PAYLOAD_EXAMPLE = {
             # STAError subclasses meant to reach the app-level handler and
             # produce {"code","type","message"} with their own status
             # (409 for Conflict). Caught here first, every failure path
-            # -- malformed payload, duplicate policy, mismatched role --
-            # is flattened to 400 with a plain {"message"} body instead.
+            # -- malformed payload, a role covered by a static policy
+            # already, a duplicate policy -- is flattened to 400 with a
+            # plain {"message"} body instead.
             400: {
                 "description": (
-                    "Malformed payload, a user already has a policy, or a "
-                    "user's role doesn't match the policy type. All "
+                    "Malformed payload, `permissions.type` is not "
+                    "`custom`, or a user already has a policy. All "
                     "collapse to 400 here regardless of their semantic "
                     "cause -- see the code comment above this response."
                 ),
@@ -136,6 +131,23 @@ async def create_policy(
 
                 permission_type = payload["permissions"].get("type")
 
+                # viewer/editor/obs_manager/sensor/qc access is granted by
+                # the static, group-scoped policies from
+                # 007_session_scoped_rls_policies.sql the moment a user's
+                # role is set -- that migration DROPs the per-user
+                # viewer_policy()/editor_policy()/obs_manager_policy()/
+                # sensor_policy()/qc_policy() functions this endpoint used
+                # to call, since there is nothing left for them to do.
+                # 'custom' is the only type this endpoint still creates.
+                if permission_type != "custom":
+                    raise BadRequest(
+                        "permissions.type must be 'custom'. viewer, editor, "
+                        "obs_manager, sensor and qc all receive row-level "
+                        "access automatically from a static policy as soon "
+                        "as the role is set -- no explicit policy is "
+                        "needed, or supported, for them."
+                    )
+
                 for user in payload["users"]:
                     query = """
                         SELECT COUNT(*)
@@ -148,57 +160,12 @@ async def create_policy(
                             f"User {user} has already a policy."
                         )
 
-                    query = """
-                        SELECT role
-                        FROM sensorthings."User"
-                        WHERE username = $1
-                    """
-                    result = await connection.fetchval(query, user)
-                    if (
-                        permission_type != "custom"
-                        and result != permission_type
-                    ):
-                        raise BadRequest(
-                            f"User {user} has a different role than the policy type."
-                        )
-
-                if permission_type == "custom":
-                    await create_policies(
-                        connection,
-                        payload["users"],
-                        payload["permissions"]["policy"],
-                        payload["name"],
-                    )
-                elif permission_type == "viewer":
-                    await connection.execute(
-                        "SELECT sensorthings.viewer_policy($1, $2);",
-                        payload["users"],
-                        payload["name"],
-                    )
-                elif permission_type == "editor":
-                    await connection.execute(
-                        "SELECT sensorthings.editor_policy($1, $2);",
-                        payload["users"],
-                        payload["name"],
-                    )
-                elif permission_type == "obs_manager":
-                    await connection.execute(
-                        "SELECT sensorthings.obs_manager_policy($1, $2);",
-                        payload["users"],
-                        payload["name"],
-                    )
-                elif permission_type == "sensor":
-                    await connection.execute(
-                        "SELECT sensorthings.sensor_policy($1, $2);",
-                        payload["users"],
-                        payload["name"],
-                    )
-                elif permission_type == "qc":
-                    await connection.execute(
-                        f"SELECT sensorthings.qc_policy($1, $2);",
-                        payload["users"],
-                        payload["name"],
-                    )
+                await create_policies(
+                    connection,
+                    payload["users"],
+                    payload["permissions"]["policy"],
+                    payload["name"],
+                )
 
         return Response(status_code=status.HTTP_201_CREATED)
 

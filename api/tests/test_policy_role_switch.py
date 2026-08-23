@@ -38,10 +38,16 @@ def attach_transaction_cm(connection):
     connection.transaction = tx
 
 
-def test_create_policy_sets_and_resets_role_for_admin():
+def test_create_policy_rejects_role_types_covered_by_static_policies():
+    """viewer/editor/obs_manager/sensor/qc get RLS access automatically from
+    007_session_scoped_rls_policies.sql's static policies the moment their
+    role is set. That migration DROPs viewer_policy()/.../qc_policy() --
+    calling this endpoint with one of those types used to raise a raw
+    Postgres UndefinedFunctionError; it should now be rejected up front.
+    """
     connection = AsyncMock()
     connection.execute = AsyncMock()
-    connection.fetchval = AsyncMock(side_effect=[0, "viewer"])
+    connection.fetchval = AsyncMock(return_value=0)
     attach_transaction_cm(connection)
 
     payload = {
@@ -62,7 +68,8 @@ def test_create_policy_sets_and_resets_role_for_admin():
     sql_calls = [c.args[0] for c in connection.execute.await_args_list]
     assert any('SET LOCAL ROLE "administrator";' in sql for sql in sql_calls)
     assert not any("RESET ROLE" in sql for sql in sql_calls)
-    assert response.status_code == 201
+    assert not any("_policy(" in sql for sql in sql_calls)
+    assert response.status_code == 400
 
 
 def test_update_policy_sets_and_resets_role_for_admin():
