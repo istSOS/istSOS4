@@ -771,12 +771,6 @@ class NodeVisitor(Visitor):
             main_query = select(*select_args)
 
             if result_format == "DataArray":
-                # conformance: req/data-array/data-array — order Observations by
-                # Datastream then id so the per-Datastream GROUP BY in the
-                # DataArray wrapper below aggregates every Observation of each
-                # Datastream (in id order). The previous .distinct("datastream_id")
-                # collapsed each Datastream to a single Observation, silently
-                # dropping all the others.
                 main_query = main_query.order_by(
                     "datastream_id", getattr(main_entity, "id")
                 )
@@ -787,11 +781,6 @@ class NodeVisitor(Visitor):
                 node.filter, self.main_entity
             )
             if join_relationships:
-                # A chain made exclusively of MANYTOONE relationships cannot
-                # multiply rows from the main entity. Keep such joins and their
-                # complete filter on the outer query. In particular, this keeps
-                # Observation.phenomenonTimeStart visible to TimescaleDB, so it
-                # can exclude chunks for filters such as Datastream/id + time.
                 direct_join_is_safe = all(
                     relationship.property.direction.name == "MANYTOONE"
                     for relationship in join_relationships
@@ -805,9 +794,6 @@ class NodeVisitor(Visitor):
                             relationship
                         )
                 else:
-                    # ONETOMANY and MANYTOMANY joins can multiply the main rows.
-                    # Keep the semi-join for those paths to preserve SensorThings
-                    # "entities that have any related ..." semantics.
                     id_attr = getattr(main_entity, "id")
                     id_subquery = select(id_attr)
                     for relationship in join_relationships:
@@ -887,14 +873,6 @@ class NodeVisitor(Visitor):
         main_query = main_query.limit(top_value).offset(skip_value)
 
         if result_format == "DataArray":
-            # conformance: req/data-array/data-array — the rows streamed by read.py
-            # are per-Datastream GROUPS, not individual Observations. The
-            # observation $top/$skip were already applied to the inner query above,
-            # and the group-row count never exceeds that limit. read.py drops a
-            # trailing "page sentinel" row whenever partition_len > top_value - 1,
-            # which at $top=1 wrongly removed the single nav-path group. Bump
-            # top_value past the bounded group-row count so groups are not
-            # truncated.
             top_value += 1
 
         columns_to_select = []
@@ -927,17 +905,7 @@ class NodeVisitor(Visitor):
             main_query = main_query.alias("main_query")
 
         if result_format == "DataArray":
-            # conformance: req/data-array/data-array — build one group object per
-            # Datastream with keys Datastream@iot.navigationLink, components,
-            # dataArray@iot.count (= number of rows in the group) and dataArray
-            # (= a list-of-rows, one inner list per Observation). Emitting the four
-            # keys as separate columns lets the uniform row_to_json() below produce
-            # the group object directly, i.e. WITHOUT a spurious "json" wrapper key.
             if not node.expand:
-                # Collection path (.../Observations): the matching Observations may
-                # span several Datastreams, so GROUP BY datastream_id and aggregate
-                # each group's rows. Was: distinct + hardcoded count literal "1" + a
-                # single flat row, which dropped every Observation but one.
                 main_query = (
                     select(
                         func.concat(
@@ -959,8 +927,6 @@ class NodeVisitor(Visitor):
                     .alias("main_query")
                 )
             else:
-                # Navigation path (.../Datastreams(id)/Observations): a single
-                # Datastream, so aggregate all of its rows into one group.
                 entity_id = self.entities[0][1]
 
                 main_query = select(
@@ -995,11 +961,6 @@ class NodeVisitor(Visitor):
                     value = "phenomenonTime"
             else:
                 value = select_query[0].right
-            # 18-088 §9.2 Usage 5 ($value): return the RAW value of the property
-            # as text/plain, not a JSON envelope. Use the JSON ->> operator
-            # (returns the element as text, unquoted) instead of -> (which keeps
-            # the JSON encoding, e.g. a quoted string). read.py streams this raw
-            # text with a text/plain content type.
             main_query = select(
                 main_query.c.json.op("->>")(text(f"'{value}'")).label("json")
             ).select_from(main_query)

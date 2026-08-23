@@ -7,10 +7,10 @@ Covers:
   req/datamodel/<entity>/properties             §8   mandatory properties
   req/datamodel/<entity>/relations              §8   bidirectional navigability
 """
+
 from __future__ import annotations
 
 import pytest
-
 import sample_data
 from client import entity_id, format_id
 
@@ -32,6 +32,7 @@ COLLECTION_NAMES = [
 # 2. Each collection GET → 200 with value[]
 # ============================================================================
 
+
 class TestCollectionEndpoints:
     """req/resource-path/resource-path-to-entities (Usage 1) — the eight entity-set
     endpoints MUST all return HTTP 200 with a 'value' array.
@@ -43,21 +44,24 @@ class TestCollectionEndpoints:
     def test_collection_returns_200(self, client, collection):
         """req/resource-path — GET /<collection> returns HTTP 200."""
         resp = client.get(collection)
-        assert resp.status_code == 200, (
-            f"GET /{collection} expected 200, got {resp.status_code}"
-        )
+        assert (
+            resp.status_code == 200
+        ), f"GET /{collection} expected 200, got {resp.status_code}"
 
     @pytest.mark.parametrize("collection", COLLECTION_NAMES)
     def test_collection_has_value_array(self, client, collection):
         """req/resource-path — GET /<collection> body has 'value' array."""
         data = client.get_json(collection)
         assert "value" in data, f"/{collection} response missing 'value'"
-        assert isinstance(data["value"], list), f"/{collection} 'value' must be a list"
+        assert isinstance(
+            data["value"], list
+        ), f"/{collection} 'value' must be a list"
 
 
 # ============================================================================
 # 3. Control information per entity
 # ============================================================================
+
 
 class TestControlInformation:
     """req/datamodel/entity-control-information/common-control-information —
@@ -77,9 +81,9 @@ class TestControlInformation:
         e = client.by_id("Things", seed.thing_id)
         assert "@iot.id" in e, "Thing missing @iot.id"
         assert "@iot.selfLink" in e, "Thing missing @iot.selfLink"
-        assert e["@iot.selfLink"].startswith("http"), (
-            "Thing @iot.selfLink must be absolute"
-        )
+        assert e["@iot.selfLink"].startswith(
+            "http"
+        ), "Thing @iot.selfLink must be absolute"
         assert e["@iot.id"] == seed.thing_id
 
     def test_thing_navigation_links(self, client, seed):
@@ -102,9 +106,9 @@ class TestControlInformation:
         """req/datamodel/entity-control-information — Location navigation links."""
         e = client.by_id("Locations", seed.location_id)
         for nav in ("Things", "HistoricalLocations"):
-            assert f"{nav}@iot.navigationLink" in e, (
-                f"Location missing navigation link: {nav}@iot.navigationLink"
-            )
+            assert (
+                f"{nav}@iot.navigationLink" in e
+            ), f"Location missing navigation link: {nav}@iot.navigationLink"
 
     # ---- HistoricalLocation ----
     def test_historical_location_has_iot_id_and_self_link(self, client, hl_id):
@@ -118,9 +122,9 @@ class TestControlInformation:
         """req/datamodel/entity-control-information — HistoricalLocation nav links."""
         e = client.by_id("HistoricalLocations", hl_id)
         for nav in ("Thing", "Locations"):
-            assert f"{nav}@iot.navigationLink" in e, (
-                f"HistoricalLocation missing: {nav}@iot.navigationLink"
-            )
+            assert (
+                f"{nav}@iot.navigationLink" in e
+            ), f"HistoricalLocation missing: {nav}@iot.navigationLink"
 
     # ---- Datastream (DS1) ----
     def test_datastream_has_iot_id_and_self_link(self, client, seed):
@@ -134,9 +138,9 @@ class TestControlInformation:
         """req/datamodel/entity-control-information — Datastream navigation links."""
         e = client.by_id("Datastreams", seed.ds1.id)
         for nav in ("Thing", "Sensor", "ObservedProperty", "Observations"):
-            assert f"{nav}@iot.navigationLink" in e, (
-                f"Datastream missing: {nav}@iot.navigationLink"
-            )
+            assert (
+                f"{nav}@iot.navigationLink" in e
+            ), f"Datastream missing: {nav}@iot.navigationLink"
 
     # ---- Sensor (from DS1) ----
     def test_sensor_has_iot_id_and_self_link(self, client, seed):
@@ -176,9 +180,9 @@ class TestControlInformation:
         """req/datamodel/entity-control-information — Observation navigation links."""
         e = client.by_id("Observations", obs_id)
         for nav in ("Datastream", "FeatureOfInterest"):
-            assert f"{nav}@iot.navigationLink" in e, (
-                f"Observation missing: {nav}@iot.navigationLink"
-            )
+            assert (
+                f"{nav}@iot.navigationLink" in e
+            ), f"Observation missing: {nav}@iot.navigationLink"
 
     # ---- FeatureOfInterest ----
     def test_foi_has_iot_id_and_self_link(self, client, foi_id):
@@ -208,15 +212,18 @@ class TestControlInformation:
         """
         data = client.collection("Things")
         for item in data["value"]:
-            assert "@iot.id" in item, f"Collection item missing @iot.id: {item}"
-            assert "@iot.selfLink" in item, (
-                f"Collection item missing @iot.selfLink: {item}"
-            )
+            assert (
+                "@iot.id" in item
+            ), f"Collection item missing @iot.id: {item}"
+            assert (
+                "@iot.selfLink" in item
+            ), f"Collection item missing @iot.selfLink: {item}"
 
 
 # ============================================================================
 # 4. Mandatory properties per entity type
 # ============================================================================
+
 
 class TestMandatoryProperties:
     """req/datamodel/<entity> — each entity type MUST expose its mandatory
@@ -247,7 +254,9 @@ class TestMandatoryProperties:
     def test_historical_location_mandatory_properties(self, client, hl_id):
         """req/datamodel/historical-location/properties — HistoricalLocation MUST have time."""
         e = client.by_id("HistoricalLocations", hl_id)
-        assert "time" in e, "HistoricalLocation missing mandatory property 'time'"
+        assert (
+            "time" in e
+        ), "HistoricalLocation missing mandatory property 'time'"
         assert e["time"], "HistoricalLocation 'time' must not be empty"
 
     def test_datastream_mandatory_properties_ds1(self, client, seed):
@@ -255,15 +264,29 @@ class TestMandatoryProperties:
         unitOfMeasurement, observationType.
         """
         e = client.by_id("Datastreams", seed.ds1.id)
-        for prop in ("name", "description", "unitOfMeasurement", "observationType"):
-            assert prop in e, f"Datastream DS1 missing mandatory property '{prop}'"
+        for prop in (
+            "name",
+            "description",
+            "unitOfMeasurement",
+            "observationType",
+        ):
+            assert (
+                prop in e
+            ), f"Datastream DS1 missing mandatory property '{prop}'"
         assert e["name"] == sample_data.DS1_NAME
 
     def test_datastream_mandatory_properties_ds2(self, client, seed):
         """req/datamodel/datastream/properties — DS2 also has mandatory properties."""
         e = client.by_id("Datastreams", seed.ds2.id)
-        for prop in ("name", "description", "unitOfMeasurement", "observationType"):
-            assert prop in e, f"Datastream DS2 missing mandatory property '{prop}'"
+        for prop in (
+            "name",
+            "description",
+            "unitOfMeasurement",
+            "observationType",
+        ):
+            assert (
+                prop in e
+            ), f"Datastream DS2 missing mandatory property '{prop}'"
         assert e["name"] == sample_data.DS2_NAME
 
     def test_sensor_mandatory_properties(self, client, seed):
@@ -281,13 +304,17 @@ class TestMandatoryProperties:
         """
         e = client.by_id("ObservedProperties", seed.ds1.observed_property_id)
         for prop in ("name", "definition", "description"):
-            assert prop in e, f"ObservedProperty missing mandatory property '{prop}'"
+            assert (
+                prop in e
+            ), f"ObservedProperty missing mandatory property '{prop}'"
         assert e["name"] == sample_data.DS1_OBSERVED_PROPERTY
 
     def test_observation_mandatory_properties(self, client, obs_id):
         """req/datamodel/observation/properties — Observation MUST have phenomenonTime and result."""
         e = client.by_id("Observations", obs_id)
-        assert "phenomenonTime" in e, "Observation missing mandatory 'phenomenonTime'"
+        assert (
+            "phenomenonTime" in e
+        ), "Observation missing mandatory 'phenomenonTime'"
         assert "result" in e, "Observation missing mandatory 'result'"
 
     def test_foi_mandatory_properties(self, client, foi_id):
@@ -296,12 +323,15 @@ class TestMandatoryProperties:
         """
         e = client.by_id("FeaturesOfInterest", foi_id)
         for prop in ("name", "description", "encodingType", "feature"):
-            assert prop in e, f"FeatureOfInterest missing mandatory property '{prop}'"
+            assert (
+                prop in e
+            ), f"FeatureOfInterest missing mandatory property '{prop}'"
 
 
 # ============================================================================
 # 5. Entity by id
 # ============================================================================
+
 
 class TestEntityById:
     """req/resource-path/resource-path-to-entities (Usage 2) — addressing a single
@@ -313,9 +343,9 @@ class TestEntityById:
     def test_thing_by_id_status_200(self, client, seed):
         """req/resource-path — GET /Things(<id>) returns 200."""
         resp = client.get(f"Things({format_id(seed.thing_id)})")
-        assert resp.status_code == 200, (
-            f"Expected 200, got {resp.status_code}: {resp.text[:200]}"
-        )
+        assert (
+            resp.status_code == 200
+        ), f"Expected 200, got {resp.status_code}: {resp.text[:200]}"
 
     def test_thing_by_id_identity(self, client, seed):
         """req/resource-path — entity fetched by id has expected @iot.id and name."""
@@ -387,6 +417,7 @@ class TestEntityById:
 # 18. Datamodel entity relations — bidirectional navigability (per declared URI)
 # ============================================================================
 
+
 class TestDatamodelEntityRelations:
     """Explicit coverage for the 8 declared req/datamodel/<entity>/relations URIs.
 
@@ -413,45 +444,59 @@ class TestDatamodelEntityRelations:
         tid = seed.thing_id
 
         # Thing → Locations  (forward)
-        loc_ids = [entity_id(e) for e in client.values(
-            f"Things({format_id(tid)})/Locations"
-        )]
-        assert seed.location_id in loc_ids, (
-            "Thing/Locations must include seed Location"
-        )
+        loc_ids = [
+            entity_id(e)
+            for e in client.values(f"Things({format_id(tid)})/Locations")
+        ]
+        assert (
+            seed.location_id in loc_ids
+        ), "Thing/Locations must include seed Location"
 
         # Location → Things  (reverse)
-        thing_ids_via_loc = [entity_id(e) for e in client.values(
-            f"Locations({format_id(seed.location_id)})/Things"
-        )]
-        assert tid in thing_ids_via_loc, (
-            "Location/Things must include seed Thing (reverse of Thing→Locations)"
-        )
+        thing_ids_via_loc = [
+            entity_id(e)
+            for e in client.values(
+                f"Locations({format_id(seed.location_id)})/Things"
+            )
+        ]
+        assert (
+            tid in thing_ids_via_loc
+        ), "Location/Things must include seed Thing (reverse of Thing→Locations)"
 
         # Thing → HistoricalLocations  (forward)
-        hl_ids = [entity_id(e) for e in client.values(
-            f"Things({format_id(tid)})/HistoricalLocations"
-        )]
-        assert hl_id in hl_ids, "Thing/HistoricalLocations must include seed HL"
+        hl_ids = [
+            entity_id(e)
+            for e in client.values(
+                f"Things({format_id(tid)})/HistoricalLocations"
+            )
+        ]
+        assert (
+            hl_id in hl_ids
+        ), "Thing/HistoricalLocations must include seed HL"
 
         # HistoricalLocation → Thing  (reverse)
-        thing_via_hl = client.nav(f"HistoricalLocations({format_id(hl_id)})/Thing")
-        assert thing_via_hl["@iot.id"] == tid, (
-            "HistoricalLocation/Thing must equal seed Thing (reverse of Thing→HistoricalLocations)"
+        thing_via_hl = client.nav(
+            f"HistoricalLocations({format_id(hl_id)})/Thing"
         )
+        assert (
+            thing_via_hl["@iot.id"] == tid
+        ), "HistoricalLocation/Thing must equal seed Thing (reverse of Thing→HistoricalLocations)"
 
         # Thing → Datastreams  (forward)
-        ds_ids = [entity_id(e) for e in client.values(
-            f"Things({format_id(tid)})/Datastreams"
-        )]
+        ds_ids = [
+            entity_id(e)
+            for e in client.values(f"Things({format_id(tid)})/Datastreams")
+        ]
         for dsid in seed.datastream_ids:
             assert dsid in ds_ids, f"Thing/Datastreams missing DS {dsid}"
 
         # Datastream → Thing  (reverse)
-        thing_via_ds = client.nav(f"Datastreams({format_id(seed.ds1.id)})/Thing")
-        assert thing_via_ds["@iot.id"] == tid, (
-            "Datastream/Thing must equal seed Thing (reverse of Thing→Datastreams)"
+        thing_via_ds = client.nav(
+            f"Datastreams({format_id(seed.ds1.id)})/Thing"
         )
+        assert (
+            thing_via_ds["@iot.id"] == tid
+        ), "Datastream/Thing must equal seed Thing (reverse of Thing→Datastreams)"
 
     # ---- Location (req/datamodel/location/relations) ----
     def test_location_relations(self, client, seed, hl_id):
@@ -465,27 +510,35 @@ class TestDatamodelEntityRelations:
         tid = seed.thing_id
 
         # Location → Things  (forward)
-        thing_ids = [entity_id(e) for e in client.values(
-            f"Locations({format_id(lid)})/Things"
-        )]
+        thing_ids = [
+            entity_id(e)
+            for e in client.values(f"Locations({format_id(lid)})/Things")
+        ]
         assert tid in thing_ids
 
         # Thing → Locations  (reverse)
-        loc_ids = [entity_id(e) for e in client.values(
-            f"Things({format_id(tid)})/Locations"
-        )]
+        loc_ids = [
+            entity_id(e)
+            for e in client.values(f"Things({format_id(tid)})/Locations")
+        ]
         assert lid in loc_ids
 
         # Location → HistoricalLocations  (forward)
-        hl_ids_from_loc = [entity_id(e) for e in client.values(
-            f"Locations({format_id(lid)})/HistoricalLocations"
-        )]
+        hl_ids_from_loc = [
+            entity_id(e)
+            for e in client.values(
+                f"Locations({format_id(lid)})/HistoricalLocations"
+            )
+        ]
         assert hl_id in hl_ids_from_loc
 
         # HistoricalLocation → Locations  (reverse)
-        loc_ids_from_hl = [entity_id(e) for e in client.values(
-            f"HistoricalLocations({format_id(hl_id)})/Locations"
-        )]
+        loc_ids_from_hl = [
+            entity_id(e)
+            for e in client.values(
+                f"HistoricalLocations({format_id(hl_id)})/Locations"
+            )
+        ]
         assert lid in loc_ids_from_hl
 
     # ---- HistoricalLocation (req/datamodel/historical-location/relations) ----
@@ -501,21 +554,30 @@ class TestDatamodelEntityRelations:
         assert thing["@iot.id"] == seed.thing_id
 
         # Thing → HistoricalLocations  (reverse)
-        hl_ids = [entity_id(e) for e in client.values(
-            f"Things({format_id(seed.thing_id)})/HistoricalLocations"
-        )]
+        hl_ids = [
+            entity_id(e)
+            for e in client.values(
+                f"Things({format_id(seed.thing_id)})/HistoricalLocations"
+            )
+        ]
         assert hl_id in hl_ids
 
         # HistoricalLocation → Locations  (forward)
-        loc_ids = [entity_id(e) for e in client.values(
-            f"HistoricalLocations({format_id(hl_id)})/Locations"
-        )]
+        loc_ids = [
+            entity_id(e)
+            for e in client.values(
+                f"HistoricalLocations({format_id(hl_id)})/Locations"
+            )
+        ]
         assert seed.location_id in loc_ids
 
         # Location → HistoricalLocations  (reverse)
-        hl_ids_from_loc = [entity_id(e) for e in client.values(
-            f"Locations({format_id(seed.location_id)})/HistoricalLocations"
-        )]
+        hl_ids_from_loc = [
+            entity_id(e)
+            for e in client.values(
+                f"Locations({format_id(seed.location_id)})/HistoricalLocations"
+            )
+        ]
         assert hl_id in hl_ids_from_loc
 
     # ---- Datastream (req/datamodel/datastream/relations) ----
@@ -535,9 +597,12 @@ class TestDatamodelEntityRelations:
         assert thing["@iot.id"] == seed.thing_id
 
         # Thing → Datastreams  (reverse)
-        ds_ids = [entity_id(e) for e in client.values(
-            f"Things({format_id(seed.thing_id)})/Datastreams"
-        )]
+        ds_ids = [
+            entity_id(e)
+            for e in client.values(
+                f"Things({format_id(seed.thing_id)})/Datastreams"
+            )
+        ]
         assert ds1_id in ds_ids
 
         # Datastream → Sensor  (forward)
@@ -545,9 +610,12 @@ class TestDatamodelEntityRelations:
         assert sensor["@iot.id"] == seed.ds1.sensor_id
 
         # Sensor → Datastreams  (reverse)
-        ds_from_sensor = [entity_id(e) for e in client.values(
-            f"Sensors({format_id(seed.ds1.sensor_id)})/Datastreams"
-        )]
+        ds_from_sensor = [
+            entity_id(e)
+            for e in client.values(
+                f"Sensors({format_id(seed.ds1.sensor_id)})/Datastreams"
+            )
+        ]
         assert ds1_id in ds_from_sensor
 
         # Datastream → ObservedProperty  (forward)
@@ -555,20 +623,28 @@ class TestDatamodelEntityRelations:
         assert op["@iot.id"] == seed.ds1.observed_property_id
 
         # ObservedProperty → Datastreams  (reverse)
-        ds_from_op = [entity_id(e) for e in client.values(
-            f"ObservedProperties({format_id(seed.ds1.observed_property_id)})/Datastreams"
-        )]
+        ds_from_op = [
+            entity_id(e)
+            for e in client.values(
+                f"ObservedProperties({format_id(seed.ds1.observed_property_id)})/Datastreams"
+            )
+        ]
         assert ds1_id in ds_from_op
 
         # Datastream → Observations  (forward)
-        obs_ids = [entity_id(e) for e in client.values(
-            f"Datastreams({format_id(ds1_id)})/Observations"
-        )]
+        obs_ids = [
+            entity_id(e)
+            for e in client.values(
+                f"Datastreams({format_id(ds1_id)})/Observations"
+            )
+        ]
         for oid in seed.ds1.observation_ids:
             assert oid in obs_ids
 
         # Observation → Datastream  (reverse)
-        ds_from_obs = client.nav(f"Observations({format_id(obs_id)})/Datastream")
+        ds_from_obs = client.nav(
+            f"Observations({format_id(obs_id)})/Datastream"
+        )
         assert ds_from_obs["@iot.id"] == ds1_id
 
     # ---- Sensor (req/datamodel/sensor/relations) ----
@@ -583,9 +659,10 @@ class TestDatamodelEntityRelations:
         ds1_id = seed.ds1.id
 
         # Sensor → Datastreams  (forward)
-        ds_ids = [entity_id(e) for e in client.values(
-            f"Sensors({format_id(s1_id)})/Datastreams"
-        )]
+        ds_ids = [
+            entity_id(e)
+            for e in client.values(f"Sensors({format_id(s1_id)})/Datastreams")
+        ]
         assert ds1_id in ds_ids
 
         # Datastream → Sensor  (reverse)
@@ -595,9 +672,10 @@ class TestDatamodelEntityRelations:
         # Verify second sensor/datastream pair as well
         s2_id = seed.ds2.sensor_id
         ds2_id = seed.ds2.id
-        ds_ids2 = [entity_id(e) for e in client.values(
-            f"Sensors({format_id(s2_id)})/Datastreams"
-        )]
+        ds_ids2 = [
+            entity_id(e)
+            for e in client.values(f"Sensors({format_id(s2_id)})/Datastreams")
+        ]
         assert ds2_id in ds_ids2
         sensor2 = client.nav(f"Datastreams({format_id(ds2_id)})/Sensor")
         assert sensor2["@iot.id"] == s2_id
@@ -614,9 +692,12 @@ class TestDatamodelEntityRelations:
         ds1_id = seed.ds1.id
 
         # ObservedProperty → Datastreams  (forward)
-        ds_ids = [entity_id(e) for e in client.values(
-            f"ObservedProperties({format_id(op1_id)})/Datastreams"
-        )]
+        ds_ids = [
+            entity_id(e)
+            for e in client.values(
+                f"ObservedProperties({format_id(op1_id)})/Datastreams"
+            )
+        ]
         assert ds1_id in ds_ids
 
         # Datastream → ObservedProperty  (reverse)
@@ -626,9 +707,12 @@ class TestDatamodelEntityRelations:
         # Also check DS2/OP2
         op2_id = seed.ds2.observed_property_id
         ds2_id = seed.ds2.id
-        ds_ids2 = [entity_id(e) for e in client.values(
-            f"ObservedProperties({format_id(op2_id)})/Datastreams"
-        )]
+        ds_ids2 = [
+            entity_id(e)
+            for e in client.values(
+                f"ObservedProperties({format_id(op2_id)})/Datastreams"
+            )
+        ]
         assert ds2_id in ds_ids2
         op2 = client.nav(f"Datastreams({format_id(ds2_id)})/ObservedProperty")
         assert op2["@iot.id"] == op2_id
@@ -646,20 +730,28 @@ class TestDatamodelEntityRelations:
         assert ds["@iot.id"] == seed.ds1.id
 
         # Datastream → Observations  (reverse)
-        obs_ids = [entity_id(e) for e in client.values(
-            f"Datastreams({format_id(seed.ds1.id)})/Observations"
-        )]
+        obs_ids = [
+            entity_id(e)
+            for e in client.values(
+                f"Datastreams({format_id(seed.ds1.id)})/Observations"
+            )
+        ]
         assert obs_id in obs_ids
 
         # Observation → FeatureOfInterest  (forward)
-        foi = client.nav(f"Observations({format_id(obs_id)})/FeatureOfInterest")
+        foi = client.nav(
+            f"Observations({format_id(obs_id)})/FeatureOfInterest"
+        )
         linked_foi_id = foi["@iot.id"]
         assert linked_foi_id in seed.foi_ids
 
         # FeatureOfInterest → Observations  (reverse)
-        obs_ids_from_foi = [entity_id(e) for e in client.values(
-            f"FeaturesOfInterest({format_id(linked_foi_id)})/Observations"
-        )]
+        obs_ids_from_foi = [
+            entity_id(e)
+            for e in client.values(
+                f"FeaturesOfInterest({format_id(linked_foi_id)})/Observations"
+            )
+        ]
         assert obs_id in obs_ids_from_foi
 
     # ---- FeatureOfInterest (req/datamodel/feature-of-interest/relations) ----
@@ -671,9 +763,12 @@ class TestDatamodelEntityRelations:
         Reverse:  Observation → FeatureOfInterest
         """
         # FeatureOfInterest → Observations  (forward)
-        obs_ids = [entity_id(e) for e in client.values(
-            f"FeaturesOfInterest({format_id(foi_id)})/Observations"
-        )]
+        obs_ids = [
+            entity_id(e)
+            for e in client.values(
+                f"FeaturesOfInterest({format_id(foi_id)})/Observations"
+            )
+        ]
         # At least one seed observation must be linked to this FOI
         matched = [oid for oid in seed.all_observation_ids if oid in obs_ids]
         assert matched, (
