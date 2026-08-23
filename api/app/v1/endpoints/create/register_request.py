@@ -183,41 +183,45 @@ async def register_request(request: RestrictedRegistrationRequest):
 
                 if existing is not None:
                     # Re-application: overwrite the previously-rejected row.
-                    # dataset_id/odrl_policy_id are overwritten too -- a
-                    # re-applying user is explicitly allowed to request a
-                    # different dataset/policy than their rejected attempt.
+                    # dataset_id/odrl_policy_id/requested_role are all
+                    # overwritten too -- a re-applying user is explicitly
+                    # allowed to request a different dataset/policy/role
+                    # than their rejected attempt.
                     row = await conn.fetchrow(
                         """
                         UPDATE sensorthings."User"
-                        SET password       = $1,
-                            contact        = $2::jsonb,
-                            status         = 'active',
-                            dataset_id     = $3,
-                            odrl_policy_id = $4
-                        WHERE id = $5
+                        SET password        = $1,
+                            contact         = $2::jsonb,
+                            status          = 'active',
+                            dataset_id      = $3,
+                            odrl_policy_id  = $4,
+                            requested_role  = $5
+                        WHERE id = $6
                         RETURNING id
                         """,
                         hashed_password,
                         contact_json,
                         request.dataset_id,
                         request.odrl_policy_id,
+                        request.requested_role,
                         existing["id"],
                     )
                 else:
                     # 3a. INSERT the new User row.
                     #     role='pending'  → zero operational privileges.
                     #     status='active' → account exists and can be found by admin.
-                    #     dataset_id/odrl_policy_id persisted here (not just
-                    #     AuditLog) so an admin reviewing GET /Users can see
-                    #     what was actually requested without a manual join.
+                    #     dataset_id/odrl_policy_id/requested_role persisted
+                    #     here (not just AuditLog) so an admin reviewing
+                    #     GET /Users can see what was actually requested
+                    #     without a manual join.
                     #     The RETURNING clause gives us the auto-assigned PK.
                     row = await conn.fetchrow(
                         """
                         INSERT INTO sensorthings."User"
                             (username, password, role, status, contact,
-                             dataset_id, odrl_policy_id)
+                             dataset_id, odrl_policy_id, requested_role)
                         VALUES
-                            ($1, $2, 'pending', 'active', $3::jsonb, $4, $5)
+                            ($1, $2, 'pending', 'active', $3::jsonb, $4, $5, $6)
                         RETURNING id
                         """,
                         request.username,
@@ -225,6 +229,7 @@ async def register_request(request: RestrictedRegistrationRequest):
                         contact_json,
                         request.dataset_id,
                         request.odrl_policy_id,
+                        request.requested_role,
                     )
                 new_user_id: int = row["id"]
 
@@ -248,7 +253,10 @@ async def register_request(request: RestrictedRegistrationRequest):
                     actor_id=new_user_id,
                     dataset_id=request.dataset_id,
                     odrl_policy_id=request.odrl_policy_id,
-                    payload={"explanation": request.explanation},
+                    payload={
+                        "explanation": request.explanation,
+                        "requested_role": request.requested_role,
+                    },
                 )
 
         logger.info(

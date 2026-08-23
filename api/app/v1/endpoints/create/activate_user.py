@@ -18,7 +18,10 @@ Flow
 ----
 1. Verify caller is an ``administrator``.
 2. Load the target user row; confirm it is currently in the ``pending`` state.
-3. Validate the requested target role via ``validate_rbac_role``.
+3. Resolve the target role: the request body's ``role`` if given, else the
+   ``requested_role`` the applicant stated at ``/auth/{provider}/login``
+   (see oidc_login.py); validate whichever one wins via
+   ``validate_rbac_role``.
 4. Within a single transaction:
    a. UPDATE sensorthings."User".role  → target role.
    b. Apply the appropriate RLS policy function for the target role.
@@ -61,7 +64,9 @@ v1 = APIRouter()
 logger = logging.getLogger(__name__)
 
 ACTIVATE_PAYLOAD_EXAMPLE = {
-    # one of: viewer, editor, obs_manager, sensor, qc, odrl_governed
+    # one of: viewer, editor, obs_manager, sensor, qc, odrl_governed.
+    # Omit entirely to activate with whatever role the applicant requested
+    # at /auth/{provider}/login.
     "role": "viewer",
 }
 
@@ -73,7 +78,9 @@ ACTIVATE_PAYLOAD_EXAMPLE = {
     summary="Activate a pending OIDC user",
     description=(
         "Promote a user from the 'pending' waiting room to a fully active "
-        "role.  Applies Row-Level Security policies for the assigned role. "
+        "role. `role` is optional -- omit it to activate with the role the "
+        "applicant requested at login; supply it to override. "
+        "Applies Row-Level Security policies for the assigned role. "
         "Only accessible by an administrator.  No PostgreSQL DDL is issued."
     ),
     status_code=status.HTTP_200_OK,
@@ -138,26 +145,17 @@ async def activate_user(
             detail="Only administrators can activate pending users.",
         )
 
-    # ------------------------------------------------------------------
-    # 2. Validate the requested target role.
-    # ------------------------------------------------------------------
-    target_role_raw = payload.get("role", "")
-    try:
-        target_role = validate_rbac_role(target_role_raw)
-    except ValueError as exc:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"message": str(exc)},
-        )
-
     try:
         async with pgpool.acquire() as conn:
             # ----------------------------------------------------------
-            # 3. Fetch the target user and assert they are 'pending'.
+            # 2. Fetch the target user and assert they are 'pending'.
+            #    Fetched before role validation, not after, because
+            #    resolving the target role needs requested_role off this
+            #    same row -- see step 3.
             # ----------------------------------------------------------
             user_row = await conn.fetchrow(
                 """
-                SELECT id, username, role, status, dataset_id
+                SELECT id, username, role, status, dataset_id, requested_role
                 FROM sensorthings."User"
                 WHERE id = $1
                 """,
@@ -198,6 +196,32 @@ async def activate_user(
                 )
 
             username = user_row["username"]
+
+            # ----------------------------------------------------------
+            # 3. Resolve and validate the target role. payload["role"] is
+            #    the administrator's explicit choice and always wins;
+            #    omitting it falls back to what the applicant asked for
+            #    at /auth/{provider}/login (see oidc_login.py).
+            # ----------------------------------------------------------
+            target_role_raw = payload.get("role") or user_row["requested_role"]
+            if not target_role_raw:
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "message": (
+                            f"User '{username}' did not request a role at "
+                            "login, so 'role' must be specified explicitly "
+                            "in the request body."
+                        )
+                    },
+                )
+            try:
+                target_role = validate_rbac_role(target_role_raw)
+            except ValueError as exc:
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={"message": str(exc)},
+                )
 
             if target_role == "odrl_governed" and user_row["dataset_id"] is None:
                 # This user never went through /auth/{provider}/login with

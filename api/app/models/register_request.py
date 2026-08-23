@@ -34,6 +34,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.rbac_roles import validate_rbac_role
 from app.utils.utils import validate_username
 from app.validators import validate_password_strength
 
@@ -74,6 +75,13 @@ class RestrictedRegistrationRequest(BaseModel):
                     applicant wants access to.
     odrl_policy_id: Identifier of the ODRL policy document that governs access
                     to the requested dataset.
+    requested_role: RBAC role the applicant is asking to be granted. An
+                    administrator reviewing the request sees this as the
+                    default at approval time (PATCH .../policy-approval)
+                    but can still assign a different role -- see that
+                    endpoint's docstring. This is a stated preference, not
+                    a grant: the account is created with role='pending'
+                    regardless of what is requested here.
     explanation:    Free-text justification for the access request.  Stored
                     inside the ``contact`` JSONB blob alongside ContactInfo.
     contact_info:   Structured contact details for the applicant.
@@ -87,6 +95,7 @@ class RestrictedRegistrationRequest(BaseModel):
                     "password": "Str0ng!Pass",
                     "dataset_id": "stac://alpine-snow-2024",
                     "odrl_policy_id": "odrl:policy:cc-by-nc",
+                    "requested_role": "viewer",
                     "explanation": "Requesting access for a climate research project.",
                     "contact_info": {"company": "SUPSI", "telegram": "@jdoe"},
                 }
@@ -123,6 +132,16 @@ class RestrictedRegistrationRequest(BaseModel):
         ),
         examples=["odrl:policy:cc-by-nc"],
     )
+    requested_role: str = Field(
+        description=(
+            "RBAC role you are asking to be granted: one of viewer, "
+            "editor, obs_manager, sensor, qc, odrl_governed. A stated "
+            "preference, not a grant -- the administrator reviewing your "
+            "request sees this as the default and can approve it as-is "
+            "or assign a different role."
+        ),
+        examples=["viewer"],
+    )
     explanation: str = Field(
         description="Free-text justification, merged into the `contact` JSONB blob alongside contact_info.",
         examples=["Requesting access for a climate research project."],
@@ -147,6 +166,18 @@ class RestrictedRegistrationRequest(BaseModel):
                 "letters, digits, and underscores."
             )
         return v
+
+    @field_validator("requested_role")
+    @classmethod
+    def requested_role_must_be_assignable(cls, v: str) -> str:
+        """Reject an unknown or internal role at submission time, not
+        silently store it for an admin to trip over later.
+
+        Reuses the same validator the approval/activation endpoints use to
+        validate assigned_role, so 'requested' and 'assigned' can never
+        drift into accepting different role sets.
+        """
+        return validate_rbac_role(v)
 
     @field_validator("password")
     @classmethod
