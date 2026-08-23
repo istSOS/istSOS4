@@ -32,7 +32,7 @@ Design decisions
 
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.utils.utils import validate_username
 from app.validators import validate_password_strength
@@ -104,3 +104,16 @@ class RestrictedRegistrationRequest(BaseModel):
         app.validators.validate_password_strength.
         """
         return validate_password_strength(v)
+
+
+class RegisterResponse(BaseModel):
+    """Documentation-only: the body POST /Register returns on success.
+
+    Built as a plain dict in the handler, not serialised through this
+    model -- see app/models/error.py for why (JSONResponse, not
+    response_model=).
+    """
+
+    id: int = Field(description="Primary key of the newly-created pending user.", examples=[42])
+    status: str = Field(description="Always 'pending' immediately after registration.", examples=["pending"])
+    message: str = Field(examples=["Registration submitted. Your account (id=42) is pending administrator approval."])

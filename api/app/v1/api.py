@@ -13,8 +13,6 @@
 # limitations under the License.
 
 from app import AUTHORIZATION, NETWORK, VERSIONING
-from app.v1.custom_docs import register_custom_docs
-from app.v1.docs_description import V1_DESCRIPTION
 from app.v1.endpoints.create import bulk_observation, data_array_observation
 from app.v1.endpoints.create import datastream as create_datastream
 from app.v1.endpoints.create import (
@@ -25,8 +23,8 @@ from app.v1.endpoints.create import (
 )
 from app.v1.endpoints.create import location as create_location
 from app.v1.endpoints.create import login
-from app.v1.endpoints.create import oidc_login as oidc_login
 from app.v1.endpoints.create import network as create_network
+from app.v1.endpoints.create import oidc_login as oidc_login
 from app.v1.endpoints.create import observation as create_observation
 from app.v1.endpoints.create import (
     observed_property as create_observed_property,
@@ -99,52 +97,12 @@ from fastapi import FastAPI
 if AUTHORIZATION:
     tags_metadata = [
         {
-            "name": "Authentication",
-            "description": (
-                "Obtain, refresh, and revoke bearer tokens for **local** "
-                "accounts.\n\n"
-                "`POST /Login` is the URL behind the **Authorize** button "
-                "above. Tokens carry `sub` and `role`, but the role is "
-                "re-read from the database on every request, so an "
-                "administrator's role change takes effect immediately "
-                "without the token being reissued.\n\n"
-                "Revoking a token via `POST /Logout` requires `REDIS=1` on "
-                "this deployment; without Redis, `/Logout` still succeeds "
-                "but the token remains valid until it naturally expires."
-            ),
-        },
-        {
-            "name": "External Authentication",
-            "description": (
-                "OpenID Connect / OAuth2 browser handshake for Google, "
-                "Microsoft, GitHub, ORCID, and SWITCH edu-ID.\n\n"
-                "**These two routes are browser redirect flows and cannot "
-                "be completed with Try it out.** `/login` responds with a "
-                "302 to the identity provider; `/callback` needs a real "
-                "provider-issued `code` plus the session cookie `/login` "
-                "set moments earlier. Open the `/login` URL directly in a "
-                "browser tab instead.\n\n"
-                "A first-time external identity lands in the same "
-                "`pending` waiting room as `POST /Register` -- it never "
-                "receives a token on its own."
-            ),
-        },
-        {
-            "name": "Registration & Approval",
-            "description": (
-                "The restricted-access lifecycle: a public request, then "
-                "an administrator's decision. Every transition writes an "
-                "append-only `AuditLog` row inside the same transaction as "
-                "the state change it records."
-            ),
-        },
-        {
             "name": "Users",
-            "description": "User accounts, credentials, and role assignment.",
+            "description": "Users of the SensorThings API.",
         },
         {
             "name": "Policies",
-            "description": "Row-level-security policies for the SensorThings API.",
+            "description": "Policies for the SensorThings API.",
         },
     ]
 else:
@@ -206,28 +164,12 @@ tags_metadata += [
 ]
 
 v1 = FastAPI(
-    title="istSOS4 — OGC SensorThings API with Auth & RBAC",
-    description=V1_DESCRIPTION,
+    title="OGC SensorThings API",
+    description="A SensorThings API implementation in Python using FastAPI.",
     version="1.1",
     openapi_tags=tags_metadata,
-    # Custom-themed /docs is registered manually below via
-    # register_custom_docs() -- docs_url=None stops FastAPI's own setup()
-    # from claiming the path first (see app/v1/custom_docs.py).
-    docs_url=None,
-    swagger_ui_parameters={
-        # Was -1, which hid the Schemas panel entirely -- including the new
-        # auth/RBAC request and error models this PR adds. 1 keeps them
-        # collapsed by default (there are ~70 schemas) without hiding them.
-        "defaultModelsExpandDepth": 1,
-        "docExpansion": "list",        # tags open, individual operations collapsed
-        "filter": True,                # search box over ~77 operations
-        "persistAuthorization": True,  # bearer token survives a page reload
-        "displayRequestDuration": True,
-        "tryItOutEnabled": True,
-        "deepLinking": True,           # each operation gets a shareable/bookmarkable URL
-    },
+    swagger_ui_parameters={"defaultModelsExpandDepth": -1},
 )
-register_custom_docs(v1)
 
 register_exception_handlers(v1)
 

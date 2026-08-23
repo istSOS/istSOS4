@@ -28,7 +28,7 @@ Design decisions
   enforces the administrator check via Depends(get_current_user).
 """
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.rbac_roles import validate_rbac_role
 
@@ -62,3 +62,14 @@ class AdminApprovalRequest(BaseModel):
         if the role is not one of the permitted assignable roles.
         """
         return validate_rbac_role(v)
+
+
+class ApprovalResponse(BaseModel):
+    """Documentation-only: the body PATCH .../policy-approval returns on
+    success. Built as a plain dict in the handler -- see app/models/error.py."""
+
+    message: str = Field(examples=["User 'jdoe' (id=42) has been approved with role 'viewer'."])
+    user_id: int = Field(examples=[42])
+    granted_role: str = Field(examples=["odrl_governed"])
+    dataset_id: str = Field(examples=["stac://alpine-snow-2024"])
+    odrl_policy_id: str = Field(examples=["odrl:policy:cc-by-nc"])
