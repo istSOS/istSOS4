@@ -93,12 +93,10 @@ async def delete_observation(
                 await update_datastream_observedArea(connection, datastream_id)
 
             if id_deleted is None:
-                if current_user is not None:
                 return error_response(
                     status.HTTP_404_NOT_FOUND,
                     f"Observation with id {observation_id} not found",
                 )
 
-            if current_user is not None:
 
     return Response(status_code=status.HTTP_200_OK)

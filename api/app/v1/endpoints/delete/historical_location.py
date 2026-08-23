@@ -76,6 +76,5 @@ async def delete_historical_location(
                     f"Historical Location with id {historical_location_id} not found",
                 )
 
-            if current_user is not None:
 
     return Response(status_code=status.HTTP_200_OK)
