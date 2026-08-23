@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+env:
+  STA_BASE_URL: http://localhost:8018/istsos4/v1.1
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Start stack
+        run: |
+          cp .env.example .env
+          docker compose -f dev_docker-compose.yml up -d --build --wait database api
+
+      - name: Wait for API
+        run: timeout 120 bash -c 'until curl -sf "$STA_BASE_URL" >/dev/null; do sleep 2; done'
+
+      - name: Install test deps
+        run: pip install -r tests/conformance/requirements.txt
+
+      - name: OGC 18-088 conformance (405 tests)
+        run: pytest tests/conformance
+
+      - name: API logs
+        if: failure()
+        run: docker compose -f dev_docker-compose.yml logs api
+
+  publish:
+    if: github.ref == 'refs/heads/main'
+    needs: conformance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [api, database]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image tags
+        id: image
+        run: |
+          ref=$(grep -oE "ghcr\.io/istsos/istsos4/${{ matrix.component }}:[^[:space:]]+" docker-compose.yml)
+          tags="${ref%:*}:latest"
+          if docker manifest inspect "$ref" >/dev/null 2>&1; then
+            echo "$ref already published, refreshing :latest only"
+          else
+            tags="$tags,$ref"
+            echo "publishing $ref"
+          fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: ./${{ matrix.component }}
+          push: true
+          tags: ${{ steps.image.outputs.tags }}

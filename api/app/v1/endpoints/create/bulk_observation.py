@@ -91,9 +91,7 @@ async def bulk_observations(
             if current_user is not None:
                 await set_role(conn, current_user)
 
-            commit_id = await set_commit(
-                conn, commit_message, current_user
-            )
+            commit_id = await set_commit(conn, commit_message, current_user)
 
             for observation_set in payload:
                 datastream_id = observation_set.get("Datastream", {}).get(
@@ -103,9 +101,7 @@ async def bulk_observations(
                 data_array = observation_set.get("dataArray", [])
 
                 if not datastream_id:
-                    raise ValueError(
-                        "Missing 'datastream_id' in Datastream."
-                    )
+                    raise ValueError("Missing 'datastream_id' in Datastream.")
 
                 # Check that at least phenomenonTime and result are present
                 if (
@@ -452,9 +448,7 @@ async def get_foi_id(datastream_id, conn, commit_id=None):
                 datastream_id,
             )
             if not datastream_exists:
-                raise BadRequest(
-                    f"Datastream {datastream_id} does not exist."
-                )
+                raise BadRequest(f"Datastream {datastream_id} does not exist.")
             raise BadRequest(
                 "Cannot auto-generate a FeatureOfInterest: the Thing linked to "
                 f"Datastream {datastream_id} has no Location. Provide a "

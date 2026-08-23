@@ -15,10 +15,9 @@ Coverage:
 from __future__ import annotations
 
 import pytest
-
 import sample_data
-from client import entity_id, format_id, id_from_self_link
 from c02.conftest import create_datastream_tree
+from client import entity_id, format_id, id_from_self_link
 
 pytestmark = pytest.mark.c02
 
@@ -27,6 +26,7 @@ pytestmark = pytest.mark.c02
 # CREATE 1 – POST minimal valid entity into each of the 8 collections
 #   req/create-update-delete/create-entity
 # ===========================================================================
+
 
 class TestCreate1MinimalEntities:
     """POST a minimal valid payload to each entity collection.
@@ -45,18 +45,20 @@ class TestCreate1MinimalEntities:
 
         resp = client.create("Things", payload)
 
-        assert resp.status_code == 201, (
-            f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
-        )
+        assert (
+            resp.status_code == 201
+        ), f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
         loc_hdr = resp.headers.get("location", "")
-        assert loc_hdr.startswith("http"), (
-            f"Location header missing or not absolute: {loc_hdr!r}"
-        )
+        assert loc_hdr.startswith(
+            "http"
+        ), f"Location header missing or not absolute: {loc_hdr!r}"
 
         cleanup(loc_hdr)
         entity = client.nav(loc_hdr)
         assert "@iot.id" in entity, "Missing @iot.id in GET response"
-        assert "@iot.selfLink" in entity, "Missing @iot.selfLink in GET response"
+        assert (
+            "@iot.selfLink" in entity
+        ), "Missing @iot.selfLink in GET response"
         assert entity["name"] == payload["name"]
         assert entity["description"] == payload["description"]
 
@@ -68,9 +70,9 @@ class TestCreate1MinimalEntities:
 
         resp = client.create("Locations", payload)
 
-        assert resp.status_code == 201, (
-            f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
-        )
+        assert (
+            resp.status_code == 201
+        ), f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
         loc_hdr = resp.headers.get("location", "")
         assert loc_hdr.startswith("http")
 
@@ -89,9 +91,9 @@ class TestCreate1MinimalEntities:
 
         resp = client.create("Sensors", payload)
 
-        assert resp.status_code == 201, (
-            f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
-        )
+        assert (
+            resp.status_code == 201
+        ), f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
         loc_hdr = resp.headers.get("location", "")
         assert loc_hdr.startswith("http")
 
@@ -110,9 +112,9 @@ class TestCreate1MinimalEntities:
 
         resp = client.create("ObservedProperties", payload)
 
-        assert resp.status_code == 201, (
-            f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
-        )
+        assert (
+            resp.status_code == 201
+        ), f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
         loc_hdr = resp.headers.get("location", "")
         assert loc_hdr.startswith("http")
 
@@ -146,9 +148,9 @@ class TestCreate1MinimalEntities:
         payload = sample_data.minimal_observation(tag, ds_id, result=7.5)
         resp = client.create("Observations", payload)
 
-        assert resp.status_code == 201, (
-            f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
-        )
+        assert (
+            resp.status_code == 201
+        ), f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
         loc_hdr = resp.headers.get("location", "")
         assert loc_hdr.startswith("http")
 
@@ -161,8 +163,12 @@ class TestCreate1MinimalEntities:
         assert entity["result"] == payload["result"]
 
         # FoI auto-generated — register for cleanup
-        foi = client.nav(f"{client.base_url}/Observations({format_id(obs_id)})/FeatureOfInterest")
-        cleanup(f"{client.base_url}/FeaturesOfInterest({format_id(entity_id(foi))})")
+        foi = client.nav(
+            f"{client.base_url}/Observations({format_id(obs_id)})/FeatureOfInterest"
+        )
+        cleanup(
+            f"{client.base_url}/FeaturesOfInterest({format_id(entity_id(foi))})"
+        )
 
     @pytest.mark.c02
     def test_post_feature_of_interest(self, client, unique_name, cleanup):
@@ -172,9 +178,9 @@ class TestCreate1MinimalEntities:
 
         resp = client.create("FeaturesOfInterest", payload)
 
-        assert resp.status_code == 201, (
-            f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
-        )
+        assert (
+            resp.status_code == 201
+        ), f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
         loc_hdr = resp.headers.get("location", "")
         assert loc_hdr.startswith("http")
 
@@ -200,9 +206,9 @@ class TestCreate1MinimalEntities:
         payload = sample_data.minimal_historical_location(tag, t_id)
         resp = client.create("HistoricalLocations", payload)
 
-        assert resp.status_code == 201, (
-            f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
-        )
+        assert (
+            resp.status_code == 201
+        ), f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
         loc_hdr = resp.headers.get("location", "")
         assert loc_hdr.startswith("http")
 
@@ -220,6 +226,7 @@ class TestCreate1MinimalEntities:
 # CREATE 3 – Create with link to existing entity via {"@iot.id": <id>}
 #   req/create-update-delete/link-to-existing-entities
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_create_with_existing_link(client, unique_name, cleanup, seed):
@@ -244,7 +251,9 @@ def test_create_with_existing_link(client, unique_name, cleanup, seed):
     s_id = id_from_self_link(s_url)
     cleanup(s_url)
 
-    op_resp = client.create("ObservedProperties", sample_data.minimal_observed_property(tag))
+    op_resp = client.create(
+        "ObservedProperties", sample_data.minimal_observed_property(tag)
+    )
     assert op_resp.status_code == 201
     op_url = client.location_of(op_resp)
     op_id = id_from_self_link(op_url)
@@ -254,23 +263,31 @@ def test_create_with_existing_link(client, unique_name, cleanup, seed):
     ds_payload = sample_data.minimal_datastream(tag, t_id, s_id, op_id)
     ds_resp = client.create("Datastreams", ds_payload)
 
-    assert ds_resp.status_code == 201, (
-        f"Expected 201, got {ds_resp.status_code}: {ds_resp.text[:300]}"
-    )
+    assert (
+        ds_resp.status_code == 201
+    ), f"Expected 201, got {ds_resp.status_code}: {ds_resp.text[:300]}"
     ds_url = client.location_of(ds_resp)
     cleanup(ds_url)
 
     # Verify links are correctly established
-    ds = client.nav(ds_url, params={"$expand": "Thing,Sensor,ObservedProperty"})
-    assert entity_id(ds["Thing"]) == t_id, "Datastream must link to the specified Thing"
-    assert entity_id(ds["Sensor"]) == s_id, "Datastream must link to the specified Sensor"
-    assert entity_id(ds["ObservedProperty"]) == op_id, (
-        "Datastream must link to the specified ObservedProperty"
+    ds = client.nav(
+        ds_url, params={"$expand": "Thing,Sensor,ObservedProperty"}
     )
+    assert (
+        entity_id(ds["Thing"]) == t_id
+    ), "Datastream must link to the specified Thing"
+    assert (
+        entity_id(ds["Sensor"]) == s_id
+    ), "Datastream must link to the specified Sensor"
+    assert (
+        entity_id(ds["ObservedProperty"]) == op_id
+    ), "Datastream must link to the specified ObservedProperty"
 
 
 @pytest.mark.c02
-def test_create_observation_with_existing_foi_link(client, unique_name, cleanup):
+def test_create_observation_with_existing_foi_link(
+    client, unique_name, cleanup
+):
     """req/create-update-delete/link-to-existing-entities — POST Observation linking
     an existing Datastream AND an existing FeatureOfInterest by @iot.id.
 
@@ -316,15 +333,16 @@ def test_create_observation_with_existing_foi_link(client, unique_name, cleanup)
 
     # Verify Datastream link too
     obs_with_ds = client.nav(obs_url, params={"$expand": "Datastream"})
-    assert entity_id(obs_with_ds["Datastream"]) == ds_id, (
-        "Observation must be linked to the specified Datastream"
-    )
+    assert (
+        entity_id(obs_with_ds["Datastream"]) == ds_id
+    ), "Observation must be linked to the specified Datastream"
 
 
 # ===========================================================================
 # CREATE 4 – POST to a navigation link
 #   req/create-update-delete/create-related-entities
 # ===========================================================================
+
 
 @pytest.mark.c02
 def test_post_to_navigation_link_thing_locations(client, unique_name, cleanup):
@@ -348,9 +366,9 @@ def test_post_to_navigation_link_thing_locations(client, unique_name, cleanup):
         json=loc_payload,
     )
 
-    assert resp.status_code == 201, (
-        f"POST to navigation link should return 201, got {resp.status_code}: {resp.text[:300]}"
-    )
+    assert (
+        resp.status_code == 201
+    ), f"POST to navigation link should return 201, got {resp.status_code}: {resp.text[:300]}"
     loc_hdr = resp.headers.get("location", "")
     assert loc_hdr.startswith("http")
     cleanup(loc_hdr)
@@ -359,13 +377,15 @@ def test_post_to_navigation_link_thing_locations(client, unique_name, cleanup):
     thing_locs = client.nav(f"Things({format_id(t_id)})/Locations")
     ids_in_thing = [entity_id(e) for e in thing_locs.get("value", [])]
     new_loc_id = id_from_self_link(loc_hdr)
-    assert new_loc_id in ids_in_thing, (
-        "Newly created Location must appear in Things(<id>)/Locations navigation"
-    )
+    assert (
+        new_loc_id in ids_in_thing
+    ), "Newly created Location must appear in Things(<id>)/Locations navigation"
 
 
 @pytest.mark.c02
-def test_post_to_navigation_link_datastream_observations(client, unique_name, cleanup):
+def test_post_to_navigation_link_datastream_observations(
+    client, unique_name, cleanup
+):
     """req/create-update-delete/create-related-entities — POST /Datastreams(<id>)/Observations.
 
     A POST to the Datastreams navigation link must create and link the Observation.
@@ -384,9 +404,9 @@ def test_post_to_navigation_link_datastream_observations(client, unique_name, cl
         json=obs_payload,
     )
 
-    assert resp.status_code == 201, (
-        f"POST to Datastreams nav link should return 201, got {resp.status_code}: {resp.text[:300]}"
-    )
+    assert (
+        resp.status_code == 201
+    ), f"POST to Datastreams nav link should return 201, got {resp.status_code}: {resp.text[:300]}"
     obs_hdr = resp.headers.get("location", "")
     assert obs_hdr.startswith("http")
     obs_id = id_from_self_link(obs_hdr)
@@ -394,14 +414,16 @@ def test_post_to_navigation_link_datastream_observations(client, unique_name, cl
 
     # Verify the Observation is linked to the Datastream
     obs = client.nav(obs_hdr, params={"$expand": "Datastream"})
-    assert entity_id(obs["Datastream"]) == ds_id, (
-        "Observation created via nav link must be linked to the parent Datastream"
-    )
+    assert (
+        entity_id(obs["Datastream"]) == ds_id
+    ), "Observation created via nav link must be linked to the parent Datastream"
 
     # Verify it appears in /Datastreams(<id>)/Observations
     ds_obs = client.nav(f"Datastreams({format_id(ds_id)})/Observations")
     obs_ids = [entity_id(o) for o in ds_obs.get("value", [])]
-    assert obs_id in obs_ids, "Observation must appear in parent Datastream's Observations nav"
+    assert (
+        obs_id in obs_ids
+    ), "Observation must appear in parent Datastream's Observations nav"
 
     # Cleanup FoI
     foi_resp = client.get(
@@ -413,7 +435,9 @@ def test_post_to_navigation_link_datastream_observations(client, unique_name, cl
 
 
 @pytest.mark.c02
-def test_post_to_navigation_link_thing_datastreams(client, unique_name, cleanup):
+def test_post_to_navigation_link_thing_datastreams(
+    client, unique_name, cleanup
+):
     """req/create-update-delete/create-entity (Req 33) — POST /Things(<id>)/Datastreams.
 
     Req 33: "If the target URL for the collection is a navigationLink, the new entity
@@ -447,28 +471,30 @@ def test_post_to_navigation_link_thing_datastreams(client, unique_name, cleanup)
         f"got {resp.status_code}: {resp.text[:300]}"
     )
     ds_hdr = resp.headers.get("location", "")
-    assert ds_hdr.startswith("http"), (
-        f"Location header must be absolute; got {ds_hdr!r}"
-    )
+    assert ds_hdr.startswith(
+        "http"
+    ), f"Location header must be absolute; got {ds_hdr!r}"
     ds_id_new = id_from_self_link(ds_hdr)
     cleanup(ds_hdr)
 
     # Forward: new Datastream's Thing must == T
     ds_entity = client.nav(ds_hdr, params={"$expand": "Thing"})
-    assert entity_id(ds_entity["Thing"]) == t_id, (
-        "Datastream created via Things nav link must link back to the parent Thing"
-    )
+    assert (
+        entity_id(ds_entity["Thing"]) == t_id
+    ), "Datastream created via Things nav link must link back to the parent Thing"
 
     # Reverse: new Datastream must appear in Things(<id>)/Datastreams
     t_ds = client.nav(f"Things({format_id(t_id)})/Datastreams")
     ds_ids_in_thing = [entity_id(d) for d in t_ds.get("value", [])]
-    assert ds_id_new in ds_ids_in_thing, (
-        "Datastream must appear in Things(<id>)/Datastreams after POST to that nav link"
-    )
+    assert (
+        ds_id_new in ds_ids_in_thing
+    ), "Datastream must appear in Things(<id>)/Datastreams after POST to that nav link"
 
 
 @pytest.mark.c02
-def test_post_to_navigation_link_sensor_datastreams(client, unique_name, cleanup):
+def test_post_to_navigation_link_sensor_datastreams(
+    client, unique_name, cleanup
+):
     """req/create-update-delete/create-entity (Req 33) — POST /Sensors(<id>)/Datastreams.
 
     Req 33: "If the target URL for the collection is a navigationLink, the new entity
@@ -502,28 +528,30 @@ def test_post_to_navigation_link_sensor_datastreams(client, unique_name, cleanup
         f"got {resp.status_code}: {resp.text[:300]}"
     )
     ds_hdr = resp.headers.get("location", "")
-    assert ds_hdr.startswith("http"), (
-        f"Location header must be absolute; got {ds_hdr!r}"
-    )
+    assert ds_hdr.startswith(
+        "http"
+    ), f"Location header must be absolute; got {ds_hdr!r}"
     ds_id_new = id_from_self_link(ds_hdr)
     cleanup(ds_hdr)
 
     # Forward: new Datastream's Sensor must == S
     ds_entity = client.nav(ds_hdr, params={"$expand": "Sensor"})
-    assert entity_id(ds_entity["Sensor"]) == s_id, (
-        "Datastream created via Sensors nav link must link back to the parent Sensor"
-    )
+    assert (
+        entity_id(ds_entity["Sensor"]) == s_id
+    ), "Datastream created via Sensors nav link must link back to the parent Sensor"
 
     # Reverse: new Datastream must appear in Sensors(<id>)/Datastreams
     s_ds = client.nav(f"Sensors({format_id(s_id)})/Datastreams")
     ds_ids_in_sensor = [entity_id(d) for d in s_ds.get("value", [])]
-    assert ds_id_new in ds_ids_in_sensor, (
-        "Datastream must appear in Sensors(<id>)/Datastreams after POST to that nav link"
-    )
+    assert (
+        ds_id_new in ds_ids_in_sensor
+    ), "Datastream must appear in Sensors(<id>)/Datastreams after POST to that nav link"
 
 
 @pytest.mark.c02
-def test_post_to_navigation_link_observedproperty_datastreams(client, unique_name, cleanup):
+def test_post_to_navigation_link_observedproperty_datastreams(
+    client, unique_name, cleanup
+):
     """req/create-update-delete/create-entity (Req 33) — POST /ObservedProperties(<id>)/Datastreams.
 
     Req 33: "If the target URL for the collection is a navigationLink, the new entity
@@ -557,9 +585,9 @@ def test_post_to_navigation_link_observedproperty_datastreams(client, unique_nam
         f"got {resp.status_code}: {resp.text[:300]}"
     )
     ds_hdr = resp.headers.get("location", "")
-    assert ds_hdr.startswith("http"), (
-        f"Location header must be absolute; got {ds_hdr!r}"
-    )
+    assert ds_hdr.startswith(
+        "http"
+    ), f"Location header must be absolute; got {ds_hdr!r}"
     ds_id_new = id_from_self_link(ds_hdr)
     cleanup(ds_hdr)
 
@@ -610,16 +638,14 @@ def test_post_to_navigation_link_location_things(client, unique_name, cleanup):
         f"got {resp.status_code}: {resp.text[:300]}"
     )
     thing_hdr = resp.headers.get("location", "")
-    assert thing_hdr.startswith("http"), (
-        f"Location header must be absolute; got {thing_hdr!r}"
-    )
+    assert thing_hdr.startswith(
+        "http"
+    ), f"Location header must be absolute; got {thing_hdr!r}"
     new_thing_id = id_from_self_link(thing_hdr)
     cleanup(thing_hdr)
 
     # Forward: new Thing's Locations must contain L
-    thing_locs = client.nav(
-        f"Things({format_id(new_thing_id)})/Locations"
-    )
+    thing_locs = client.nav(f"Things({format_id(new_thing_id)})/Locations")
     loc_ids_in_thing = [entity_id(loc) for loc in thing_locs.get("value", [])]
     assert l_id in loc_ids_in_thing, (
         f"New Thing's Locations must contain the parent Location (id={l_id}) "
@@ -636,7 +662,9 @@ def test_post_to_navigation_link_location_things(client, unique_name, cleanup):
 
 
 @pytest.mark.c02
-def test_post_to_navigation_link_thing_historicallocations(client, unique_name, cleanup):
+def test_post_to_navigation_link_thing_historicallocations(
+    client, unique_name, cleanup
+):
     """req/create-update-delete/create-entity (Req 33) — POST /Things(<id>)/HistoricalLocations.
 
     Req 33: "If the target URL for the collection is a navigationLink, the new entity
@@ -677,17 +705,17 @@ def test_post_to_navigation_link_thing_historicallocations(client, unique_name, 
         f"got {resp.status_code}: {resp.text[:300]}"
     )
     hl_hdr = resp.headers.get("location", "")
-    assert hl_hdr.startswith("http"), (
-        f"Location header must be absolute; got {hl_hdr!r}"
-    )
+    assert hl_hdr.startswith(
+        "http"
+    ), f"Location header must be absolute; got {hl_hdr!r}"
     hl_id_new = id_from_self_link(hl_hdr)
     cleanup(hl_hdr)
 
     # Forward (Thing): new HL's Thing must == T
     hl_entity = client.nav(hl_hdr, params={"$expand": "Thing,Locations"})
-    assert entity_id(hl_entity["Thing"]) == t_id, (
-        "HistoricalLocation created via Things nav link must link back to the parent Thing"
-    )
+    assert (
+        entity_id(hl_entity["Thing"]) == t_id
+    ), "HistoricalLocation created via Things nav link must link back to the parent Thing"
 
     # Forward (Locations): new HL's Locations must contain L
     hl_loc_ids = [entity_id(loc) for loc in hl_entity.get("Locations", [])]
@@ -706,7 +734,9 @@ def test_post_to_navigation_link_thing_historicallocations(client, unique_name, 
 
 
 @pytest.mark.c02
-def test_post_to_navigation_link_foi_observations(client, unique_name, cleanup):
+def test_post_to_navigation_link_foi_observations(
+    client, unique_name, cleanup
+):
     """req/create-update-delete/create-entity (Req 33) — POST /FeaturesOfInterest(<id>)/Observations.
 
     Req 33: "If the target URL for the collection is a navigationLink, the new entity
@@ -722,7 +752,9 @@ def test_post_to_navigation_link_foi_observations(client, unique_name, cleanup):
     ds_id = tree["ds_id"]
 
     # Create a standalone FeatureOfInterest to be the nav-link host
-    foi_resp = client.create("FeaturesOfInterest", sample_data.minimal_feature_of_interest(tag))
+    foi_resp = client.create(
+        "FeaturesOfInterest", sample_data.minimal_feature_of_interest(tag)
+    )
     assert foi_resp.status_code == 201
     foi_url = client.location_of(foi_resp)
     f_id = id_from_self_link(foi_url)
@@ -744,14 +776,16 @@ def test_post_to_navigation_link_foi_observations(client, unique_name, cleanup):
         f"got {resp.status_code}: {resp.text[:300]}"
     )
     obs_hdr = resp.headers.get("location", "")
-    assert obs_hdr.startswith("http"), (
-        f"Location header must be absolute; got {obs_hdr!r}"
-    )
+    assert obs_hdr.startswith(
+        "http"
+    ), f"Location header must be absolute; got {obs_hdr!r}"
     obs_id_new = id_from_self_link(obs_hdr)
     cleanup(obs_hdr)
 
     # Forward (FeatureOfInterest): new Observation's FoI must == F
-    obs_entity = client.nav(obs_hdr, params={"$expand": "FeatureOfInterest,Datastream"})
+    obs_entity = client.nav(
+        obs_hdr, params={"$expand": "FeatureOfInterest,Datastream"}
+    )
     assert entity_id(obs_entity["FeatureOfInterest"]) == f_id, (
         "Observation created via FeaturesOfInterest nav link must link back to the "
         "parent FeatureOfInterest (not an auto-generated one)"
@@ -777,6 +811,7 @@ def test_post_to_navigation_link_foi_observations(client, unique_name, cleanup):
 #   req/create-update-delete/historical-location-auto-creation  (18-088 §10.2.2.2)
 # ===========================================================================
 
+
 @pytest.mark.c02
 def test_historical_location_auto_creation(client, unique_name, cleanup):
     """req/create-update-delete/historical-location-auto-creation — 18-088 §10.2.2.2.
@@ -801,18 +836,18 @@ def test_historical_location_auto_creation(client, unique_name, cleanup):
         "Locations": [loc1_payload],
     }
     t_resp = client.create("Things", thing_payload)
-    assert t_resp.status_code == 201, (
-        f"Deep-insert Thing+Location must return 201; got {t_resp.status_code}: {t_resp.text[:300]}"
-    )
+    assert (
+        t_resp.status_code == 201
+    ), f"Deep-insert Thing+Location must return 201; got {t_resp.status_code}: {t_resp.text[:300]}"
     thing_url = client.location_of(t_resp)
     t_id = id_from_self_link(thing_url)
     cleanup(thing_url)  # cascade-deletes Datastreams, HLs
 
     # Retrieve the auto-created Location's id from the Thing's Locations nav
     thing_with_locs = client.nav(thing_url, params={"$expand": "Locations"})
-    assert len(thing_with_locs["Locations"]) == 1, (
-        "Exactly 1 Location must be linked to the Thing after deep insert"
-    )
+    assert (
+        len(thing_with_locs["Locations"]) == 1
+    ), "Exactly 1 Location must be linked to the Thing after deep insert"
     loc1_id = entity_id(thing_with_locs["Locations"][0])
     loc1_url = f"{client.base_url}/Locations({format_id(loc1_id)})"
     cleanup(loc1_url)  # Locations are NOT cascade-deleted by Thing deletion
@@ -831,9 +866,10 @@ def test_historical_location_auto_creation(client, unique_name, cleanup):
 
     hl1 = hl_list[0]
     # HL must carry a non-empty 'time'
-    assert hl1.get("time") not in (None, ""), (
-        "Auto-created HistoricalLocation must have a non-empty 'time' property"
-    )
+    assert hl1.get("time") not in (
+        None,
+        "",
+    ), "Auto-created HistoricalLocation must have a non-empty 'time' property"
     # HL must be linked to loc1
     hl1_loc_ids = [entity_id(l) for l in hl1.get("Locations", [])]
     assert loc1_id in hl1_loc_ids, (
@@ -849,9 +885,9 @@ def test_historical_location_auto_creation(client, unique_name, cleanup):
         f"Things({format_id(t_id)})/Locations",
         json=loc2_payload,
     )
-    assert nav_resp.status_code == 201, (
-        f"POST to Things nav link must return 201; got {nav_resp.status_code}: {nav_resp.text[:300]}"
-    )
+    assert (
+        nav_resp.status_code == 201
+    ), f"POST to Things nav link must return 201; got {nav_resp.status_code}: {nav_resp.text[:300]}"
     loc2_url = client.location_of(nav_resp)
     loc2_id = id_from_self_link(loc2_url)
     cleanup(loc2_url)  # cleanup loc2 (also not cascade-deleted)
@@ -873,7 +909,8 @@ def test_historical_location_auto_creation(client, unique_name, cleanup):
     # Find the HL that references loc2
     loc2_hl = next(
         (
-            hl for hl in hl_list2
+            hl
+            for hl in hl_list2
             if loc2_id in [entity_id(l) for l in hl.get("Locations", [])]
         ),
         None,
@@ -884,6 +921,7 @@ def test_historical_location_auto_creation(client, unique_name, cleanup):
         f"(id={loc2_id}); HL Locations in all HLs: "
         f"{[[entity_id(l) for l in hl.get('Locations',[])] for hl in hl_list2]}"
     )
-    assert loc2_hl.get("time") not in (None, ""), (
-        "Second auto-created HistoricalLocation must have a non-empty 'time'"
-    )
+    assert loc2_hl.get("time") not in (
+        None,
+        "",
+    ), "Second auto-created HistoricalLocation must have a non-empty 'time'"

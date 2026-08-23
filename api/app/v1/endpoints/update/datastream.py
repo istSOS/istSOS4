@@ -16,6 +16,7 @@ from app import AUTHORIZATION, NETWORK, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
 from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import Response
@@ -23,7 +24,6 @@ from fastapi.responses import Response
 from .functions import check_id_exists, set_commit, update_datastream_entity
 from .json_patch import apply_json_patch_to_entity, normalize_patch_body
 from .put import handle_put_replace, request_body_openapi_example
-from app.v1.endpoints.exceptions import BadRequest
 
 v1 = APIRouter()
 
@@ -64,11 +64,6 @@ ALLOWED_KEYS = [
     "Observations",
 ]
 
-# conformance: NETWORK extension — the "Network" relation is a mandatory
-# Datastream association that exists exactly when the NETWORK extension is
-# enabled (NETWORK=1), independent of AUTHORIZATION. Gating it on AUTHORIZATION
-# wrongly rejected "Network" under NETWORK=1/AUTHORIZATION=0 with
-# "Invalid keys in payload: Network".
 if NETWORK:
     ALLOWED_KEYS.append("Network")
 
@@ -106,8 +101,6 @@ async def update_datastream(
                     status.HTTP_404_NOT_FOUND, "Datastream not found."
                 )
 
-            # req/create-update-delete/update-entity-jsonpatch: resolve an
-            # RFC 6902 array body into a merge dict; dict bodies pass through.
             payload = await apply_json_patch_to_entity(
                 connection, "Datastream", datastream_id, payload
             )
@@ -137,12 +130,6 @@ async def update_datastream(
     return Response(status_code=status.HTTP_200_OK)
 
 
-# conformance: req/create-update-delete/update-entity-put — mandatory Datastream
-# properties (also NOT NULL in the schema). observedArea / phenomenonTime /
-# resultTime / properties are optional and reset to null when a PUT omits them.
-# The mandatory relations (Thing, Sensor, ObservedProperty[, Network]) and the
-# Observations collection are left untouched when absent so the existing,
-# required links are not orphaned.
 REQUIRED_PUT_KEYS = [
     "name",
     "description",
@@ -173,7 +160,6 @@ async def replace_datastream(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    # conformance: req/create-update-delete/update-entity-put (18-088 §10.3)
     return await handle_put_replace(
         pool=pool,
         request=request,
