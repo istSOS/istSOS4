@@ -38,7 +38,7 @@ PAYLOAD_EXAMPLE = {
     "username": "cp1",
     "password": "qwertz",
     "uri": "https://orcid.org/0000-0004-3456-7890",
-    "role": "viewer",  # viewer, editor, obs_manager, sensor, custom
+    "role": "viewer",  # viewer, editor, obs_manager, sensor, qc, custom
 }
 
 # POLICY_FN_MAP is the single source of truth — imported from rbac_roles.py.
@@ -140,6 +140,14 @@ async def create_user(
                     }
                     await insert_commit(connection, commit, "CREATE")
 
+                elif payload["role"] == "qc":
+                    commit = {
+                        "message": "QC data",
+                        "author": user["uri"],
+                        "encodingType": "text/plain",
+                        "user_id": user["id"],
+                    }
+                    await insert_commit(connection, commit, "UPDATE")
 
                 # Auto-create the default RLS policy for the new user.
                 # POLICY_FN_MAP imported from rbac_roles.py — single source

@@ -26,10 +26,6 @@ _PG_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # DB_ROLE_BY_RBAC_ROLE (it is a bootstrap-only role, not API-assignable).
 _ADMIN_PG_ROLE = "administrator"
 
-<<<<<<< HEAD
-def validate_role_identifier(username: str) -> str:
-    if not isinstance(username, str) or not _PG_IDENTIFIER_RE.match(username):
-=======
 
 def _validate_role_identifier(role_name: str) -> str:
     """Validate that *role_name* is a safe PostgreSQL identifier.
@@ -42,7 +38,6 @@ def _validate_role_identifier(role_name: str) -> str:
         ValueError: if the role_name does not match a plain PG identifier.
     """
     if not isinstance(role_name, str) or not _PG_IDENTIFIER_RE.match(role_name):
->>>>>>> b3e7ef1 (fix(rbac): kill split-brain DDL — SET LOCAL ROLE, bcrypt, pure UPDATE)
         raise ValueError("Invalid role identifier")
     return role_name
 
@@ -61,12 +56,6 @@ async def set_role(connection, current_user):
 
     Must be called **inside** an open ``connection.transaction()`` block.
     """
-<<<<<<< HEAD
-    async with connection.transaction():
-        username = validate_role_identifier(current_user["username"])
-        query = f"SET ROLE {pg_quote_ident(username)};"
-        await connection.execute(query)
-=======
     app_role = current_user.get("role", current_user.get("username"))
     pg_group_role = DB_ROLE_BY_RBAC_ROLE.get(app_role)
     if pg_group_role is None:
@@ -79,7 +68,6 @@ async def set_role(connection, current_user):
 
     pg_group_role = _validate_role_identifier(pg_group_role)
     await connection.execute(f"SET LOCAL ROLE {pg_quote_ident(pg_group_role)};")
->>>>>>> b3e7ef1 (fix(rbac): kill split-brain DDL — SET LOCAL ROLE, bcrypt, pure UPDATE)
 
 
 async def insert_commit(connection, payload, action):

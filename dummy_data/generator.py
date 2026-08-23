@@ -45,6 +45,9 @@ date = datetime.strptime(
 )
 chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL", "P1Y"))
 epsg = int(os.getenv("EPSG", 4326))
+center_lat = float(os.getenv("CENTER_LAT", 45.8693))
+center_lon = float(os.getenv("CENTER_LON", 8.9770))
+spread_deg = float(os.getenv("SPREAD_DEG", 0.05))
 authorization = int(os.getenv("AUTHORIZATION", 0))
 st_aggregate = os.getenv("ST_AGGREGATE", "CONVEX_HULL")
 
@@ -52,6 +55,17 @@ pgpool = None
 network = int(os.getenv("NETWORK", 0))
 
 observedProperties = []
+
+
+def random_point():
+    """
+    Return a random (lon, lat) inside the configured box around the center.
+    """
+
+    return (
+        random.uniform(center_lon - spread_deg, center_lon + spread_deg),
+        random.uniform(center_lat - spread_deg, center_lat + spread_deg),
+    )
 
 
 async def get_pool():
@@ -186,8 +200,7 @@ async def generate_locations(conn, commit_id):
 
     locations = []
     for i in range(1, n_things + 1):
-        lon = random.uniform(-180, 180)
-        lat = random.uniform(-90, 90)
+        lon, lat = random_point()
         # elevation = random.uniform(0, 1000)
 
         description = f"location {i}"
@@ -456,8 +469,7 @@ async def generate_featuresofinterest(conn, commit_id):
 
     featuresofinterest = []
     for i in range(1, n_things + 1):
-        lon = random.uniform(-180, 180)
-        lat = random.uniform(-90, 90)
+        lon, lat = random_point()
         # elevation = random.uniform(0, 1000)
 
         description = f"featuresofinterest {i}"
