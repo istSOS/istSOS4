@@ -82,7 +82,6 @@ async def create_network(
                 connection, payload, commit_id
             )
 
-            if current_user is not None:
     return Response(
         status_code=status.HTTP_201_CREATED,
         headers={"location": header},

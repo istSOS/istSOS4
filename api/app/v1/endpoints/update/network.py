@@ -71,7 +71,6 @@ async def update_network(
                 await set_role(connection, current_user)
 
             if not await check_id_exists(connection, "Network", network_id):
-                if current_user is not None:
 
                 return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -87,7 +86,6 @@ async def update_network(
             )
 
             if not payload:
-                if current_user is not None:
                 return Response(status_code=status.HTTP_200_OK)
 
             validate_payload_keys(payload, ALLOWED_KEYS)
@@ -102,7 +100,6 @@ async def update_network(
 
             await update_network_entity(connection, network_id, payload)
 
-            if current_user is not None:
 
     return Response(status_code=status.HTTP_200_OK)
 
