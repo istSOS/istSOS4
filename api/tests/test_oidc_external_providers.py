@@ -126,7 +126,9 @@ async def test_normalize_claims_google():
     }
     result = await normalize_claims("google", token, client=None)
     assert result == {
-        "username": "Jane Doe",  # no preferred_username on Google -> name
+        # no preferred_username on Google -> falls to email (ranked above
+        # name: a stable, meaningful identifier vs. a raw display string)
+        "username": "jdoe@gmail.com",
         "email": "jdoe@gmail.com",
         "auth_provider": "google",
         "external_sub_id": "108234982374982374",
@@ -190,7 +192,8 @@ async def test_normalize_claims_eduid():
     }
     result = await normalize_claims("eduid", token, client=None)
     assert result == {
-        "username": "Jane Doe",
+        # no preferred_username -> falls to email, ranked above name
+        "username": "jane.doe@supsi.ch",
         "email": "jane.doe@supsi.ch",
         "auth_provider": "eduid",
         "external_sub_id": "eduid-sub-abc123",
