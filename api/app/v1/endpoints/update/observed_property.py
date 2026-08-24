@@ -15,16 +15,19 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
+from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
-from fastapi import APIRouter, Body, Depends, Header, status
-from fastapi.responses import JSONResponse, Response
+from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi.responses import Response
 
 from .functions import (
     check_id_exists,
     set_commit,
     update_observed_property_entity,
 )
+from .json_patch import apply_json_patch_to_entity, normalize_patch_body
+from .put import handle_put_replace, request_body_openapi_example
 
 v1 = APIRouter()
 
@@ -61,73 +64,97 @@ ALLOWED_KEYS = [
     summary="Update an Observed Property",
     description="Update an Observed Property",
     status_code=status.HTTP_200_OK,
+    openapi_extra=request_body_openapi_example(PAYLOAD_EXAMPLE),
 )
 async def update_observed_property(
     observed_property_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload=Depends(normalize_patch_body),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        if not observed_property_id:
-            raise Exception("Observed Property ID not provided")
+    if not observed_property_id:
+        raise BadRequest("Observed Property ID not provided")
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                if not await check_id_exists(
-                    connection, "ObservedProperty", observed_property_id
-                ):
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
-                    return JSONResponse(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        content={
-                            "code": 404,
-                            "type": "error",
-                            "message": "Observed Property ID not found.",
-                        },
-                    )
-
-                if not payload:
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
-                    return Response(status_code=status.HTTP_200_OK)
-
-                validate_payload_keys(payload, ALLOWED_KEYS)
-
-                commit_id = await set_commit(
-                    connection,
-                    commit_message,
-                    current_user,
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
-
-                await update_observed_property_entity(
-                    connection,
-                    observed_property_id,
-                    payload,
-                )
-
+            if not await check_id_exists(
+                connection, "ObservedProperty", observed_property_id
+            ):
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
+                return error_response(
+                    status.HTTP_404_NOT_FOUND,
+                    "Observed Property ID not found.",
+                )
 
-        return Response(status_code=status.HTTP_200_OK)
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={
-                "code": 401,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
+            payload = await apply_json_patch_to_entity(
+                connection,
+                "ObservedProperty",
+                observed_property_id,
+                payload,
+            )
+
+            if not payload:
+                if current_user is not None:
+                    await connection.execute("RESET ROLE;")
+                return Response(status_code=status.HTTP_200_OK)
+
+            validate_payload_keys(payload, ALLOWED_KEYS)
+
+            commit_id = await set_commit(
+                connection,
+                commit_message,
+                current_user,
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
+
+            await update_observed_property_entity(
+                connection,
+                observed_property_id,
+                payload,
+            )
+
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+
+    return Response(status_code=status.HTTP_200_OK)
+
+
+REQUIRED_PUT_KEYS = ["name", "definition", "description"]
+OPTIONAL_PUT_KEYS = ["properties"]
+
+
+@v1.api_route(
+    "/ObservedProperties({observed_property_id})",
+    methods=["PUT"],
+    tags=["ObservedProperties"],
+    summary="Replace an Observed Property",
+    description="Replace an Observed Property (full update)",
+    status_code=status.HTTP_200_OK,
+    openapi_extra=request_body_openapi_example(PAYLOAD_EXAMPLE),
+)
+async def replace_observed_property(
+    observed_property_id: int,
+    request: Request,
+    commit_message=message,
+    current_user=user,
+    pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
+):
+    return await handle_put_replace(
+        pool=pool,
+        request=request,
+        entity_db_name="ObservedProperty",
+        not_found_message="Observed Property ID not found.",
+        entity_id=observed_property_id,
+        commit_message=commit_message,
+        current_user=current_user,
+        allowed_keys=ALLOWED_KEYS,
+        required_keys=REQUIRED_PUT_KEYS,
+        optional_keys=OPTIONAL_PUT_KEYS,
+        update_entity_fn=update_observed_property_entity,
+    )

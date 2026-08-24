@@ -19,6 +19,7 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
 from app.utils.utils import pg_quote_ident, validate_payload_keys
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Body, Depends, Query, status
@@ -55,13 +56,13 @@ async def update_user(
         alias="user",
         description="The the user to update",
     ),
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
         if not user:
-            raise Exception("User not provided")
+            raise BadRequest("User not provided")
 
         async with pgpool.acquire() as connection:
             async with connection.transaction():
@@ -92,13 +93,7 @@ async def update_user(
 
                 previous_role = result["role"]
                 if "role" in payload:
-                    try:
-                        payload["role"] = validate_rbac_role(payload["role"])
-                    except ValueError as e:
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={"message": str(e)},
-                        )
+                    payload["role"] = validate_rbac_role(payload["role"])
 
                 payload = {
                     key: (

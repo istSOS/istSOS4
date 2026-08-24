@@ -17,6 +17,7 @@ import re
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.v1.endpoints.exceptions import BadRequest, Conflict
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import DuplicateObjectError, InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, status
@@ -60,13 +61,13 @@ PAYLOAD_EXAMPLE = {
     status_code=status.HTTP_201_CREATED,
 )
 async def create_policy(
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
         if not isinstance(payload, dict):
-            raise Exception("Payload must be a dictionary.")
+            raise BadRequest("Payload must be a dictionary.")
 
         async with pgpool.acquire() as connection:
             async with connection.transaction():
@@ -101,7 +102,7 @@ async def create_policy(
                         """
                         result = await connection.fetchval(query, user)
                         if result > 0:
-                            raise Exception(
+                            raise Conflict(
                                 f"User {user} has already a policy."
                             )
 
@@ -115,7 +116,7 @@ async def create_policy(
                             permission_type != "custom"
                             and result != permission_type
                         ):
-                            raise Exception(
+                            raise BadRequest(
                                 f"User {user} has a different role than the policy type."
                             )
 

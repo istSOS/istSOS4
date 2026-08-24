@@ -23,7 +23,21 @@ LANGUAGE plpgsql
 AS $body$
 DECLARE
     timestamp_now TIMESTAMPTZ := current_timestamp;
+    target_schema text;
+    target_table text;
 BEGIN
+    SELECT n.nspname, c.relname
+    INTO target_schema, target_table
+    FROM pg_inherits i
+    JOIN pg_class c ON c.oid = i.inhparent
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE i.inhrelid = TG_RELID;
+
+    IF NOT FOUND THEN
+        target_schema := TG_TABLE_SCHEMA;
+        target_table := TG_TABLE_NAME;
+    END IF;
+
     IF (TG_OP = 'UPDATE') THEN
         -- Verify the id is not modified
         IF (NEW.id <> OLD.id) THEN
@@ -31,26 +45,19 @@ BEGIN
         END IF;
 
         -- If the table is 'Location' and the column 'gen_foi_id' exists and is updated
-        IF TG_TABLE_NAME = 'Location' THEN
+        IF target_table = 'Location' THEN
             IF (NEW.gen_foi_id IS DISTINCT FROM OLD.gen_foi_id AND NEW.gen_foi_id IS NOT NULL) THEN
                 -- Skip systemTimeValidity update
                 RETURN NEW;
             END IF;
         END IF;
 
-        -- If the table is 'Datastream' and the column 'phenomenonTime' or columns 'observedArea' exist  and are updated
-        IF TG_TABLE_NAME = 'Datastream' THEN
-             IF (
-                (
-                    NEW."phenomenonTime" IS DISTINCT FROM OLD."phenomenonTime"
-                    OR NEW."resultTime" IS DISTINCT FROM OLD."resultTime"
-                    OR NEW."observedArea" IS DISTINCT FROM OLD."observedArea"
-                )
-                AND NEW."name" IS NOT DISTINCT FROM OLD."name"
-                AND NEW."description" IS NOT DISTINCT FROM OLD."description"
-                AND NEW."unitOfMeasurement" IS NOT DISTINCT FROM OLD."unitOfMeasurement"
-                AND NEW."observationType" IS NOT DISTINCT FROM OLD."observationType"
-                AND NEW."properties" IS NOT DISTINCT FROM OLD."properties"
+        -- If the table is 'Datastream' and the column 'phenomenonTime', 'resultTime', 'observedArea' exist and are updated
+        IF target_table = 'Datastream' THEN
+            IF (
+                to_jsonb(NEW) - ARRAY['phenomenonTime', 'resultTime', 'observedArea', 'last_foi_id', 'systemTimeValidity', 'commit_id']
+                IS NOT DISTINCT FROM
+                to_jsonb(OLD) - ARRAY['phenomenonTime', 'resultTime', 'observedArea', 'last_foi_id', 'systemTimeValidity', 'commit_id']
             ) THEN
                 RETURN NEW;
             END IF;
@@ -60,7 +67,7 @@ BEGIN
         -- Set the END systemTimeValidity to the 'timestamp_now'
         OLD."systemTimeValidity" := tstzrange(lower(OLD."systemTimeValidity"), timestamp_now);
         -- Copy the original row to the history table
-        EXECUTE format('INSERT INTO %I.%I SELECT ($1).*', TG_TABLE_SCHEMA || '_history', TG_TABLE_NAME) USING OLD;
+        EXECUTE format('INSERT INTO %I.%I SELECT ($1).*', target_schema || '_history', target_table) USING OLD;
 
         -- Return the NEW record modified to run the table UPDATE
         RETURN NEW;
@@ -75,9 +82,9 @@ BEGIN
 
     IF (TG_OP = 'DELETE') THEN
         -- Set the END systemTimeValidity to the 'timestamp_now'
-        OLD."systemTimeValidity" := tstzrange(lower(OLD."systemTimeValidity"), timestamp_now, '[]');
+        OLD."systemTimeValidity" := tstzrange(lower(OLD."systemTimeValidity"), timestamp_now);
         -- Copy the original row to the history table
-        EXECUTE format('INSERT INTO %I.%I SELECT ($1).*', TG_TABLE_SCHEMA || '_history', TG_TABLE_NAME) USING OLD;
+        EXECUTE format('INSERT INTO %I.%I SELECT ($1).*', target_schema || '_history', target_table) USING OLD;
         RETURN OLD;
     END IF;
 END;

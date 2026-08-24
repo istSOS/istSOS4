@@ -8,6 +8,7 @@ VALID_RBAC_ROLES = {
     "editor",
     "obs_manager",
     "sensor",
+    "qc",
     "custom",
 }
 
@@ -22,7 +23,7 @@ DB_ROLE_BY_RBAC_ROLE = {
     "editor": "user",
     "obs_manager": "sensor",
     "sensor": "sensor",
-    # Custom policies still require baseline schema/table permissions.
+    "qc": "qc",
     "custom": "user",
 }
 

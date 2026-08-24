@@ -15,7 +15,7 @@
 import json
 import re
 
-from app import EPSG, ST_AGGREGATE
+from app import ST_AGGREGATE
 from app.utils.utils import pg_quote_ident
 
 _PG_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -43,7 +43,7 @@ async def set_role(connection, current_user):
     Uses ``pg_quote_ident`` to safely quote the identifier for the query.
     """
     async with connection.transaction():
-        username = _validate_role_identifier(current_user["username"])
+        username = validate_role_identifier(current_user["username"])
         query = f"SET ROLE {pg_quote_ident(username)};"
         await connection.execute(query)
 

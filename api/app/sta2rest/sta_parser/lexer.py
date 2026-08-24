@@ -91,13 +91,7 @@ class Lexer:
             text (str): The input text to be tokenized.
         """
 
-        if "'" in urllib.parse.unquote(text):
-            if "+" in text:
-                self.text = urllib.parse.unquote_plus(text)
-            else:
-                self.text = urllib.parse.unquote(text)
-        else:
-            self.text = urllib.parse.unquote(text)
+        self.text = urllib.parse.unquote_plus(text)
 
         self.tokens = self.tokenize()
 

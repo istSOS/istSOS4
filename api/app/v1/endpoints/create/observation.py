@@ -15,10 +15,10 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import require_json_content_type, validate_payload_keys
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError, UniqueViolationError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from .functions import insert_observation_entity, set_commit
 
@@ -65,64 +65,36 @@ ALLOWED_KEYS = [
 )
 async def create_observation(
     request: Request,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        require_json_content_type(request)
+    require_json_content_type(request)
 
-        validate_payload_keys(payload, ALLOWED_KEYS)
+    validate_payload_keys(payload, ALLOWED_KEYS)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                commit_id = await set_commit(
-                    connection, commit_message, current_user
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
 
-                _, header = await insert_observation_entity(
-                    connection, payload, commit_id=commit_id
-                )
+            _, header = await insert_observation_entity(
+                connection, payload, commit_id=commit_id
+            )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except UniqueViolationError:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={
-                "code": 409,
-                "type": "error",
-                "message": "Observation already exists.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )
 
 
 PAYLOAD_EXAMPLE_DATASTREAM = {
@@ -144,70 +116,42 @@ PAYLOAD_EXAMPLE_DATASTREAM = {
 async def create_observation_for_datastream(
     request: Request,
     datastream_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE_DATASTREAM),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE_DATASTREAM]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        require_json_content_type(request)
+    require_json_content_type(request)
 
-        if not datastream_id:
-            raise Exception("Datastream ID not provided")
+    if not datastream_id:
+        raise BadRequest("Datastream ID not provided")
 
-        validate_payload_keys(payload, ALLOWED_KEYS)
+    validate_payload_keys(payload, ALLOWED_KEYS)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                commit_id = await set_commit(
-                    connection, commit_message, current_user
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
 
-                _, header = await insert_observation_entity(
-                    connection,
-                    payload,
-                    datastream_id=datastream_id,
-                    commit_id=commit_id,
-                )
+            _, header = await insert_observation_entity(
+                connection,
+                payload,
+                datastream_id=datastream_id,
+                commit_id=commit_id,
+            )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except UniqueViolationError:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={
-                "code": 409,
-                "type": "error",
-                "message": "Observation already exists.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )
 
 
 @v1.api_route(
@@ -221,67 +165,39 @@ async def create_observation_for_datastream(
 async def create_observation_for_feature_of_interest(
     request: Request,
     feature_of_interest_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        require_json_content_type(request)
+    require_json_content_type(request)
 
-        if not feature_of_interest_id:
-            raise Exception("FeatureOfInterest ID not provided")
+    if not feature_of_interest_id:
+        raise BadRequest("FeatureOfInterest ID not provided")
 
-        validate_payload_keys(payload, ALLOWED_KEYS)
+    validate_payload_keys(payload, ALLOWED_KEYS)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                commit_id = await set_commit(
-                    connection, commit_message, current_user
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
 
-                _, header = await insert_observation_entity(
-                    connection,
-                    payload,
-                    feature_of_interest_id=feature_of_interest_id,
-                    commit_id=commit_id,
-                )
+            _, header = await insert_observation_entity(
+                connection,
+                payload,
+                features_of_interest_id=feature_of_interest_id,
+                commit_id=commit_id,
+            )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except UniqueViolationError:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={
-                "code": 409,
-                "type": "error",
-                "message": "Observation already exists.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )

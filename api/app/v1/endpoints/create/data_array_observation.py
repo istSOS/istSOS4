@@ -15,6 +15,7 @@
 import json
 from datetime import datetime
 
+import asyncpg
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import (
@@ -24,9 +25,9 @@ from app.utils.utils import (
     handle_datetime_fields,
     handle_result_field,
 )
+from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
-from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse
 
@@ -95,130 +96,98 @@ PAYLOAD_EXAMPLE = [
     status_code=status.HTTP_201_CREATED,
 )
 async def data_array_observation(
-    payload: list = Body(example=PAYLOAD_EXAMPLE),
+    payload: list = Body(examples=[PAYLOAD_EXAMPLE]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        response_urls = []
+    response_urls = []
 
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                if current_user is not None:
-                    await set_role(conn, current_user)
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            if current_user is not None:
+                await set_role(conn, current_user)
 
-                try:
-                    commit_id = await set_commit(
-                        conn, commit_message, current_user
+            commit_id = await set_commit(conn, commit_message, current_user)
+
+            for observation_set in payload:
+                datastream_id = observation_set.get("Datastream", {}).get(
+                    "@iot.id"
+                )
+                components = observation_set.get("components", [])
+                data_array = observation_set.get("dataArray", [])
+
+                if not datastream_id:
+                    return error_response(
+                        status.HTTP_400_BAD_REQUEST,
+                        "Missing 'datastream_id' in Datastream.",
                     )
-                except InsufficientPrivilegeError:
-                    return JSONResponse(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        content={
-                            "code": 403,
-                            "type": "error",
-                            "message": "Insufficient privileges.",
-                        },
+
+                # Check that at least phenomenonTime and result are present
+                if (
+                    "phenomenonTime" not in components
+                    or "result" not in components
+                ):
+                    return error_response(
+                        status.HTTP_400_BAD_REQUEST,
+                        "Missing required properties 'phenomenonTime' or 'result' in components.",
                     )
 
-                for observation_set in payload:
-                    datastream_id = observation_set.get("Datastream", {}).get(
-                        "@iot.id"
-                    )
-                    components = observation_set.get("components", [])
-                    data_array = observation_set.get("dataArray", [])
+                for data in data_array:
+                    try:
+                        observation_payload = {
+                            components[i]: (data[i] if i < len(data) else None)
+                            for i in range(len(components))
+                        }
 
-                    if not datastream_id:
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Missing 'datastream_id' in Datastream.",
-                            },
-                        )
+                        observation_payload["datastream_id"] = datastream_id
 
-                    # Check that at least phenomenonTime and result are present
-                    if (
-                        "phenomenonTime" not in components
-                        or "result" not in components
-                    ):
-                        return JSONResponse(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            content={
-                                "code": 400,
-                                "type": "error",
-                                "message": "Missing required properties 'phenomenonTime' or 'result' in components.",
-                            },
-                        )
-
-                    for data in data_array:
-                        try:
-                            observation_payload = {
-                                components[i]: (
-                                    data[i] if i < len(data) else None
+                        if "FeatureOfInterest/id" in observation_payload:
+                            observation_payload["FeatureOfInterest"] = {
+                                "@iot.id": observation_payload.pop(
+                                    "FeatureOfInterest/id"
                                 )
-                                for i in range(len(components))
                             }
-
-                            observation_payload["datastream_id"] = (
-                                datastream_id
+                        else:
+                            await generate_feature_of_interest(
+                                observation_payload,
+                                conn,
+                                commit_id=commit_id,
                             )
 
-                            if "FeatureOfInterest/id" in observation_payload:
-                                observation_payload["FeatureOfInterest"] = {
-                                    "@iot.id": observation_payload.pop(
-                                        "FeatureOfInterest/id"
-                                    )
-                                }
-                            else:
-                                await generate_feature_of_interest(
-                                    observation_payload,
-                                    conn,
-                                    commit_id=commit_id,
-                                )
-
-                            _, observation_selfLink = (
-                                await insertDataArrayObservation(
-                                    observation_payload,
-                                    conn,
-                                    commit_id=commit_id,
-                                )
+                        _, observation_selfLink = (
+                            await insertDataArrayObservation(
+                                observation_payload,
+                                conn,
+                                commit_id=commit_id,
                             )
-                            response_urls.append(observation_selfLink)
-                        except InsufficientPrivilegeError:
-                            return JSONResponse(
-                                status_code=status.HTTP_403_FORBIDDEN,
-                                content={
-                                    "code": 403,
-                                    "type": "error",
-                                    "message": "Insufficient privileges.",
-                                },
-                            )
-                        except Exception as e:
-                            response_urls.append("error")
+                        )
+                        response_urls.append(observation_selfLink)
+                    except InsufficientPrivilegeError:
+                        return JSONResponse(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            content={
+                                "code": 403,
+                                "type": "error",
+                                "message": "Insufficient privileges.",
+                            },
+                        )
+                    except (
+                        asyncpg.PostgresConnectionError,
+                        asyncpg.TooManyConnectionsError,
+                    ):
+                        return error_response(
+                            status.HTTP_503_SERVICE_UNAVAILABLE,
+                            "Database temporarily unavailable",
+                        )
+                    except Exception as e:
+                        response_urls.append("error")
 
-                if current_user is not None:
-                    await conn.execute("RESET ROLE;")
-        return JSONResponse(
-            status_code=status.HTTP_201_CREATED, content=response_urls
-        )
-
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
+            if current_user is not None:
+                await conn.execute("RESET ROLE;")
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED, content=response_urls
+    )
 
 
 async def insertDataArrayObservation(
@@ -302,13 +271,10 @@ async def insertDataArrayObservation(
             handle_datetime_fields(obs)
             handle_result_field(obs)
 
-            if obs.get("phenomenonTime") is None:
+            if obs.get("phenomenonTimeStart") is None:
                 current_time = datetime.now()
-                obs["phenomenonTime"] = Range(
-                    current_time,
-                    current_time,
-                    upper_inc=True,
-                )
+                obs["phenomenonTimeStart"] = current_time
+                obs["phenomenonTimeEnd"] = current_time
 
             for key, value in obs.items():
                 if isinstance(value, dict):
@@ -334,8 +300,8 @@ async def insertDataArrayObservation(
             VALUES {values_placeholders}
             RETURNING
                 id,
-                lower("phenomenonTime"),
-                upper("phenomenonTime"),
+                "phenomenonTimeStart",
+                "phenomenonTimeEnd",
                 "resultTime",
                 datastream_id,
                 featuresofinterest_id;
@@ -346,8 +312,12 @@ async def insertDataArrayObservation(
         ]
         result = await conn.fetch(insert_query, *values)
 
-        min_phenomenon_times = [record["lower"] for record in result]
-        max_phenomenon_times = [record["upper"] for record in result]
+        min_phenomenon_times = [
+            record["phenomenonTimeStart"] for record in result
+        ]
+        max_phenomenon_times = [
+            record["phenomenonTimeEnd"] for record in result
+        ]
         result_times = [
             record["resultTime"]
             for record in result
