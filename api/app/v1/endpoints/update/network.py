@@ -14,6 +14,7 @@
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
+from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
 from fastapi import APIRouter, Depends, Header, Request, status
@@ -97,7 +98,13 @@ async def update_network(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            await update_network_entity(connection, network_id, payload)
+            updated = await update_network_entity(connection, network_id, payload)
+
+            if updated is False:
+                return error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    "Insufficient privileges to update this Network.",
+                )
 
     return Response(status_code=status.HTTP_200_OK)
 

@@ -115,11 +115,17 @@ async def update_feature_of_interest(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            await update_feature_of_interest_entity(
+            updated = await update_feature_of_interest_entity(
                 connection,
                 feature_of_interest_id,
                 payload,
             )
+
+            if updated is False:
+                return error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    "Insufficient privileges to update this Feature of Interest.",
+                )
 
             datastream_records = await get_datastreams_from_foi(
                 connection, feature_of_interest_id

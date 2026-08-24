@@ -101,7 +101,13 @@ async def update_sensor(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            await update_sensor_entity(connection, sensor_id, payload)
+            updated = await update_sensor_entity(connection, sensor_id, payload)
+
+            if updated is False:
+                return error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    "Insufficient privileges to update this Sensor.",
+                )
 
     return Response(status_code=status.HTTP_200_OK)
 

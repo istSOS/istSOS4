@@ -110,6 +110,18 @@ async def relocate_observation(connection, observation_id, payload):
 async def update_entity(
     connection, entity_name, entity_id, payload, obs=False
 ):
+    """Apply a column-level UPDATE for one entity.
+
+    Returns a signal the caller can check before reporting success:
+      - obs=False: ``True``/``False`` -- whether the UPDATE actually matched
+        a row. RLS silently filters rows an UPDATE isn't allowed to touch
+        (0 rows affected, no exception raised), so without this the caller
+        has no way to tell "wrote the row" from "RLS quietly dropped this
+        on the floor" -- see the callers in thing.py/datastream.py/etc.
+      - obs=True: the RETURNING row (truthy) or ``None`` (0 rows affected,
+        same RLS-silent-filter reasoning) -- relocate_observation() already
+        returns this shape via its own RETURNING clause.
+    """
     payload = {
         key: json.dumps(value) if isinstance(value, dict) else value
         for key, value in payload.items()
@@ -137,14 +149,16 @@ async def update_entity(
             """,
             *payload.values(),
         )
-    await connection.fetchval(
+    updated_id = await connection.fetchval(
         f"""
             UPDATE sensorthings."{entity_name}"
             SET {set_clause}
-            WHERE id = {entity_id};
+            WHERE id = {entity_id}
+            RETURNING id;
         """,
         *payload.values(),
     )
+    return updated_id is not None
 
 
 async def update_location_entity(
@@ -218,7 +232,7 @@ async def update_location_entity(
     payload["gen_foi_id"] = None
 
     if payload:
-        await update_entity(connection, "Location", location_id, payload)
+        return await update_entity(connection, "Location", location_id, payload)
 
 
 async def update_thing_entity(connection, thing_id, payload):
@@ -292,7 +306,7 @@ async def update_thing_entity(connection, thing_id, payload):
     )
 
     if payload:
-        await update_entity(connection, "Thing", thing_id, payload)
+        return await update_entity(connection, "Thing", thing_id, payload)
 
 
 async def update_historical_location_entity(
@@ -335,7 +349,7 @@ async def update_historical_location_entity(
     handle_associations(payload, ["Thing"])
 
     if payload:
-        await update_entity(
+        return await update_entity(
             connection,
             "HistoricalLocation",
             historical_location_id,
@@ -354,7 +368,7 @@ async def update_sensor_entity(connection, sensor_id, payload):
     )
 
     if payload:
-        await update_entity(connection, "Sensor", sensor_id, payload)
+        return await update_entity(connection, "Sensor", sensor_id, payload)
 
 
 async def update_observed_property_entity(
@@ -370,7 +384,7 @@ async def update_observed_property_entity(
     )
 
     if payload:
-        await update_entity(
+        return await update_entity(
             connection, "ObservedProperty", observed_property_id, payload
         )
 
@@ -397,7 +411,7 @@ async def update_datastream_entity(connection, datastream_id, payload):
     )
 
     if payload:
-        await update_entity(connection, "Datastream", datastream_id, payload)
+        return await update_entity(connection, "Datastream", datastream_id, payload)
 
 
 async def update_feature_of_interest_entity(
@@ -416,7 +430,7 @@ async def update_feature_of_interest_entity(
     )
 
     if payload:
-        await update_entity(
+        return await update_entity(
             connection, "FeaturesOfInterest", feature_of_interest_id, payload
         )
 
@@ -445,7 +459,7 @@ async def update_network_entity(connection, network_id, payload):
     )
 
     if payload:
-        await update_entity(connection, "Network", network_id, payload)
+        return await update_entity(connection, "Network", network_id, payload)
 
 
 async def handle_nested_entities(
