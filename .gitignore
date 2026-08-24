@@ -1,11 +1,13 @@
-# Python stuff
-__pycache__/
+# Python
 *.py[cod]
-.cache/
+.cache
+
+# Local config & secrets
 .env
-*.pkl
+
+# Generated output
 docs/mkdocs/site
 database/schemaspy
-.venv/
-venv/
-env/
+
+# Editors
+.vscode

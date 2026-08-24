@@ -35,6 +35,10 @@ from app.db.redis_db import redis
 from app.oauth import get_current_user
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
+from app.sta2rest.odata_query.exceptions import (
+    InvalidCollectionException,
+    InvalidFieldException,
+)
 from app.utils.utils import build_nextLink
 from app.v1.endpoints.functions import set_role
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -82,9 +86,12 @@ def __handle_root():
 
 
 async def wrapped_result_generator(first_item, result):
-    yield first_item
-    async for item in result:
-        yield item
+    try:
+        yield first_item
+        async for item in result:
+            yield item
+    finally:
+        await result.aclose()
 
 
 @v1.api_route(
@@ -131,6 +138,7 @@ async def catch_all_get(
         as_of_value = data.get("as_of_value")
         from_to_value = data.get("from_to_value")
         single_result = data.get("single_result")
+        value = data.get("value")
 
         result = asyncpg_stream_results(
             main_entity,
@@ -144,13 +152,14 @@ async def catch_all_get(
             single_result,
             full_path,
             current_user,
+            value,
         )
 
         try:
             first_item = await anext(result)
             return StreamingResponse(
                 wrapped_result_generator(first_item, result),
-                media_type="application/json",
+                media_type="text/plain" if value else "application/json",
                 status_code=status.HTTP_200_OK,
             )
         except StopAsyncIteration:
@@ -160,6 +169,31 @@ async def catch_all_get(
                     "code": 404,
                     "type": "error",
                     "message": "Not Found",
+                },
+            )
+        except (
+            asyncpg.PostgresConnectionError,
+            asyncpg.TooManyConnectionsError,
+        ):
+            logger.exception(
+                "Database unavailable during initial stream fetch"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={
+                    "code": 503,
+                    "type": "error",
+                    "message": "Database temporarily unavailable",
+                },
+            )
+        except asyncpg.PostgresError:
+            logger.exception("PostgreSQL error during initial stream fetch")
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={
+                    "code": 500,
+                    "type": "error",
+                    "message": "Internal server error",
                 },
             )
         except Exception:
@@ -175,6 +209,15 @@ async def catch_all_get(
 
     except HTTPException:
         raise
+    except (InvalidFieldException, InvalidCollectionException) as e:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "code": 404,
+                "type": "error",
+                "message": str(e),
+            },
+        )
     except (
         asyncpg.PostgresConnectionError,
         asyncpg.TooManyConnectionsError,
@@ -212,6 +255,7 @@ async def asyncpg_stream_results(
     single_result,
     full_path,
     current_user,
+    value=False,
 ):
     async with pgpool.acquire() as connection:
         async with connection.transaction():
@@ -249,6 +293,20 @@ async def asyncpg_stream_results(
             )
             await connection.execute(f"DECLARE my_cursor CURSOR FOR {query}")
 
+            if value:
+                while True:
+                    partition = await connection.fetch(
+                        f"FETCH {PARTITION_CHUNK} FROM my_cursor"
+                    )
+                    if not partition:
+                        break
+                    raw = partition[0]["json"]
+                    yield "null" if raw is None else str(raw)
+                await connection.execute("CLOSE my_cursor")
+                if current_user is not None:
+                    await connection.execute("RESET ROLE")
+                return
+
             start_json = ""
             is_first_partition = True
             has_rows = False
@@ -262,6 +320,8 @@ async def asyncpg_stream_results(
                     .replace("+00:00", "Z")
                 )
 
+            total_rows = 0
+
             while True:
                 partition = await connection.fetch(
                     f"FETCH {PARTITION_CHUNK} FROM my_cursor"
@@ -270,10 +330,13 @@ async def asyncpg_stream_results(
                     break
 
                 partition_len = len(partition)
+                total_rows += partition_len
                 has_rows = True
 
-                if partition_len > top - 1:
+                if total_rows >= top:
                     partition = partition[:-1]
+                    if not partition and not is_first_partition:
+                        break
 
                 if (
                     VERSIONING
@@ -283,7 +346,8 @@ async def asyncpg_stream_results(
                     and not from_to_value
                 ):
                     partition_data = ujson.loads(partition[0]["json"])
-                    partition_data["@iot.as_of"] = as_of_value
+                    if isinstance(partition_data, dict):
+                        partition_data["@iot.as_of"] = as_of_value
                     partition_json = ujson.dumps(
                         partition_data,
                         escape_forward_slashes=False,
@@ -301,12 +365,6 @@ async def asyncpg_stream_results(
                     if partition_len > 0 and not single_result:
                         start_json = "{"
 
-                    next_link = build_nextLink(full_path, partition_len)
-                    next_link_json = (
-                        f'"@iot.nextLink": "{next_link}",'
-                        if next_link and not single_result
-                        else ""
-                    )
                     as_of = (
                         f'"@iot.as_of": "{as_of_value}",'
                         if VERSIONING
@@ -315,7 +373,7 @@ async def asyncpg_stream_results(
                         and not from_to_value
                         else ""
                     )
-                    start_json += as_of + iot_count + next_link_json
+                    start_json += as_of + iot_count
                     start_json += (
                         '"value": ['
                         if (partition_len > 0 and not single_result)
@@ -328,10 +386,18 @@ async def asyncpg_stream_results(
                     yield "," + partition_json
 
             if not has_rows and not single_result:
-                yield '{"value": []}'
+                yield "{" + iot_count + '"value": []}'
 
             if has_rows and not single_result:
-                yield "]}"
+                next_link = (
+                    build_nextLink(full_path, total_rows)
+                    if total_rows >= top
+                    else None
+                )
+                next_link_json = (
+                    f',"@iot.nextLink": "{next_link}"' if next_link else ""
+                )
+                yield "]" + next_link_json + "}"
 
             await connection.execute("CLOSE my_cursor")
 

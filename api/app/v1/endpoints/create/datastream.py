@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
+from app import AUTHORIZATION, NETWORK, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import require_json_content_type, validate_payload_keys
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, Request, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from .functions import insert_datastream_entity, set_commit
 
@@ -64,8 +64,9 @@ ALLOWED_KEYS = [
     "Observations",
 ]
 
-if AUTHORIZATION:
+if NETWORK:
     ALLOWED_KEYS.append("Network")
+    PAYLOAD_EXAMPLE["Network"] = {"@iot.id": 1}
 
 
 @v1.api_route(
@@ -78,55 +79,36 @@ if AUTHORIZATION:
 )
 async def create_datastream(
     request: Request,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        require_json_content_type(request)
+    require_json_content_type(request)
 
-        validate_payload_keys(payload, ALLOWED_KEYS)
+    validate_payload_keys(payload, ALLOWED_KEYS)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                commit_id = await set_commit(
-                    connection, commit_message, current_user
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
 
-                _, header = await insert_datastream_entity(
-                    connection, payload, commit_id=commit_id
-                )
+            _, header = await insert_datastream_entity(
+                connection, payload, commit_id=commit_id
+            )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )
 
 
 PAYLOAD_EXAMPLE_THING = {
@@ -154,60 +136,41 @@ PAYLOAD_EXAMPLE_THING = {
 async def create_datastream_for_thing(
     request: Request,
     thing_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE_THING),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE_THING]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        require_json_content_type(request)
+    require_json_content_type(request)
 
-        if not thing_id:
-            raise Exception("Thing ID is required.")
+    if not thing_id:
+        raise BadRequest("Thing ID is required.")
 
-        payload["Thing"] = {"@iot.id": thing_id}
+    payload["Thing"] = {"@iot.id": thing_id}
 
-        validate_payload_keys(payload, ALLOWED_KEYS)
+    validate_payload_keys(payload, ALLOWED_KEYS)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                commit_id = await set_commit(
-                    connection, commit_message, current_user
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
 
-                _, header = await insert_datastream_entity(
-                    connection, payload, thing_id=thing_id, commit_id=commit_id
-                )
+            _, header = await insert_datastream_entity(
+                connection, payload, thing_id=thing_id, commit_id=commit_id
+            )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )
 
 
 PAYLOAD_EXAMPLE_SENSOR = {
@@ -235,18 +198,84 @@ PAYLOAD_EXAMPLE_SENSOR = {
 async def create_datastream_for_sensor(
     request: Request,
     sensor_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE_SENSOR),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE_SENSOR]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
+    require_json_content_type(request)
+
+    if not sensor_id:
+        raise BadRequest("Sensor ID is required.")
+
+    payload["Sensor"] = {"@iot.id": sensor_id}
+
+    validate_payload_keys(payload, ALLOWED_KEYS)
+
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
+
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
+
+            _, header = await insert_datastream_entity(
+                connection,
+                payload,
+                sensor_id=sensor_id,
+                commit_id=commit_id,
+            )
+
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )
+
+
+if NETWORK:
+
+    PAYLOAD_EXAMPLE_NETWORK = {
+        "unitOfMeasurement": {
+            "name": "Lumen",
+            "symbol": "lm",
+            "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html/Lumen",
+        },
+        "description": "datastream 1",
+        "name": "datastream name 1",
+        "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement",
+        "Thing": {"@iot.id": 1},
+        "Sensor": {"@iot.id": 1},
+        "ObservedProperty": {"@iot.id": 1},
+    }
+
+    @v1.api_route(
+        "/Networks({network_id})/Datastreams",
+        methods=["POST"],
+        tags=["Datastreams"],
+        summary="Create a new Datastream for a Network",
+        description="Create a new Datastream entity for a Network entity.",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def create_datastream_for_network(
+        request: Request,
+        network_id: int,
+        payload: dict = Body(examples=[PAYLOAD_EXAMPLE_NETWORK]),
+        commit_message=message,
+        current_user=user,
+        pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
+    ):
         require_json_content_type(request)
 
-        if not sensor_id:
-            raise Exception("Sensor ID is required.")
+        if not network_id:
+            raise ValueError("Network ID is required.")
 
-        payload["Sensor"] = {"@iot.id": sensor_id}
+        payload["Network"] = {"@iot.id": network_id}
 
         validate_payload_keys(payload, ALLOWED_KEYS)
 
@@ -264,7 +293,7 @@ async def create_datastream_for_sensor(
                 _, header = await insert_datastream_entity(
                     connection,
                     payload,
-                    sensor_id=sensor_id,
+                    network_id=network_id,
                     commit_id=commit_id,
                 )
 
@@ -273,24 +302,6 @@ async def create_datastream_for_sensor(
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"location": header},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
         )
 
 
@@ -319,60 +330,41 @@ PAYLOAD_EXAMPLE_OBSERVED_PROPERTY = {
 async def create_datastream_for_observed_property(
     request: Request,
     observed_property_id: int,
-    payload: dict = Body(example=PAYLOAD_EXAMPLE_OBSERVED_PROPERTY),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE_OBSERVED_PROPERTY]),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        require_json_content_type(request)
+    require_json_content_type(request)
 
-        if not observed_property_id:
-            raise Exception("Observed Property ID is required.")
+    if not observed_property_id:
+        raise BadRequest("Observed Property ID is required.")
 
-        payload["ObservedProperty"] = {"@iot.id": observed_property_id}
+    payload["ObservedProperty"] = {"@iot.id": observed_property_id}
 
-        validate_payload_keys(payload, ALLOWED_KEYS)
+    validate_payload_keys(payload, ALLOWED_KEYS)
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                commit_id = await set_commit(
-                    connection, commit_message, current_user
-                )
-                if commit_id is not None:
-                    payload["commit_id"] = commit_id
+            commit_id = await set_commit(
+                connection, commit_message, current_user
+            )
+            if commit_id is not None:
+                payload["commit_id"] = commit_id
 
-                _, header = await insert_datastream_entity(
-                    connection,
-                    payload,
-                    observed_property_id=observed_property_id,
-                    commit_id=commit_id,
-                )
+            _, header = await insert_datastream_entity(
+                connection,
+                payload,
+                observed_property_id=observed_property_id,
+                commit_id=commit_id,
+            )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": header},
-        )
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": 403,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "code": 400,
-                "type": "error",
-                "message": str(e),
-            },
-        )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": header},
+    )

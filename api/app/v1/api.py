@@ -36,6 +36,7 @@ from app.v1.endpoints.delete import datastream as delete_datastream
 from app.v1.endpoints.delete import (
     feature_of_interest as delete_feature_of_interest,
 )
+from app.v1.endpoints.delete import filtered_delete_observation
 from app.v1.endpoints.delete import (
     historical_location as delete_historical_location,
 )
@@ -49,6 +50,7 @@ from app.v1.endpoints.delete import policy as delete_policy
 from app.v1.endpoints.delete import sensor as delete_sensor
 from app.v1.endpoints.delete import thing as delete_thing
 from app.v1.endpoints.delete import user as delete_user
+from app.v1.endpoints.exception_handlers import register_exception_handlers
 from app.v1.endpoints.read import commit as read_commit
 from app.v1.endpoints.read import datastream as read_datastream
 from app.v1.endpoints.read import (
@@ -162,6 +164,8 @@ v1 = FastAPI(
     swagger_ui_parameters={"defaultModelsExpandDepth": -1},
 )
 
+register_exception_handlers(v1)
+
 # Register the authorization endpoints (login, user, policy)
 if AUTHORIZATION:
     v1.include_router(login.v1)
@@ -226,3 +230,4 @@ v1.include_router(delete_sensor.v1)
 v1.include_router(delete_datastream.v1)
 v1.include_router(delete_feature_of_interest.v1)
 v1.include_router(delete_observation.v1)
+v1.include_router(filtered_delete_observation.v1)

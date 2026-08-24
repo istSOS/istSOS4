@@ -20,7 +20,6 @@ from datetime import datetime, time
 
 import asyncpg
 import isodate
-from asyncpg.types import Range
 
 hostname = os.getenv("HOSTNAME", "http://localhost:8018")
 subpath = os.getenv("SUBPATH", "/istsos4")
@@ -46,6 +45,9 @@ date = datetime.strptime(
 )
 chunk = isodate.parse_duration(os.getenv("CHUNK_INTERVAL", "P1Y"))
 epsg = int(os.getenv("EPSG", 4326))
+center_lat = float(os.getenv("CENTER_LAT", 45.8693))
+center_lon = float(os.getenv("CENTER_LON", 8.9770))
+spread_deg = float(os.getenv("SPREAD_DEG", 0.05))
 authorization = int(os.getenv("AUTHORIZATION", 0))
 st_aggregate = os.getenv("ST_AGGREGATE", "CONVEX_HULL")
 
@@ -53,6 +55,17 @@ pgpool = None
 network = int(os.getenv("NETWORK", 0))
 
 observedProperties = []
+
+
+def random_point():
+    """
+    Return a random (lon, lat) inside the configured box around the center.
+    """
+
+    return (
+        random.uniform(center_lon - spread_deg, center_lon + spread_deg),
+        random.uniform(center_lat - spread_deg, center_lat + spread_deg),
+    )
 
 
 async def get_pool():
@@ -187,8 +200,7 @@ async def generate_locations(conn, commit_id):
 
     locations = []
     for i in range(1, n_things + 1):
-        lon = random.uniform(-180, 180)
-        lat = random.uniform(-90, 90)
+        lon, lat = random_point()
         # elevation = random.uniform(0, 1000)
 
         description = f"location {i}"
@@ -457,8 +469,7 @@ async def generate_featuresofinterest(conn, commit_id):
 
     featuresofinterest = []
     for i in range(1, n_things + 1):
-        lon = random.uniform(-180, 180)
-        lat = random.uniform(-90, 90)
+        lon, lat = random_point()
         # elevation = random.uniform(0, 1000)
 
         description = f"featuresofinterest {i}"
@@ -489,7 +500,8 @@ async def generate_featuresofinterest(conn, commit_id):
 
 async def insert_observations(conn, observations, commit_id):
     cols = [
-        "phenomenonTime",
+        "phenomenonTimeStart",
+        "phenomenonTimeEnd",
         "resultTime",
         "resultNumber",
         "resultType",
@@ -521,8 +533,9 @@ async def insert_observations(conn, observations, commit_id):
 
 
 async def update_datastream_phenomenon_time(conn, observations, datastream_id):
-    phenomenon_times = [record[0].lower for record in observations]
-    result_times = [record[1] for record in observations]
+    phenomenon_starts = [record[0] for record in observations]
+    phenomenon_ends = [record[1] for record in observations]
+    result_times = [record[2] for record in observations]
     update_sql = """
         UPDATE sensorthings."Datastream"
         SET "phenomenonTime" = tstzrange(
@@ -539,8 +552,8 @@ async def update_datastream_phenomenon_time(conn, observations, datastream_id):
     """
     await conn.execute(
         update_sql,
-        min(phenomenon_times),
-        max(phenomenon_times),
+        min(phenomenon_starts),
+        max(phenomenon_ends),
         min(result_times),
         max(result_times),
         datastream_id,
@@ -612,11 +625,8 @@ async def generate_observations(conn, commit_id):
 
         while phenomenonTime < (date + interval):
             phenomenonTime += frequency
-            phenomenonTimeRange = Range(
-                phenomenonTime,
-                phenomenonTime,
-                upper_inc=True,
-            )
+            phenomenonTimeStart = phenomenonTime
+            phenomenonTimeEnd = phenomenonTime
             resultTime = phenomenonTime
             resultNumber = random.randint(1, 100)
             resultType = 0
@@ -626,7 +636,8 @@ async def generate_observations(conn, commit_id):
             if commit_id is not None:
                 observations.append(
                     (
-                        phenomenonTimeRange,
+                        phenomenonTimeStart,
+                        phenomenonTimeEnd,
                         resultTime,
                         resultNumber,
                         resultType,
@@ -638,7 +649,8 @@ async def generate_observations(conn, commit_id):
             else:
                 observations.append(
                     (
-                        phenomenonTimeRange,
+                        phenomenonTimeStart,
+                        phenomenonTimeEnd,
                         resultTime,
                         resultNumber,
                         resultType,

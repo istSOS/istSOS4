@@ -14,10 +14,11 @@
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
-from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Depends, Header, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from .functions import delete_entity, set_commit
 
@@ -49,52 +50,33 @@ async def delete_observed_property(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    try:
-        if not observed_property_id:
-            raise Exception("Sensor ID not provided")
+    if not observed_property_id:
+        raise BadRequest("Sensor ID not provided")
 
-        async with pool.acquire() as connection:
-            async with connection.transaction():
-                if current_user is not None:
-                    await set_role(connection, current_user)
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            if current_user is not None:
+                await set_role(connection, current_user)
 
-                await set_commit(
-                    connection,
-                    commit_message,
-                    current_user,
-                    "ObservedProperty",
-                    observed_property_id,
+            await set_commit(
+                connection,
+                commit_message,
+                current_user,
+                "ObservedProperty",
+                observed_property_id,
+            )
+
+            id_deleted = await delete_entity(
+                connection, "ObservedProperty", observed_property_id
+            )
+
+            if id_deleted is None:
+                return error_response(
+                    status.HTTP_404_NOT_FOUND,
+                    f"Observed Property with id {observed_property_id} not found",
                 )
 
-                id_deleted = await delete_entity(
-                    connection, "ObservedProperty", observed_property_id
-                )
+            if current_user is not None:
+                await connection.execute("RESET ROLE;")
 
-                if id_deleted is None:
-                    return JSONResponse(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        content={
-                            "code": 404,
-                            "type": "error",
-                            "message": f"Observed Property with id {observed_property_id} not found",
-                        },
-                    )
-
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-
-        return Response(status_code=status.HTTP_200_OK)
-    except InsufficientPrivilegeError:
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={
-                "code": 401,
-                "type": "error",
-                "message": "Insufficient privileges.",
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"code": 400, "type": "error", "message": str(e)},
-        )
+    return Response(status_code=status.HTTP_200_OK)

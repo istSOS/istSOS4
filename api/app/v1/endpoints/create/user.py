@@ -38,7 +38,7 @@ PAYLOAD_EXAMPLE = {
     "username": "cp1",
     "password": "qwertz",
     "uri": "https://orcid.org/0000-0004-3456-7890",
-    "role": "viewer",  # viewer, editor, obs_manager, sensor, custom
+    "role": "viewer",  # viewer, editor, obs_manager, sensor, qc, custom
 }
 
 # POLICY_FN_MAP is the single source of truth — imported from rbac_roles.py.
@@ -53,7 +53,7 @@ PAYLOAD_EXAMPLE = {
     status_code=status.HTTP_201_CREATED,
 )
 async def create_user(
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
@@ -94,13 +94,7 @@ async def create_user(
                         },
                     )
 
-                try:
-                    payload["role"] = validate_rbac_role(payload["role"])
-                except ValueError as e:
-                    return JSONResponse(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        content={"message": str(e)},
-                    )
+                payload["role"] = validate_rbac_role(payload["role"])
 
                 if current_user is not None:
                     if current_user["role"] != "administrator":
@@ -145,6 +139,15 @@ async def create_user(
                         "user_id": user["id"],
                     }
                     await insert_commit(connection, commit, "CREATE")
+
+                elif payload["role"] == "qc":
+                    commit = {
+                        "message": "QC data",
+                        "author": user["uri"],
+                        "encodingType": "text/plain",
+                        "user_id": user["id"],
+                    }
+                    await insert_commit(connection, commit, "UPDATE")
 
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
