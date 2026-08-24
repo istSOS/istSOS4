@@ -16,6 +16,18 @@ VALID_RBAC_ROLES = {
 # Users in this state have NO PostgreSQL database role (zero DB footprint).
 PENDING_ROLE = "pending"
 
+# sensorthings."User".status value for a deactivated account (see
+# delete/user.py). DELETE /Users never hard-deletes the row: an
+# AuditLog_actor_id_fkey ON DELETE SET NULL trigger runs with the
+# referenced table's owner privileges, not the caller's, and that owner
+# (administrator) was deliberately never granted UPDATE on AuditLog, since
+# it's meant to be genuinely append-only -- so a real DELETE fails for
+# every caller, unconditionally. Deactivating in place sidesteps that
+# entirely: it's a plain UPDATE, and the row (and every AuditLog entry
+# that references it) is left alone. 'active' and 'rejected' are the
+# other values this same unconstrained VARCHAR(50) column already used.
+DELETED_STATUS = "deleted"
+
 # Maps each assignable RBAC role to its underlying PostgreSQL group role.
 # Pending users are excluded — they receive no DB role until activated.
 DB_ROLE_BY_RBAC_ROLE = {

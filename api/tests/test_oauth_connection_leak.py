@@ -83,7 +83,7 @@ def _make_pool(row, execute_capture=None):
     return pool
 
 
-def _make_row(username="alice", role="viewer", password=_FAKE_HASH, auth_provider=None):
+def _make_row(username="alice", role="viewer", password=_FAKE_HASH, auth_provider=None, status="active"):
     """Build a minimal asyncpg-like Record stub."""
     row = MagicMock()
     row.__getitem__ = lambda self, key: {
@@ -92,6 +92,7 @@ def _make_row(username="alice", role="viewer", password=_FAKE_HASH, auth_provide
         "role": role,
         "password": password,
         "auth_provider": auth_provider,
+        "status": status,
     }[key]
     return row
 
