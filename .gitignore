@@ -30,3 +30,5 @@ test_access_matrix.py
 test_admin_rejection.py
 test_dataset_scoping.py
 test_security_boundaries.py
+
+SWAGGER_TESTING_GUIDE.md
