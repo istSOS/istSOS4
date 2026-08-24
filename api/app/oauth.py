@@ -31,7 +31,7 @@ from app import (
 )
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
-from app.rbac_roles import PENDING_ROLE
+from app.rbac_roles import DELETED_STATUS, PENDING_ROLE
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
@@ -59,7 +59,7 @@ async def get_user_from_db(username: str):
     pool = await get_pool()
     async with pool.acquire() as connection:
         query = """
-            SELECT id, username, role, uri
+            SELECT id, username, role, uri, status
             FROM sensorthings."User"
             WHERE username = $1
         """
@@ -70,6 +70,7 @@ async def get_user_from_db(username: str):
                 "username": user_record["username"],
                 "role": user_record["role"],
                 "uri": user_record["uri"],
+                "status": user_record["status"],
             }
     return None
 
@@ -231,6 +232,11 @@ async def authenticate_user(username: str, password: str):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Account application was rejected. Please re-register to apply again.",
             )
+        if row["status"] == DELETED_STATUS:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="This account has been deactivated.",
+            )
         return {"sub": row["username"], "role": row["role"]}
 
     # ------------------------------------------------------------------
@@ -277,6 +283,11 @@ async def authenticate_user(username: str, password: str):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Account application was rejected. Please re-register to apply again.",
         )
+    if row["status"] == DELETED_STATUS:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This account has been deactivated.",
+        )
     return {"sub": row["username"], "role": row["role"]}
 
 
@@ -307,6 +318,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         401 – token missing / invalid / revoked.
         403 – user exists but is in the 'pending' waiting room; they must be
               activated by an administrator before accessing any resource.
+        403 – user's account has been deactivated (DELETE /Users). Checked
+              live on every request, same as role -- a still-valid JWT
+              issued before deactivation stops working on its very next
+              use, no token revocation needed.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -343,6 +358,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             detail="Account pending admin activation",
         )
 
+    if user["status"] == DELETED_STATUS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been deactivated",
+        )
+
     return user
 
 
@@ -360,6 +381,7 @@ async def get_optional_current_user(
     * Token has been revoked (present in the Redis blocklist).
     * The ``sub`` claim does not map to any row in ``sensorthings."User"``.
     * The user account exists but is in the ``pending`` waiting room.
+    * The user account has been deactivated (DELETE /Users).
 
     Callers (read endpoints, asyncpg_stream_results) treat ``None`` as the
     signal to fall back to the ``guest`` PostgreSQL role, which activates the
@@ -404,6 +426,16 @@ async def get_optional_current_user(
     if user["role"] == PENDING_ROLE:
         logger.debug(
             "get_optional_current_user: pending user %r — treating as anonymous.",
+            username,
+        )
+        return None
+
+    # Same silent-anonymous treatment as pending -- a deactivated user must
+    # not sneak through as guest either (they'd get the guest RLS view
+    # instead of correctly being denied their own data).
+    if user["status"] == DELETED_STATUS:
+        logger.debug(
+            "get_optional_current_user: deactivated user %r — treating as anonymous.",
             username,
         )
         return None
