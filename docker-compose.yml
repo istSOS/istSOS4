@@ -64,7 +64,30 @@ services:
       ANONYMOUS_VIEWER: ${ANONYMOUS_VIEWER}
       NETWORK: ${NETWORK}
       ST_AGGREGATE: ${ST_AGGREGATE}
-    command: uvicorn --timeout-keep-alive 75 --workers 2 --host 0.0.0.0 --port 5000 app.main:app
+      # External identity providers (app/oidc_providers.py) -- a provider
+      # only registers if both its CLIENT_ID and CLIENT_SECRET resolve to
+      # a non-empty value, so it's safe to leave any of these unset.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET}
+      MICROSOFT_DISCOVERY_URL: ${MICROSOFT_DISCOVERY_URL}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      ORCID_CLIENT_ID: ${ORCID_CLIENT_ID}
+      ORCID_CLIENT_SECRET: ${ORCID_CLIENT_SECRET}
+      ORCID_DISCOVERY_URL: ${ORCID_DISCOVERY_URL}
+      EDUID_CLIENT_ID: ${EDUID_CLIENT_ID}
+      EDUID_CLIENT_SECRET: ${EDUID_CLIENT_SECRET}
+    # --proxy-headers makes uvicorn trust X-Forwarded-Proto from a
+    # fronting reverse proxy -- required for external-login callback URLs
+    # to come out as https:// behind TLS-terminating infra, same reason
+    # dev_docker-compose.yml needs it for ngrok. Unlike dev, this does NOT
+    # trust everyone ("*"): FORWARDED_ALLOW_IPS defaults to 127.0.0.1
+    # (uvicorn's own built-in default, i.e. trust nothing external) and
+    # MUST be overridden in .env with the actual reverse proxy's IP/CIDR
+    # for this to work in front of a real proxy -- see .env.example.
+    command: uvicorn --timeout-keep-alive 75 --workers 2 --host 0.0.0.0 --port 5000 --proxy-headers --forwarded-allow-ips=${FORWARDED_ALLOW_IPS:-127.0.0.1} app.main:app
     ports:
       - ${EXTERNAL_PORT}:5000
     working_dir: /code
