@@ -109,11 +109,17 @@ async def update_observed_property(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            await update_observed_property_entity(
+            updated = await update_observed_property_entity(
                 connection,
                 observed_property_id,
                 payload,
             )
+
+            if updated is False:
+                return error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    "Insufficient privileges to update this Observed Property.",
+                )
 
     return Response(status_code=status.HTTP_200_OK)
 

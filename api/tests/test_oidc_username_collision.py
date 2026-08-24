@@ -20,15 +20,21 @@ against the CRUD function directly, mocking the connection pool, rather
 than the live-integration style used for endpoints that are actually
 reachable.
 
-Covers two distinct UniqueViolationError sources, which must be handled
-differently:
-  * User_username_key            -> OidcUsernameCollisionError (new,
-    explicit; the underlying UniqueViolationError must NOT propagate
-    unchanged, since callers shouldn't have to know the constraint name
-    to distinguish this case).
+Covers:
+  * A plain username collision (User_username_key) is now auto-resolved
+    by retrying with a suffixed candidate (_suffixed_candidate()) instead
+    of failing the signup -- OidcUsernameCollisionError is raised only if
+    every fallback candidate also collides.
   * uq_user_auth_provider_sub_id -> UniqueViolationError re-raised
-    unchanged (existing, documented recovery path via
-    get_user_by_provider_sub -- must not regress).
+    unchanged, on the very first attempt, no retry (existing, documented
+    recovery path via get_user_by_provider_sub -- must not regress).
+  * possible_duplicate_of is populated from an email match against an
+    existing, unrelated account, and stays NULL otherwise -- the
+    advisory-only admin hint, not account linking.
+
+Whenever ``email`` is truthy, create_pending_oidc_user() issues one extra
+SELECT (the duplicate-email lookup) before the INSERT attempt(s) -- tests
+below that pass an email supply a leading side_effect entry for it.
 """
 
 import os
@@ -81,6 +87,7 @@ def _make_mock_pool(side_effect):
 
     mock_pool = MagicMock()
     mock_pool.acquire = mock_acquire
+    mock_pool.conn = mock_conn  # exposed so tests can inspect call_args_list
     return mock_pool
 
 
@@ -93,11 +100,14 @@ def _unique_violation(constraint_name: str) -> UniqueViolationError:
 
 
 async def test_username_collision_raises_explicit_error():
-    """A User_username_key violation must raise OidcUsernameCollisionError,
-    not the raw UniqueViolationError, and the message must name the
-    username and describe the unresolved state."""
+    """If the base username AND every auto-suffixed fallback all collide,
+    create_pending_oidc_user() must raise OidcUsernameCollisionError, not
+    the raw UniqueViolationError, with a message naming the username and
+    describing the unresolved state."""
+    # 1 dup-email lookup (email is truthy) + 5 INSERT attempts, all
+    # colliding on User_username_key.
     mock_pool = _make_mock_pool(
-        side_effect=_unique_violation("User_username_key")
+        side_effect=[None] + [_unique_violation("User_username_key")] * 5
     )
 
     with patch("app.db.oidc_user_crud.get_pool", AsyncMock(return_value=mock_pool)):
@@ -163,12 +173,98 @@ async def test_successful_insert_unaffected():
         "auth_provider": "google",
         "external_sub_id": "sub-123",
     }
-    mock_pool = _make_mock_pool(side_effect=[expected_row])
+    # No existing account shares this email (dup-email lookup -> None),
+    # then the INSERT succeeds on the first attempt.
+    mock_pool = _make_mock_pool(side_effect=[None, expected_row])
 
     with patch("app.db.oidc_user_crud.get_pool", AsyncMock(return_value=mock_pool)):
         result = await create_pending_oidc_user(
             username="jdoe",
             email="jdoe@example.com",
+            auth_provider="google",
+            external_sub_id="sub-123",
+        )
+
+    assert result == expected_row
+
+
+async def test_username_collision_resolved_by_auto_suffix():
+    """A single colliding attempt must be transparently retried with a
+    suffixed candidate -- the caller gets back a successful result, not
+    an error, and the returned username reflects the suffixed variant
+    that actually got inserted."""
+    suffixed_row = {
+        "id": 43,
+        "username": "jdoe_2",
+        "role": "pending",
+        "uri": "/Users(43)",
+        "auth_provider": "google",
+        "external_sub_id": "sub-123",
+    }
+    mock_pool = _make_mock_pool(
+        side_effect=[
+            None,  # dup-email lookup
+            _unique_violation("User_username_key"),  # "jdoe" taken
+            suffixed_row,  # "jdoe_2" succeeds
+        ]
+    )
+
+    with patch("app.db.oidc_user_crud.get_pool", AsyncMock(return_value=mock_pool)):
+        result = await create_pending_oidc_user(
+            username="jdoe",
+            email="jdoe@example.com",
+            auth_provider="google",
+            external_sub_id="sub-123",
+        )
+
+    assert result == suffixed_row
+
+
+async def test_possible_duplicate_of_set_on_email_match():
+    """If an existing, unrelated account already uses this email, its id
+    must be passed through as possible_duplicate_of -- an advisory hint
+    only, never account linking."""
+    expected_row = {
+        "id": 44,
+        "username": "jdoe",
+        "role": "pending",
+        "uri": "/Users(44)",
+        "auth_provider": "google",
+        "external_sub_id": "sub-123",
+    }
+    mock_pool = _make_mock_pool(
+        side_effect=[{"id": 7}, expected_row]  # existing account id=7 matches
+    )
+
+    with patch("app.db.oidc_user_crud.get_pool", AsyncMock(return_value=mock_pool)):
+        await create_pending_oidc_user(
+            username="jdoe",
+            email="jdoe@example.com",
+            auth_provider="google",
+            external_sub_id="sub-123",
+        )
+
+    insert_call = mock_pool.conn.fetchrow.call_args_list[1]
+    assert insert_call.args[-1] == 7  # possible_duplicate_of positional param
+
+
+async def test_no_dup_email_lookup_when_email_is_none():
+    """email=None must skip the dup-email SELECT entirely -- only the
+    INSERT attempt should hit fetchrow."""
+    expected_row = {
+        "id": 45,
+        "username": "jdoe",
+        "role": "pending",
+        "uri": "/Users(45)",
+        "auth_provider": "google",
+        "external_sub_id": "sub-123",
+    }
+    mock_pool = _make_mock_pool(side_effect=[expected_row])
+
+    with patch("app.db.oidc_user_crud.get_pool", AsyncMock(return_value=mock_pool)):
+        result = await create_pending_oidc_user(
+            username="jdoe",
+            email=None,
             auth_provider="google",
             external_sub_id="sub-123",
         )

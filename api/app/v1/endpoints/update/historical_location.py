@@ -99,11 +99,17 @@ async def update_historical_location(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            await update_historical_location_entity(
+            updated = await update_historical_location_entity(
                 connection,
                 historical_location_id,
                 payload,
             )
+
+            if updated is False:
+                return error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    "Insufficient privileges to update this Historical Location.",
+                )
 
     return Response(status_code=status.HTTP_200_OK)
 

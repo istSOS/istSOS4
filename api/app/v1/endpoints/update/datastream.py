@@ -116,11 +116,17 @@ async def update_datastream(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            await update_datastream_entity(
+            updated = await update_datastream_entity(
                 connection,
                 datastream_id,
                 payload,
             )
+
+            if updated is False:
+                return error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    "Insufficient privileges to update this Datastream.",
+                )
 
     return Response(status_code=status.HTTP_200_OK)
 

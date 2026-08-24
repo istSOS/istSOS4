@@ -102,7 +102,13 @@ async def update_thing(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            await update_thing_entity(connection, thing_id, payload)
+            updated = await update_thing_entity(connection, thing_id, payload)
+
+            if updated is False:
+                return error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    "Insufficient privileges to update this Thing.",
+                )
 
     return Response(status_code=status.HTTP_200_OK)
 

@@ -247,16 +247,20 @@ async def test_normalize_claims_github_no_verified_primary_email_at_all():
 # ---------------------------------------------------------------------------
 
 
-def _fake_pool_for_provisioning(fetchrow_result=None, insert_result=None):
+def _fake_pool_for_provisioning(
+    fetchrow_result=None, insert_result=None, dup_email_result=None
+):
     """Mimics test_oidc_username_collision.py's mock pool, extended to
     also back get_user_by_provider_sub's SELECT.
 
-    Both get_user_by_provider_sub's lookup and create_pending_oidc_user's
-    INSERT run fetchrow on the same connection, in that order -- when a
-    test needs to exercise both (an unknown identity that then gets
-    provisioned), insert_result supplies the second call's return value
-    via side_effect; a bare fetchrow_result alone covers tests that only
-    ever reach the lookup.
+    Three fetchrow calls run on the same connection, in order, when a test
+    needs to exercise the full provisioning path (an unknown identity that
+    then gets provisioned): get_user_by_provider_sub's lookup, then
+    create_pending_oidc_user's advisory duplicate-email lookup (skipped
+    only when the claimed email is falsy -- every test using this helper
+    supplies one), then the INSERT itself. insert_result supplies that
+    third call's return value via side_effect; a bare fetchrow_result alone
+    covers tests that only ever reach the first lookup.
     """
 
     @asynccontextmanager
@@ -268,7 +272,7 @@ def _fake_pool_for_provisioning(fetchrow_result=None, insert_result=None):
     mock_conn.execute = AsyncMock(return_value=None)
     if insert_result is not None:
         mock_conn.fetchrow = AsyncMock(
-            side_effect=[fetchrow_result, insert_result]
+            side_effect=[fetchrow_result, dup_email_result, insert_result]
         )
     else:
         mock_conn.fetchrow = AsyncMock(return_value=fetchrow_result)
@@ -512,7 +516,12 @@ def test_callback_existing_approved_identity_issues_access_token(app_client):
     assert isinstance(body["access_token"], str) and body["access_token"]
 
 
-def test_callback_username_collision_returns_409(app_client):
+def test_callback_username_collision_auto_resolves_with_suffix(app_client):
+    """A single username collision must no longer dead-end the applicant:
+    create_pending_oidc_user() now retries with an auto-suffixed candidate
+    (see oidc_user_crud.py) instead of raising immediately, so the callback
+    still succeeds with 202 -- this replaces the old assert-409 version of
+    this test, which tested the pre-auto-suffix behavior."""
     import app.db.oidc_user_crud as crud_module
     import app.v1.endpoints.create.oidc_login as route_module
     from asyncpg.exceptions import UniqueViolationError
@@ -539,9 +548,90 @@ def test_callback_username_collision_returns_409(app_client):
     mock_conn = AsyncMock()
     mock_conn.transaction = MagicMock(side_effect=fake_transaction)
     mock_conn.execute = AsyncMock(return_value=None)
-    # First fetchrow: get_user_by_provider_sub -> no match. Second
-    # fetchrow: the INSERT itself -> raises the collision.
-    mock_conn.fetchrow = AsyncMock(side_effect=[None, exc])
+    # get_user_by_provider_sub -> no match, dup-email lookup -> no match,
+    # first INSERT attempt ("existing_local_user") collides, second
+    # attempt (auto-suffixed) succeeds.
+    mock_conn.fetchrow = AsyncMock(
+        side_effect=[
+            None,
+            None,
+            exc,
+            {
+                "id": 77,
+                "username": "existing_local_user_2",
+                "role": "pending",
+                "uri": "/Users(77)",
+                "auth_provider": "testoidc",
+                "external_sub_id": "collide-sub-1",
+                "dataset_id": "ds://climate",
+                "odrl_policy_id": "odrl://supsi",
+            },
+        ]
+    )
+
+    @asynccontextmanager
+    async def mock_acquire():
+        yield mock_conn
+
+    mock_pool = MagicMock()
+    mock_pool.acquire = mock_acquire
+
+    with patch.object(
+        route_module.oauth, "create_client", return_value=fake_client
+    ):
+        app_client.get(
+            "/istsos4/v1.1/auth/testoidc/login"
+            "?dataset_id=ds://climate&odrl_policy_id=odrl://supsi&requested_role=viewer",
+            follow_redirects=False,
+        )
+
+        with patch.object(
+            crud_module, "get_pool", AsyncMock(return_value=mock_pool)
+        ):
+            r = app_client.get(
+                "/istsos4/v1.1/auth/testoidc/callback?code=abc&state=xyz",
+                follow_redirects=False,
+            )
+
+    assert r.status_code == 202
+
+
+def test_callback_username_collision_returns_409_when_every_fallback_collides(
+    app_client,
+):
+    """The genuine, still-reachable 409 path: the base username AND every
+    auto-suffixed fallback all collide. Vanishingly rare in practice (the
+    last fallback is a hash of the provider's sub claim), but still a real
+    code path worth covering at the HTTP layer."""
+    import app.db.oidc_user_crud as crud_module
+    import app.v1.endpoints.create.oidc_login as route_module
+    from asyncpg.exceptions import UniqueViolationError
+
+    fake_client = _make_fake_oidc_client(
+        {
+            "userinfo": {
+                "sub": "collide-sub-2",
+                "email": "collide2@example.com",
+                "name": "existing_local_user",
+            }
+        }
+    )
+
+    exc = UniqueViolationError(
+        "duplicate key value violates unique constraint 'User_username_key'"
+    )
+    exc.constraint_name = "User_username_key"
+
+    @asynccontextmanager
+    async def fake_transaction():
+        yield None
+
+    mock_conn = AsyncMock()
+    mock_conn.transaction = MagicMock(side_effect=fake_transaction)
+    mock_conn.execute = AsyncMock(return_value=None)
+    # get_user_by_provider_sub -> no match, dup-email lookup -> no match,
+    # then all 5 candidate usernames (base + 4 fallbacks) collide.
+    mock_conn.fetchrow = AsyncMock(side_effect=[None, None, exc, exc, exc, exc, exc])
 
     @asynccontextmanager
     async def mock_acquire():

@@ -109,6 +109,12 @@ async def update_observation(
                 connection, observation_id, payload
             )
 
+            if updated is None:
+                return error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    "Insufficient privileges to update this Observation.",
+                )
+
             if updated:
                 obs_phenomenon_start = updated["phenomenonTimeStart"]
                 obs_phenomenon_end = updated["phenomenonTimeEnd"]
