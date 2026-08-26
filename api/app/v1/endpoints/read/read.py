@@ -261,8 +261,18 @@ async def asyncpg_stream_results(
             else:
                 # Unauthenticated / Path A: fall back to the guest role so the
                 # is_public RLS policies on Datastream and Observation take effect.
-                # The audit INSERT runs BEFORE SET LOCAL ROLE so it executes with
-                # the pool's application-role privileges, not the restricted guest role.
+                # SET LOCAL ROLE guest runs BEFORE the audit INSERT -- the pool's
+                # base login role (ISTSOS_ADMIN) was never granted INSERT on
+                # AuditLog (only 'user'/'sensor', see 003_audit_log.sql, and
+                # 'guest' itself, see 004_public_access.sql); inserting before
+                # the role switch failed with an InsufficientPrivilegeError on
+                # every anonymous read, and -- since one failed statement
+                # poisons the rest of the open transaction in Postgres -- the
+                # swallowed exception below then made the *next* statement
+                # (the actual data query) 500 too. guest already has the grant
+                # it needs once the switch happens first.
+                current_user = {"username": "guest"}
+                await set_role(connection, current_user)
                 try:
                     await log_audit_event(
                         conn=connection,
@@ -276,8 +286,6 @@ async def asyncpg_stream_results(
                     logger.warning(
                         "PUBLIC_READ audit log failed for path=%r", full_path
                     )
-                current_user = {"username": "guest"}
-                await set_role(connection, current_user)
 
             if is_count:
                 if COUNT_MODE == "LIMIT_ESTIMATE":
