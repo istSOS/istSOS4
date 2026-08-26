@@ -90,9 +90,6 @@ async def update_feature_of_interest(
             if not await check_id_exists(
                 connection, "FeaturesOfInterest", feature_of_interest_id
             ):
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-
                 return error_response(
                     status.HTTP_404_NOT_FOUND,
                     "Feature of Interest not found.",
@@ -106,8 +103,6 @@ async def update_feature_of_interest(
             )
 
             if not payload:
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
                 return Response(status_code=status.HTTP_200_OK)
 
             validate_payload_keys(payload, ALLOWED_KEYS)
@@ -120,11 +115,17 @@ async def update_feature_of_interest(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            await update_feature_of_interest_entity(
+            updated = await update_feature_of_interest_entity(
                 connection,
                 feature_of_interest_id,
                 payload,
             )
+
+            if updated is False:
+                return error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    "Insufficient privileges to update this Feature of Interest.",
+                )
 
             datastream_records = await get_datastreams_from_foi(
                 connection, feature_of_interest_id
@@ -134,9 +135,6 @@ async def update_feature_of_interest(
                 await update_datastream_observedArea(
                     connection, ds_id, feature_of_interest_id
                 )
-
-            if current_user is not None:
-                await connection.execute("RESET ROLE;")
 
     return Response(status_code=status.HTTP_200_OK)
 

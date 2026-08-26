@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import json
 import re
 from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
@@ -489,6 +490,38 @@ def validate_username(username: str) -> bool:
     """Return True if *username* contains only letters, digits and underscores
     and is between 3 and 63 characters long."""
     return bool(_USERNAME_RE.match(username))
+
+
+_USERNAME_DISALLOWED_RE = re.compile(r"[^a-zA-Z0-9_]+")
+
+
+def sanitize_username(raw: str, fallback_seed: str) -> str:
+    """Transform an arbitrary OIDC-provider-derived string into something
+    that passes validate_username().
+
+    Local registration's username is typed directly by the user and
+    validated as-is -- this function is only for the OIDC path, where the
+    "username" is whatever a provider's preferred_username/email/name/sub
+    claim happened to contain, none of which are constrained to
+    [a-zA-Z0-9_]{3,63} (a Google display name with a space, an ORCID iD
+    full of hyphens, an email address, ...), and where there is no form
+    step for a real person to retype something invalid -- rejecting the
+    login outright would drop a sincere signup for a reason entirely
+    outside the applicant's control.
+
+    Every run of disallowed characters collapses to a single underscore,
+    then leading/trailing underscores are stripped and the result is
+    truncated to 63 characters. If what's left is under 3 characters --
+    a pathological input with no usable ASCII alphanumerics at all, e.g.
+    a CJK-only display name -- falls back to a short, deterministic hash
+    of *fallback_seed* (pass the provider's `sub` claim) instead, so this
+    always returns something validate_username() accepts.
+    """
+    cleaned = _USERNAME_DISALLOWED_RE.sub("_", raw).strip("_")[:63]
+    if len(cleaned) >= 3:
+        return cleaned
+    digest = hashlib.sha256(fallback_seed.encode("utf-8")).hexdigest()[:12]
+    return f"user_{digest}"
 
 
 def pg_quote_ident(name: str) -> str:

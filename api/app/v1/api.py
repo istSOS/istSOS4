@@ -24,6 +24,7 @@ from app.v1.endpoints.create import (
 from app.v1.endpoints.create import location as create_location
 from app.v1.endpoints.create import login
 from app.v1.endpoints.create import network as create_network
+from app.v1.endpoints.create import oidc_login as oidc_login
 from app.v1.endpoints.create import observation as create_observation
 from app.v1.endpoints.create import (
     observed_property as create_observed_property,
@@ -32,6 +33,8 @@ from app.v1.endpoints.create import policy as create_policy
 from app.v1.endpoints.create import sensor as create_sensor
 from app.v1.endpoints.create import thing as create_thing
 from app.v1.endpoints.create import user as create_user
+from app.v1.endpoints.create import activate_user as activate_user
+from app.v1.endpoints.create import register_request as register_request
 from app.v1.endpoints.delete import datastream as delete_datastream
 from app.v1.endpoints.delete import (
     feature_of_interest as delete_feature_of_interest,
@@ -85,6 +88,10 @@ from app.v1.endpoints.update import policy as update_policy
 from app.v1.endpoints.update import sensor as update_sensor
 from app.v1.endpoints.update import thing as update_thing
 from app.v1.endpoints.update import user as update_user
+from app.v1.endpoints.update import password as update_password
+from app.v1.endpoints.update import role as update_role
+from app.v1.endpoints.update import admin_approval as admin_approval
+from app.v1.endpoints.update import admin_rejection as admin_rejection
 from fastapi import FastAPI
 
 if AUTHORIZATION:
@@ -169,9 +176,16 @@ register_exception_handlers(v1)
 # Register the authorization endpoints (login, user, policy)
 if AUTHORIZATION:
     v1.include_router(login.v1)
+    v1.include_router(oidc_login.v1)       # GET /auth/{provider}/login, /callback
     v1.include_router(read_user.v1)
     v1.include_router(create_user.v1)
+    v1.include_router(activate_user.v1)   # POST /Users/{id}/activate
+    v1.include_router(register_request.v1)  # POST /Register  (public)
     v1.include_router(update_user.v1)
+    v1.include_router(update_password.v1)  # PATCH /Users/{id}/password
+    v1.include_router(update_role.v1)      # PATCH /Users/{id}/role
+    v1.include_router(admin_approval.v1)   # PATCH /Users/{id}/policy-approval
+    v1.include_router(admin_rejection.v1)  # PATCH /Users/{id}/reject
     v1.include_router(delete_user.v1)
     v1.include_router(read_policy.v1)
     v1.include_router(create_policy.v1)

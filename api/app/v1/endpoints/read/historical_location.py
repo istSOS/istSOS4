@@ -14,24 +14,21 @@
 
 import json
 
-from app import ANONYMOUS_VIEWER, AUTHORIZATION, REDIS
+from app import REDIS
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
 from app.sta2rest import sta2rest
-from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .query_parameters import CommonQueryParams, get_common_query_params
 from .read import asyncpg_stream_results, wrapped_result_generator
 
+from app.oauth import get_optional_current_user
+
 v1 = APIRouter()
 
-user = Header(default=None, include_in_schema=False)
-
-if AUTHORIZATION and not ANONYMOUS_VIEWER:
-    from app.oauth import get_current_user
-
-    user = Depends(get_current_user)
+user = Depends(get_optional_current_user)
 
 
 @v1.api_route(

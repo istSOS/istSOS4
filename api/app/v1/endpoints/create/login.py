@@ -29,15 +29,14 @@ from fastapi.security import OAuth2PasswordRequestForm
 v1 = APIRouter()
 
 
-def extract_bearer_token(authorization: str | None) -> str:
+def _extract_bearer_token(authorization: str | None) -> str:
     prefix = "Bearer "
-    if authorization is None or not authorization.lower().startswith(
-        prefix.lower()
-    ):
+    if not authorization or not authorization.lower().startswith(prefix.lower()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid authorization header format",
         )
+
     return authorization[len(prefix) :].strip()
 
 
@@ -87,14 +86,7 @@ async def login(
     include_in_schema=False,
 )
 async def refresh_token(authorization: str | None = Header(default=None)):
-    token = extract_bearer_token(authorization)
-
-    if REDIS and redis.get(token) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has been revoked",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    token = _extract_bearer_token(authorization)
 
     if REDIS and redis.get(token) is not None:
         raise HTTPException(
@@ -135,10 +127,10 @@ async def refresh_token(authorization: str | None = Header(default=None)):
     include_in_schema=False,
 )
 async def logout(authorization: str | None = Header(default=None)):
-    token = extract_bearer_token(authorization)
+    token = _extract_bearer_token(authorization)
 
     try:
-        payload = decode_token(token)
+        expire = decode_token(token).get("exp")
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -146,7 +138,6 @@ async def logout(authorization: str | None = Header(default=None)):
         )
 
     if REDIS:
-        expire = payload.get("exp")
         redis.set(token, "logged_out", ex=ttl_from_exp(expire))
 
     return JSONResponse(

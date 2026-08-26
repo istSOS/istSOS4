@@ -19,8 +19,14 @@ from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
-from app.utils.utils import pg_quote_ident, pg_quote_literal, validate_username
+from app.utils.utils import pg_quote_ident, validate_username
 from app.v1.endpoints.functions import insert_commit, set_role
+from app.v1.endpoints.openapi_responses import (
+    DB_TIMEOUT,
+    DB_UNAVAILABLE,
+    STA_BAD_REQUEST,
+    merge,
+)
 from asyncpg.exceptions import (
     InsufficientPrivilegeError,
     PostgresConnectionError,
@@ -38,17 +44,55 @@ PAYLOAD_EXAMPLE = {
     "username": "cp1",
     "password": "qwertz",
     "uri": "https://orcid.org/0000-0004-3456-7890",
-    "role": "viewer",  # viewer, editor, obs_manager, sensor, qc, custom
+    "role": "viewer",  # viewer, editor, obs_manager, sensor, qc, odrl_governed
 }
-
 
 @v1.api_route(
     "/Users",
     methods=["POST"],
     tags=["Users"],
     summary="Create a new User",
-    description="Create a new User entity.",
+    description=(
+        "Create a new User entity directly, bypassing the "
+        "registration/approval lifecycle. Administrator-only in practice: "
+        "a non-administrator caller is accepted here but then always fails "
+        "with 403, since `set_role()` (needed to attach the RLS policy) is "
+        "only invoked for administrators."
+    ),
     status_code=status.HTTP_201_CREATED,
+    responses=merge(
+        {201: {"description": "Created. Response body is empty."}},
+        STA_BAD_REQUEST,
+        {
+            403: {
+                "description": "The caller is not an administrator.",
+                "content": {
+                    "application/json": {"example": {"message": "Insufficient privileges."}}
+                },
+            },
+            409: {
+                "description": "A user with that username already exists.",
+                "content": {
+                    "application/json": {"example": {"message": "User already exists."}}
+                },
+            },
+        },
+        DB_UNAVAILABLE,
+        DB_TIMEOUT,
+        {
+            500: {
+                "description": (
+                    "Unexpected server error. Also reached, notably, by an "
+                    "invalid `role` value -- validate_rbac_role()'s "
+                    "ValueError isn't caught by a dedicated 400 handler "
+                    "here, so it falls through to this generic one instead."
+                ),
+                "content": {
+                    "application/json": {"example": {"message": "Internal server error."}}
+                },
+            }
+        },
+    ),
 )
 async def create_user(
     payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
@@ -147,25 +191,15 @@ async def create_user(
                     }
                     await insert_commit(connection, commit, "UPDATE")
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-
-                db_role = get_db_role_for_rbac(payload["role"])
-
-                await connection.execute(
-                    "CREATE USER {} WITH ENCRYPTED PASSWORD {} IN ROLE {};".format(
-                        pg_quote_ident(user["username"]),
-                        pg_quote_literal(password),
-                        pg_quote_ident(db_role),
-                    )
-                )
-
-                await connection.execute(
-                    "GRANT {} TO {};".format(
-                        pg_quote_ident(payload["username"]),
-                        pg_quote_ident(current_user["username"]),
-                    )
-                )
+                # No RLS DDL needed here: as of
+                # 007_session_scoped_rls_policies.sql, viewer/editor/
+                # obs_manager/sensor/qc access is enforced by static
+                # policies created once by that migration, not per-user.
+                # odrl_governed is the one role still needing a
+                # per-approval CREATE POLICY call (see
+                # update/admin_approval.py) — this endpoint never collects
+                # a dataset_id, so it correctly can't grant that role
+                # anything meaningful anyway.
 
         return Response(status_code=status.HTTP_201_CREATED)
 
