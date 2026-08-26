@@ -38,6 +38,7 @@ import logging
 
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.db.audit_crud import AUDIT_ACTION_ADMIN_APPROVAL, log_audit_event
 from app.models.error import MessageError
 from app.oauth import get_current_user
 from app.rbac_roles import PENDING_ROLE, validate_rbac_role
@@ -155,7 +156,8 @@ async def activate_user(
             # ----------------------------------------------------------
             user_row = await conn.fetchrow(
                 """
-                SELECT id, username, role, status, dataset_id, requested_role
+                SELECT id, username, role, status, dataset_id, requested_role,
+                    odrl_policy_id, auth_provider
                 FROM sensorthings."User"
                 WHERE id = $1
                 """,
@@ -298,6 +300,29 @@ async def activate_user(
                             "— zero DB footprint).",
                             username,
                         )
+
+                # 4c. Record the activation in the AuditLog — same
+                #     transaction as the role UPDATE above, so a logging
+                #     failure rolls back the activation too (no
+                #     unaudited role grant left behind). Mirrors
+                #     update/admin_approval.py's ADMIN_APPROVAL write;
+                #     this endpoint was the one path into an active role
+                #     that never wrote one (create_pending_oidc_user()
+                #     already logs RESTRICTED_REQUEST on signup — see
+                #     app/db/oidc_user_crud.py).
+                await log_audit_event(
+                    conn=conn,
+                    action_type=AUDIT_ACTION_ADMIN_APPROVAL,
+                    actor_id=current_user["id"],
+                    dataset_id=user_row["dataset_id"],
+                    odrl_policy_id=user_row["odrl_policy_id"],
+                    payload={
+                        "activated_user_id": user_id,
+                        "activated_username": username,
+                        "granted_role": target_role,
+                        "auth_provider": user_row["auth_provider"],
+                    },
+                )
 
         logger.info(
             "User '%s' (id=%d) activated to role '%s' by admin '%s'.",
