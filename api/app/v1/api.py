@@ -13,6 +13,8 @@
 # limitations under the License.
 
 from app import AUTHORIZATION, NETWORK, VERSIONING
+from app.v1.custom_docs import register_custom_docs
+from app.v1.docs_description import V1_DESCRIPTION
 from app.v1.endpoints.create import bulk_observation, data_array_observation
 from app.v1.endpoints.create import datastream as create_datastream
 from app.v1.endpoints.create import (
@@ -23,6 +25,7 @@ from app.v1.endpoints.create import (
 )
 from app.v1.endpoints.create import location as create_location
 from app.v1.endpoints.create import login
+from app.v1.endpoints.create import oidc_login as oidc_login
 from app.v1.endpoints.create import network as create_network
 from app.v1.endpoints.create import observation as create_observation
 from app.v1.endpoints.create import (
@@ -32,6 +35,8 @@ from app.v1.endpoints.create import policy as create_policy
 from app.v1.endpoints.create import sensor as create_sensor
 from app.v1.endpoints.create import thing as create_thing
 from app.v1.endpoints.create import user as create_user
+from app.v1.endpoints.create import activate_user as activate_user
+from app.v1.endpoints.create import register_request as register_request
 from app.v1.endpoints.delete import datastream as delete_datastream
 from app.v1.endpoints.delete import (
     feature_of_interest as delete_feature_of_interest,
@@ -85,17 +90,61 @@ from app.v1.endpoints.update import policy as update_policy
 from app.v1.endpoints.update import sensor as update_sensor
 from app.v1.endpoints.update import thing as update_thing
 from app.v1.endpoints.update import user as update_user
+from app.v1.endpoints.update import password as update_password
+from app.v1.endpoints.update import role as update_role
+from app.v1.endpoints.update import admin_approval as admin_approval
+from app.v1.endpoints.update import admin_rejection as admin_rejection
 from fastapi import FastAPI
 
 if AUTHORIZATION:
     tags_metadata = [
         {
+            "name": "Authentication",
+            "description": (
+                "Obtain, refresh, and revoke bearer tokens for **local** "
+                "accounts.\n\n"
+                "`POST /Login` is the URL behind the **Authorize** button "
+                "above. Tokens carry `sub` and `role`, but the role is "
+                "re-read from the database on every request, so an "
+                "administrator's role change takes effect immediately "
+                "without the token being reissued.\n\n"
+                "Revoking a token via `POST /Logout` requires `REDIS=1` on "
+                "this deployment; without Redis, `/Logout` still succeeds "
+                "but the token remains valid until it naturally expires."
+            ),
+        },
+        {
+            "name": "External Authentication",
+            "description": (
+                "OpenID Connect / OAuth2 browser handshake for Google, "
+                "Microsoft, GitHub, ORCID, and SWITCH edu-ID.\n\n"
+                "**These two routes are browser redirect flows and cannot "
+                "be completed with Try it out.** `/login` responds with a "
+                "302 to the identity provider; `/callback` needs a real "
+                "provider-issued `code` plus the session cookie `/login` "
+                "set moments earlier. Open the `/login` URL directly in a "
+                "browser tab instead.\n\n"
+                "A first-time external identity lands in the same "
+                "`pending` waiting room as `POST /Register` -- it never "
+                "receives a token on its own."
+            ),
+        },
+        {
+            "name": "Registration & Approval",
+            "description": (
+                "The restricted-access lifecycle: a public request, then "
+                "an administrator's decision. Every transition writes an "
+                "append-only `AuditLog` row inside the same transaction as "
+                "the state change it records."
+            ),
+        },
+        {
             "name": "Users",
-            "description": "Users of the SensorThings API.",
+            "description": "User accounts, credentials, and role assignment.",
         },
         {
             "name": "Policies",
-            "description": "Policies for the SensorThings API.",
+            "description": "Row-level-security policies for the SensorThings API.",
         },
     ]
 else:
@@ -157,21 +206,44 @@ tags_metadata += [
 ]
 
 v1 = FastAPI(
-    title="OGC SensorThings API",
-    description="A SensorThings API implementation in Python using FastAPI.",
+    title="istSOS4 — OGC SensorThings API with Auth & RBAC",
+    description=V1_DESCRIPTION,
     version="1.1",
     openapi_tags=tags_metadata,
-    swagger_ui_parameters={"defaultModelsExpandDepth": -1},
+    # Custom-themed /docs is registered manually below via
+    # register_custom_docs() -- docs_url=None stops FastAPI's own setup()
+    # from claiming the path first (see app/v1/custom_docs.py).
+    docs_url=None,
+    swagger_ui_parameters={
+        # Was -1, which hid the Schemas panel entirely -- including the new
+        # auth/RBAC request and error models this PR adds. 1 keeps them
+        # collapsed by default (there are ~70 schemas) without hiding them.
+        "defaultModelsExpandDepth": 1,
+        "docExpansion": "list",        # tags open, individual operations collapsed
+        "filter": True,                # search box over ~77 operations
+        "persistAuthorization": True,  # bearer token survives a page reload
+        "displayRequestDuration": True,
+        "tryItOutEnabled": True,
+        "deepLinking": True,           # each operation gets a shareable/bookmarkable URL
+    },
 )
+register_custom_docs(v1)
 
 register_exception_handlers(v1)
 
 # Register the authorization endpoints (login, user, policy)
 if AUTHORIZATION:
     v1.include_router(login.v1)
+    v1.include_router(oidc_login.v1)       # GET /auth/{provider}/login, /callback
     v1.include_router(read_user.v1)
     v1.include_router(create_user.v1)
+    v1.include_router(activate_user.v1)   # POST /Users/{id}/activate
+    v1.include_router(register_request.v1)  # POST /Register  (public)
     v1.include_router(update_user.v1)
+    v1.include_router(update_password.v1)  # PATCH /Users/{id}/password
+    v1.include_router(update_role.v1)      # PATCH /Users/{id}/role
+    v1.include_router(admin_approval.v1)   # PATCH /Users/{id}/policy-approval
+    v1.include_router(admin_rejection.v1)  # PATCH /Users/{id}/reject
     v1.include_router(delete_user.v1)
     v1.include_router(read_policy.v1)
     v1.include_router(create_policy.v1)

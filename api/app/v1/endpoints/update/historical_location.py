@@ -74,8 +74,6 @@ async def update_historical_location(
             if not await check_id_exists(
                 connection, "HistoricalLocation", historical_location_id
             ):
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
                 return error_response(
                     status.HTTP_404_NOT_FOUND,
                     "Historical Location not found.",
@@ -89,8 +87,6 @@ async def update_historical_location(
             )
 
             if not payload:
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
                 return Response(status_code=status.HTTP_200_OK)
 
             validate_payload_keys(payload, ALLOWED_KEYS)
@@ -103,14 +99,17 @@ async def update_historical_location(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            await update_historical_location_entity(
+            updated = await update_historical_location_entity(
                 connection,
                 historical_location_id,
                 payload,
             )
 
-            if current_user is not None:
-                await connection.execute("RESET ROLE;")
+            if updated is False:
+                return error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    "Insufficient privileges to update this Historical Location.",
+                )
 
     return Response(status_code=status.HTTP_200_OK)
 

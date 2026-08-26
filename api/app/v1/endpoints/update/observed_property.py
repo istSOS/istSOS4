@@ -84,8 +84,6 @@ async def update_observed_property(
             if not await check_id_exists(
                 connection, "ObservedProperty", observed_property_id
             ):
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
                 return error_response(
                     status.HTTP_404_NOT_FOUND,
                     "Observed Property ID not found.",
@@ -99,8 +97,6 @@ async def update_observed_property(
             )
 
             if not payload:
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
                 return Response(status_code=status.HTTP_200_OK)
 
             validate_payload_keys(payload, ALLOWED_KEYS)
@@ -113,14 +109,17 @@ async def update_observed_property(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            await update_observed_property_entity(
+            updated = await update_observed_property_entity(
                 connection,
                 observed_property_id,
                 payload,
             )
 
-            if current_user is not None:
-                await connection.execute("RESET ROLE;")
+            if updated is False:
+                return error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    "Insufficient privileges to update this Observed Property.",
+                )
 
     return Response(status_code=status.HTTP_200_OK)
 

@@ -21,6 +21,7 @@ from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
 from app.utils.utils import pg_quote_ident, validate_payload_keys
 from app.v1.endpoints.exceptions import BadRequest
 from app.v1.endpoints.functions import set_role
+from app.v1.endpoints.openapi_responses import merge
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Body, Depends, Query, status
 from fastapi.responses import JSONResponse, Response
@@ -48,13 +49,47 @@ ALLOWED_KEYS = [
     methods=["PATCH"],
     tags=["Users"],
     summary="Update a User",
-    description="Update a User",
+    description=(
+        "Update an existing user's role, contact info, and/or uri, "
+        "identified by username via the `user` query parameter (not an "
+        "id, unlike most other /Users endpoints). Changing `role` also "
+        "re-grants the underlying PostgreSQL group role if the new role "
+        "maps to a different one."
+    ),
     status_code=status.HTTP_200_OK,
+    responses=merge(
+        {
+            200: {"description": "Updated (or, with an empty payload, a no-op). Response body is empty."},
+            404: {
+                "description": "No user exists with that username.",
+                "content": {"application/json": {"example": {"message": "User not found."}}},
+            },
+            # Genuinely 401 here, not 403 -- an inconsistency worth knowing
+            # about rather than silently normalising away: most other
+            # endpoints in this API map InsufficientPrivilegeError to 403.
+            401: {
+                "description": (
+                    "The caller is not an administrator. Mapped to 401 "
+                    "here specifically, unlike most other endpoints in "
+                    "this API, which use 403 for the same condition."
+                ),
+                "content": {"application/json": {"example": {"message": "Insufficient privileges"}}},
+            },
+            400: {
+                "description": (
+                    "Catch-all: missing `user` query param, an unrecognised "
+                    "payload key, an invalid role value, or any other "
+                    "failure -- the message is the raw exception text."
+                ),
+                "content": {"application/json": {"example": {"message": "User not provided"}}},
+            },
+        }
+    ),
 )
 async def update_user(
     user: str = Query(
         alias="user",
-        description="The the user to update",
+        description="Username of the user to update (not their id).",
     ),
     payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     current_user=Depends(get_current_user),
@@ -85,8 +120,6 @@ async def update_user(
                     )
 
                 if not payload:
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
                     return Response(status_code=status.HTTP_200_OK)
 
                 validate_payload_keys(payload, ALLOWED_KEYS)
@@ -131,8 +164,6 @@ async def update_user(
                             )
                         )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
 

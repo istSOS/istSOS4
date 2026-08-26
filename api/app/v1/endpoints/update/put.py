@@ -159,6 +159,14 @@ async def handle_put_replace(
 
             updated = await update_entity_fn(connection, entity_id, payload)
 
+            if not updated:
+                if current_user is not None:
+                    await connection.execute("RESET ROLE;")
+                return error_response(
+                    status.HTTP_403_FORBIDDEN,
+                    f"Insufficient privileges to update this {entity_db_name}.",
+                )
+
             if post_update is not None:
                 await post_update(connection, entity_id, payload, updated)
 

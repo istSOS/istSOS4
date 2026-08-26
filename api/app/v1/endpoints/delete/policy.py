@@ -33,8 +33,26 @@ if AUTHORIZATION:
     methods=["DELETE"],
     tags=["Policies"],
     summary="Delete a Policy",
-    description="Delete a Policy",
+    description="Delete a named row-level-security policy. Administrator-only.",
     status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Deleted. Response body is empty."},
+        400: {
+            "description": "Catch-all for any unexpected failure during deletion.",
+            "content": {"application/json": {"example": {"message": "..."}}},
+        },
+        401: {
+            "description": (
+                "The caller is not an administrator. 401 here, not 403 -- "
+                "same inconsistency as update/user.py and update/policy.py."
+            ),
+            "content": {"application/json": {"example": {"message": "Insufficient privileges"}}},
+        },
+        404: {
+            "description": "No policy exists with that name.",
+            "content": {"application/json": {"example": {"message": "Policy not found"}}},
+        },
+    },
 )
 async def delete_policy(
     policy: str = Query(
@@ -68,8 +86,6 @@ async def delete_policy(
                 )
                 await connection.execute(query)
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
 

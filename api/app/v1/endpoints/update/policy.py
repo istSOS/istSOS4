@@ -20,6 +20,7 @@ from app.oauth import get_current_user
 from app.utils.utils import pg_quote_ident, validate_payload_keys
 from app.v1.endpoints.exceptions import NotFound
 from app.v1.endpoints.functions import set_role
+from app.v1.endpoints.openapi_responses import merge
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Body, Depends, Query, status
 from fastapi.responses import JSONResponse, Response
@@ -55,8 +56,45 @@ def validate_policy_expression(value: str) -> str:
     methods=["PATCH"],
     tags=["Policies"],
     summary="Update a Policy",
-    description="Update a Policy",
+    description=(
+        "Add users to an existing policy, and/or change its USING/WITH "
+        "CHECK expression, identified by policy name via the `policy` "
+        "query parameter."
+    ),
     status_code=status.HTTP_200_OK,
+    responses=merge(
+        {
+            200: {"description": "Updated. Response body is empty."},
+            404: {
+                "description": "No policy exists with that name (raised via UndefinedObjectError).",
+                "content": {"application/json": {"example": {"message": "Policy not found"}}},
+            },
+            # See the identical note in create/policy.py: this handler's
+            # own except Exception catches everything first, including
+            # NotFound (a STAError subclass meant to reach the app-level
+            # handler with its own 404 + {"code","type","message"} body).
+            # It never gets there -- flattened to 400 {"message"} instead.
+            400: {
+                "description": (
+                    "Catch-all: an unrecognised payload key, an unsafe or "
+                    "empty policy expression, an unsupported policy "
+                    "command, or -- notably -- the policy name not being "
+                    "found when only `policy` (no `users`) is supplied. "
+                    "That last case is a NotFound (STAError) raised "
+                    "internally but caught here before it can reach its "
+                    "own handler, so it surfaces as 400, not 404."
+                ),
+                "content": {"application/json": {"example": {"message": "Policy 'demo' not found."}}},
+            },
+            401: {
+                "description": (
+                    "The caller is not an administrator. 401 here, not "
+                    "403 -- same inconsistency as update/user.py."
+                ),
+                "content": {"application/json": {"example": {"message": "Insufficient privileges."}}},
+            },
+        }
+    ),
 )
 async def update_policy(
     policy: str = Query(
@@ -77,52 +115,48 @@ async def update_policy(
                     await set_role(connection, current_user)
                     role_switched = True
 
-                try:
-                    validate_payload_keys(payload, ALLOWED_KEYS)
+                validate_payload_keys(payload, ALLOWED_KEYS)
 
-                    if payload.get("users") is not None:
-                        query = """
-                            SELECT sensorthings.add_users_to_policy($1, $2);
-                        """
-                        tablename, cmd = await connection.fetchval(
-                            query, payload["users"], policy
+                if payload.get("users") is not None:
+                    query = """
+                        SELECT sensorthings.add_users_to_policy($1, $2);
+                    """
+                    tablename, cmd = await connection.fetchval(
+                        query, payload["users"], policy
+                    )
+                else:
+                    query = """
+                        SELECT tablename, cmd FROM pg_policies
+                        WHERE policyname = $1;
+                    """
+                    row = await connection.fetchrow(query, policy)
+                    if row is None:
+                        raise NotFound(f"Policy '{policy}' not found.")
+
+                    tablename, cmd = row["tablename"], row["cmd"]
+
+                if payload.get("policy") is not None:
+                    policy_expression = validate_policy_expression(
+                        payload["policy"]
+                    )
+                    policy_ident = pg_quote_ident(policy)
+                    table_ident = pg_quote_ident(tablename)
+                    cmd_upper = (cmd or "").upper()
+
+                    policy_sql = {
+                        "SELECT": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({policy_expression});",
+                        "INSERT": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} WITH CHECK ({policy_expression});",
+                        "UPDATE": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({policy_expression}) WITH CHECK ({policy_expression});",
+                        "DELETE": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({policy_expression});",
+                        "ALL": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({policy_expression}) WITH CHECK ({policy_expression});",
+                    }.get(cmd_upper)
+
+                    if policy_sql is None:
+                        raise ValueError(
+                            f"Unsupported policy command: {cmd}"
                         )
-                    else:
-                        query = """
-                            SELECT tablename, cmd FROM pg_policies
-                            WHERE policyname = $1;
-                        """
-                        row = await connection.fetchrow(query, policy)
-                        if row is None:
-                            raise NotFound(f"Policy '{policy}' not found.")
 
-                        tablename, cmd = row["tablename"], row["cmd"]
-
-                    if payload.get("policy") is not None:
-                        policy_expression = validate_policy_expression(
-                            payload["policy"]
-                        )
-                        policy_ident = pg_quote_ident(policy)
-                        table_ident = pg_quote_ident(tablename)
-                        cmd_upper = (cmd or "").upper()
-
-                        policy_sql = {
-                            "SELECT": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({policy_expression});",
-                            "INSERT": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} WITH CHECK ({policy_expression});",
-                            "UPDATE": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({policy_expression}) WITH CHECK ({policy_expression});",
-                            "DELETE": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({policy_expression});",
-                            "ALL": f"ALTER POLICY {policy_ident} ON sensorthings.{table_ident} USING ({policy_expression}) WITH CHECK ({policy_expression});",
-                        }.get(cmd_upper)
-
-                        if policy_sql is None:
-                            raise ValueError(
-                                f"Unsupported policy command: {cmd}"
-                            )
-
-                        await connection.execute(policy_sql)
-                finally:
-                    if role_switched:
-                        await connection.execute("RESET ROLE;")
+                    await connection.execute(policy_sql)
 
         return Response(status_code=status.HTTP_200_OK)
 
