@@ -218,16 +218,7 @@ BEGIN
         EXECUTE format('
             CREATE OR REPLACE FUNCTION "Things@iot.navigationLink"(sensorthings."Commit")
             RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."Thing" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        ''/Commits('' || $1.id || '')/Things''
-                    ELSE 
-                        NULL
-                END;
+                SELECT ''/Commits('' || $1.id || '')/Things'';
             $$ LANGUAGE SQL;
         ');
 
@@ -235,16 +226,7 @@ BEGIN
         EXECUTE format('
             CREATE OR REPLACE FUNCTION "Locations@iot.navigationLink"(sensorthings."Commit")
             RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."Location" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        ''/Commits('' || $1.id || '')/Locations''
-                    ELSE 
-                        NULL
-                END;
+                SELECT ''/Commits('' || $1.id || '')/Locations'';
             $$ LANGUAGE SQL;
         ');
 
@@ -252,16 +234,7 @@ BEGIN
         EXECUTE format('
             CREATE OR REPLACE FUNCTION "HistoricalLocations@iot.navigationLink"(sensorthings."Commit")
             RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."HistoricalLocation" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        ''/Commits('' || $1.id || '')/HistoricalLocations''
-                    ELSE 
-                        NULL
-                END;
+                SELECT ''/Commits('' || $1.id || '')/HistoricalLocations'';
             $$ LANGUAGE SQL;
         ');
 
@@ -269,16 +242,7 @@ BEGIN
         EXECUTE format('
             CREATE OR REPLACE FUNCTION "ObservedProperties@iot.navigationLink"(sensorthings."Commit")
             RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."ObservedProperty" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        ''/Commits('' || $1.id || '')/ObservedProperties''
-                    ELSE 
-                        NULL
-                END;
+                SELECT ''/Commits('' || $1.id || '')/ObservedProperties'';
             $$ LANGUAGE SQL;
         ');
 
@@ -286,16 +250,7 @@ BEGIN
          EXECUTE format('
             CREATE OR REPLACE FUNCTION "Sensors@iot.navigationLink"(sensorthings."Commit")
             RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."Sensor" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        ''/Commits('' || $1.id || '')/Sensors''
-                    ELSE 
-                        NULL
-                END;
+                SELECT ''/Commits('' || $1.id || '')/Sensors'';
             $$ LANGUAGE SQL;
         ');
 
@@ -303,32 +258,14 @@ BEGIN
         EXECUTE format('
             CREATE OR REPLACE FUNCTION "Datastreams@iot.navigationLink"(sensorthings."Commit")
             RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."Datastream" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        ''/Commits('' || $1.id || '')/Datastreams''
-                    ELSE 
-                        NULL
-                END;
+                SELECT ''/Commits('' || $1.id || '')/Datastreams'';
             $$ LANGUAGE SQL;
         ');
         -- Create or replace function for FeaturesOfInterest@iot.navigationLink in Commit table
         EXECUTE format('
             CREATE OR REPLACE FUNCTION "FeaturesOfInterest@iot.navigationLink"(sensorthings."Commit")
             RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."FeaturesOfInterest" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        ''/Commits('' || $1.id || '')/FeaturesOfInterest''
-                    ELSE 
-                        NULL
-                END;
+                SELECT ''/Commits('' || $1.id || '')/FeaturesOfInterest'';
             $$ LANGUAGE SQL;
         ');
 
@@ -336,16 +273,7 @@ BEGIN
         EXECUTE format('
             CREATE OR REPLACE FUNCTION "Observations@iot.navigationLink"(sensorthings."Commit")
             RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."Observation" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        ''/Commits('' || $1.id || '')/Observations''
-                    ELSE 
-                        NULL
-                END;
+                SELECT ''/Commits('' || $1.id || '')/Observations'';
             $$ LANGUAGE SQL;
         ');
 
@@ -381,16 +309,7 @@ BEGIN
             EXECUTE format('
                 CREATE OR REPLACE FUNCTION "Networks@iot.navigationLink"(sensorthings."Commit")
                 RETURNS text AS $$
-                    SELECT CASE 
-                        WHEN EXISTS (
-                            SELECT 1 
-                            FROM sensorthings."Network" 
-                            WHERE commit_id = $1.id
-                        ) THEN 
-                            ''/Commits('' || $1.id || '')/Network''
-                        ELSE 
-                            NULL
-                    END;
+                    SELECT ''/Commits('' || $1.id || '')/Networks'';
                 $$ LANGUAGE SQL;
             ');
         END IF;

@@ -521,129 +521,48 @@ BEGIN
 
             -- Create or replace function for Things@iot.navigationLink in Commit table
             CREATE OR REPLACE FUNCTION "Things@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."Thing" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        '/Commits(' || $1.id || ')/Things'
-                    ELSE 
-                        NULL
-                END;
+                SELECT '/Commits(' || $1.id || ')/Things';
             $$ LANGUAGE SQL;
 
             -- Create or replace function for Locations@iot.navigationLink in Commit table
             CREATE OR REPLACE FUNCTION "Locations@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."Location" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        '/Commits(' || $1.id || ')/Locations'
-                    ELSE 
-                        NULL
-                END;
+                SELECT '/Commits(' || $1.id || ')/Locations';
             $$ LANGUAGE SQL;
 
             -- Create or replace function for HistoricalLocations@iot.navigationLink in Commit table
             CREATE OR REPLACE FUNCTION "HistoricalLocations@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."HistoricalLocation" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        '/Commits(' || $1.id || ')/HistoricalLocations'
-                    ELSE 
-                        NULL
-                END;
+                SELECT '/Commits(' || $1.id || ')/HistoricalLocations';
             $$ LANGUAGE SQL;
 
             -- Create or replace function for ObservedProperties@iot.navigationLink in Commit table
             CREATE OR REPLACE FUNCTION "ObservedProperties@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."ObservedProperty" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        '/Commits(' || $1.id || ')/ObservedProperties'
-                    ELSE 
-                        NULL
-                END;
+                SELECT '/Commits(' || $1.id || ')/ObservedProperties';
             $$ LANGUAGE SQL;
 
             -- Create or replace function for Sensors@iot.navigationLink in Commit table
             CREATE OR REPLACE FUNCTION "Sensors@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."Sensor" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        '/Commits(' || $1.id || ')/Sensors'
-                    ELSE 
-                        NULL
-                END;
+                SELECT '/Commits(' || $1.id || ')/Sensors';
             $$ LANGUAGE SQL;
 
             -- Create or replace function for Datastreams@iot.navigationLink in Commit table
             CREATE OR REPLACE FUNCTION "Datastreams@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."Datastream" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        '/Commits(' || $1.id || ')/Datastreams'
-                    ELSE 
-                        NULL
-                END;
+                SELECT '/Commits(' || $1.id || ')/Datastreams';
             $$ LANGUAGE SQL;
 
             -- Create or replace function for FeaturesOfInterest@iot.navigationLink in Commit table
             CREATE OR REPLACE FUNCTION "FeaturesOfInterest@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."FeaturesOfInterest" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        '/Commits(' || $1.id || ')/FeaturesOfInterest'
-                    ELSE 
-                        NULL
-                END;
+                SELECT '/Commits(' || $1.id || ')/FeaturesOfInterest';
             $$ LANGUAGE SQL;
-
+            
             -- Create or replace function for Observations@iot.navigationLink in Commit table
             CREATE OR REPLACE FUNCTION "Observations@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-                SELECT CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM sensorthings."Observation" 
-                        WHERE commit_id = $1.id
-                    ) THEN 
-                        '/Commits(' || $1.id || ')/Observations'
-                    ELSE 
-                        NULL
-                END;
+                SELECT '/Commits(' || $1.id || ')/Observations';
             $$ LANGUAGE SQL;
 
             IF current_setting('custom.network')::boolean THEN
                 -- Create or replace function for Networks@iot.navigationLink in Commit table
                 CREATE OR REPLACE FUNCTION "Networks@iot.navigationLink"(sensorthings."Commit") RETURNS text AS $$
-                    SELECT CASE 
-                        WHEN EXISTS (
-                            SELECT 1 
-                            FROM sensorthings."Network" 
-                            WHERE commit_id = $1.id
-                        ) THEN 
-                            '/Commits(' || $1.id || ')/Networks'
-                        ELSE 
-                            NULL
-                    END;
+                    SELECT '/Commits(' || $1.id || ')/Networks';
                 $$ LANGUAGE SQL;
             END IF;
         END IF;
@@ -701,7 +620,9 @@ BEGIN
             ALTER VIEW sensorthings."Datastream_traveltime" SET (security_invoker = on);
             ALTER VIEW sensorthings."FeaturesOfInterest_traveltime" SET (security_invoker = on);
             ALTER VIEW sensorthings."Observation_traveltime" SET (security_invoker = on);
-            ALTER VIEW sensorthings."Network_traveltime" SET (security_invoker = on);
+            IF current_setting('custom.network')::boolean THEN
+                ALTER VIEW sensorthings."Network_traveltime" SET (security_invoker = on);
+            END IF;
 
         END IF;
     END IF;
