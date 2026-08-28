@@ -539,53 +539,59 @@ class FilterVisitor(visitor.NodeVisitor):
     # String Functions
     ####################################################################################
 
-    def substr_function(
-        self, field: ast._Node, substr: ast._Node, func: str
-    ) -> ClauseElement:
-        identifier = self.visit(field)
-        substring = self.visit(substr)
-        op = getattr(identifier, func)
+    LIKE_WILDCARDS = {
+        "contains": ("%", "%"),
+        "startswith": ("", "%"),
+        "endswith": ("%", ""),
+    }
 
-        return op(substring)
+    def result_field(self, node: ast._Node) -> Any:
+        if isinstance(node, ast.Identifier) and node.name == "result":
+            return getattr(globals()[self.root_model], "result_string")
+        return node
+
+    def like_function(
+        self, field: Any, substr: Any, func: str
+    ) -> ClauseElement:
+        identifier = (
+            self.visit(field) if isinstance(field, ast._Node) else field
+        )
+
+        if isinstance(substr, ast.String):
+            return getattr(identifier, func)(substr.py_val, autoescape=True)
+
+        pattern = (
+            self.visit(substr) if isinstance(substr, ast._Node) else substr
+        )
+        for char in ("/", "%", "_"):
+            pattern = functions.func.replace(pattern, char, "/" + char)
+        prefix, suffix = self.LIKE_WILDCARDS[func]
+        if prefix:
+            pattern = literal(prefix).concat(pattern)
+        if suffix:
+            pattern = pattern.concat(suffix)
+        return identifier.like(pattern, escape="/")
 
     def func_substringof(
         self, substr: ast._Node, field: ast._Node
     ) -> ClauseElement:
-        if isinstance(substr, ast.Identifier) and substr.name == "result":
-            identifier = getattr(globals()[self.root_model], "result_string")
-            return self.visit(field).contains(identifier)
-        if isinstance(field, ast.Identifier) and field.name == "result":
-            identifier = getattr(globals()[self.root_model], "result_string")
-            return identifier.contains(self.visit(substr))
-        return self.substr_function(field, substr, "contains")
+        return self.like_function(
+            self.result_field(field), self.result_field(substr), "contains"
+        )
 
     def func_endswith(
         self, field: ast._Node, substr: ast._Node
     ) -> ClauseElement:
-        if isinstance(field, ast.Identifier) and field.name == "result":
-            identifier = getattr(globals()[self.root_model], "result_string")
-            return identifier.endswith(self.visit(substr))
-        if isinstance(substr, ast.Identifier) and substr.name == "result":
-            identifier = getattr(globals()[self.root_model], "result_string")
-            return self.visit(field).endswith(identifier)
-        if isinstance(field, ast.Identifier):
-            return self.substr_function(field, substr, "endswith")
-        if isinstance(substr, ast.Identifier):
-            return self.substr_function(substr, field, "endswith")
+        return self.like_function(
+            self.result_field(field), self.result_field(substr), "endswith"
+        )
 
     def func_startswith(
         self, field: ast._Node, substr: ast._Node
     ) -> ClauseElement:
-        if isinstance(field, ast.Identifier) and field.name == "result":
-            identifier = getattr(globals()[self.root_model], "result_string")
-            return identifier.startswith(self.visit(substr))
-        if isinstance(substr, ast.Identifier) and substr.name == "result":
-            identifier = getattr(globals()[self.root_model], "result_string")
-            return self.visit(field).startswith(identifier)
-        if isinstance(field, ast.Identifier):
-            return self.substr_function(field, substr, "startswith")
-        if isinstance(substr, ast.Identifier):
-            return self.substr_function(substr, field, "startswith")
+        return self.like_function(
+            self.result_field(field), self.result_field(substr), "startswith"
+        )
 
     def func_length(self, arg: ast._Node) -> functions.Function:
         if isinstance(arg, ast.Identifier) and arg.name == "result":
