@@ -17,6 +17,24 @@ DB_ROLE_BY_RBAC_ROLE = {
 }
 
 
+# WARNING: This static RBAC dictionary is legacy scaffolding. Data policies
+# and role grants are intended to be dynamically generated via the ODRL
+# engine. Do not extend this map for new use cases — treat it as a
+# placeholder pending that migration, and update it here (not by
+# redeclaring it in individual endpoint files) if it must change before
+# then.
+#
+# Maps the application-layer role to its sensorthings RLS policy function.
+# Administrator is intentionally absent — admins bypass RLS by privilege,
+# not by policy.
+POLICY_FN_MAP = {
+    "viewer":      "sensorthings.viewer_policy",
+    "editor":      "sensorthings.editor_policy",
+    "obs_manager": "sensorthings.obs_manager_policy",
+    "sensor":      "sensorthings.sensor_policy",
+}
+
+
 def validate_rbac_role(role: str) -> str:
     clean_role = role.strip().lower()
     if clean_role not in VALID_RBAC_ROLES:
