@@ -29,6 +29,7 @@ from app import (
 )
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
+from app.rbac_roles import DELETED_STATUS, PENDING_ROLE
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
@@ -41,7 +42,7 @@ async def get_user_from_db(username: str):
     pool = await get_pool()
     async with pool.acquire() as connection:
         query = """
-            SELECT id, username, role, uri
+            SELECT id, username, role, uri, status
             FROM sensorthings."User"
             WHERE username = $1
         """
@@ -52,6 +53,7 @@ async def get_user_from_db(username: str):
                 "username": user_record["username"],
                 "role": user_record["role"],
                 "uri": user_record["uri"],
+                "status": user_record["status"],
             }
     return None
 
@@ -128,7 +130,7 @@ async def authenticate_user(username: str, password: str):
     pool = await get_pool()
     try:
         async with pool.acquire() as connection:
-            query = 'SELECT role FROM sensorthings."User" WHERE username=$1'
+            query = 'SELECT role, status FROM sensorthings."User" WHERE username=$1'
             row = await connection.fetchrow(query, username)
 
             if not row:
@@ -140,6 +142,12 @@ async def authenticate_user(username: str, password: str):
                 )
                 return None
 
+            if row["status"] == DELETED_STATUS:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="This account has been deactivated.",
+                )
+
             return {"sub": username, "role": row["role"]}
     except TypeError as e:
         logger.error(
@@ -149,7 +157,6 @@ async def authenticate_user(username: str, password: str):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication service temporarily unavailable",
         )
-
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -172,6 +179,17 @@ def decode_token(token: str):
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
+    """Decode the Bearer JWT and return the authenticated user dict.
+
+    Raises:
+        401 – token missing / invalid / revoked.
+        403 – user exists but is in the 'pending' waiting room; they must be
+              activated by an administrator before accessing any resource.
+        403 – user's account has been deactivated (DELETE /Users). Checked
+              live on every request, same as role -- a still-valid JWT
+              issued before deactivation stops working on its very next
+              use, no token revocation needed.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -189,7 +207,28 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         username: str = payload.get("sub")
     except InvalidTokenError:
         raise credentials_exception
+
+    # NOTE: role is intentionally fetched live from the DB on every request.
+    # This ensures role changes (via PATCH /Users/{id}/role) take effect
+    # immediately without requiring JWT rotation, eliminating stale JWT
+    # vulnerabilities.
     user = await get_user_from_db(username)
     if user is None:
         raise credentials_exception
+
+    # Pending users have authenticated successfully (their JWT is valid) but
+    # they have NO database role and are awaiting admin activation.  Block
+    # them here so they never reach any business-logic handler.
+    if user["role"] == PENDING_ROLE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account pending admin activation",
+        )
+
+    if user["status"] == DELETED_STATUS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been deactivated",
+        )
+
     return user
