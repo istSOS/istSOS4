@@ -94,6 +94,58 @@ async def wrapped_result_generator(first_item, result):
         await result.aclose()
 
 
+async def stream_or_error(result, media_type="application/json"):
+    try:
+        first_item = await anext(result)
+        return StreamingResponse(
+            wrapped_result_generator(first_item, result),
+            media_type=media_type,
+            status_code=status.HTTP_200_OK,
+        )
+    except StopAsyncIteration:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "code": 404,
+                "type": "error",
+                "message": "Not Found",
+            },
+        )
+    except (
+        asyncpg.PostgresConnectionError,
+        asyncpg.TooManyConnectionsError,
+    ):
+        logger.exception("Database unavailable during initial stream fetch")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "code": 503,
+                "type": "error",
+                "message": "Database temporarily unavailable",
+            },
+        )
+    except asyncpg.PostgresError:
+        logger.exception("PostgreSQL error during initial stream fetch")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "code": 500,
+                "type": "error",
+                "message": "Internal server error",
+            },
+        )
+    except Exception:
+        logger.exception("Unexpected error during initial stream fetch")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "code": 500,
+                "type": "error",
+                "message": "Internal server error",
+            },
+        )
+
+
 @v1.api_route(
     "/{path_name:path}",
     methods=["GET"],
@@ -155,57 +207,9 @@ async def catch_all_get(
             value,
         )
 
-        try:
-            first_item = await anext(result)
-            return StreamingResponse(
-                wrapped_result_generator(first_item, result),
-                media_type="text/plain" if value else "application/json",
-                status_code=status.HTTP_200_OK,
-            )
-        except StopAsyncIteration:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={
-                    "code": 404,
-                    "type": "error",
-                    "message": "Not Found",
-                },
-            )
-        except (
-            asyncpg.PostgresConnectionError,
-            asyncpg.TooManyConnectionsError,
-        ):
-            logger.exception(
-                "Database unavailable during initial stream fetch"
-            )
-            return JSONResponse(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                content={
-                    "code": 503,
-                    "type": "error",
-                    "message": "Database temporarily unavailable",
-                },
-            )
-        except asyncpg.PostgresError:
-            logger.exception("PostgreSQL error during initial stream fetch")
-            return JSONResponse(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content={
-                    "code": 500,
-                    "type": "error",
-                    "message": "Internal server error",
-                },
-            )
-        except Exception:
-            logger.exception("Unexpected streaming error in catch_all_get")
-            return JSONResponse(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content={
-                    "code": 500,
-                    "type": "error",
-                    "message": "Internal server error",
-                },
-            )
+        return await stream_or_error(
+            result, "text/plain" if value else "application/json"
+        )
 
     except HTTPException:
         raise
