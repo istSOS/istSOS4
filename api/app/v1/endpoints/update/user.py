@@ -56,7 +56,7 @@ async def update_user(
         alias="user",
         description="The the user to update",
     ),
-    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
+    payload: dict = Body(example=PAYLOAD_EXAMPLE),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
@@ -85,8 +85,6 @@ async def update_user(
                     )
 
                 if not payload:
-                    if current_user is not None:
-                        await connection.execute("RESET ROLE;")
                     return Response(status_code=status.HTTP_200_OK)
 
                 validate_payload_keys(payload, ALLOWED_KEYS)
@@ -131,8 +129,6 @@ async def update_user(
                             )
                         )
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
 
