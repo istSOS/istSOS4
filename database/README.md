@@ -9,6 +9,14 @@ Additionally, other SOS-specific metadata may be considered as an extension.
 You can enable or disable database versioning by setting the **VERSIONING** environment variable in the `.env` file.
 
 For more information about the database versioning, refer to the [Database Versioning Documentation](https://github.com/istSOS/istsos4/blob/traveltime/database/README_VERSIONING.md)
+
+### Datastream aggregation functions
+
+The database image installs the Datastream aggregation functions and procedures
+only when versioning is enabled (`VERSIONING=1`) and duplicate entities are
+disabled (`DUPLICATES=0`). The aggregation upsert requires the Observation
+uniqueness constraint created by the latter setting, while incremental
+recomputation uses the system-time history installed by versioning.
     
 ### Database dummy data
 
