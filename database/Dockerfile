@@ -35,3 +35,4 @@ COPY ./migrations/006_user_dataset_policy.sql /docker-entrypoint-initdb.d/20_mig
 COPY ./migrations/007_session_scoped_rls_policies.sql /docker-entrypoint-initdb.d/21_migration_007_session_scoped_rls_policies.sql
 COPY ./migrations/008_requested_role.sql /docker-entrypoint-initdb.d/22_migration_008_requested_role.sql
 COPY ./migrations/009_oidc_duplicate_hint.sql /docker-entrypoint-initdb.d/23_migration_009_oidc_duplicate_hint.sql
+COPY ./migrations/010_observation_dataset_scoping.sql /docker-entrypoint-initdb.d/24_migration_010_observation_dataset_scoping.sql
