@@ -78,9 +78,6 @@ async def create_historical_location(
                 connection, payload, commit_id
             )
 
-            if current_user is not None:
-                await connection.execute("RESET ROLE;")
-
     return Response(
         status_code=status.HTTP_201_CREATED,
         headers={"location": header},
@@ -131,9 +128,6 @@ async def create_historical_location_for_thing(
             _, header = await insert_historical_location_entity(
                 connection, payload, commit_id
             )
-
-            if current_user is not None:
-                await connection.execute("RESET ROLE;")
 
     return Response(
         status_code=status.HTTP_201_CREATED,
