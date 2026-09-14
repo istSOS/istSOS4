@@ -113,84 +113,9 @@ async def update_observation(
                 connection, observation_id, payload
             )
 
-            if updated:
-                obs_phenomenon_start = updated["phenomenonTimeStart"]
-                obs_phenomenon_end = updated["phenomenonTimeEnd"]
-                obs_result_time = updated["resultTime"]
-                datastream_id = updated["datastream_id"]
-
-                datastream_query = """
-                    SELECT "phenomenonTime", "resultTime"
-                    FROM sensorthings."Datastream"
-                    WHERE id = $1;
-                """
-                datastream_times = await connection.fetchrow(
-                    datastream_query, datastream_id
-                )
-                datastream_phenomenon_time = datastream_times["phenomenonTime"]
-                datastream_result_time = datastream_times["resultTime"]
-                if datastream_phenomenon_time and (
-                    obs_phenomenon_start is not None
-                    and obs_phenomenon_end is not None
-                ):
-                    obs_lower = obs_phenomenon_start
-                    obs_upper = obs_phenomenon_end
-                    datastream_lower = datastream_phenomenon_time.lower
-                    datastream_upper = datastream_phenomenon_time.upper
-                    if (
-                        obs_lower < datastream_lower
-                        or obs_upper > datastream_upper
-                    ):
-                        new_lower_bound = min(
-                            obs_lower,
-                            datastream_lower,
-                        )
-                        new_upper_bound = max(
-                            obs_upper,
-                            datastream_upper,
-                        )
-                        update_datastream_query = """
-                            UPDATE sensorthings."Datastream"
-                            SET "phenomenonTime" = tstzrange($1, $2, '[]')
-                            WHERE id = $3;
-                        """
-                        await connection.execute(
-                            update_datastream_query,
-                            new_lower_bound,
-                            new_upper_bound,
-                            datastream_id,
-                        )
-
-                if datastream_result_time and obs_result_time:
-                    obs_rt = obs_result_time
-                    datastream_rt_lower = datastream_result_time.lower
-                    datastream_rt_upper = datastream_result_time.upper
-                    if (
-                        obs_rt < datastream_rt_lower
-                        or obs_rt > datastream_rt_upper
-                    ):
-                        new_rt_lower_bound = min(
-                            obs_rt,
-                            datastream_rt_lower,
-                        )
-                        new_rt_upper_bound = max(
-                            obs_rt,
-                            datastream_rt_upper,
-                        )
-                        update_datastream_query = """
-                            UPDATE sensorthings."Datastream"
-                            SET "resultTime" = tstzrange($1, $2, '[]')
-                            WHERE id = $3;
-                        """
-                        await connection.execute(
-                            update_datastream_query,
-                            new_rt_lower_bound,
-                            new_rt_upper_bound,
-                            datastream_id,
-                        )
-
-            if payload.get("featuresofinterest_id"):
-                await update_datastream_observedArea(connection, datastream_id)
+            await post_update_observation(
+                connection, observation_id, payload, updated
+            )
 
             if current_user is not None:
                 await connection.execute("RESET ROLE;")
@@ -202,20 +127,22 @@ REQUIRED_PUT_KEYS = ["phenomenonTime", "resultTime", "result"]
 OPTIONAL_PUT_KEYS = ["resultQuality", "validTime", "parameters"]
 
 
+OBSERVATION_TIME_COLUMNS = {
+    "phenomenonTimeStart",
+    "phenomenonTimeEnd",
+    "resultTime",
+}
+
+
 async def post_update_observation(
     connection, observation_id, payload, updated
 ):
-    """Re-expand the parent Datastream's phenomenonTime/resultTime/observedArea.
+    datastream_id = updated["datastream_id"] if updated else None
 
-    Mirrors the PATCH handler so a PUT maintains the same derived Datastream
-    state (req/create-update-delete/update-entity-put).
-    """
-    datastream_id = None
-    if updated:
+    if updated and OBSERVATION_TIME_COLUMNS & payload.keys():
         obs_phenomenon_start = updated["phenomenonTimeStart"]
         obs_phenomenon_end = updated["phenomenonTimeEnd"]
         obs_result_time = updated["resultTime"]
-        datastream_id = updated["datastream_id"]
 
         datastream_times = await connection.fetchrow(
             """
