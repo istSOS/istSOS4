@@ -18,7 +18,10 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.utils.utils import safe_parse_datetime
 from app.v1.endpoints.exceptions import BadRequest
-from app.v1.endpoints.functions import set_role
+from app.v1.endpoints.functions import (
+    set_role,
+    update_datastream_time_ranges,
+)
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import Response
@@ -296,38 +299,13 @@ async def insertBulkObservation(
 
         await conn.execute(query, *flattened_values)
 
-        update_query = """
-            UPDATE sensorthings."Datastream"
-            SET "phenomenonTime" = tstzrange(
-                LEAST($1::timestamptz, lower("phenomenonTime")),
-                GREATEST($2::timestamptz, upper("phenomenonTime")),
-                '[]'
-            ),
-            "resultTime" =
-                CASE
-                    WHEN $3::timestamptz IS NOT NULL
-                    AND $4::timestamptz IS NOT NULL THEN
-                        CASE
-                            WHEN "resultTime" IS NULL THEN
-                                tstzrange($3::timestamptz, $4::timestamptz, '[]')
-                            ELSE
-                                tstzrange(
-                                    LEAST($3::timestamptz, lower("resultTime")),
-                                    GREATEST($4::timestamptz, upper("resultTime")),
-                                    '[]'
-                                )
-                        END
-                    ELSE "resultTime"
-                END
-            WHERE id = $5::bigint;
-        """
-        await conn.execute(
-            update_query,
+        await update_datastream_time_ranges(
+            conn,
+            datastream_id,
             ph_min_start,
             ph_max_end,
             rt_interval.lower if rt_interval else None,
             rt_interval.upper if rt_interval else None,
-            datastream_id,
         )
 
         await update_datastream_last_foi_id(conn, foi_id, datastream_id)

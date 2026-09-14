@@ -26,7 +26,10 @@ from app.utils.utils import (
     handle_result_field,
 )
 from app.v1.endpoints.error_response import error_response
-from app.v1.endpoints.functions import set_role
+from app.v1.endpoints.functions import (
+    set_role,
+    update_datastream_time_ranges,
+)
 from asyncpg.exceptions import InsufficientPrivilegeError
 from fastapi import APIRouter, Body, Depends, Header, status
 from fastapi.responses import JSONResponse
@@ -322,38 +325,13 @@ async def insertDataArrayObservation(
             for record in result
             if record["resultTime"] is not None
         ]
-        update_query = """
-            UPDATE sensorthings."Datastream"
-            SET "phenomenonTime" = tstzrange(
-                LEAST($1::timestamptz, lower("phenomenonTime")),
-                GREATEST($2::timestamptz, upper("phenomenonTime")),
-                '[]'
-            ),
-            "resultTime" =
-                CASE
-                    WHEN $3::timestamptz IS NOT NULL
-                    AND $4::timestamptz IS NOT NULL THEN
-                        CASE
-                            WHEN "resultTime" IS NULL THEN
-                                tstzrange($3::timestamptz, $4::timestamptz, '[]')
-                            ELSE
-                                tstzrange(
-                                    LEAST($3::timestamptz, lower("resultTime")),
-                                    GREATEST($4::timestamptz, upper("resultTime")),
-                                    '[]'
-                                )
-                        END
-                    ELSE "resultTime"
-                END
-            WHERE id = $5::bigint;
-        """
-        await conn.execute(
-            update_query,
+        await update_datastream_time_ranges(
+            conn,
+            result[0]["datastream_id"],
             min(min_phenomenon_times),
             max(max_phenomenon_times),
             min(result_times) if result_times else None,
             max(result_times) if result_times else None,
-            result[0]["datastream_id"],
         )
 
         observation_id = result[0]["id"]
