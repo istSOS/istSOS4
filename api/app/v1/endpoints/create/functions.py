@@ -25,7 +25,10 @@ from app.utils.utils import (
     validate_epsg,
 )
 from app.v1.endpoints.exceptions import BadRequest, Forbidden
-from app.v1.endpoints.functions import insert_commit
+from app.v1.endpoints.functions import (
+    insert_commit,
+    update_datastream_time_ranges,
+)
 from app.v1.endpoints.update.datastream import update_datastream_entity
 from app.v1.endpoints.update.observation import update_observation_entity
 
@@ -539,20 +542,13 @@ async def insert_observation_entity(
             connection, "Observation", payload
         )
 
-        update_query = """
-            UPDATE sensorthings."Datastream"
-            SET "phenomenonTime" = tstzrange(
-                LEAST($1::timestamptz, lower("phenomenonTime")),
-                GREATEST($2::timestamptz, upper("phenomenonTime")),
-                '[]'
-            )
-            WHERE id = $3::bigint;
-        """
-        await connection.execute(
-            update_query,
+        await update_datastream_time_ranges(
+            connection,
+            payload["datastream_id"],
             payload["phenomenonTimeStart"],
             payload["phenomenonTimeEnd"],
-            payload["datastream_id"],
+            payload.get("resultTime"),
+            payload.get("resultTime"),
         )
 
         return observation_id, observation_self_link

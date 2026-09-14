@@ -17,7 +17,11 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.exceptions import BadRequest
-from app.v1.endpoints.functions import set_role, update_datastream_observedArea
+from app.v1.endpoints.functions import (
+    set_role,
+    update_datastream_observedArea,
+    update_datastream_time_ranges,
+)
 from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import Response
 
@@ -140,57 +144,14 @@ async def post_update_observation(
     datastream_id = updated["datastream_id"] if updated else None
 
     if updated and OBSERVATION_TIME_COLUMNS & payload.keys():
-        obs_phenomenon_start = updated["phenomenonTimeStart"]
-        obs_phenomenon_end = updated["phenomenonTimeEnd"]
-        obs_result_time = updated["resultTime"]
-
-        datastream_times = await connection.fetchrow(
-            """
-                SELECT "phenomenonTime", "resultTime"
-                FROM sensorthings."Datastream"
-                WHERE id = $1;
-            """,
+        await update_datastream_time_ranges(
+            connection,
             datastream_id,
+            updated["phenomenonTimeStart"],
+            updated["phenomenonTimeEnd"],
+            updated["resultTime"],
+            updated["resultTime"],
         )
-        datastream_phenomenon_time = datastream_times["phenomenonTime"]
-        datastream_result_time = datastream_times["resultTime"]
-        if datastream_phenomenon_time and (
-            obs_phenomenon_start is not None and obs_phenomenon_end is not None
-        ):
-            datastream_lower = datastream_phenomenon_time.lower
-            datastream_upper = datastream_phenomenon_time.upper
-            if (
-                obs_phenomenon_start < datastream_lower
-                or obs_phenomenon_end > datastream_upper
-            ):
-                await connection.execute(
-                    """
-                        UPDATE sensorthings."Datastream"
-                        SET "phenomenonTime" = tstzrange($1, $2, '[]')
-                        WHERE id = $3;
-                    """,
-                    min(obs_phenomenon_start, datastream_lower),
-                    max(obs_phenomenon_end, datastream_upper),
-                    datastream_id,
-                )
-
-        if datastream_result_time and obs_result_time:
-            datastream_rt_lower = datastream_result_time.lower
-            datastream_rt_upper = datastream_result_time.upper
-            if (
-                obs_result_time < datastream_rt_lower
-                or obs_result_time > datastream_rt_upper
-            ):
-                await connection.execute(
-                    """
-                        UPDATE sensorthings."Datastream"
-                        SET "resultTime" = tstzrange($1, $2, '[]')
-                        WHERE id = $3;
-                    """,
-                    min(obs_result_time, datastream_rt_lower),
-                    max(obs_result_time, datastream_rt_upper),
-                    datastream_id,
-                )
 
     if payload.get("featuresofinterest_id") and datastream_id is not None:
         await update_datastream_observedArea(connection, datastream_id)
