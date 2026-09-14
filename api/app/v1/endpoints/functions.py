@@ -139,3 +139,51 @@ async def update_datastream_observedArea(conn, datastream_id, feature_id=None):
                     WHERE id = $1;
                 """
             await conn.execute(query, datastream_id, feature_id)
+
+
+async def update_datastream_time_ranges(
+    conn,
+    datastream_id,
+    phenomenon_time_start,
+    phenomenon_time_end,
+    result_time_start=None,
+    result_time_end=None,
+):
+    """Widen a Datastream's phenomenonTime/resultTime to cover an Observation.
+
+    LEAST/GREATEST ignore NULL arguments, so a range that is still NULL is
+    initialised from the observation's own instants instead of staying NULL.
+    A pair of NULL bounds leaves its range untouched.
+    """
+    query = """
+        UPDATE sensorthings."Datastream"
+        SET "phenomenonTime" =
+                CASE
+                    WHEN $2::timestamptz IS NULL OR $3::timestamptz IS NULL
+                        THEN "phenomenonTime"
+                    ELSE tstzrange(
+                        LEAST($2::timestamptz, lower("phenomenonTime")),
+                        GREATEST($3::timestamptz, upper("phenomenonTime")),
+                        '[]'
+                    )
+                END,
+            "resultTime" =
+                CASE
+                    WHEN $4::timestamptz IS NULL OR $5::timestamptz IS NULL
+                        THEN "resultTime"
+                    ELSE tstzrange(
+                        LEAST($4::timestamptz, lower("resultTime")),
+                        GREATEST($5::timestamptz, upper("resultTime")),
+                        '[]'
+                    )
+                END
+        WHERE id = $1::bigint;
+    """
+    await conn.execute(
+        query,
+        datastream_id,
+        phenomenon_time_start,
+        phenomenon_time_end,
+        result_time_start,
+        result_time_end,
+    )
