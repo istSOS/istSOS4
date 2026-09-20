@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from app import AUTHORIZATION, VERSIONING
-from app.v1.endpoints.exceptions import BadRequest
+from app.v1.endpoints.exceptions import BadRequest, Forbidden
 from app.v1.endpoints.functions import insert_commit
 
 
@@ -23,8 +23,12 @@ async def set_commit(
     if not (VERSIONING or AUTHORIZATION):
         return
 
+    if current_user and current_user["role"] == "sensor":
+        if commit_message:
+            raise Forbidden("Sensor cannot provide commit message")
+        return
+
     if not commit_message:
-        await connection.execute("RESET ROLE;")
         raise BadRequest("No commit message provided")
 
     commit = {

@@ -60,8 +60,6 @@ async def get_users(
 
                 users = [ujson.loads(record["users"]) for record in users]
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
