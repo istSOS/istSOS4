@@ -41,8 +41,10 @@ row-level security, the audit trail — actually live.*
    `Authorization: Bearer <token>` automatically when you run **Try it out**.
 3. Anonymous read access depends on deployment config. With
    `ANONYMOUS_VIEWER=0` (the default) a request with no token is rejected
-   with 401. With `ANONYMOUS_VIEWER=1` an anonymous request runs as the
-   PostgreSQL `guest` role for reads.
+   with 401. With `ANONYMOUS_VIEWER=1` a read with no token runs as the
+   PostgreSQL `guest` role (shared reference data only), a read with a
+   valid token runs as that user, with their role and Network scope, and a
+   read with an invalid token is rejected with 401.
 
 ---
 
@@ -52,7 +54,7 @@ Access is staged, not binary. No path skips a stage.
 
 | State | How you get there | What you can do |
 |:--|:--|:--|
-| **guest** | no token at all, and only when `ANONYMOUS_VIEWER=1` | read-only, subject to the `guest` row-level-security policy |
+| **guest** | no token at all, and only when `ANONYMOUS_VIEWER=1` | read-only, and only the shared reference data (Things, Sensors, Locations, ObservedProperties, HistoricalLocations, FeaturesOfInterest); Datastreams, Observations and Networks are not visible |
 | **pending** | `POST /Register`, or a first-time login via `GET /auth/{provider}/login` | nothing — every authenticated route returns 403 |
 | **approved** | an administrator calls `PATCH /Users/{id}/policy-approval` | whatever the granted RBAC role and row-level-security policy allow |
 | **rejected** | an administrator calls `PATCH /Users/{id}/reject` | nothing, permanently, unless the applicant re-registers |

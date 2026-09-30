@@ -46,7 +46,7 @@ istsos4-database psql` for ground-truth counts.
 1. First OIDC callback for an unknown identity → **202**, a `pending` user
    row is created with the requested Network stored on it.
 2. A second OIDC login while still pending → **202** (no token).
-3. Admin `POST /Users/{id}/activate {role: viewer, dataset: <network>}` →
+3. Admin `PATCH /Users/{id}/policy-approval {role: viewer, dataset: <network>}` →
    **200**; the row is now `viewer` scoped to that network.
 4. OIDC login again → **200 + a real access token**.
 5. With that token: `GET /Datastreams` count **== that network's datastream

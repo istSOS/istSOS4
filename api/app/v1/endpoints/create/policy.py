@@ -52,8 +52,8 @@ PAYLOAD_EXAMPLE = {
         "Create a row-level-security policy for the given users.\n\n"
         "`viewer` / `editor` / `obs_manager` / `sensor` / `qc` are already "
         "covered by the static per-role policies from "
-        "`006_session_scoped_rls_policies.sql`; the endpoint returns 200 "
-        "and creates nothing for them.\n\n"
+        "`006_session_scoped_rls_policies.sql`; there is nothing for this "
+        "endpoint to create for them, and it returns 400.\n\n"
         "`custom` builds hand-specified policies from `permissions.policy`. "
         "It applies only to users whose role is `custom` (those have no "
         "blanket grant), and each policy is scoped to the `user` group role "
@@ -63,9 +63,15 @@ PAYLOAD_EXAMPLE = {
     status_code=status.HTTP_201_CREATED,
     responses=merge(
         {
-            200: {"description": "Role already covered by a static RLS policy; nothing created."},
             201: {"description": "Custom policy created. Response body is empty."},
-            400: {"description": "Malformed payload or unknown `permissions.type`."},
+            400: {
+                "description": (
+                    "Malformed payload, unknown `permissions.type`, or "
+                    "`permissions.type` is one of the five role types "
+                    "already covered by a static RLS policy (nothing to "
+                    "create for those)."
+                )
+            },
             403: {"description": "The caller is not an administrator."},
             409: {"description": "A policy of that name already exists, or the user already has one."},
         }
@@ -104,8 +110,13 @@ async def create_policy(
 
                 # The five role types are already enforced by the static
                 # per-role policies from 006_session_scoped_rls_policies.sql,
-                # which apply the moment set_role() runs. Accept them so the
-                # API contract is unchanged, but there is nothing to create.
+                # which apply the moment set_role() runs -- there is nothing
+                # for this endpoint to create for them. Previously this
+                # returned 200 with an explanatory message so the caller
+                # would have to read the body to learn nothing happened;
+                # 400 makes that failure visible in the status code itself,
+                # matching every other "you asked for something invalid"
+                # response in this API.
                 STATIC_ROLE_TYPES = {
                     "viewer",
                     "editor",
@@ -114,14 +125,11 @@ async def create_policy(
                     "qc",
                 }
                 if permission_type in STATIC_ROLE_TYPES:
-                    return JSONResponse(
-                        status_code=status.HTTP_200_OK,
-                        content={
-                            "message": (
-                                f"Role '{permission_type}' is covered by a "
-                                "static RLS policy; no explicit policy created."
-                            )
-                        },
+                    raise BadRequest(
+                        f"Role '{permission_type}' is covered by a static "
+                        "RLS policy already -- there is nothing for "
+                        "POST /Policies to create. Only permissions.type "
+                        "'custom' creates a policy through this endpoint."
                     )
 
                 if permission_type != "custom":
@@ -217,7 +225,12 @@ async def create_policies(connection, users, policies, name):
 
     user_ids = sorted(int(found[u]["id"]) for u in users)
     id_array = "ARRAY[" + ", ".join(str(i) for i in user_ids) + "]::bigint[]"
+    # The role is checked live on every query, not only here at creation:
+    # a user later moved to viewer/editor must not keep these grants on top
+    # of their new role's. The policy stays in place and applies again if
+    # the user is moved back to 'custom'.
     identity_clause = (
+        "sensorthings.current_app_user_role() = 'custom' AND "
         f"sensorthings.current_app_user_id() = ANY ({id_array})"
     )
 

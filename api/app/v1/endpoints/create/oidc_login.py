@@ -46,6 +46,7 @@ Flow
 
 import logging
 
+from app import NETWORK
 from app.db.oidc_user_crud import (
     OidcUsernameCollisionError,
     create_pending_oidc_user,
@@ -186,7 +187,8 @@ async def oidc_login(
         None,
         description=(
             "Name of the Network the applicant is requesting scoped access "
-            "to. Optional -- omit for unrestricted access."
+            "to. Optional -- omit for unrestricted access. Ignored when "
+            "the deployment runs with NETWORK=0."
         ),
         examples=["IDROLOGIA"],
     ),
@@ -197,7 +199,7 @@ async def oidc_login(
             "obs_manager, sensor, qc, custom. A stated preference, "
             "not a grant -- the account is still created as 'pending' "
             "regardless, and an administrator can assign a different "
-            "role at activation. Optional."
+            "role at approval time. Optional."
         ),
         examples=["viewer"],
     ),
@@ -215,7 +217,8 @@ async def oidc_login(
     # Stash the selection in the session now -- it has to survive the
     # round trip to the external provider and back, and a GET redirect has
     # no request body to carry it in directly.
-    request.session[_SESSION_DATASET_KEY] = dataset_id
+    # With NETWORK=0 there are no Networks, so a requested scope is ignored.
+    request.session[_SESSION_DATASET_KEY] = dataset_id if NETWORK else None
     request.session[_SESSION_ROLE_KEY] = requested_role
 
     redirect_uri = request.url_for("oidc_callback", provider=provider)

@@ -120,7 +120,8 @@ class RestrictedRegistrationRequest(BaseModel):
             "Name of the Network the applicant is requesting scoped access "
             "to. Optional -- omit for unrestricted access. Persisted on the "
             "User row so an administrator reviewing the pending queue can "
-            "see it, and forwarded to the RESTRICTED_REQUEST audit event."
+            "see it, and forwarded to the RESTRICTED_REQUEST audit event. "
+            "Ignored when the deployment runs with NETWORK=0."
         ),
         examples=["IDROLOGIA"],
     )
@@ -165,9 +166,9 @@ class RestrictedRegistrationRequest(BaseModel):
         """Reject an unknown or internal role at submission time, not
         silently store it for an admin to trip over later.
 
-        Reuses the same validator the approval/activation endpoints use to
-        validate assigned_role, so 'requested' and 'assigned' can never
-        drift into accepting different role sets.
+        Reuses the same validator the approval endpoint uses to validate
+        role, so 'requested' and 'granted' can never drift into accepting
+        different role sets.
         """
         return validate_rbac_role(v)
 

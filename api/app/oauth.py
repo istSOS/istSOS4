@@ -160,6 +160,19 @@ async def authenticate_user(username: str, password: str):
           Step 2 instead.  The backfill failure is logged but does not
           block the current login (best-effort JIT migration).
 
+        TEMPORARY, migration-only code path. It exists solely to carry
+        forward accounts created before this application-layer credential
+        model, back when a user's password was verified through a real
+        PostgreSQL login (pg_authid) rather than a bcrypt hash on the User
+        row. Once every account in a given deployment has logged in at
+        least once since that switch -- and so has a bcrypt hash -- this
+        step never runs again for that deployment and can be deleted along
+        with get_auth_connection(). There is no reliable way for the code
+        itself to detect "no account still needs this" (it would have to
+        assume no pg_authid login for any User row will ever be attempted
+        again); that call is an operational one for whoever runs a given
+        deployment, not something to infer here.
+
     Lazy import note
     ----------------
     ``pwd_context`` is imported inside the function body to avoid a
@@ -366,4 +379,19 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         )
 
     return user
+
+
+async def get_current_user_optional(
+    token: str | None = Depends(oauth2_scheme_optional),
+):
+    """Read-route dependency when ANONYMOUS_VIEWER=1.
+
+    No token: None, so the request runs as the ``guest`` role. A present
+    token is validated exactly as get_current_user does -- a bad, expired,
+    revoked, pending, or deactivated token is a 401/403, not a silent
+    downgrade to guest. Only the *absence* of a token means "anonymous".
+    """
+    if token is None:
+        return None
+    return await get_current_user(token)
 

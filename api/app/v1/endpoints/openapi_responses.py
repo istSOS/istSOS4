@@ -253,7 +253,7 @@ BAD_REQUEST_PENDING_ROLE = {
         "to already-activated accounts.",
         {
             "detail": "Cannot reassign role for a pending user. "
-            "Activate the account first via POST /Users/{id}/activate."
+            "Approve the account first via PATCH /Users/{id}/policy-approval."
         },
     )
 }

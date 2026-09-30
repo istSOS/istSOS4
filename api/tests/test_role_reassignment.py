@@ -62,13 +62,15 @@ os.environ.setdefault("ALGORITHM", "HS256")
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_user_row(role="viewer", username="alice", user_id=10):
-    """Build a minimal asyncpg-like Record stub."""
+def _make_user_row(role="viewer", username="alice", user_id=10, dataset_id=None):
+    """Build a minimal asyncpg-like Record stub with the columns
+    update_user_role() selects."""
     row = MagicMock()
     row.__getitem__ = lambda self, key: {
         "id": user_id,
         "username": username,
         "role": role,
+        "dataset_id": dataset_id,
     }[key]
     return row
 
@@ -260,6 +262,46 @@ class TestUpdateUserRoleCRUD:
         assert not any("GRANT" in q for q in executed), (
             "GRANT should NOT be issued when PG group role is unchanged"
         )
+
+    # -----------------------------------------------------------------------
+    # 2g. A real change is recorded in the AuditLog, in the same transaction,
+    #     with the acting administrator and the old and new role.
+    # -----------------------------------------------------------------------
+    def test_role_change_writes_role_changed_audit_event(self):
+        import json
+
+        from app.db import role_crud
+
+        pool, conn = _make_pool(
+            fetchrow_result=_make_user_row(role="viewer", dataset_id="psos")
+        )
+
+        executed: list[tuple] = []
+        async def _capture_execute(sql, *args):
+            executed.append((sql, args))
+
+        conn.execute = _capture_execute
+
+        with patch.object(role_crud, "get_pool", AsyncMock(return_value=pool)), \
+             patch("app.db.role_crud.POSTGRES_PORT_WRITE", None):
+            _run(role_crud.update_user_role(
+                user_id=10, new_role="editor", actor_id=1,
+            ))
+
+        audit = [a for sql, a in executed if 'INTO sensorthings."AuditLog"' in sql]
+        assert len(audit) == 1, "expected exactly one AuditLog INSERT"
+        actor_id, action_type, dataset_id, payload = audit[0]
+        assert actor_id == 1
+        assert action_type == "ROLE_CHANGED"
+        assert dataset_id == "psos"
+        assert json.loads(payload) == {
+            "target_user_id": 10,
+            "username": "alice",
+            "old_role": "viewer",
+            "new_role": "editor",
+            "old_dataset_id": "psos",
+            "new_dataset_id": "psos",
+        }
 
 
 # ===========================================================================

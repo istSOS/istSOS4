@@ -100,6 +100,7 @@ async def patch_user_role(
         user_id=user_id,
         new_role=payload.role,
         new_dataset=payload.dataset,
+        actor_id=current_user.get("id"),
     )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)

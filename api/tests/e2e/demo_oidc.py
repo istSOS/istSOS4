@@ -189,14 +189,14 @@ uid = psql("SELECT id FROM sensorthings.\"User\" "
            "WHERE auth_provider='google' AND external_sub_id='fake-sub-001'")
 row_before = psql(f'SELECT role, dataset_id FROM sensorthings."User" WHERE id={uid}')
 print(f"   before:  User {uid}  role|dataset = {row_before}")
-a = requests.post(f"{BASE}/Users/{uid}/activate",
+a = requests.patch(f"{BASE}/Users/{uid}/policy-approval",
                   headers={"Authorization": f"Bearer {tok}"},
                   json={"role": "viewer", "dataset": net_name})
-print(f"   POST /Users/{uid}/activate {{role:viewer, dataset:{net_name}}} -> {a.status_code}: {a.json().get('message')}")
+print(f"   PATCH /Users/{uid}/policy-approval {{role:viewer, dataset:{net_name}}} -> {a.status_code}: {a.json().get('message')}")
 row_after = psql(f'SELECT role, dataset_id FROM sensorthings."User" WHERE id={uid}')
 print(f"   after:   User {uid}  role|dataset = {row_after}")
 audit = psql("SELECT action_type, dataset_id FROM sensorthings.\"AuditLog\" "
-             f"WHERE (payload->>'activated_user_id')::bigint = {uid}")
+             f"WHERE (payload->>'approved_user_id')::bigint = {uid}")
 print(f"   audit log row: {audit}")
 pause()
 

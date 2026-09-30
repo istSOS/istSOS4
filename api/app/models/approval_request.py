@@ -12,20 +12,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Pydantic schemas for PATCH /Users/{target_user_id}/policy-approval.
+"""Pydantic schemas for PATCH /Users/{user_id}/policy-approval.
 
 Design decisions
 ----------------
-* ``assigned_role`` is validated via ``validate_rbac_role`` at model
-  instantiation time (field_validator), so the endpoint handler never
-  receives an unknown or internal role (e.g. 'pending', 'administrator').
+* ``role`` is validated via ``validate_rbac_role`` at model instantiation
+  time (field_validator), so the endpoint handler never receives an
+  unknown or internal role (e.g. 'pending', 'administrator'). Named
+  ``role`` -- not ``assigned_role`` -- to match the other two
+  administrator-facing role-grant endpoints (POST /Users,
+  PATCH /Users/{id}/role); ``POST /Register``'s ``requested_role`` stays
+  a different name on purpose, since it means something different (an
+  applicant's stated preference, not a grant).
 
-* ``dataset_id`` is a plain string (a Network name). The model does not
+* ``dataset`` is a plain string (a Network name), named to match
+  PATCH /Users/{id}/role's field of the same name. The model does not
   validate it; the endpoint handler checks it against the Network table
   before writing it to ``User.dataset_id``.
 
 * The model intentionally carries no auth context; the endpoint handler
   enforces the administrator check via Depends(get_current_user).
+
+* This endpoint used to have a sibling, POST /Users/{id}/activate, built
+  independently five weeks earlier for OIDC signups and doing the same
+  "promote a pending user" job under different field names
+  (``role``/``dataset`` there vs. ``assigned_role``/``dataset_id`` here).
+  The two had already drifted (one logged ``auth_provider`` in its audit
+  event, the other didn't). ``activate`` has been removed; this endpoint
+  now covers both the local-registration and OIDC-signup approval paths,
+  under the field names that were already used by two of the three
+  admin-role-grant endpoints.
 """
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -34,44 +50,45 @@ from app.rbac_roles import ASSIGNABLE_ROLES, validate_rbac_role
 
 
 class AdminApprovalRequest(BaseModel):
-    """Request body for PATCH /Users/{target_user_id}/policy-approval.
+    """Request body for PATCH /Users/{user_id}/policy-approval.
 
     Fields
     ------
-    assigned_role:   The application-layer RBAC role to grant to the target
-                     user.  Optional -- if omitted, the endpoint falls back
-                     to the ``requested_role`` the applicant stated at
-                     registration (see register_request.py). Supplying a
-                     value here always overrides that default; the
-                     administrator is the final gatekeeper either way. Must
-                     be one of the assignable roles defined in
-                     ``VALID_RBAC_ROLES`` (viewer, editor, obs_manager,
-                     sensor, qc, custom) if given.  The internal
-                     'pending' state and 'administrator' may NOT be set
-                     through this endpoint.
-    dataset_id:      Name of the Network to scope the user to. Optional --
-                     omit for unrestricted access, or to keep whatever the
-                     applicant requested. Written to User.dataset_id and
-                     forwarded to AuditLog. Must match an existing Network.
+    role:       The application-layer RBAC role to grant to the target
+                user.  Optional -- if omitted, the endpoint falls back
+                to the ``requested_role`` the applicant stated at
+                registration or OIDC login (see register_request.py,
+                oidc_login.py). Supplying a value here always overrides
+                that default; the administrator is the final gatekeeper
+                either way. Must be one of the assignable roles defined
+                in ``VALID_RBAC_ROLES`` (viewer, editor, obs_manager,
+                sensor, qc, custom) if given.  The internal 'pending'
+                state and 'administrator' may NOT be set through this
+                endpoint.
+    dataset:    Name of the Network to scope the user to. Optional --
+                omit for unrestricted access, or to keep whatever the
+                applicant requested. Written to User.dataset_id and
+                forwarded to AuditLog. Must match an existing Network.
     """
 
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
                 {
-                    "assigned_role": "viewer",
-                    "dataset_id": "IDROLOGIA",
+                    "role": "viewer",
+                    "dataset": "IDROLOGIA",
                 }
             ]
         }
     )
 
-    assigned_role: str | None = Field(
+    role: str | None = Field(
         default=None,
         description=(
             "RBAC role to grant. Omit to approve with the role the "
-            "applicant requested at registration. `administrator` and "
-            "`pending` are rejected -- see the model docstring."
+            "applicant requested at registration or OIDC login. "
+            "`administrator` and `pending` are rejected -- see the "
+            "model docstring."
         ),
         examples=["viewer"],
         # See app/models/role.py for why this is json_schema_extra and not
@@ -80,17 +97,18 @@ class AdminApprovalRequest(BaseModel):
         # would reject non-canonical casing before that ever runs.
         json_schema_extra={"enum": ASSIGNABLE_ROLES},
     )
-    dataset_id: str | None = Field(
+    dataset: str | None = Field(
         default=None,
         description=(
             "Name of the Network to scope this user to. Omit to leave the "
             "applicant's requested value unchanged, or send an empty string "
-            "to clear any scope. Must match an existing Network."
+            "to clear any scope. Must match an existing Network. Ignored "
+            "when the deployment runs with NETWORK=0."
         ),
         examples=["IDROLOGIA"],
     )
 
-    @field_validator("assigned_role")
+    @field_validator("role")
     @classmethod
     def role_must_be_valid(cls, v: str | None) -> str | None:
         """Pass the value through validate_rbac_role, unless omitted.

@@ -40,29 +40,29 @@ policies and ran DROP ROLE. Neither is needed now: a deactivated user is
 rejected at the auth layer before any query runs, so a stale custom
 policy naming them is harmless, and there is no per-user PostgreSQL role
 to drop (the backend connects as one service account -- see
-activate_user.py's architecture note).
+update/admin_approval.py's architecture note).
 """
 
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.rbac_roles import DELETED_STATUS
-from app.utils.utils import validate_username
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
 
 
 @v1.api_route(
-    "/Users",
+    "/Users/{user_id}",
     methods=["DELETE"],
     tags=["Users"],
     summary="Deactivate a User",
     description=(
-        "Deactivates the given user -- the account and every audit-log "
+        "Deactivates the given user, identified by id -- consistent with "
+        "every other /Users endpoint. The account and every audit-log "
         "entry that references it are preserved, never physically "
         "deleted. A deactivated account can no longer authenticate, "
         "immediately: role and status are both checked live on every "
@@ -74,10 +74,7 @@ v1 = APIRouter()
     responses={
         200: {"description": "Deactivated. Response body is empty."},
         400: {
-            "description": (
-                "Invalid username format, or an attempt to deactivate the "
-                "currently authenticated account."
-            ),
+            "description": "An attempt to deactivate the currently authenticated account.",
             "content": {
                 "application/json": {
                     "example": {
@@ -93,7 +90,7 @@ v1 = APIRouter()
             "content": {"application/json": {"example": {"message": "Insufficient privileges"}}},
         },
         404: {
-            "description": "No user exists with that username.",
+            "description": "No user exists with that id.",
             "content": {"application/json": {"example": {"code": 404, "type": "error", "message": "User not found"}}},
         },
         409: {
@@ -119,35 +116,11 @@ v1 = APIRouter()
     },
 )
 async def delete_user(
-    user: str = Query(
-        alias="user",
-        description="The user to deactivate",
-    ),
+    user_id: int,
     current_user=Depends(get_current_user),
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
-        if not validate_username(user):
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "code": 400,
-                    "type": "error",
-                    "message": "Invalid username: only letters, digits and underscores allowed (3–63 characters).",
-                },
-            )
-
-        # Prevent authenticated administrators from deactivating themselves.
-        if current_user is not None and current_user["username"] == user:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "code": 400,
-                    "type": "error",
-                    "message": "Deactivating the currently authenticated user is not allowed.",
-                },
-            )
-
         async with pool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
@@ -160,10 +133,10 @@ async def delete_user(
                 # before attempting the update.
                 row = await connection.fetchrow(
                     """
-                    SELECT status FROM sensorthings."User"
-                    WHERE username = $1;
+                    SELECT username, status FROM sensorthings."User"
+                    WHERE id = $1;
                     """,
-                    user,
+                    user_id,
                 )
 
                 if row is None:
@@ -176,13 +149,27 @@ async def delete_user(
                         },
                     )
 
+                # Prevent authenticated administrators from deactivating
+                # themselves. Checked here, after the row is fetched, so
+                # it can compare by id (what current_user carries) rather
+                # than needing a second lookup by username.
+                if current_user is not None and current_user["id"] == user_id:
+                    return JSONResponse(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        content={
+                            "code": 400,
+                            "type": "error",
+                            "message": "Deactivating the currently authenticated user is not allowed.",
+                        },
+                    )
+
                 if row["status"] == DELETED_STATUS:
                     return JSONResponse(
                         status_code=status.HTTP_409_CONFLICT,
                         content={
                             "code": 409,
                             "type": "error",
-                            "message": f"User '{user}' is already deactivated.",
+                            "message": f"User '{row['username']}' is already deactivated.",
                         },
                     )
 
@@ -190,10 +177,10 @@ async def delete_user(
                     """
                     UPDATE sensorthings."User"
                     SET status = $1
-                    WHERE username = $2;
+                    WHERE id = $2;
                     """,
                     DELETED_STATUS,
-                    user,
+                    user_id,
                 )
 
         return Response(status_code=status.HTTP_200_OK)

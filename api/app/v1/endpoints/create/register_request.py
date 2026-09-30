@@ -34,7 +34,8 @@ Architecture notes
 * The endpoint is intentionally **public** (no ``Depends(get_current_user)``).
   Any unauthenticated user may submit a registration request; the resulting
   account is locked in the ``pending`` role with zero operational privileges
-  until an administrator explicitly activates it via POST /Users/{id}/activate.
+  until an administrator explicitly approves it via
+  PATCH /Users/{id}/policy-approval.
 
 * Password hashing is offloaded to ``asyncio.to_thread`` because
   ``passlib.CryptContext.hash`` is a synchronous, CPU-intensive bcrypt
@@ -56,7 +57,7 @@ import asyncio
 import json
 import logging
 
-from app import POSTGRES_PORT_WRITE
+from app import NETWORK, POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.db.audit_crud import AUDIT_ACTION_RESTRICTED_REQUEST, log_audit_event
 from app.db.password_crud import pwd_context
@@ -91,7 +92,7 @@ logger = logging.getLogger(__name__)
         "and records a RESTRICTED_REQUEST audit event. "
         "No authentication required. "
         "The account grants zero operational access until an administrator "
-        "activates it via POST /Users/{id}/activate."
+        "approves it via PATCH /Users/{id}/policy-approval."
     ),
     status_code=status.HTTP_201_CREATED,
     responses=merge(
@@ -145,6 +146,9 @@ async def register_request(request: RestrictedRegistrationRequest):
     contact_dict: dict = request.contact_info.model_dump()
     contact_dict["explanation"] = request.explanation
     contact_json: str = json.dumps(contact_dict)
+
+    # With NETWORK=0 there are no Networks, so a requested scope is ignored.
+    dataset_id = request.dataset_id if NETWORK else None
 
     # ------------------------------------------------------------------
     # 3. Acquire a write connection and execute all mutations atomically.
@@ -201,7 +205,7 @@ async def register_request(request: RestrictedRegistrationRequest):
                         """,
                         hashed_password,
                         contact_json,
-                        request.dataset_id,
+                        dataset_id,
                         request.requested_role,
                         existing["id"],
                     )
@@ -225,7 +229,7 @@ async def register_request(request: RestrictedRegistrationRequest):
                         request.username,
                         hashed_password,
                         contact_json,
-                        request.dataset_id,
+                        dataset_id,
                         request.requested_role,
                     )
                 new_user_id: int = row["id"]
@@ -248,7 +252,7 @@ async def register_request(request: RestrictedRegistrationRequest):
                     conn=conn,
                     action_type=AUDIT_ACTION_RESTRICTED_REQUEST,
                     actor_id=new_user_id,
-                    dataset_id=request.dataset_id,
+                    dataset_id=dataset_id,
                     payload={
                         "explanation": request.explanation,
                         "requested_role": request.requested_role,
@@ -260,7 +264,7 @@ async def register_request(request: RestrictedRegistrationRequest):
             "requested network '%s', role '%s'.",
             request.username,
             new_user_id,
-            request.dataset_id,
+            dataset_id,
             request.requested_role,
         )
 

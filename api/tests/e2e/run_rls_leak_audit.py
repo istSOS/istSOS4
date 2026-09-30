@@ -127,7 +127,7 @@ def main():
             "requested_role": role})
         uid = psql(f"SELECT id FROM sensorthings.\"User\" WHERE username='{u}'")
         requests.patch(f"{BASE}/Users/{uid}/policy-approval", headers=A,
-                       json={"role": role, "dataset_id": net_a}, timeout=20)
+                       json={"role": role, "dataset": net_a}, timeout=20)
         r = requests.post(f"{BASE}/Login", data={"username": u, "password": PW}, timeout=15)
         return r.json().get("access_token"), uid
 

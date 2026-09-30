@@ -150,8 +150,8 @@ async def create_pending_oidc_user(
         requested_role:  RBAC role the user asked to be granted, collected
                          the same way as dataset_id (see oidc_login.py). An
                          administrator reviewing the pending queue sees this
-                         as the default at activation time but can assign a
-                         different role — see activate_user.py.
+                         as the default at approval time but can assign a
+                         different role — see update/admin_approval.py.
 
     Returns:
         dict with keys ``id``, ``username``, ``role``, ``uri``,

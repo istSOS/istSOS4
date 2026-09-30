@@ -32,7 +32,7 @@ from app import (
 )
 from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
-from app.oauth import get_current_user
+from app.oauth import get_current_user, get_current_user_optional
 from app.settings import serverSettings, tables
 from app.sta2rest import sta2rest
 from app.sta2rest.odata_query.exceptions import (
@@ -41,7 +41,7 @@ from app.sta2rest.odata_query.exceptions import (
 )
 from app.utils.utils import build_nextLink
 from app.v1.endpoints.functions import set_role
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .query_parameters import CommonQueryParams, get_common_query_params
@@ -50,10 +50,12 @@ v1 = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-user = Header(default=None, include_in_schema=False)
+user = Depends(lambda: None)
 
-if AUTHORIZATION and not ANONYMOUS_VIEWER:
-    user = Depends(get_current_user)
+if AUTHORIZATION:
+    user = Depends(
+        get_current_user_optional if ANONYMOUS_VIEWER else get_current_user
+    )
 
 
 def __handle_root():
@@ -349,6 +351,24 @@ async def asyncpg_stream_results(
                     await set_role(connection, current_user)
 
             if is_count:
+                if entity == "Observation":
+                    # TimescaleDB's SkipScan-for-DISTINCT-aggregates can
+                    # pick a plan that crashes with "unsupported subplan
+                    # type for SkipScan: Result" on a Network-scoped
+                    # $count -- see 006_session_scoped_rls_policies.sql
+                    # for the underlying RLS predicate this interacts
+                    # with. It only shows up once TimescaleDB has
+                    # statistics on so few/no chunks that it picks
+                    # SkipScan over a normal scan (e.g. right after a
+                    # bulk insert, before autovacuum's ANALYZE runs); the
+                    # query is correct either way, this only turns off
+                    # one planner optimisation for it. The plain
+                    # timescaledb.enable_skipscan GUC does not cover this
+                    # -- verified live that only the *_for_distinct_
+                    # aggregates one actually prevents the crash.
+                    await connection.execute(
+                        "SET LOCAL timescaledb.enable_skipscan_for_distinct_aggregates = false;"
+                    )
                 if COUNT_MODE == "LIMIT_ESTIMATE":
                     query_count = await connection.fetchval(count_queries[0])
                     if query_count == COUNT_ESTIMATE_THRESHOLD:

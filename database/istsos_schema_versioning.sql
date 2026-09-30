@@ -701,7 +701,9 @@ BEGIN
             ALTER VIEW sensorthings."Datastream_traveltime" SET (security_invoker = on);
             ALTER VIEW sensorthings."FeaturesOfInterest_traveltime" SET (security_invoker = on);
             ALTER VIEW sensorthings."Observation_traveltime" SET (security_invoker = on);
-            ALTER VIEW sensorthings."Network_traveltime" SET (security_invoker = on);
+            IF current_setting('custom.network')::boolean THEN
+                ALTER VIEW sensorthings."Network_traveltime" SET (security_invoker = on);
+            END IF;
 
         END IF;
     END IF;

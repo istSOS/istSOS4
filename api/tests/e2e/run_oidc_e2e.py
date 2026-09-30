@@ -167,13 +167,13 @@ def main():
     check("OIDC login while pending -> 202", r.status_code == 202,
           f"HTTP {r.status_code}")
 
-    # --- 3. admin activates with the network scope -------------------
-    r = requests.post(
-        f"{BASE}/Users/{uid}/activate",
+    # --- 3. admin approves with the network scope ---------------------
+    r = requests.patch(
+        f"{BASE}/Users/{uid}/policy-approval",
         headers={"Authorization": f"Bearer {tok}"},
         json={"role": "viewer", "dataset": net_name},
     )
-    check("admin activate (role=viewer, dataset=network) -> 200",
+    check("admin approval (role=viewer, dataset=network) -> 200",
           r.status_code == 200, f"HTTP {r.status_code}: {r.text[:150]}")
     role_after, ds_after = psql(
         f'SELECT role, dataset_id FROM sensorthings."User" WHERE id = {uid}'

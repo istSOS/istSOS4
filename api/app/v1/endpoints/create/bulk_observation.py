@@ -28,7 +28,7 @@ from .functions import create_entity, set_commit, update_datastream_last_foi_id
 v1 = APIRouter()
 
 
-user = Header(default=None, include_in_schema=False)
+user = Depends(lambda: None)
 message = Header(default=None, alias="commit-message", include_in_schema=False)
 
 if AUTHORIZATION:

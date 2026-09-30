@@ -19,7 +19,7 @@ from app.db.asyncpg_db import get_pool
 from app.db.redis_db import redis
 from app.sta2rest import sta2rest
 from asyncpg.exceptions import InsufficientPrivilegeError
-from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
 from .query_parameters import CommonQueryParams, get_common_query_params
@@ -27,12 +27,14 @@ from .read import asyncpg_stream_results, stream_or_error
 
 v1 = APIRouter()
 
-user = Header(default=None, include_in_schema=False)
+user = Depends(lambda: None)
 
-if AUTHORIZATION and not ANONYMOUS_VIEWER:
-    from app.oauth import get_current_user
+if AUTHORIZATION:
+    from app.oauth import get_current_user, get_current_user_optional
 
-    user = Depends(get_current_user)
+    user = Depends(
+        get_current_user_optional if ANONYMOUS_VIEWER else get_current_user
+    )
 
 
 @v1.api_route(
@@ -62,7 +64,11 @@ async def get_commits(
         # application layer instead, the same way GET /Users and
         # GET /Policies are admin-only for the same reason (no clean
         # per-user / per-network row filter to write a policy against).
-        if current_user is not None and current_user["role"] != "administrator":
+        # With ANONYMOUS_VIEWER=1 an anonymous caller arrives as None, which
+        # must not be read as "no restriction" while authorization is on.
+        if AUTHORIZATION and (
+            current_user is None or current_user["role"] != "administrator"
+        ):
             raise InsufficientPrivilegeError
 
         full_path = request.url.path

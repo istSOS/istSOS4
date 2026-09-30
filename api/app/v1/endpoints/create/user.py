@@ -16,8 +16,9 @@ import asyncio
 import json
 import logging
 
-from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
+from app import HOSTNAME, NETWORK, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.db.audit_crud import AUDIT_ACTION_USER_CREATED, log_audit_event
 from app.db.password_crud import pwd_context
 from app.oauth import get_current_user
 from app.rbac_roles import validate_rbac_role
@@ -140,6 +141,9 @@ async def create_user(
                     )
 
                 payload["role"] = validate_rbac_role(payload["role"])
+                # With NETWORK=0 there are no Networks, so a requested scope is ignored.
+                if not NETWORK:
+                    payload.pop("dataset_id", None)
 
                 if current_user is not None:
                     if current_user["role"] != "administrator":
@@ -205,6 +209,19 @@ async def create_user(
                         "user_id": user["id"],
                     }
                     await insert_commit(connection, commit, "UPDATE")
+
+                if current_user is not None:
+                    await log_audit_event(
+                        conn=connection,
+                        action_type=AUDIT_ACTION_USER_CREATED,
+                        actor_id=current_user["id"],
+                        dataset_id=payload.get("dataset_id"),
+                        payload={
+                            "created_user_id": user["id"],
+                            "username": user["username"],
+                            "role": payload["role"],
+                        },
+                    )
 
                 # No RLS DDL needed here: as of
                 # 006_session_scoped_rls_policies.sql, every assignable

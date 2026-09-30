@@ -81,7 +81,7 @@ def make_local(role, net, admin):
     uid = psql(f"SELECT id FROM sensorthings.\"User\" WHERE username='{u}'")
     requests.patch(f"{BASE}/Users/{uid}/policy-approval",
                    headers={"Authorization": f"Bearer {admin}"},
-                   json={"role": role, "dataset_id": net}, timeout=20)
+                   json={"role": role, "dataset": net}, timeout=20)
     r = requests.post(f"{BASE}/Login", data={"username": u, "password": PW},
                       timeout=15)
     return u, uid, r.json().get("access_token")
@@ -98,15 +98,15 @@ def oidc_roundtrip(sub, email):
 
 
 def make_oidc(role, net, admin):
-    """OIDC signup -> admin activates with role + network scope -> sign in."""
+    """OIDC signup -> admin approves with role + network scope -> sign in."""
     sub = f"parity-{role}-{TAG}"
     email = f"{sub}@example.org"
     oidc_roundtrip(sub, email)
     uid = psql("SELECT id FROM sensorthings.\"User\" "
                f"WHERE external_sub_id='{sub}'")
-    requests.post(f"{BASE}/Users/{uid}/activate",
-                  headers={"Authorization": f"Bearer {admin}"},
-                  json={"role": role, "dataset": net}, timeout=20)
+    requests.patch(f"{BASE}/Users/{uid}/policy-approval",
+                   headers={"Authorization": f"Bearer {admin}"},
+                   json={"role": role, "dataset": net}, timeout=20)
     r = oidc_roundtrip(sub, email)
     return sub, uid, r.json().get("access_token")
 

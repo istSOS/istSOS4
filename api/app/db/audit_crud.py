@@ -41,11 +41,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Valid action_type values — must match the CHECK constraint in
-# database/migrations/003_audit_log.sql and 004_admin_rejection.sql.
+# database/migrations/003_audit_log.sql, 004_admin_rejection.sql and
+# 013_audit_user_created_role_changed.sql.
 AUDIT_ACTION_PUBLIC_READ = "PUBLIC_READ"
 AUDIT_ACTION_RESTRICTED_REQUEST = "RESTRICTED_REQUEST"
 AUDIT_ACTION_ADMIN_APPROVAL = "ADMIN_APPROVAL"
 AUDIT_ACTION_ADMIN_REJECTION = "ADMIN_REJECTION"
+AUDIT_ACTION_USER_CREATED = "USER_CREATED"
+AUDIT_ACTION_ROLE_CHANGED = "ROLE_CHANGED"
 
 
 async def log_audit_event(

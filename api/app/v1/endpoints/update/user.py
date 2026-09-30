@@ -17,19 +17,16 @@ import json
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
-from app.utils.utils import pg_quote_ident, validate_payload_keys
-from app.v1.endpoints.exceptions import BadRequest
+from app.utils.utils import validate_payload_keys
 from app.v1.endpoints.functions import set_role
 from app.v1.endpoints.openapi_responses import merge
-from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
-from fastapi import APIRouter, Body, Depends, Query, status
+from asyncpg.exceptions import InsufficientPrivilegeError
+from fastapi import APIRouter, Body, Depends, status
 from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
 
 PAYLOAD_EXAMPLE = {
-    "role": "editor",
     "contact": {
         "email": "example@mail.com",
         "name": "example",
@@ -38,30 +35,28 @@ PAYLOAD_EXAMPLE = {
 }
 
 ALLOWED_KEYS = [
-    "role",
     "contact",
     "uri",
 ]
 
 
 @v1.api_route(
-    "/Users",
+    "/Users/{user_id}",
     methods=["PATCH"],
     tags=["Users"],
     summary="Update a User",
     description=(
-        "Update an existing user's role, contact info, and/or uri, "
-        "identified by username via the `user` query parameter (not an "
-        "id, unlike most other /Users endpoints). Changing `role` also "
-        "re-grants the underlying PostgreSQL group role if the new role "
-        "maps to a different one."
+        "Update an existing user's contact info and/or uri, identified by "
+        "id -- consistent with every other /Users endpoint. A user's role "
+        "and Network scope are changed with `PATCH /Users/{user_id}/role`; "
+        "sending `role` here returns 400."
     ),
     status_code=status.HTTP_200_OK,
     responses=merge(
         {
             200: {"description": "Updated (or, with an empty payload, a no-op). Response body is empty."},
             404: {
-                "description": "No user exists with that username.",
+                "description": "No user exists with that id.",
                 "content": {"application/json": {"example": {"message": "User not found."}}},
             },
             # Genuinely 401 here, not 403 -- an inconsistency worth knowing
@@ -77,28 +72,22 @@ ALLOWED_KEYS = [
             },
             400: {
                 "description": (
-                    "Catch-all: missing `user` query param, an unrecognised "
-                    "payload key, an invalid role value, or any other "
-                    "failure -- the message is the raw exception text."
+                    "`role` in the payload (use `PATCH /Users/{user_id}/role`), "
+                    "an unrecognised payload key, or any other failure -- "
+                    "the message is the raw exception text."
                 ),
-                "content": {"application/json": {"example": {"message": "User not provided"}}},
+                "content": {"application/json": {"example": {"message": "Unrecognized key(s): foo"}}},
             },
         }
     ),
 )
 async def update_user(
-    user: str = Query(
-        alias="user",
-        description="Username of the user to update (not their id).",
-    ),
+    user_id: int,
     payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
     try:
-        if not user:
-            raise BadRequest("User not provided")
-
         async with pgpool.acquire() as connection:
             async with connection.transaction():
                 if current_user is not None:
@@ -109,9 +98,9 @@ async def update_user(
 
                 query = """
                     SELECT username, role FROM sensorthings."User"
-                    WHERE username = $1;
+                    WHERE id = $1;
                 """
-                result = await connection.fetchrow(query, user)
+                result = await connection.fetchrow(query, user_id)
 
                 if not result:
                     return JSONResponse(
@@ -122,11 +111,22 @@ async def update_user(
                 if not payload:
                     return Response(status_code=status.HTTP_200_OK)
 
-                validate_payload_keys(payload, ALLOWED_KEYS)
-
-                previous_role = result["role"]
+                # Roles are application-layer (sensorthings."User".role), not
+                # per-user PostgreSQL roles, so a role change here used to hit
+                # a REVOKE/GRANT on a role that no longer exists. The role
+                # endpoint owns role and scope changes and their safeguards.
                 if "role" in payload:
-                    payload["role"] = validate_rbac_role(payload["role"])
+                    return JSONResponse(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        content={
+                            "message": (
+                                "Use PATCH /Users/{user_id}/role to change "
+                                "a user's role."
+                            )
+                        },
+                    )
+
+                validate_payload_keys(payload, ALLOWED_KEYS)
 
                 payload = {
                     key: (
@@ -142,36 +142,12 @@ async def update_user(
                 query = f"""
                     UPDATE sensorthings."User"
                     SET {set_clause}
-                    WHERE username = $1;
+                    WHERE id = $1;
                 """
-                await connection.execute(query, user, *payload.values())
-
-                if "role" in payload and payload["role"] != previous_role:
-                    previous_db_role = get_db_role_for_rbac(previous_role)
-                    new_db_role = get_db_role_for_rbac(payload["role"])
-
-                    if previous_db_role != new_db_role:
-                        await connection.execute(
-                            "REVOKE {} FROM {};".format(
-                                pg_quote_ident(previous_db_role),
-                                pg_quote_ident(user),
-                            )
-                        )
-                        await connection.execute(
-                            "GRANT {} TO {};".format(
-                                pg_quote_ident(new_db_role),
-                                pg_quote_ident(user),
-                            )
-                        )
-
+                await connection.execute(query, user_id, *payload.values())
 
         return Response(status_code=status.HTTP_200_OK)
 
-    except UndefinedObjectError:
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={"message": "User not found"},
-        )
     except InsufficientPrivilegeError:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,

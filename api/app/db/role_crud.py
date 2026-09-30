@@ -33,6 +33,7 @@ import logging
 
 from app import NETWORK, POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.db.audit_crud import AUDIT_ACTION_ROLE_CHANGED, log_audit_event
 from app.rbac_roles import PENDING_ROLE
 from fastapi import HTTPException, status
 
@@ -43,6 +44,7 @@ async def update_user_role(
     user_id: int,
     new_role: str | None = None,
     new_dataset: str | None = None,
+    actor_id: int | None = None,
 ) -> None:
     """Atomically update an active user's role and/or Network scope.
 
@@ -54,6 +56,8 @@ async def update_user_role(
         4. If ``new_dataset`` is not None: validate against the Network
            table (400 if unknown), then UPDATE dataset_id. ``""`` clears
            the scope (NULL).
+        5. If anything changed: write a ROLE_CHANGED AuditLog row in the
+           same transaction, so a refused or failed change leaves none.
 
     Args:
         user_id:     Primary key of the target User row.
@@ -61,6 +65,7 @@ async def update_user_role(
                      to leave it unchanged.
         new_dataset: Network name to scope to, ``""`` to clear, or None to
                      leave the scope unchanged.
+        actor_id:    Id of the administrator making the change (AuditLog).
 
     Raises:
         HTTPException 404: User not found.
@@ -98,12 +103,14 @@ async def update_user_role(
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=(
-                        "Cannot change a pending user here. Activate the "
-                        "account first via POST /Users/{id}/activate."
+                        "Cannot change a pending user here. Approve the "
+                        "account first via PATCH /Users/{id}/policy-approval."
                     ),
                 )
 
             changes = []
+            final_role = current_role
+            final_scope = row["dataset_id"]
 
             # --- role ---------------------------------------------------
             if new_role is not None and new_role != current_role:
@@ -126,9 +133,11 @@ async def update_user_role(
                     user_id,
                 )
                 changes.append(f"role {current_role!r} -> {new_role!r}")
+                final_role = new_role
 
             # --- network scope ----------------------------------------
-            if new_dataset is not None:
+            # With NETWORK=0 there are no Networks, so a requested scope is ignored.
+            if new_dataset is not None and NETWORK:
                 scope = new_dataset.strip() or None
                 if scope is not None and NETWORK:
                     exists = await conn.fetchval(
@@ -153,6 +162,23 @@ async def update_user_role(
                     changes.append(
                         f"scope {row['dataset_id']!r} -> {scope!r}"
                     )
+                    final_scope = scope
+
+            if changes:
+                await log_audit_event(
+                    conn=conn,
+                    action_type=AUDIT_ACTION_ROLE_CHANGED,
+                    actor_id=actor_id,
+                    dataset_id=final_scope,
+                    payload={
+                        "target_user_id": user_id,
+                        "username": username,
+                        "old_role": current_role,
+                        "new_role": final_role,
+                        "old_dataset_id": row["dataset_id"],
+                        "new_dataset_id": final_scope,
+                    },
+                )
 
     logger.info(
         "User %r (id=%d): %s",

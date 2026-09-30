@@ -17,14 +17,14 @@ from app import AUTHORIZATION
 from app.db.asyncpg_db import get_pool
 from app.rbac_roles import PENDING_ROLE
 from asyncpg.exceptions import InsufficientPrivilegeError
-from fastapi import APIRouter, Depends, Header, status
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
 from .read import set_role
 
 v1 = APIRouter()
 
-user = Header(default=None, include_in_schema=False)
+user = Depends(lambda: None)
 
 if AUTHORIZATION:
     from app.oauth import get_current_user

@@ -9,14 +9,15 @@ branch of this fork.
 git clone https://github.com/KinshukSS2/istSOS4.git
 cd istSOS4
 git checkout docs/swagger-api-documentation
-cp .env.example .env
+cp .env.testing .env
 docker compose up -d --build
 ```
 
-1. `.env.example` is already set for testing: `AUTHORIZATION=1`, `NETWORK=1`,
+1. `.env.testing` is `.env.example` with `AUTHORIZATION=1`, `NETWORK=1`,
    `VERSIONING=1` and `DUMMY_DATA=1`. Change nothing for a first run. Do not
    set `AUTHORIZATION` or `NETWORK` back to `0`, or none of the auth features
-   are active.
+   are active. `.env.example` keeps the upstream defaults (all `0`) that CI
+   and ordinary deployments use.
 2. Wait about a minute for the database to initialise and the dummy data to be
    generated (`docker compose logs -f dummy_data`).
 3. Open Swagger at <http://localhost:8018/istsos4/v1.1/docs>, click
@@ -27,7 +28,7 @@ repository (nothing to pull except the base images), so re-run
 `docker compose up -d --build` after changing anything under `api/` or
 `database/`.
 
-**Logout and Redis.** `.env.example` ships with `REDIS=0`. With it, `POST /Logout`
+**Logout and Redis.** `.env.testing` ships with `REDIS=0`. With it, `POST /Logout`
 still answers "Successfully logged out" but the token keeps working until it
 expires, because the list of revoked tokens lives in Redis. To make logout
 actually revoke a token, set `REDIS=1` in `.env` and restart the API

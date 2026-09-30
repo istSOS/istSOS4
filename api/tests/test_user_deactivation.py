@@ -339,12 +339,15 @@ def _attach_transaction_cm(connection):
 
 def test_delete_user_rejects_self_deactivation():
     connection = AsyncMock()
+    connection.fetchrow = AsyncMock(
+        return_value={"username": "admin_user", "status": "active"}
+    )
     _attach_transaction_cm(connection)
-    current_user = {"username": "admin_user", "role": "administrator"}
+    current_user = {"id": 1, "username": "admin_user", "role": "administrator"}
 
     response = asyncio.run(
         delete_user_endpoint.delete_user(
-            user="admin_user",
+            user_id=1,
             current_user=current_user,
             pool=_mock_pgpool(connection),
         )
@@ -356,11 +359,11 @@ def test_delete_user_returns_404_for_unknown_user():
     connection = AsyncMock()
     connection.fetchrow = AsyncMock(return_value=None)
     _attach_transaction_cm(connection)
-    current_user = {"username": "admin_user", "role": "administrator"}
+    current_user = {"id": 1, "username": "admin_user", "role": "administrator"}
 
     response = asyncio.run(
         delete_user_endpoint.delete_user(
-            user="nosuchuser",
+            user_id=999,
             current_user=current_user,
             pool=_mock_pgpool(connection),
         )
@@ -370,13 +373,15 @@ def test_delete_user_returns_404_for_unknown_user():
 
 def test_delete_user_returns_409_if_already_deactivated():
     connection = AsyncMock()
-    connection.fetchrow = AsyncMock(return_value={"status": DELETED_STATUS})
+    connection.fetchrow = AsyncMock(
+        return_value={"username": "alreadygone", "status": DELETED_STATUS}
+    )
     _attach_transaction_cm(connection)
-    current_user = {"username": "admin_user", "role": "administrator"}
+    current_user = {"id": 1, "username": "admin_user", "role": "administrator"}
 
     response = asyncio.run(
         delete_user_endpoint.delete_user(
-            user="alreadygone",
+            user_id=2,
             current_user=current_user,
             pool=_mock_pgpool(connection),
         )
@@ -392,13 +397,15 @@ def test_delete_user_issues_update_not_delete():
     """
     connection = AsyncMock()
     connection.execute = AsyncMock()
-    connection.fetchrow = AsyncMock(return_value={"status": "active"})
+    connection.fetchrow = AsyncMock(
+        return_value={"username": "targetuser", "status": "active"}
+    )
     _attach_transaction_cm(connection)
-    current_user = {"username": "admin_user", "role": "administrator"}
+    current_user = {"id": 1, "username": "admin_user", "role": "administrator"}
 
     response = asyncio.run(
         delete_user_endpoint.delete_user(
-            user="targetuser",
+            user_id=2,
             current_user=current_user,
             pool=_mock_pgpool(connection),
         )

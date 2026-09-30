@@ -44,7 +44,7 @@ from .functions import (
 v1 = APIRouter()
 logger = logging.getLogger(__name__)
 
-user = Header(default=None, include_in_schema=False)
+user = Depends(lambda: None)
 message = Header(default=None, alias="commit-message", include_in_schema=False)
 
 if AUTHORIZATION:

@@ -193,7 +193,7 @@ def main():
     section("6. Admin approval + network scoping  (NEW)")
     # ==================================================================
     r = requests.patch(f"{BASE}/Users/{reg_id}/policy-approval", headers=H(admin),
-                       json={"role": "viewer", "dataset_id": net}, timeout=15)
+                       json={"role": "viewer", "dataset": net}, timeout=15)
     check("PATCH /Users/{id}/policy-approval -> 200", r.status_code == 200,
           f"HTTP {r.status_code}: {r.text[:90]}")
     st = psql(f"SELECT role || '|' || status FROM sensorthings.\"User\" "
@@ -205,7 +205,7 @@ def main():
     check("approved user can now log in", r.status_code == 200 and viewer)
 
     r = requests.patch(f"{BASE}/Users/{reg_id}/policy-approval", headers=H(admin),
-                       json={"role": "viewer", "dataset_id": "NoSuchNetwork"},
+                       json={"role": "viewer", "dataset": "NoSuchNetwork"},
                        timeout=15)
     check("approval with an unknown Network -> 4xx (validated, not silent)",
           r.status_code >= 400, f"HTTP {r.status_code}")
@@ -322,8 +322,8 @@ def main():
     r = requests.post(f"{BASE}/Policies", headers=H(admin),
                       json={"users": [ru], "name": f"noop_{TAG}",
                             "permissions": {"type": "viewer"}}, timeout=15)
-    check("POST /Policies type=viewer -> 200 no-op (static policy covers it)",
-          r.status_code == 200, f"HTTP {r.status_code}: {r.text[:80]}")
+    check("POST /Policies type=viewer -> 400 (static policy covers it, nothing to create)",
+          r.status_code == 400, f"HTTP {r.status_code}: {r.text[:80]}")
     r = requests.post(f"{BASE}/Policies", headers=H(admin),
                       json={"users": [ru]}, timeout=15)
     check("POST /Policies missing 'name'/'permissions' -> 400 (upstream contract)",
@@ -429,8 +429,8 @@ def main():
     # Deactivation is the revocation path that works without Redis: the role
     # and status are re-read from the database on every single request.
     dead = tok_of(login(du, PW))
-    requests.delete(f"{BASE}/Users", headers=H(admin),
-                    params={"user": du}, timeout=15)
+    du_id = psql(f"SELECT id FROM sensorthings.\"User\" WHERE username='{du}'")
+    requests.delete(f"{BASE}/Users/{du_id}", headers=H(admin), timeout=15)
     r = requests.get(f"{BASE}/Datastreams", params={"$top": 1}, headers=H(dead),
                      timeout=10)
     check("an already-issued JWT dies the moment the account is deactivated",

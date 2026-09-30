@@ -28,7 +28,7 @@ a fiction -- each endpoint must reference the shape it genuinely returns.
   * ``DetailError``   -- raised as ``HTTPException``; rendered by FastAPI's
     built-in handler.  e.g. oauth.py's 401/403, register_request.py's 409.
   * ``MessageError``  -- the inline ``JSONResponse`` blocks in the auth/RBAC
-    handlers.  e.g. activate_user.py, admin_rejection.py, read/user.py.
+    handlers.  e.g. admin_approval.py, admin_rejection.py, read/user.py.
   * ``StaError``      -- the canonical SensorThings body produced by
     ``error_response()`` via ``exception_handlers.py``.
 

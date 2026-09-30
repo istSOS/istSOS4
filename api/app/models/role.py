@@ -81,7 +81,8 @@ class RoleUpdateRequest(BaseModel):
             "New Network scope. A Network name limits the user to that "
             "network's Datastreams/Observations; `\"\"` clears any scope "
             "(full access, subject to role); omitting the field leaves the "
-            "current scope unchanged. Must match an existing Network."
+            "current scope unchanged. Must match an existing Network. "
+            "Ignored when the deployment runs with NETWORK=0."
         ),
         examples=["IDROLOGIA"],
     )

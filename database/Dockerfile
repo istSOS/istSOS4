@@ -19,3 +19,10 @@ COPY ./migrations/006_session_scoped_rls_policies.sql /docker-entrypoint-initdb.
 COPY ./migrations/007_requested_role.sql /docker-entrypoint-initdb.d/20_migration_007_requested_role.sql
 COPY ./migrations/008_oidc_duplicate_hint.sql /docker-entrypoint-initdb.d/21_migration_008_oidc_duplicate_hint.sql
 COPY ./migrations/009_backfill_user_uri.sql /docker-entrypoint-initdb.d/22_migration_009_backfill_user_uri.sql
+COPY ./migrations/010_unscoped_writes_without_network.sql /docker-entrypoint-initdb.d/23_migration_010_unscoped_writes_without_network.sql
+COPY ./migrations/011_guest_reference_data_only.sql /docker-entrypoint-initdb.d/24_migration_011_guest_reference_data_only.sql
+COPY ./migrations/012_custom_policies_require_custom_role.sql /docker-entrypoint-initdb.d/25_migration_012_custom_policies_require_custom_role.sql
+COPY ./migrations/013_audit_user_created_role_changed.sql /docker-entrypoint-initdb.d/26_migration_013_audit_user_created_role_changed.sql
+COPY ./migrations/014_history_tables_network_scoped.sql /docker-entrypoint-initdb.d/27_migration_014_history_tables_network_scoped.sql
+COPY ./migrations/015_obs_manager_foi_datastream_location.sql /docker-entrypoint-initdb.d/28_migration_015_obs_manager_foi_datastream_location.sql
+COPY ./migrations/016_dataset_id_scope_conditional_on_network.sql /docker-entrypoint-initdb.d/29_migration_016_dataset_id_scope_conditional_on_network.sql

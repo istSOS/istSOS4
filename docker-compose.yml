@@ -1,7 +1,7 @@
 services:
   database:
     # Built from source, not pulled: this branch's database/Dockerfile bakes
-    # the auth/RBAC migrations (001-009) into the image, and no published
+    # the auth/RBAC migrations (001-016) into the image, and no published
     # tag contains them yet. Run `docker compose up --build` after changing
     # anything under database/.
     build:

@@ -17,11 +17,11 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import pg_quote_ident
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
-from fastapi import APIRouter, Depends, Header, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
-user = Header(default=None, include_in_schema=False)
+user = Depends(lambda: None)
 if AUTHORIZATION:
     from app.oauth import get_current_user
 
