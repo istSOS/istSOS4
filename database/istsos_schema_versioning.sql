@@ -44,6 +44,12 @@ BEGIN
             RAISE EXCEPTION 'the ID must not be changed (%)', NEW.id;
         END IF;
 
+        IF to_jsonb(NEW) - ARRAY['commit_id', 'systemTimeValidity']
+            IS NOT DISTINCT FROM
+            to_jsonb(OLD) - ARRAY['commit_id', 'systemTimeValidity'] THEN
+            RETURN NULL;
+        END IF;
+
         -- If the table is 'Location' and the column 'gen_foi_id' exists and is updated
         IF target_table = 'Location' THEN
             IF (NEW.gen_foi_id IS DISTINCT FROM OLD.gen_foi_id AND NEW.gen_foi_id IS NOT NULL) THEN
