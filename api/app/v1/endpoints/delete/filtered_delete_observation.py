@@ -96,25 +96,9 @@ async def delete_observations_filtered(
                     content={"deleted": 0},
                 )
 
-            deleted_rows = await connection.fetch(
-                """
-                DELETE FROM sensorthings."Observation"
-                WHERE id = ANY($1::bigint[])
-                RETURNING datastream_id;
-                """,
-                matched_ids,
+            deleted_count = await delete_observations_by_ids(
+                connection, matched_ids
             )
-
-            deleted_count = len(deleted_rows)
-            touched_datastreams = {
-                row["datastream_id"] for row in deleted_rows
-            }
-
-            for datastream_id in touched_datastreams:
-                await update_datastream_phenomenon_time_from_foi(
-                    connection, datastream_id
-                )
-                await update_datastream_observedArea(connection, datastream_id)
 
             if current_user is not None:
                 await connection.execute("RESET ROLE;")
@@ -123,3 +107,23 @@ async def delete_observations_filtered(
         status_code=status.HTTP_200_OK,
         content={"deleted": deleted_count},
     )
+
+
+async def delete_observations_by_ids(connection, ids):
+    """Delete Observations by id and refresh the touched Datastreams. Returns the deleted count."""
+    deleted_rows = await connection.fetch(
+        """
+            DELETE FROM sensorthings."Observation"
+            WHERE id = ANY($1::bigint[])
+            RETURNING datastream_id;
+        """,
+        ids,
+    )
+
+    for datastream_id in {row["datastream_id"] for row in deleted_rows}:
+        await update_datastream_phenomenon_time_from_foi(
+            connection, datastream_id
+        )
+        await update_datastream_observedArea(connection, datastream_id)
+
+    return len(deleted_rows)

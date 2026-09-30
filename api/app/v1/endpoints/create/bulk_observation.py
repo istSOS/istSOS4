@@ -17,13 +17,13 @@ from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
 from app.utils.utils import safe_parse_datetime
-from app.v1.endpoints.exceptions import BadRequest
-from app.v1.endpoints.functions import (
-    set_role,
-    update_datastream_time_ranges,
+from app.v1.endpoints.delete.filtered_delete_observation import (
+    delete_observations_by_ids,
 )
+from app.v1.endpoints.exceptions import BadRequest
+from app.v1.endpoints.functions import set_role, update_datastream_time_ranges
 from asyncpg.types import Range
-from fastapi import APIRouter, Body, Depends, Header, status
+from fastapi import APIRouter, Body, Depends, Header, Query, status
 from fastapi.responses import Response
 
 from .functions import create_entity, set_commit, update_datastream_last_foi_id
@@ -85,6 +85,7 @@ PAYLOAD_EXAMPLE = [
 )
 async def bulk_observations(
     payload: list = Body(examples=[PAYLOAD_EXAMPLE]),
+    force: bool = Query(False),
     commit_message=message,
     current_user=user,
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -129,6 +130,7 @@ async def bulk_observations(
                     datastream_id=datastream_id,
                     components=components,
                     commit_id=commit_id,
+                    force=force,
                 )
 
             if current_user is not None:
@@ -137,7 +139,13 @@ async def bulk_observations(
 
 
 async def insertBulkObservation(
-    payload, conn, foi_id, datastream_id, components=None, commit_id=None
+    payload,
+    conn,
+    foi_id,
+    datastream_id,
+    components=None,
+    commit_id=None,
+    force=False,
 ):
     """
     Inserts observation data into the database.
@@ -296,6 +304,24 @@ async def insertBulkObservation(
         """
 
         flattened_values = [item for row in data for item in row]
+
+        if force and ph_min_start is not None:
+            existing_ids = [
+                row["id"]
+                for row in await conn.fetch(
+                    """
+                        SELECT id FROM sensorthings."Observation"
+                        WHERE datastream_id = $1
+                        AND "phenomenonTimeStart" >= $2
+                        AND "phenomenonTimeEnd" <= $3;
+                    """,
+                    datastream_id,
+                    ph_min_start,
+                    ph_max_end,
+                )
+            ]
+            if existing_ids:
+                await delete_observations_by_ids(conn, existing_ids)
 
         await conn.execute(query, *flattened_values)
 
