@@ -24,7 +24,7 @@ from .functions import delete_entity, set_commit
 
 v1 = APIRouter()
 
-user = Header(default=None, include_in_schema=False)
+user = Depends(lambda: None)
 message = Header(default=None, alias="commit-message", include_in_schema=False)
 
 if AUTHORIZATION:
@@ -75,8 +75,5 @@ async def delete_datastream(
                     status.HTTP_404_NOT_FOUND,
                     f"Datastream with id {datastream_id} not found",
                 )
-
-            if current_user is not None:
-                await connection.execute("RESET ROLE;")
 
     return Response(status_code=status.HTTP_200_OK)

@@ -17,11 +17,11 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import pg_quote_ident
 from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
-from fastapi import APIRouter, Depends, Header, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse, Response
 
 v1 = APIRouter()
-user = Header(default=None, include_in_schema=False)
+user = Depends(lambda: None)
 if AUTHORIZATION:
     from app.oauth import get_current_user
 
@@ -33,8 +33,26 @@ if AUTHORIZATION:
     methods=["DELETE"],
     tags=["Policies"],
     summary="Delete a Policy",
-    description="Delete a Policy",
+    description="Delete a named row-level-security policy. Administrator-only.",
     status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Deleted. Response body is empty."},
+        400: {
+            "description": "Catch-all for any unexpected failure during deletion.",
+            "content": {"application/json": {"example": {"message": "..."}}},
+        },
+        401: {
+            "description": (
+                "The caller is not an administrator. 401 here, not 403 -- "
+                "same inconsistency as update/user.py and update/policy.py."
+            ),
+            "content": {"application/json": {"example": {"message": "Insufficient privileges"}}},
+        },
+        404: {
+            "description": "No policy exists with that name.",
+            "content": {"application/json": {"example": {"message": "Policy not found"}}},
+        },
+    },
 )
 async def delete_policy(
     policy: str = Query(
@@ -68,17 +86,15 @@ async def delete_policy(
                 )
                 await connection.execute(query)
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
         return Response(status_code=status.HTTP_200_OK)
 
-    except UndefinedObjectError as e:
+    except UndefinedObjectError:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={"message": "Policy not found"},
         )
-    except InsufficientPrivilegeError as e:
+    except InsufficientPrivilegeError:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={"message": "Insufficient privileges"},

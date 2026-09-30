@@ -12,15 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import json
 import logging
 
-from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
+from app import HOSTNAME, NETWORK, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
+from app.db.audit_crud import AUDIT_ACTION_USER_CREATED, log_audit_event
+from app.db.password_crud import pwd_context
 from app.oauth import get_current_user
-from app.rbac_roles import get_db_role_for_rbac, validate_rbac_role
-from app.utils.utils import pg_quote_ident, pg_quote_literal, validate_username
+from app.rbac_roles import validate_rbac_role
+from app.utils.utils import validate_username
+from app.validators import validate_password_strength
 from app.v1.endpoints.functions import insert_commit, set_role
+from app.v1.endpoints.openapi_responses import (
+    DB_TIMEOUT,
+    DB_UNAVAILABLE,
+    STA_BAD_REQUEST,
+    merge,
+)
 from asyncpg.exceptions import (
     InsufficientPrivilegeError,
     PostgresConnectionError,
@@ -41,14 +51,52 @@ PAYLOAD_EXAMPLE = {
     "role": "viewer",  # viewer, editor, obs_manager, sensor, qc, custom
 }
 
-
 @v1.api_route(
     "/Users",
     methods=["POST"],
     tags=["Users"],
     summary="Create a new User",
-    description="Create a new User entity.",
+    description=(
+        "Create a new User entity directly, bypassing the "
+        "registration/approval lifecycle. Administrator-only in practice: "
+        "a non-administrator caller is accepted here but then always fails "
+        "with 403, since `set_role()` (needed to attach the RLS policy) is "
+        "only invoked for administrators."
+    ),
     status_code=status.HTTP_201_CREATED,
+    responses=merge(
+        {201: {"description": "Created. Response body is empty."}},
+        STA_BAD_REQUEST,
+        {
+            403: {
+                "description": "The caller is not an administrator.",
+                "content": {
+                    "application/json": {"example": {"message": "Insufficient privileges."}}
+                },
+            },
+            409: {
+                "description": "A user with that username already exists.",
+                "content": {
+                    "application/json": {"example": {"message": "User already exists."}}
+                },
+            },
+        },
+        DB_UNAVAILABLE,
+        DB_TIMEOUT,
+        {
+            500: {
+                "description": (
+                    "Unexpected server error. Also reached, notably, by an "
+                    "invalid `role` value -- validate_rbac_role()'s "
+                    "ValueError isn't caught by a dedicated 400 handler "
+                    "here, so it falls through to this generic one instead."
+                ),
+                "content": {
+                    "application/json": {"example": {"message": "Internal server error."}}
+                },
+            }
+        },
+    ),
 )
 async def create_user(
     payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
@@ -93,6 +141,9 @@ async def create_user(
                     )
 
                 payload["role"] = validate_rbac_role(payload["role"])
+                # With NETWORK=0 there are no Networks, so a requested scope is ignored.
+                if not NETWORK:
+                    payload.pop("dataset_id", None)
 
                 if current_user is not None:
                     if current_user["role"] != "administrator":
@@ -100,7 +151,19 @@ async def create_user(
 
                     await set_role(connection, current_user)
 
-                password = payload.pop("password", None)
+                # Hash the password and put it back as a bcrypt hash so the
+                # dynamic INSERT below writes it to "User".password. istSOS
+                # users are not PostgreSQL roles -- there is no CREATE USER
+                # / WITH ENCRYPTED PASSWORD; /Login verifies against this
+                # column (same as the /Register path in
+                # create/register_request.py).
+                raw_password = payload.pop("password", None)
+                if not isinstance(raw_password, str):
+                    raise ValueError("Password must be a string.")
+                validate_password_strength(raw_password)
+                payload["password"] = await asyncio.to_thread(
+                    pwd_context.hash, raw_password
+                )
 
                 for key in list(payload.keys()):
                     if isinstance(payload[key], dict):
@@ -148,27 +211,32 @@ async def create_user(
                     await insert_commit(connection, commit, "UPDATE")
 
                 if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-
-                db_role = get_db_role_for_rbac(payload["role"])
-
-                await connection.execute(
-                    "CREATE USER {} WITH ENCRYPTED PASSWORD {} IN ROLE {};".format(
-                        pg_quote_ident(user["username"]),
-                        pg_quote_literal(password),
-                        pg_quote_ident(db_role),
+                    await log_audit_event(
+                        conn=connection,
+                        action_type=AUDIT_ACTION_USER_CREATED,
+                        actor_id=current_user["id"],
+                        dataset_id=payload.get("dataset_id"),
+                        payload={
+                            "created_user_id": user["id"],
+                            "username": user["username"],
+                            "role": payload["role"],
+                        },
                     )
-                )
 
-                await connection.execute(
-                    "GRANT {} TO {};".format(
-                        pg_quote_ident(payload["username"]),
-                        pg_quote_ident(current_user["username"]),
-                    )
-                )
+                # No RLS DDL needed here: as of
+                # 006_session_scoped_rls_policies.sql, every assignable
+                # role's access is enforced by static policies created once
+                # by that migration, not per-user. Creating a user is a
+                # plain INSERT + role column; a 'custom' user's narrower
+                # rule (if any) is added later via POST /Policies.
 
         return Response(status_code=status.HTTP_201_CREATED)
 
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"message": str(exc)},
+        )
     except UniqueViolationError:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,

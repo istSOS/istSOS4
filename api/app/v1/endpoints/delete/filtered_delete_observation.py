@@ -24,7 +24,7 @@ from .functions import update_datastream_phenomenon_time_from_foi
 
 v1 = APIRouter()
 
-user = Header(default=None, include_in_schema=False)
+user = Depends(lambda: None)
 message = Header(default=None, alias="commit-message", include_in_schema=False)
 
 if AUTHORIZATION:

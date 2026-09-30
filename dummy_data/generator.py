@@ -690,6 +690,18 @@ async def create_data():
     try:
         async with pool.acquire() as conn:
             try:
+                # `docker compose up` re-runs this container every time; without
+                # this guard a second run collides on unique keys and leaves
+                # extra empty Networks behind.
+                if await conn.fetchval(
+                    'SELECT EXISTS (SELECT 1 FROM sensorthings."Thing")'
+                ):
+                    print(
+                        "Data already present, skipping dummy data "
+                        "(set CLEAR_DATA=1 to regenerate)."
+                    )
+                    return
+
                 user_id = None
                 user_uri = "anonymous"
                 if authorization:

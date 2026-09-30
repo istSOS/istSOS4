@@ -55,7 +55,6 @@ async def set_commit(connection, commit_message, current_user):
 
     if current_user and current_user["role"] == "sensor":
         if commit_message:
-            await connection.execute("RESET ROLE;")
             raise Forbidden("Sensor cannot provide commit message")
 
         return await connection.fetchval(
@@ -67,7 +66,6 @@ async def set_commit(connection, commit_message, current_user):
         )
 
     if not commit_message:
-        await connection.execute("RESET ROLE;")
         raise BadRequest("No commit message provided")
 
     commit = {

@@ -17,11 +17,12 @@ import logging
 from contextlib import asynccontextmanager
 
 import asyncpg
-from app import HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
+from app import AUTHORIZATION, HOSTNAME, POSTGRES_PORT_WRITE, SECRET_KEY, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.settings import serverSettings, tables
 from app.v1 import api
 from fastapi import FastAPI
+from starlette.middleware.sessions import SessionMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="OGC SensorThings API",
-    description="A SensorThings API implementation in Python using FastAPI.",
+    description=(
+        "Service root. **The full API documentation, including "
+        "authentication and RBAC, lives at "
+        f"[{SUBPATH}{VERSION}/docs]({SUBPATH}{VERSION}/docs)** -- this page "
+        "only documents the service-root capabilities document."
+    ),
+    version="1.1",
     lifespan=lifespan,
     openapi_tags=[
         {
@@ -94,5 +101,13 @@ def __handle_root():
 async def read_root():
     return __handle_root()
 
+
+if AUTHORIZATION:
+    # Required by Authlib's Starlette OAuth client (app.oidc_providers) to
+    # persist the OAuth `state` and OIDC `nonce` across the redirect round
+    # trip to an external identity provider and back. SECRET_KEY is
+    # guaranteed non-None here -- app/__init__.py already refuses to start
+    # with AUTHORIZATION on and no SECRET_KEY set.
+    app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 app.mount(f"{SUBPATH}{VERSION}", api.v1)

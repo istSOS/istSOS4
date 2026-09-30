@@ -16,13 +16,13 @@ import ujson
 from app import AUTHORIZATION
 from app.db.asyncpg_db import get_pool
 from asyncpg.exceptions import InsufficientPrivilegeError
-from fastapi import APIRouter, Depends, Header, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
 
 from .read import set_role
 
 v1 = APIRouter()
-user = Header(default=None, include_in_schema=False)
+user = Depends(lambda: None)
 
 if AUTHORIZATION:
     from app.oauth import get_current_user
@@ -35,7 +35,11 @@ if AUTHORIZATION:
     methods=["GET"],
     tags=["Policies"],
     summary="Get Policies",
-    description="Get Policies",
+    description=(
+        "List row-level-security policies from pg_policies, optionally "
+        "filtered by user, policy name, table, or operation. "
+        "Administrator-only."
+    ),
     status_code=status.HTTP_200_OK,
 )
 async def get_policies(
@@ -107,8 +111,6 @@ async def get_policies(
                     ujson.loads(record["policies"]) for record in policies
                 ]
 
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
 
         return JSONResponse(
             status_code=status.HTTP_200_OK, content={"value": policies}

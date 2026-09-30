@@ -1,0 +1,5 @@
+fastapi==0.116.1
+uvicorn==0.35.0
+pyjwt==2.9.0
+cryptography==43.0.1
+python-multipart==0.0.9

@@ -1,6 +1,13 @@
 services:
   database:
-    image: ghcr.io/istsos/istsos4/database:1.14
+    # Built from source, not pulled: this branch's database/Dockerfile bakes
+    # in functions.sql (upstream's AggregationJobs feature) plus the
+    # auth/RBAC migrations (001-016), and no published tag contains them
+    # yet. Run `docker compose up --build` after changing anything under
+    # database/.
+    build:
+      context: ./database
+      dockerfile: Dockerfile
     restart: always
     container_name: istsos4-database
     environment:
@@ -32,7 +39,13 @@ services:
       - istsos4-network
 
   api:
-    image: ghcr.io/istsos/istsos4/api:1.32
+    # Built from source, not pulled: this branch adds auth endpoints and
+    # new dependencies (authlib, httpx, itsdangerous, bcrypt) that no
+    # published api tag has. Run `docker compose up --build` after changing
+    # anything under api/.
+    build:
+      context: ./api
+      dockerfile: Dockerfile
     restart: always
     container_name: istsos4-api
     depends_on:
@@ -64,7 +77,30 @@ services:
       ANONYMOUS_VIEWER: ${ANONYMOUS_VIEWER}
       NETWORK: ${NETWORK}
       ST_AGGREGATE: ${ST_AGGREGATE}
-    command: uvicorn --timeout-keep-alive 75 --workers 2 --host 0.0.0.0 --port 5000 app.main:app
+      # External identity providers (app/oidc_providers.py) -- a provider
+      # only registers if both its CLIENT_ID and CLIENT_SECRET resolve to
+      # a non-empty value, so it's safe to leave any of these unset.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET}
+      MICROSOFT_DISCOVERY_URL: ${MICROSOFT_DISCOVERY_URL}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      ORCID_CLIENT_ID: ${ORCID_CLIENT_ID}
+      ORCID_CLIENT_SECRET: ${ORCID_CLIENT_SECRET}
+      ORCID_DISCOVERY_URL: ${ORCID_DISCOVERY_URL}
+      EDUID_CLIENT_ID: ${EDUID_CLIENT_ID}
+      EDUID_CLIENT_SECRET: ${EDUID_CLIENT_SECRET}
+    # --proxy-headers makes uvicorn trust X-Forwarded-Proto from a
+    # fronting reverse proxy -- required for external-login callback URLs
+    # to come out as https:// behind TLS-terminating infra, same reason
+    # dev_docker-compose.yml needs it for ngrok. Unlike dev, this does NOT
+    # trust everyone ("*"): FORWARDED_ALLOW_IPS defaults to 127.0.0.1
+    # (uvicorn's own built-in default, i.e. trust nothing external) and
+    # MUST be overridden in .env with the actual reverse proxy's IP/CIDR
+    # for this to work in front of a real proxy -- see .env.example.
+    command: uvicorn --timeout-keep-alive 75 --workers 2 --host 0.0.0.0 --port 5000 --proxy-headers --forwarded-allow-ips=${FORWARDED_ALLOW_IPS:-127.0.0.1} app.main:app
     ports:
       - ${EXTERNAL_PORT}:5000
     working_dir: /code
@@ -81,7 +117,9 @@ services:
       - istsos4-network
 
   dummy_data:
-    image: ghcr.io/istsos/istsos4/dummy_data:1.10
+    build:
+      context: ./dummy_data
+      dockerfile: Dockerfile
     restart: on-failure
     container_name: istsos4-dummy-data
     environment:
@@ -97,9 +135,9 @@ services:
       CLEAR_DATA: ${CLEAR_DATA}
       N_THINGS: ${N_THINGS}
       N_OBSERVED_PROPERTIES: ${N_OBSERVED_PROPERTIES}
-      CENTER_LAT: ${CENTER_LAT}
-      CENTER_LON: ${CENTER_LON}
-      SPREAD_DEG: ${SPREAD_DEG}
+      CENTER_LAT: ${CENTER_LAT:-45.8693}
+      CENTER_LON: ${CENTER_LON:-8.9770}
+      SPREAD_DEG: ${SPREAD_DEG:-0.05}
       INTERVAL: ${INTERVAL}
       FREQUENCY: ${FREQUENCY}
       START_DATETIME: ${START_DATETIME}

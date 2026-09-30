@@ -1,0 +1,37 @@
+# E2E test override: adds a fake OpenID Connect provider and points the
+# API's "google" client at it. Use with the base compose file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+#   python api/tests/e2e/run_oidc_e2e.py
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml down -v
+#
+# The fake issues real RS256-signed id_tokens; only the identity is canned.
+services:
+  oidc-fake:
+    build:
+      context: ./api/tests/e2e/fake_oidc
+      dockerfile: Dockerfile
+    container_name: istsos4-oidc-fake
+    restart: "no"
+    environment:
+      # The browser follows authorization_endpoint (PUBLIC); the API
+      # container calls token/jwks/userinfo (INTERNAL). Same split a real
+      # IdP behind a reverse proxy has.
+      FAKE_OIDC_PUBLIC_BASE: ${FAKE_OIDC_PUBLIC_BASE:-http://localhost:9000}
+      FAKE_OIDC_INTERNAL_BASE: http://oidc-fake:9000
+      FAKE_OIDC_SUB: ${FAKE_OIDC_SUB:-fake-sub-001}
+      FAKE_OIDC_EMAIL: ${FAKE_OIDC_EMAIL:-oidctester@example.com}
+      FAKE_OIDC_NAME: ${FAKE_OIDC_NAME:-OIDC Tester}
+    ports:
+      - "9000:9000"
+    networks:
+      - istsos4-network
+
+  api:
+    environment:
+      GOOGLE_CLIENT_ID: fake-client
+      GOOGLE_CLIENT_SECRET: fake-secret
+      GOOGLE_DISCOVERY_URL: http://oidc-fake:9000/.well-known/openid-configuration
+    depends_on:
+      oidc-fake:
+        condition: service_started

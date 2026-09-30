@@ -33,7 +33,7 @@ from .functions import (
 
 v1 = APIRouter()
 
-user = Header(default=None, include_in_schema=False)
+user = Depends(lambda: None)
 message = Header(default=None, alias="commit-message", include_in_schema=False)
 
 if AUTHORIZATION:
@@ -102,8 +102,5 @@ async def delete_feature_of_interest(
                 await update_datastream_phenomenon_time_from_foi(
                     connection, ds_id
                 )
-
-            if current_user is not None:
-                await connection.execute("RESET ROLE;")
 
     return Response(status_code=status.HTTP_200_OK)
