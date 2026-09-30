@@ -35,6 +35,20 @@ create_dummy_data = int(os.getenv("DUMMY_DATA", 1))
 delete_dummy_data = int(os.getenv("CLEAR_DATA", 0))
 n_things = int(os.getenv("N_THINGS", 10))
 n_observed_properties = int(os.getenv("N_OBSERVED_PROPERTIES", 2))
+
+# ── quality index ────────────────────────────────────────────────────────────
+# The istSOS quality index: 100 is good, and lower values are flag codes. 90-93
+# are what the SaQC checks in the quality tutorial write back
+# (docs/mkdocs/docs/tutorial/quality.ipynb).
+#
+# Generated observations used to leave resultQuality null and every sensor
+# well-behaved, which left the field with nothing to describe: quality features
+# were invisible on a fresh install and could not be reviewed without seeding
+# data by hand. A few injected faults, flagged to match, fix that.
+QUALITY_PASS = 100
+QUALITY_CONSTANT = 91  # flagConstants - sensor stuck on one value
+QUALITY_OUTLIER = 92  # flagZScore    - isolated implausible spike
+QUALITY_OUT_OF_RANGE = 93  # flagRange - outside the plausible band
 interval = isodate.parse_duration(os.getenv("INTERVAL", "P1Y"))
 frequency = isodate.parse_duration(os.getenv("FREQUENCY", "PT5M"))
 date = datetime.strptime(
@@ -504,6 +518,10 @@ async def insert_observations(conn, observations, commit_id):
         "phenomenonTimeEnd",
         "resultTime",
         "resultNumber",
+        # Appended after resultNumber, never before it:
+        # update_datastream_phenomenon_time() reads positions 0-2 of these
+        # tuples positionally.
+        "resultQuality",
         "resultType",
         "datastream_id",
         "featuresofinterest_id",
@@ -607,6 +625,80 @@ async def update_datastream_observed_area(conn):
             await conn.execute(query, ds)
 
 
+def count_reading_steps():
+    """
+    How many readings one datastream receives.
+
+    Fault windows below are placed as a fraction of the run rather than at fixed
+    dates, so they land sensibly whatever INTERVAL and FREQUENCY are configured.
+    """
+    moment = date
+    steps = 0
+    while moment < (date + interval):
+        moment += frequency
+        steps += 1
+    return steps
+
+
+def plan_quality_faults(datastream_id, total_steps):
+    """
+    The fault a datastream carries, as (start_step, end_step, code, value_fn).
+
+    One kind per datastream, chosen from its id so a regenerated database is
+    reproducible and every flag appears somewhere in the demo set. One
+    datastream in four stays clean.
+    """
+    if total_steps < 12:
+        return []
+
+    def span(fraction):
+        return max(3, int(total_steps * fraction))
+
+    kind = datastream_id % 4
+
+    if kind == 1:
+        # flagConstants - the sensor stops responding and repeats one value.
+        begin = int(total_steps * 0.30)
+        return [(begin, begin + span(0.14), QUALITY_CONSTANT, lambda: 5)]
+    if kind == 2:
+        # flagRange - readings above the plausible maximum for the property.
+        begin = int(total_steps * 0.62)
+        return [
+            (
+                begin,
+                begin + span(0.03),
+                QUALITY_OUT_OF_RANGE,
+                lambda: random.randint(120, 160),
+            )
+        ]
+    if kind == 3:
+        # flagZScore - isolated spikes far outside the local spread.
+        begin = int(total_steps * 0.80)
+        return [
+            (
+                begin,
+                begin + span(0.01),
+                QUALITY_OUTLIER,
+                lambda: random.randint(280, 400),
+            )
+        ]
+    return []
+
+
+def resolve_reading(step, faults):
+    """
+    The reading at this step, and the quality verdict describing it.
+
+    Value and flag are decided together on purpose: an injected fault changes
+    the NUMBER as well as the code, so the flag describes something genuinely
+    present in the series instead of annotating clean data.
+    """
+    for begin, end, code, make_value in faults:
+        if begin <= step < end:
+            return make_value(), code
+    return random.randint(1, 100), QUALITY_PASS
+
+
 async def generate_observations(conn, commit_id):
     """
     Generates observations and inserts them into the database.
@@ -618,17 +710,25 @@ async def generate_observations(conn, commit_id):
         None
     """
 
+    total_steps = count_reading_steps()
+
     observations = []
     for j in range(1, n_things * n_observed_properties + 1):
         phenomenonTime = date
         check_date = date
+        faults = plan_quality_faults(j, total_steps)
+        step = 0
 
         while phenomenonTime < (date + interval):
             phenomenonTime += frequency
             phenomenonTimeStart = phenomenonTime
             phenomenonTimeEnd = phenomenonTime
             resultTime = phenomenonTime
-            resultNumber = random.randint(1, 100)
+            resultNumber, quality_code = resolve_reading(step, faults)
+            # jsonb column: asyncpg sends a str straight through as JSON text,
+            # so the integer code has to arrive already rendered.
+            resultQuality = str(quality_code)
+            step += 1
             resultType = 0
             datastream_id = j
             featuresofinterest_id = random.randint(1, n_things)
@@ -640,6 +740,7 @@ async def generate_observations(conn, commit_id):
                         phenomenonTimeEnd,
                         resultTime,
                         resultNumber,
+                        resultQuality,
                         resultType,
                         datastream_id,
                         featuresofinterest_id,
@@ -653,6 +754,7 @@ async def generate_observations(conn, commit_id):
                         phenomenonTimeEnd,
                         resultTime,
                         resultNumber,
+                        resultQuality,
                         resultType,
                         datastream_id,
                         featuresofinterest_id,
