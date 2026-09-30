@@ -790,7 +790,8 @@ async def manage_thing_location_with_historical_location(
                 await conn.execute(
                     """
                         INSERT INTO sensorthings."Thing_Location" ("thing_id", "location_id")
-                        VALUES ($1, $2);
+                        VALUES ($1, $2)
+                        ON CONFLICT ("thing_id", "location_id") DO NOTHING;
                     """,
                     thing_id,
                     location_id,
