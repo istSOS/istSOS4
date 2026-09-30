@@ -16,6 +16,7 @@ from app import AUTHORIZATION, NETWORK, VERSIONING
 from fastapi.openapi.utils import get_openapi
 from app.v1.custom_docs import register_custom_docs
 from app.v1.docs_description import V1_DESCRIPTION
+from app.v1.endpoints.create import aggregation_job as create_aggregation_job
 from app.v1.endpoints.create import bulk_observation, data_array_observation
 from app.v1.endpoints.create import datastream as create_datastream
 from app.v1.endpoints.create import (
@@ -56,6 +57,7 @@ from app.v1.endpoints.delete import sensor as delete_sensor
 from app.v1.endpoints.delete import thing as delete_thing
 from app.v1.endpoints.delete import user as delete_user
 from app.v1.endpoints.exception_handlers import register_exception_handlers
+from app.v1.endpoints.read import aggregation_job as read_aggregation_job
 from app.v1.endpoints.read import commit as read_commit
 from app.v1.endpoints.read import datastream as read_datastream
 from app.v1.endpoints.read import (
@@ -73,6 +75,7 @@ from app.v1.endpoints.read import read
 from app.v1.endpoints.read import sensor as read_sensor
 from app.v1.endpoints.read import thing as read_thing
 from app.v1.endpoints.read import user as read_user
+from app.v1.endpoints.update import aggregation_job as update_aggregation_job
 from app.v1.endpoints.update import datastream as update_datastream
 from app.v1.endpoints.update import (
     feature_of_interest as update_feature_of_interest,
@@ -166,6 +169,10 @@ if NETWORK:
     ]
 
 tags_metadata += [
+    {
+        "name": "AggregationJobs",
+        "description": "TimescaleDB jobs that aggregate Datastream Observations.",
+    },
     {
         "name": "Catch All",
         "description": "Read operations for SensorThings API.",
@@ -266,6 +273,7 @@ v1.include_router(read_observed_property.v1)
 v1.include_router(read_datastream.v1)
 v1.include_router(read_feature_of_interest.v1)
 v1.include_router(read_observation.v1)
+v1.include_router(read_aggregation_job.v1)
 v1.include_router(read.v1)
 
 # Register the create endpoints
@@ -279,6 +287,7 @@ v1.include_router(create_observed_property.v1)
 v1.include_router(create_datastream.v1)
 v1.include_router(create_feature_of_interest.v1)
 v1.include_router(create_observation.v1)
+v1.include_router(create_aggregation_job.v1)
 
 # Register the update endpoints
 v1.include_router(update_location.v1)
@@ -289,6 +298,7 @@ v1.include_router(update_observed_property.v1)
 v1.include_router(update_datastream.v1)
 v1.include_router(update_feature_of_interest.v1)
 v1.include_router(update_observation.v1)
+v1.include_router(update_aggregation_job.v1)
 
 # Register the delete endpoints
 v1.include_router(delete_location.v1)

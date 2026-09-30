@@ -1,9 +1,10 @@
 services:
   database:
     # Built from source, not pulled: this branch's database/Dockerfile bakes
-    # the auth/RBAC migrations (001-016) into the image, and no published
-    # tag contains them yet. Run `docker compose up --build` after changing
-    # anything under database/.
+    # in functions.sql (upstream's AggregationJobs feature) plus the
+    # auth/RBAC migrations (001-016), and no published tag contains them
+    # yet. Run `docker compose up --build` after changing anything under
+    # database/.
     build:
       context: ./database
       dockerfile: Dockerfile
