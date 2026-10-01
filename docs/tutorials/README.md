@@ -4,50 +4,50 @@ This folder contains the python notebooks used in the tutorials.
 
 # Git Workflow: Merging Branches
 
-## Scopo
+## Purpose
 
-Questa guida spiega come importare (fare il merge) delle modifiche dal branch `traveltime` nel branch `traveltime_edu`.
+This guide explains how to merge the changes from the `traveltime` branch into the `traveltime_edu` branch.
 
-## Passaggi
+## Steps
 
-1. **Assicurati di essere sul branch `traveltime_edu`:**
+1. **Make sure you are on the `traveltime_edu` branch:**
 
    ```bash
    git checkout traveltime_edu
    ```
 
-2. **Esegui il pull delle ultime modifiche da `traveltime`:**
+2. **Pull the latest changes of `traveltime`:**
 
-   Prima di fare il merge, assicurati che il branch `traveltime` sia aggiornato:
+   Before merging, make sure the `traveltime` branch is up to date:
 
    ```bash
    git checkout traveltime
    git pull origin traveltime
    ```
 
-3. **Torna su `traveltime_edu`:**
+3. **Go back to `traveltime_edu`:**
 
    ```bash
    git checkout traveltime_edu
    ```
 
-4. **Fai il merge delle modifiche da `traveltime` in `traveltime_edu`:**
+4. **Merge the changes from `traveltime` into `traveltime_edu`:**
 
    ```bash
    git merge traveltime
    ```
 
-   Se ci sono conflitti, Git ti notificherà e dovrai risolverli manualmente. Dopo aver risolto eventuali conflitti, salva i file modificati e fai il commit:
+   If there are conflicts, Git tells you and you have to resolve them by hand. After resolving them, save the modified files and commit:
 
    ```bash
    git add .
    git commit
    ```
 
-5. **Pusha le modifiche (opzionale, se stai lavorando con un repository remoto):**
+5. **Push the changes (optional, if you work with a remote repository):**
 
    ```bash
    git push origin traveltime_edu
    ```
 
-Così facendo, avrai importato tutte le modifiche dal branch `traveltime` nel branch `traveltime_edu`.
+This way all the changes from the `traveltime` branch are merged into `traveltime_edu`.
