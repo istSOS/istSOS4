@@ -1,0 +1,4 @@
+istsos4-client>=0.1
+paramiko>=3.0
+PyYAML>=6.0
+requests>=2.31

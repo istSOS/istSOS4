@@ -1,0 +1,4 @@
+istsos4-client>=0.1
+pandas>=2.0,<3
+PyYAML>=6.0,<7
+requests>=2.31,<3

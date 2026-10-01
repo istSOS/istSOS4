@@ -1,187 +1,28 @@
-# istSOS4 Utility Image
+# istSOS4 utilities
 
-This folder contains small import utilities and shell wrappers to run them in
-one shared Docker image.
+Tools that move data into istSOS4. Each folder is one tool, one Docker image
+and its own build context (`docker build -t <image> <folder>`).
 
-## Folder Structure
+- `services/` run continuously: `docker compose up -d`.
+- `jobs/` run once and exit: `docker run --rm`, by hand or from cron.
 
-```text
-utils/
-  dockerfile                    Dockerfile for the shared utility image
-  .env.example                  Template for runtime configuration
-  .env                          Real runtime configuration, ignored by git
-  models.py                     Shared helper models
-  xlsx2istsos.py                Import sensors/datastreams from Excel
-  eyeonwater2istsos.py          Import EyeOnWater observations from JSON
-  fetch_eyeonwater2istsos.py    Fetch EyeOnWater API data and import it
-  xlsx2istsos.sh                Docker wrapper for xlsx2istsos.py
-  eyeonwater2istsos.sh          Docker wrapper for eyeonwater2istsos.py
-  fetch_eyeonwater2istsos.sh    Docker wrapper for cron/API fetches
-```
+| Tool | Kind | Run |
+| --- | --- | --- |
+| [mqtt2istsos](services/mqtt2istsos/) | service | `docker compose up -d` |
+| [ftp2istsos](jobs/ftp2istsos/) | job, cron | `./run.sh` |
+| [eyeonwater2istsos](jobs/eyeonwater2istsos/) | job, cron or manual | `./fetch.sh`, `./run.sh FILE.json` |
+| [xlsx2istsos](jobs/xlsx2istsos/) | job, manual | `./run.sh FILE.xlsx` |
+| [istsos2_to_istsos4](jobs/istsos2_to_istsos4/) | job, one-off migration | `docker run`, see its README |
+| [istsos4_to_istsos4](jobs/istsos4_to_istsos4/) | job, one-off migration | `docker run`, see its README |
 
-The Docker image contains Python, the Python dependencies, and the `utils/*.py`
-files copied into `/app`.
+## Conventions
 
-The shell wrappers load `utils/.env` and pass it to Docker with `--env-file`.
-If `utils/.env` does not exist, they fall back to the project root `.env`.
-
-## Runtime Env File
-
-Create the real env file from the template:
-
-```bash
-cp utils/.env.example utils/.env
-nano utils/.env
-```
-
-The real `utils/.env` should contain the values used by the wrappers and
-Python scripts, for example:
-
-```env
-ISTSOS4_UTILS_IMAGE=istsos4-utils
-DOCKER=/usr/bin/docker
-
-ISTSOS4_URL=http://localhost:8018/istsos4/v1.1
-ISTSOS4_USERNAME=admin
-ISTSOS4_PASSWORD=admin
-
-EYEONWATER_THING_ID=12
-EYEONWATER_NETWORK_NAME=winca4ti
-EYEONWATER_BBOX=46.187437,6.116638,46.545639,6.963959
-EYEONWATER_LOOKBACK_DAYS=2
-
-XLSX_PATH=/absolute/path/to/file.xlsx
-EYEONWATER_JSON_PATH=/absolute/path/to/file.json
-```
-
-Do not put real passwords in `.env.example`; keep them in `utils/.env`.
-
-## Build The Image
-
-From the project root:
-
-```bash
-docker build -f utils/dockerfile -t istsos4-utils .
-```
-
-Rebuild the image whenever a `utils/*.py` file changes, because the Python files
-are copied into the image at build time.
-
-## Calls With Shell Wrappers
-
-Fetch EyeOnWater API observations and import them. By default this fetches from
-`EYEONWATER_LOOKBACK_DAYS` days ago:
-
-```bash
-utils/fetch_eyeonwater2istsos.sh
-```
-
-Fetch EyeOnWater with a custom begin date:
-
-```bash
-BEGIN="2026-06-01T00:00:00" utils/fetch_eyeonwater2istsos.sh
-```
-
-Fetch EyeOnWater with a custom bbox:
-
-```bash
-BBOX="46.187437,6.116638,46.545639,6.963959" utils/fetch_eyeonwater2istsos.sh
-```
-
-Import sensors/datastreams from Excel using `XLSX_PATH` from `utils/.env`:
-
-```bash
-utils/xlsx2istsos.sh
-```
-
-Import sensors/datastreams from a specific Excel file:
-
-```bash
-utils/xlsx2istsos.sh /absolute/path/to/file.xlsx
-```
-
-Import EyeOnWater observations from JSON using `EYEONWATER_JSON_PATH` from
-`utils/.env`:
-
-```bash
-utils/eyeonwater2istsos.sh
-```
-
-Import EyeOnWater observations from a specific JSON file:
-
-```bash
-utils/eyeonwater2istsos.sh /absolute/path/to/file.json
-```
-
-## Calls With Docker Directly
-
-Show help for each program:
-
-```bash
-docker run --rm --network host --env-file utils/.env istsos4-utils /app/fetch_eyeonwater2istsos.py --help
-docker run --rm --network host --env-file utils/.env istsos4-utils /app/xlsx2istsos.py --help
-docker run --rm --network host --env-file utils/.env istsos4-utils /app/eyeonwater2istsos.py --help
-```
-
-First full EyeOnWater API import, without a `begin` filter:
-
-```bash
-docker run --rm --network host --env-file utils/.env \
-  istsos4-utils \
-  /app/fetch_eyeonwater2istsos.py \
-  --bbox "46.187437,6.116638,46.545639,6.963959"
-```
-
-Import Excel directly with Docker:
-
-```bash
-docker run --rm --network host --env-file utils/.env \
-  -v /absolute/path/to/file.xlsx:/absolute/path/to/file.xlsx:ro \
-  istsos4-utils \
-  /app/xlsx2istsos.py \
-  /absolute/path/to/file.xlsx
-```
-
-Import EyeOnWater JSON directly with Docker:
-
-```bash
-docker run --rm --network host --env-file utils/.env \
-  -v /absolute/path/to/file.json:/absolute/path/to/file.json:ro \
-  istsos4-utils \
-  /app/eyeonwater2istsos.py \
-  /absolute/path/to/file.json
-```
-
-## Cron
-
-Daily EyeOnWater update at 03:15:
-
-```cron
-15 3 * * * /home/ist/Documents/code/istSOS4/utils/fetch_eyeonwater2istsos.sh >> /home/ist/eyeonwater2istsos.log 2>&1
-```
-
-The wrapper computes `--begin` from `EYEONWATER_LOOKBACK_DAYS`, so the cron line
-does not need an inline `date` command.
-
-## Moving To A Server
-
-Recommended approach:
-
-```bash
-git pull
-docker build -f utils/dockerfile -t istsos4-utils .
-cp utils/.env.example utils/.env
-nano utils/.env
-utils/fetch_eyeonwater2istsos.sh --help
-```
-
-If you build the image on another machine, export and import it:
-
-```bash
-docker save istsos4-utils -o istsos4-utils.tar
-scp istsos4-utils.tar user@server:/tmp/
-docker load -i /tmp/istsos4-utils.tar
-```
-
-Then copy the shell wrappers and `utils/.env` to the server in the same
-`utils/` folder layout.
+- A folder holds its `Dockerfile`, `requirements.txt`, `README.md` and a
+  tracked `*.example` config. The real `.env` and `config.yaml` stay local
+  (gitignored) and are passed in at run time, never copied into the image.
+- No code is shared between folders: istSOS4 access goes through
+  [istsos4-client](https://github.com/istSOS/istSOS4-client).
+- A job has a `run.sh` only when it does more than `docker run`: mounting an
+  input file, computing dates, being a cron target.
+- Published images are named `ghcr.io/istsos/istsos4/utils/<tool>:<version>`.
+- Tests (`test_*.py`) sit next to the code and stay out of the images.
