@@ -1,13 +1,21 @@
 # Python
 *.py[cod]
 .cache
+.venv
 
 # Local config & secrets
 .env
+*.pem
+*.key
+utils/**/config.yaml
 
 # Generated output
 docs/mkdocs/site
 database/schemaspy
+logs/
+*.log
 
-# Editors
+# Editors & agents
 .vscode
+.agents
+.codex
