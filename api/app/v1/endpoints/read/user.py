@@ -78,3 +78,65 @@ async def get_users(
             status_code=status.HTTP_404_NOT_FOUND,
             content={"message": "Users not found."},
         )
+
+
+# Columns any authenticated user may read about another user, e.g. to name the
+# author of a commit. `contact` is personal data and stays administrator-only.
+PUBLIC_USER_COLUMNS = "id, username, role, uri"
+ADMIN_USER_COLUMNS = PUBLIC_USER_COLUMNS + ", contact"
+
+
+@v1.api_route(
+    "/Users({user_id})",
+    methods=["GET"],
+    tags=["Users"],
+    summary="Get a user",
+    description=(
+        "Returns one user. Any authenticated user gets id, username, role and "
+        "uri; administrators also get contact."
+    ),
+    status_code=status.HTTP_200_OK,
+)
+async def get_user(
+    user_id: int,
+    current_user=user,
+    pool=Depends(get_pool),
+):
+    # No SET ROLE here: the `sensor` database role has SELECT on "User"
+    # revoked, and this endpoint deliberately exposes a fixed set of columns
+    # to every role — the same unscoped lookup get_current_user performs.
+    is_admin = (
+        current_user is not None
+        and current_user["role"] == "administrator"
+    )
+    columns = ADMIN_USER_COLUMNS if is_admin else PUBLIC_USER_COLUMNS
+
+    try:
+        async with pool.acquire() as connection:
+            record = await connection.fetchval(
+                f"""
+                    SELECT row_to_json(t)
+                    FROM (
+                        SELECT {columns}
+                        FROM sensorthings."User"
+                        WHERE id = $1
+                    ) t;
+                """,
+                user_id,
+            )
+    except Exception:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": "Could not read user."},
+        )
+
+    if record is None:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"message": "User not found."},
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=ujson.loads(record),
+    )
