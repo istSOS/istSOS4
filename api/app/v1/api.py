@@ -13,6 +13,8 @@
 # limitations under the License.
 
 from app import AUTHORIZATION, NETWORK, VERSIONING
+from app.v1.connector import api as connector
+from app.v1.endpoints.exception_handlers import register_exception_handlers
 from app.v1.endpoints.create import bulk_observation, data_array_observation
 from app.v1.endpoints.create import datastream as create_datastream
 from app.v1.endpoints.create import (
@@ -36,6 +38,7 @@ from app.v1.endpoints.delete import datastream as delete_datastream
 from app.v1.endpoints.delete import (
     feature_of_interest as delete_feature_of_interest,
 )
+from app.v1.endpoints.delete import filtered_delete_observation
 from app.v1.endpoints.delete import (
     historical_location as delete_historical_location,
 )
@@ -84,6 +87,7 @@ from app.v1.endpoints.update import sensor as update_sensor
 from app.v1.endpoints.update import thing as update_thing
 from app.v1.endpoints.update import user as update_user
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 if AUTHORIZATION:
     tags_metadata = [
@@ -116,6 +120,14 @@ if NETWORK:
     ]
 
 tags_metadata += [
+    {
+        "name": "STAC",
+        "description": (
+            "STAC 1.0 catalog of istSOS4 metadata -- Things as Collections, "
+            "Datastreams as Items. Served from a cache populated by a "
+            "scheduled harvest cycle, not computed per request."
+        ),
+    },
     {
         "name": "Catch All",
         "description": "Read operations for SensorThings API.",
@@ -162,6 +174,18 @@ v1 = FastAPI(
     swagger_ui_parameters={"defaultModelsExpandDepth": -1},
 )
 
+v1.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all web browsers to access the API
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows GET, POST, etc.
+    allow_headers=["*"],  # Allows all headers
+)
+# Canonical write-error handling for all endpoints on this sub-app. Endpoints
+# let asyncpg/ValueError exceptions propagate; these map them to STA error
+# bodies. See app/v1/endpoints/exception_handlers.py.
+register_exception_handlers(v1)
+
 # Register the authorization endpoints (login, user, policy)
 if AUTHORIZATION:
     v1.include_router(login.v1)
@@ -183,6 +207,9 @@ if NETWORK:
     v1.include_router(create_network.v1)
     v1.include_router(update_network.v1)
     v1.include_router(delete_network.v1)
+
+# Register the connector endpoints
+v1.include_router(connector.v1, prefix="/connector")
 
 # Register the read endpoints
 v1.include_router(read_location.v1)
@@ -226,3 +253,4 @@ v1.include_router(delete_sensor.v1)
 v1.include_router(delete_datastream.v1)
 v1.include_router(delete_feature_of_interest.v1)
 v1.include_router(delete_observation.v1)
+v1.include_router(filtered_delete_observation.v1)

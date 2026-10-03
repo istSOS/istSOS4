@@ -22,6 +22,7 @@ from app.v1.endpoints.functions import set_role
 from asyncpg.exceptions import InsufficientPrivilegeError, UndefinedObjectError
 from fastapi import APIRouter, Body, Depends, Query, status
 from fastapi.responses import JSONResponse, Response
+from app.v1.endpoints.exceptions import NotFound
 
 v1 = APIRouter()
 
@@ -35,7 +36,7 @@ ALLOWED_KEYS = [
 _UNSAFE_POLICY_TOKENS_RE = re.compile(r";|--|/\*|\*/|\x00")
 
 
-def _validate_policy_expression(value: str) -> str:
+def validate_policy_expression(value: str) -> str:
     if not isinstance(value, str):
         raise ValueError("Policy expression must be a string")
 
@@ -62,7 +63,7 @@ async def update_policy(
         alias="policy",
         description="The name of the policy to update",
     ),
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
@@ -93,12 +94,12 @@ async def update_policy(
                         """
                         row = await connection.fetchrow(query, policy)
                         if row is None:
-                            raise Exception(f"Policy '{policy}' not found.")
+                            raise NotFound(f"Policy '{policy}' not found.")
 
                         tablename, cmd = row["tablename"], row["cmd"]
 
                     if payload.get("policy") is not None:
-                        policy_expression = _validate_policy_expression(
+                        policy_expression = validate_policy_expression(
                             payload["policy"]
                         )
                         policy_ident = pg_quote_ident(policy)

@@ -15,6 +15,7 @@
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import asyncpg
 import jwt
@@ -35,6 +36,11 @@ from jwt.exceptions import InvalidTokenError
 
 logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="Login")
+
+# auto_error=False: FastAPI will NOT reject a missing Authorization header
+# automatically. Instead, token will be None, letting the caller decide
+# whether to treat that as "anonymous" or "must log in" based on flags.
+optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="Login", auto_error=False)
 
 
 async def get_user_from_db(username: str):
@@ -171,7 +177,16 @@ def decode_token(token: str):
     return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def _validate_token(token: str) -> dict:
+    """
+    Validate a bearer token: check revocation, decode JWT, look up user.
+
+    Raises ``HTTPException(401)`` on any failure (revoked, expired,
+    malformed, or user not found in the database).
+
+    This is the single source of truth for token validation; both
+    ``get_current_user`` and ``get_current_user_optional`` delegate here.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -193,3 +208,24 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     if user is None:
         raise credentials_exception
     return user
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    return await _validate_token(token)
+
+
+async def get_current_user_optional(
+    token: Optional[str] = Depends(optional_oauth2_scheme),
+) -> Optional[dict]:
+    """
+    Return the authenticated user dict, or ``None`` when no Authorization
+    header was sent at all.
+
+    A *present-but-invalid* token (expired, revoked, malformed) still
+    raises 401 — only a completely absent header is treated as anonymous.
+    This lets callers distinguish "no credential" from "bad credential".
+    """
+    if token is None:
+        return None
+    return await _validate_token(token)
+

@@ -51,7 +51,7 @@ PAYLOAD_EXAMPLE = {
     status_code=status.HTTP_201_CREATED,
 )
 async def create_user(
-    payload: dict = Body(example=PAYLOAD_EXAMPLE),
+    payload: dict = Body(examples=[PAYLOAD_EXAMPLE]),
     current_user=Depends(get_current_user),
     pgpool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
@@ -92,13 +92,7 @@ async def create_user(
                         },
                     )
 
-                try:
-                    payload["role"] = validate_rbac_role(payload["role"])
-                except ValueError as e:
-                    return JSONResponse(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        content={"message": str(e)},
-                    )
+                payload["role"] = validate_rbac_role(payload["role"])
 
                 if current_user is not None:
                     if current_user["role"] != "administrator":

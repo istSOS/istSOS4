@@ -21,7 +21,10 @@ from app.sta2rest import sta2rest
 from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from .query_parameters import CommonQueryParams, get_common_query_params
+from .query_parameters import (
+    ObservationQueryParams,
+    get_observation_query_params,
+)
 from .read import asyncpg_stream_results, wrapped_result_generator
 
 v1 = APIRouter()
@@ -46,7 +49,7 @@ async def get_observations(
     request: Request,
     current_user=user,
     pool=Depends(get_pool),
-    params: CommonQueryParams = Depends(get_common_query_params),
+    params: ObservationQueryParams = Depends(get_observation_query_params),
 ):
     try:
         full_path = request.url.path

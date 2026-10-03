@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from app import VERSIONING
 from app.db.sqlalchemy_db import SCHEMA_NAME, Base
 from sqlalchemy.dialects.postgresql.base import TIMESTAMP
 from sqlalchemy.dialects.postgresql.json import JSON
@@ -32,7 +33,8 @@ class Observation(Base):
     )
     datastream_navigation_link = Column("Datastream@iot.navigationLink", Text)
     commit_navigation_link = Column("Commit@iot.navigationLink", Text)
-    phenomenon_time = Column("phenomenonTime", TSTZRANGE)
+    phenomenon_time_start = Column("phenomenonTimeStart", TIMESTAMP)
+    phenomenon_time_end = Column("phenomenonTimeEnd", TIMESTAMP)
     result_time = Column("resultTime", TIMESTAMP, nullable=False)
     result = Column(JSON, nullable=True)
     result_string = Column("resultString", Text)
@@ -42,6 +44,8 @@ class Observation(Base):
     result_quality = Column("resultQuality", JSON)
     valid_time = Column("validTime", TSTZRANGE)
     parameters = Column(JSON)
+    if VERSIONING:
+        system_time_validity = Column("systemTimeValidity", TSTZRANGE)
     featuresofinterest_id = Column(
         Integer,
         ForeignKey(f"{SCHEMA_NAME}.FeaturesOfInterest.id"),

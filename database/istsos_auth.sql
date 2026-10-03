@@ -495,7 +495,7 @@ BEGIN
             user_list_ text;
             tables TEXT[];
         BEGIN
-            user_list_ := array_to_string(users_, ', ');
+            SELECT string_agg(quote_ident(u), ', ') INTO user_list_ FROM unnest(users_) AS u;            
             tables := ARRAY[
                 'Location', 
                 'Thing', 
@@ -531,7 +531,7 @@ BEGIN
             user_list_ text;
             tables TEXT[];
         BEGIN
-            user_list_ := array_to_string(users_, ', ');
+            SELECT string_agg(quote_ident(u), ', ') INTO user_list_ FROM unnest(users_) AS u;
             tables := ARRAY[
                 'Location', 
                 'Thing', 
@@ -567,7 +567,7 @@ BEGIN
             user_list_ text;
             tables TEXT[];
         BEGIN
-            user_list_ := array_to_string(users_, ', ');
+            SELECT string_agg(quote_ident(u), ', ') INTO user_list_ FROM unnest(users_) AS u;
             tables := ARRAY[
                 'Location', 
                 'Thing', 
@@ -582,7 +582,7 @@ BEGIN
                 tables := tables || ARRAY['Network'];
             END IF;
 
-FOR tablename IN SELECT unnest(tables)
+            FOR tablename IN SELECT unnest(tables)
             LOOP
                 EXECUTE format(
                     'CREATE POLICY %I
@@ -639,17 +639,35 @@ FOR tablename IN SELECT unnest(tables)
         DECLARE
             tablename text;
             user_list_ text;
+            tables TEXT[];
         BEGIN
-            user_list_ := array_to_string(users_, ', ');
+            SELECT string_agg(quote_ident(u), ', ') INTO user_list_ FROM unnest(users_) AS u;
+            tables := ARRAY[
+                'Location',
+                'Thing',
+                'HistoricalLocation',
+                'ObservedProperty',
+                'Sensor',
+                'Datastream',
+                'FeaturesOfInterest',
+                'Observation'
+            ];
 
-            EXECUTE format(
-                'CREATE POLICY %I
-                ON sensorthings."Observation"
-                FOR SELECT
-                TO %s
-                USING (TRUE);',
-                policyname_ || '_qc_observation_select', user_list_
-            );
+            IF coalesce(current_setting('custom.network', true)::boolean, false) THEN
+                tables := tables || ARRAY['Network'];
+            END IF;
+
+            FOR tablename IN SELECT unnest(tables)
+            LOOP
+                EXECUTE format(
+                    'CREATE POLICY %I
+                    ON sensorthings.%I
+                    FOR SELECT
+                    TO %s
+                    USING (TRUE);',
+                    policyname_ || '_qc_' || tablename || '_select', tablename, user_list_
+                );
+            END LOOP;
 
             EXECUTE format(
                 'CREATE POLICY %I
@@ -670,7 +688,7 @@ FOR tablename IN SELECT unnest(tables)
             user_list_ text;
             tables TEXT[];
         BEGIN
-            user_list_ := array_to_string(users_, ', ');
+            SELECT string_agg(quote_ident(u), ', ') INTO user_list_ FROM unnest(users_) AS u;
             tables := ARRAY[
                 'Location', 
                 'Thing', 
@@ -753,7 +771,7 @@ FOR tablename IN SELECT unnest(tables)
                 IF new_roles_ = '{}' THEN
                     EXECUTE format('DROP POLICY %I ON sensorthings.%I', policyname_, tablename_);
                 ELSE
-                    EXECUTE format('ALTER POLICY %I ON sensorthings.%I TO %s', policyname_, tablename_, array_to_string(new_roles_, ','));
+                    EXECUTE format('ALTER POLICY %I ON sensorthings.%I TO %s', policyname_, tablename_, (SELECT string_agg(quote_ident(r), ',') FROM unnest(new_roles_) AS r));
                 END IF;
             END LOOP;
         END;
@@ -777,7 +795,7 @@ FOR tablename IN SELECT unnest(tables)
             
             new_roles_ := old_roles_ || users_;
             
-            EXECUTE format('ALTER POLICY %I ON sensorthings.%I TO %s', policyname_, tablename_, array_to_string(new_roles_, ','));
+            EXECUTE format('ALTER POLICY %I ON sensorthings.%I TO %s', policyname_, tablename_, (SELECT string_agg(quote_ident(r), ',') FROM unnest(new_roles_) AS r));
 
             RETURN QUERY SELECT tablename_, cmd_; 
         END;
