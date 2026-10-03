@@ -151,7 +151,7 @@ def dcat_turtle_files(connector_base_url) -> list[Path]:
     root_dest.write_bytes(root_resp.content)
     files.append(root_dest)
 
-    optional_endpoints = {"orphan.ttl": f"{connector_base_url}/dcat/orphan.ttl"}
+    optional_endpoints = {}
     for network in NETWORKS:
         optional_endpoints[f"network_{network}.ttl"] = f"{connector_base_url}/dcat/{network}.ttl"
 
