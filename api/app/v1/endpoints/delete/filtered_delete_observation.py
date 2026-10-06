@@ -76,7 +76,10 @@ async def delete_observations_filtered(
     if request.url.query:
         full_path += "?" + request.url.query
 
-    ids_query = sta2rest.STA2REST.convert_filter_to_ids_query(full_path)
+    try:
+        ids_query = sta2rest.STA2REST.convert_filter_to_ids_query(full_path)
+    except Exception as e:
+        return error_response(status.HTTP_400_BAD_REQUEST, str(e))
 
     async with pool.acquire() as connection:
         async with connection.transaction():
