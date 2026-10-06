@@ -47,6 +47,9 @@ BEGIN
         IF to_jsonb(NEW) - ARRAY['commit_id', 'systemTimeValidity']
             IS NOT DISTINCT FROM
             to_jsonb(OLD) - ARRAY['commit_id', 'systemTimeValidity'] THEN
+            IF NEW.commit_id IS DISTINCT FROM OLD.commit_id THEN
+                RAISE EXCEPTION 'No changes to apply';
+            END IF;
             RETURN NULL;
         END IF;
 
@@ -87,8 +90,20 @@ BEGIN
     END IF;
 
     IF (TG_OP = 'DELETE') THEN
-        -- Set the END systemTimeValidity to the 'timestamp_now'
-        OLD."systemTimeValidity" := tstzrange(lower(OLD."systemTimeValidity"), timestamp_now);
+        -- Commit of the DELETE, set by the API only for the target row (not for cascaded rows)
+        IF current_setting('istsos.delete_target', true) = target_table || ':' || OLD.id THEN
+            -- Archive the last version with its own commit
+            OLD."systemTimeValidity" := tstzrange(lower(OLD."systemTimeValidity"), timestamp_now);
+            EXECUTE format('INSERT INTO %I.%I SELECT ($1).*', target_schema || '_history', target_table) USING OLD;
+            -- Then archive the deletion itself with the DELETE commit
+            OLD.commit_id := current_setting('istsos.delete_commit_id')::bigint;
+            OLD."systemTimeValidity" := tstzrange(timestamp_now, timestamp_now, '[]');
+        ELSIF lower(OLD."systemTimeValidity") = timestamp_now THEN
+            OLD."systemTimeValidity" := tstzrange(timestamp_now, timestamp_now, '[]');
+        ELSE
+            -- Set the END systemTimeValidity to the 'timestamp_now'
+            OLD."systemTimeValidity" := tstzrange(lower(OLD."systemTimeValidity"), timestamp_now);
+        END IF;
         -- Copy the original row to the history table
         EXECUTE format('INSERT INTO %I.%I SELECT ($1).*', target_schema || '_history', target_table) USING OLD;
         RETURN OLD;
