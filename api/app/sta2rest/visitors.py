@@ -421,6 +421,7 @@ class NodeVisitor(Visitor):
                     for relationship in join_relationships:
                         sub_query = sub_query.join(relationship)
 
+            sub_query = sub_query.subquery()
             columns_to_select = []
             for column in sub_query.columns:
                 if column.name not in labels:
@@ -875,6 +876,7 @@ class NodeVisitor(Visitor):
         if result_format == "DataArray":
             top_value += 1
 
+        main_query = main_query.subquery()
         columns_to_select = []
         for column in main_query.columns:
             if column.name not in labels:
@@ -961,6 +963,7 @@ class NodeVisitor(Visitor):
                     value = "phenomenonTime"
             else:
                 value = select_query[0].right
+            main_query = main_query.subquery()
             main_query = select(
                 main_query.c.json.op("->>")(text(f"'{value}'")).label("json")
             ).select_from(main_query)

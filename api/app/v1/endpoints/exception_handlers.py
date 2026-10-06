@@ -50,10 +50,12 @@ from asyncpg.exceptions import (
     InsufficientPrivilegeError,
     IntegrityConstraintViolationError,
     PostgresConnectionError,
+    RaiseError,
     TooManyConnectionsError,
     UniqueViolationError,
 )
 from fastapi import FastAPI, Request, status
+from fastapi.responses import Response
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +76,15 @@ async def handle_unique_violation(request: Request, exc: Exception):
     if detail:
         message = f"{message} {detail}"
     return error_response(status.HTTP_409_CONFLICT, message)
+
+
+NO_CHANGES = "No changes to apply"
+
+
+async def handle_raise_error(request: Request, exc: Exception):
+    if getattr(exc, "message", None) == NO_CHANGES:
+        return Response(status_code=status.HTTP_200_OK)
+    return error_response(status.HTTP_400_BAD_REQUEST, str(exc))
 
 
 async def handle_db_unavailable(request: Request, exc: Exception):
@@ -115,6 +126,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         InsufficientPrivilegeError, handle_insufficient_privilege
     )
     app.add_exception_handler(UniqueViolationError, handle_unique_violation)
+    app.add_exception_handler(RaiseError, handle_raise_error)
     app.add_exception_handler(PostgresConnectionError, handle_db_unavailable)
     app.add_exception_handler(TooManyConnectionsError, handle_db_unavailable)
     app.add_exception_handler(ForeignKeyViolationError, handle_foreign_key)

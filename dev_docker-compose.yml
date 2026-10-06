@@ -78,7 +78,7 @@ services:
       - istsos4-network
 
   redis:
-    image: redis:7.4.0-alpine3.20
+    image: redis:8.8.0-alpine3.23
     restart: always
     container_name: istsos4-redis
     volumes:

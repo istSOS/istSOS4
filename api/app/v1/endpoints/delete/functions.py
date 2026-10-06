@@ -36,12 +36,14 @@ async def set_commit(
     if current_user is not None:
         commit["user_id"] = current_user["id"]
         commit_id = await insert_commit(connection, commit, "DELETE")
-        query = f"""
-            UPDATE sensorthings."{entity_name}"
-            SET "commit_id" = $1
-            WHERE id = $2
-        """
-        await connection.execute(query, commit_id, entity_id)
+        await connection.execute(
+            """
+            SELECT set_config('istsos.delete_commit_id', $1, true),
+                   set_config('istsos.delete_target', $2, true)
+            """,
+            str(commit_id),
+            f"{entity_name}:{entity_id}",
+        )
 
 
 async def delete_entity(connection, entity_name, entity_id, obs=False):

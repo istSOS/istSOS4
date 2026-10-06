@@ -420,7 +420,7 @@ class FilterVisitor(visitor.NodeVisitor):
                 else:
                     expression = left.op("@>")(
                         functions.func.timestamptz(right)
-                    )
+                    ) & ~functions.func.upper_inc(left)
                 if op_name == "ne":
                     return operator.invert(expression)
                 return expression
