@@ -3,7 +3,6 @@ name: CI
 on:
   push:
     branches: [main, dev]
-  pull_request:
 
 env:
   STA_BASE_URL: http://localhost:8018/istsos4/v1.1
