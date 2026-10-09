@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 from istsos4_client import Datastream, Observation
+from istsos4_client.client import MAX_ROWS_PER_BULK
 
 COLUMNS = ("time", "result", "resultQuality")
 FILENAME = re.compile(r"(?P<thing>.+)_(?P<end>\d{14}[+-]\d{4})")
@@ -39,10 +40,10 @@ def parse_time(value, tz, where):
     return value
 
 
-def read_sheet(title, df, end):
+def read_sheet(title, df, end, qc=None):
     """[(time, result, resultQuality), ...], or [] when the sheet is empty,
     runs past the file date or repeats a time. A time without offset gets
-    end's."""
+    end's. qc, if given, replaces every resultQuality."""
     df = df.dropna(how="all")
     if df.empty:
         print(f"{title}: no observations, skipped.")
@@ -80,16 +81,15 @@ def read_sheet(title, df, end):
         time = parse_time(row.time, end.tzinfo, where)
         # resultQuality is jsonb: the API stores a str as JSON text and
         # fails with a 500 on anything else, e.g. an int cell.
-        quality = (
-            None
-            if pd.isna(row.resultQuality)
-            else json.dumps(row.resultQuality)
-        )
+        quality = row.resultQuality if qc is None else qc
+        quality = None if pd.isna(quality) else json.dumps(quality)
         observations.append((time, row.result, quality))
     return observations
 
 
-def import_observations(client, xlsx_path, commit_message, force=False):
+def import_observations(
+    client, xlsx_path, commit_message, force=False, qc=None
+):
     """Post each sheet to its Datastream. Returns the observations sent."""
     thing, end = parse_filename(xlsx_path)
     thing_name = thing.replace("'", "''")
@@ -100,7 +100,7 @@ def import_observations(client, xlsx_path, commit_message, force=False):
     # anything is posted.
     sheets, missing = [], []
     for title, df in frames.items():
-        rows = read_sheet(title, df, end)
+        rows = read_sheet(title, df, end, qc)
         if not rows:
             continue
 
@@ -142,10 +142,17 @@ def import_observations(client, xlsx_path, commit_message, force=False):
             f"Thing {thing} has no Datastream named {', '.join(missing)}."
         )
 
-    sent = 0
+    chunks = []
     for datastream, rows in sheets:
-        # Sorted: with force, each bulk request first deletes the stored
-        # observations in its own time window.
+        rows = sorted(rows, key=lambda row: row[0])
+        for offset in range(0, len(rows), MAX_ROWS_PER_BULK):
+            chunks.append(
+                (datastream, rows[offset : offset + MAX_ROWS_PER_BULK])
+            )
+
+    run_time = datetime.now().astimezone().isoformat(timespec="seconds")
+    sent = 0
+    for index, (datastream, rows) in enumerate(chunks, start=1):
         observations = [
             Observation(
                 phenomenon_time=time,
@@ -153,11 +160,18 @@ def import_observations(client, xlsx_path, commit_message, force=False):
                 result_quality=quality,
                 datastream=datastream.iot_id,
             )
-            for time, result, quality in sorted(rows, key=lambda row: row[0])
+            for time, result, quality in rows
         ]
-        count = client.bulk_observations(
-            observations, commit_message=commit_message, force=force
+        message = (
+            f"execution time {run_time}, {commit_message} for {Path(xlsx_path).name}, "
+            f"sheet {datastream.name} ({index}/{len(chunks)})"
         )
-        print(f"{datastream.name}: {count} observations imported.")
+        count = client.bulk_observations(
+            observations, commit_message=message, force=force
+        )
+        print(
+            f"{message}, {count} observations imported from "
+            f"{rows[0][0].isoformat()} to {rows[-1][0].isoformat()}."
+        )
         sent += count
     return sent
