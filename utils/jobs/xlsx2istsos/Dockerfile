@@ -8,6 +8,6 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY xlsx2istsos.py ./
+COPY xlsx2istsos.py observations.py ./
 
 ENTRYPOINT ["python", "xlsx2istsos.py"]

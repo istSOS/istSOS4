@@ -15,6 +15,8 @@ from istsos4_client import (
     Thing,
 )
 
+from observations import import_observations
+
 UOM_MAPPING = {
     "V": "Voltage",
     "°C": "Celsius degree",
@@ -354,18 +356,28 @@ def create_entities(procedure, client, commit_message):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Import sensors and datastreams from an Excel template into istSOS4."
+        description="Import sensors and datastreams from an Excel template into istSOS4, or with --observations their observations."
     )
     parser.add_argument("xlsx_path", help="Path to the Excel file to import.")
     parser.add_argument(
         "--sheet-name",
         default="Sheet1",
-        help="Worksheet name to read. Defaults to Sheet1.",
+        help="Worksheet name to read. Defaults to Sheet1. Ignored with --observations.",
     )
     parser.add_argument(
         "--commit-message",
         default="Import from Excel",
         help="Commit message sent to istSOS4.",
+    )
+    parser.add_argument(
+        "--observations",
+        action="store_true",
+        help="Import observations into existing Datastreams: file named <thing>_<YYYYMMDDhhmmss+hhmm>.xlsx, one sheet per Datastream.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="With --observations: replace the stored observations in each sheet's time range.",
     )
     return parser.parse_args()
 
@@ -382,6 +394,13 @@ def main():
         os.environ["ISTSOS4_USERNAME"],
         os.environ["ISTSOS4_PASSWORD"],
     )
+    if args.observations:
+        sent = import_observations(
+            client, xlsx_path, args.commit_message, args.force
+        )
+        print(f"Imported {sent} observations into {client.base_url}.")
+        return
+
     things = read_configuration(xlsx_path, args.sheet_name)
 
     for procedure in things:
