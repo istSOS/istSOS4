@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from datetime import datetime
+
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import validate_payload_keys
@@ -22,7 +24,7 @@ from app.v1.endpoints.functions import (
     update_datastream_observedArea,
     update_datastream_time_ranges,
 )
-from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi import APIRouter, Depends, Header, Query, Request, status
 from fastapi.responses import Response
 
 from .functions import check_id_exists, set_commit, update_observation_entity
@@ -61,6 +63,15 @@ ALLOWED_KEYS = [
 ]
 
 
+def parse_phenomenon_time(phenomenon_time: str = Query(None)):
+    if phenomenon_time is None:
+        return None
+    try:
+        return datetime.fromisoformat(phenomenon_time.split("/")[0])
+    except ValueError:
+        raise BadRequest("Invalid phenomenonTime")
+
+
 @v1.api_route(
     "/Observations({observation_id})",
     methods=["PATCH"],
@@ -73,6 +84,7 @@ ALLOWED_KEYS = [
 async def update_observation(
     observation_id: int,
     payload=Depends(normalize_patch_body),
+    phenomenon_time=Depends(parse_phenomenon_time),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -86,7 +98,7 @@ async def update_observation(
                 await set_role(connection, current_user)
 
             if not await check_id_exists(
-                connection, "Observation", observation_id
+                connection, "Observation", observation_id, phenomenon_time
             ):
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
@@ -95,7 +107,11 @@ async def update_observation(
                 )
 
             payload = await apply_json_patch_to_entity(
-                connection, "Observation", observation_id, payload
+                connection,
+                "Observation",
+                observation_id,
+                payload,
+                phenomenon_time,
             )
 
             if not payload:
@@ -114,7 +130,7 @@ async def update_observation(
                 payload["commit_id"] = commit_id
 
             updated = await update_observation_entity(
-                connection, observation_id, payload
+                connection, observation_id, payload, phenomenon_time
             )
 
             await post_update_observation(
@@ -169,6 +185,7 @@ async def post_update_observation(
 async def replace_observation(
     observation_id: int,
     request: Request,
+    phenomenon_time=Depends(parse_phenomenon_time),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -186,4 +203,5 @@ async def replace_observation(
         optional_keys=OPTIONAL_PUT_KEYS,
         update_entity_fn=update_observation_entity,
         post_update=post_update_observation,
+        phenomenon_time=phenomenon_time,
     )

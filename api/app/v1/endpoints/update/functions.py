@@ -25,13 +25,26 @@ from app.v1.endpoints.exceptions import BadRequest, Forbidden
 from app.v1.endpoints.functions import insert_commit
 
 
-async def check_id_exists(connection, entity_name, entity_id):
+def phenomenon_time_filter(phenomenon_time, index):
+    if phenomenon_time is None:
+        return ""
+    return f' AND "phenomenonTimeStart" = ${index}'
+
+
+async def check_id_exists(
+    connection, entity_name, entity_id, phenomenon_time=None
+):
     query = f"""
         SELECT id
         FROM sensorthings."{entity_name}"
-        WHERE id = $1
+        WHERE id = $1{phenomenon_time_filter(phenomenon_time, 2)}
     """
-    return await connection.fetchval(query, entity_id)
+    args = (
+        [entity_id]
+        if phenomenon_time is None
+        else [entity_id, phenomenon_time]
+    )
+    return await connection.fetchval(query, *args)
 
 
 async def set_commit(connection, commit_message, current_user):
@@ -67,7 +80,9 @@ async def set_commit(connection, commit_message, current_user):
     return await insert_commit(connection, commit, "UPDATE")
 
 
-async def relocate_observation(connection, observation_id, payload):
+async def relocate_observation(
+    connection, observation_id, payload, phenomenon_time=None
+):
     """Re-create an Observation row to change its phenomenonTime.
 
     phenomenonTimeStart is the TimescaleDB hypertable partition column, and an
@@ -85,6 +100,8 @@ async def relocate_observation(connection, observation_id, payload):
             ORDER BY ordinal_position
             """)]
     params = [observation_id]
+    if phenomenon_time is not None:
+        params.append(phenomenon_time)
     insert_cols = []
     select_exprs = []
     for col in columns:
@@ -98,7 +115,7 @@ async def relocate_observation(connection, observation_id, payload):
     query = f"""
         WITH deleted AS (
             DELETE FROM sensorthings."Observation"
-            WHERE id = $1
+            WHERE id = $1{phenomenon_time_filter(phenomenon_time, 2)}
             RETURNING *
         )
         INSERT INTO sensorthings."Observation" ({", ".join(insert_cols)})
@@ -110,14 +127,21 @@ async def relocate_observation(connection, observation_id, payload):
 
 
 async def update_entity(
-    connection, entity_name, entity_id, payload, obs=False
+    connection,
+    entity_name,
+    entity_id,
+    payload,
+    obs=False,
+    phenomenon_time=None,
 ):
     payload = {
         key: json.dumps(value) if isinstance(value, dict) else value
         for key, value in payload.items()
     }
     if obs and "phenomenonTimeStart" in payload:
-        return await relocate_observation(connection, entity_id, payload)
+        return await relocate_observation(
+            connection, entity_id, payload, phenomenon_time
+        )
 
     set_clause = ", ".join(
         [
@@ -130,14 +154,17 @@ async def update_entity(
         ]
     )
     if obs:
+        args = list(payload.values())
+        if phenomenon_time is not None:
+            args.append(phenomenon_time)
         return await connection.fetchrow(
             f"""
                 UPDATE sensorthings."{entity_name}"
                 SET {set_clause}
-                WHERE id = {entity_id}
+                WHERE id = {entity_id}{phenomenon_time_filter(phenomenon_time, len(payload) + 1)}
                 RETURNING "phenomenonTimeStart", "phenomenonTimeEnd", "resultTime", "datastream_id";
             """,
-            *payload.values(),
+            *args,
         )
     await connection.fetchval(
         f"""
@@ -423,7 +450,9 @@ async def update_feature_of_interest_entity(
         )
 
 
-async def update_observation_entity(connection, observation_id, payload):
+async def update_observation_entity(
+    connection, observation_id, payload, phenomenon_time=None
+):
     handle_datetime_fields(payload)
 
     handle_result_field(payload)
@@ -432,7 +461,12 @@ async def update_observation_entity(connection, observation_id, payload):
 
     if payload:
         return await update_entity(
-            connection, "Observation", observation_id, payload, True
+            connection,
+            "Observation",
+            observation_id,
+            payload,
+            True,
+            phenomenon_time,
         )
 
 

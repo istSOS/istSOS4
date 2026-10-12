@@ -14,7 +14,6 @@ from istsos4_client import (
     Sensor,
     Thing,
 )
-
 from observations import import_observations
 
 UOM_MAPPING = {
@@ -379,6 +378,11 @@ def parse_args():
         action="store_true",
         help="With --observations: replace the stored observations in each sheet's time range.",
     )
+    parser.add_argument(
+        "--qc",
+        type=int,
+        help="With --observations: resultQuality for every observation, instead of the resultQuality column.",
+    )
     return parser.parse_args()
 
 
@@ -396,7 +400,7 @@ def main():
     )
     if args.observations:
         sent = import_observations(
-            client, xlsx_path, args.commit_message, args.force
+            client, xlsx_path, args.commit_message, args.force, args.qc
         )
         print(f"Imported {sent} observations into {client.base_url}.")
         return
