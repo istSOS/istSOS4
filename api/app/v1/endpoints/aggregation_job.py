@@ -105,29 +105,31 @@ def require_administrator(current_user):
         raise Forbidden()
 
 
-def _require_string(value, field):
+def require_string(value, field):
     if not isinstance(value, str) or not value.strip():
         raise BadRequest(f"'{field}' must be a non-empty string.")
     return value.strip()
 
 
-def _require_boolean(value, field):
+def require_boolean(value, field):
     if not isinstance(value, bool):
         raise BadRequest(f"'{field}' must be a boolean.")
     return value
 
 
-def _require_integer(value, field, minimum=None, maximum=None):
+def require_integer(value, field, minimum=None, maximum=None):
     if isinstance(value, bool) or not isinstance(value, int):
         raise BadRequest(f"'{field}' must be an integer.")
     if minimum is not None and value < minimum:
-        raise BadRequest(f"'{field}' must be greater than or equal to {minimum}.")
+        raise BadRequest(
+            f"'{field}' must be greater than or equal to {minimum}."
+        )
     if maximum is not None and value > maximum:
         raise BadRequest(f"'{field}' must be less than or equal to {maximum}.")
     return value
 
 
-def _require_number(value, field):
+def require_number(value, field):
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise BadRequest(f"'{field}' must be a number.")
     try:
@@ -139,11 +141,11 @@ def _require_number(value, field):
     return value
 
 
-def _optional_number(payload, field):
+def optional_number(payload, field):
     value = payload.get(field)
     if value is None:
         return None
-    return _require_number(value, field)
+    return require_number(value, field)
 
 
 def validate_create_payload(payload):
@@ -155,45 +157,45 @@ def validate_create_payload(payload):
 
     values = DEFAULTS | payload
 
-    values["sourceDatastream"] = _require_string(
+    values["sourceDatastream"] = require_string(
         values["sourceDatastream"], "sourceDatastream"
     )
-    values["targetDatastream"] = _require_string(
+    values["targetDatastream"] = require_string(
         values["targetDatastream"], "targetDatastream"
     )
 
     if values["sourceDatastream"] == values["targetDatastream"]:
         raise BadRequest("Source and target Datastreams must be different.")
 
-    values["bucketInterval"] = _require_string(
+    values["bucketInterval"] = require_string(
         values["bucketInterval"], "bucketInterval"
     )
     if values["bucketInterval"] not in AGGREGATION_PROCEDURES:
         allowed = ", ".join(AGGREGATION_PROCEDURES)
         raise BadRequest(f"Unsupported bucketInterval. Allowed: {allowed}.")
 
-    values["bucketTimezone"] = _require_string(
+    values["bucketTimezone"] = require_string(
         values["bucketTimezone"], "bucketTimezone"
     )
 
-    values["aggregation"] = _require_string(
+    values["aggregation"] = require_string(
         values["aggregation"], "aggregation"
     ).upper()
     if values["aggregation"] not in AGGREGATIONS:
         allowed = ", ".join(sorted(AGGREGATIONS))
         raise BadRequest(f"Unsupported aggregation. Allowed: {allowed}.")
 
-    values["conversionFactor"] = _require_number(
+    values["conversionFactor"] = require_number(
         values["conversionFactor"], "conversionFactor"
     )
-    values["bucketsToRecompute"] = _require_integer(
+    values["bucketsToRecompute"] = require_integer(
         values["bucketsToRecompute"],
         "bucketsToRecompute",
         minimum=1,
         maximum=2147483647,
     )
 
-    values["boundaryMode"] = _require_string(
+    values["boundaryMode"] = require_string(
         values["boundaryMode"], "boundaryMode"
     ).lower()
     if values["boundaryMode"] not in BOUNDARY_MODES:
@@ -202,7 +204,7 @@ def validate_create_payload(payload):
 
     quality_key = values.get("resultQualityKey")
     if quality_key is not None:
-        values["resultQualityKey"] = _require_string(
+        values["resultQualityKey"] = require_string(
             quality_key, "resultQualityKey"
         )
 
@@ -211,16 +213,12 @@ def validate_create_payload(payload):
         if not isinstance(quality_allowed, list):
             raise BadRequest("'resultQualityAllowed' must be an array.")
         values["resultQualityAllowed"] = [
-            _require_number(item, "resultQualityAllowed")
+            require_number(item, "resultQualityAllowed")
             for item in quality_allowed
         ]
 
-    values["resultQualityMin"] = _optional_number(
-        values, "resultQualityMin"
-    )
-    values["resultQualityMax"] = _optional_number(
-        values, "resultQualityMax"
-    )
+    values["resultQualityMin"] = optional_number(values, "resultQualityMin")
+    values["resultQualityMax"] = optional_number(values, "resultQualityMax")
     if (
         values["resultQualityMin"] is not None
         and values["resultQualityMax"] is not None
@@ -238,27 +236,25 @@ def validate_create_payload(payload):
 
     normalized_availability = []
     for datastream in availability:
-        name = _require_string(datastream, "availabilityDatastreams")
+        name = require_string(datastream, "availabilityDatastreams")
         if name not in normalized_availability:
             normalized_availability.append(name)
     values["availabilityDatastreams"] = normalized_availability
 
     availability_max_age = values.get("availabilityMaxAge")
     if availability_max_age is not None:
-        values["availabilityMaxAge"] = _require_string(
+        values["availabilityMaxAge"] = require_string(
             availability_max_age, "availabilityMaxAge"
         )
 
-    values["emptyBucketPolicy"] = _require_string(
+    values["emptyBucketPolicy"] = require_string(
         values["emptyBucketPolicy"], "emptyBucketPolicy"
     ).lower()
     if values["emptyBucketPolicy"] not in EMPTY_BUCKET_POLICIES:
         allowed = ", ".join(sorted(EMPTY_BUCKET_POLICIES))
-        raise BadRequest(
-            f"Unsupported emptyBucketPolicy. Allowed: {allowed}."
-        )
+        raise BadRequest(f"Unsupported emptyBucketPolicy. Allowed: {allowed}.")
 
-    values["emptyBucketResultQuality"] = _require_number(
+    values["emptyBucketResultQuality"] = require_number(
         values["emptyBucketResultQuality"], "emptyBucketResultQuality"
     )
 
@@ -278,16 +274,16 @@ def validate_create_payload(payload):
             "availabilityDatastreams and availabilityMaxAge."
         )
 
-    values["systemTimeIncremental"] = _require_boolean(
+    values["systemTimeIncremental"] = require_boolean(
         values["systemTimeIncremental"], "systemTimeIncremental"
     )
-    values["systemTimeOverlap"] = _require_string(
+    values["systemTimeOverlap"] = require_string(
         values["systemTimeOverlap"], "systemTimeOverlap"
     )
 
     features_of_interest_id = values.get("featuresOfInterestId")
     if features_of_interest_id is not None:
-        values["featuresOfInterestId"] = _require_integer(
+        values["featuresOfInterestId"] = require_integer(
             features_of_interest_id,
             "featuresOfInterestId",
             minimum=1,
@@ -296,7 +292,7 @@ def validate_create_payload(payload):
 
     result_type = values.get("resultType")
     if result_type is not None:
-        values["resultType"] = _require_integer(
+        values["resultType"] = require_integer(
             result_type,
             "resultType",
             minimum=-2147483648,
@@ -306,23 +302,23 @@ def validate_create_payload(payload):
     schedule_interval = values.get("scheduleInterval")
     if schedule_interval is None:
         schedule_interval = values["bucketInterval"]
-    values["scheduleInterval"] = _require_string(
+    values["scheduleInterval"] = require_string(
         schedule_interval, "scheduleInterval"
     )
-    values["scheduleDelay"] = _require_string(
+    values["scheduleDelay"] = require_string(
         values["scheduleDelay"], "scheduleDelay"
     )
-    values["fixedSchedule"] = _require_boolean(
+    values["fixedSchedule"] = require_boolean(
         values["fixedSchedule"], "fixedSchedule"
     )
 
     schedule_timezone = values.get("scheduleTimezone")
     if schedule_timezone is None:
         schedule_timezone = values["bucketTimezone"]
-    values["scheduleTimezone"] = _require_string(
+    values["scheduleTimezone"] = require_string(
         schedule_timezone, "scheduleTimezone"
     )
-    values["enabled"] = _require_boolean(values["enabled"], "enabled")
+    values["enabled"] = require_boolean(values["enabled"], "enabled")
 
     return values
 
@@ -333,7 +329,7 @@ def validate_patch_payload(payload):
 
     validate_payload_keys(payload, PATCH_KEYS)
     validate_required_keys(payload, ["enabled"])
-    return {"enabled": _require_boolean(payload["enabled"], "enabled")}
+    return {"enabled": require_boolean(payload["enabled"], "enabled")}
 
 
 async def ensure_aggregation_available(connection, procedure=None):
@@ -415,9 +411,7 @@ async def validate_database_options(connection, values):
     found_timezones = {row["name"] for row in timezone_rows}
     missing_timezones = sorted(requested_timezones - found_timezones)
     if missing_timezones:
-        raise BadRequest(
-            f"Unknown timezone: {', '.join(missing_timezones)}."
-        )
+        raise BadRequest(f"Unknown timezone: {', '.join(missing_timezones)}.")
 
 
 async def resolve_datastreams(connection, values):
@@ -435,8 +429,7 @@ async def resolve_datastreams(connection, values):
         list(requested_names),
     )
     datastreams = {
-        row["name"]: {"id": row["id"], "name": row["name"]}
-        for row in rows
+        row["name"]: {"id": row["id"], "name": row["name"]} for row in rows
     }
 
     missing = sorted(requested_names - datastreams.keys())
@@ -482,14 +475,9 @@ def build_database_config(values, datastreams):
         "conversion_factor": values["conversionFactor"],
         "boundary_mode": values["boundaryMode"],
         "empty_bucket_policy": values["emptyBucketPolicy"],
-        "empty_bucket_result_quality": values[
-            "emptyBucketResultQuality"
-        ],
+        "empty_bucket_result_quality": values["emptyBucketResultQuality"],
         "system_time_incremental": values["systemTimeIncremental"],
         "system_time_overlap": values["systemTimeOverlap"],
-        # TimescaleDB does not retain the scheduling delay separately from the
-        # initial start. Keeping it in config lets the API reproduce the job
-        # settings without changing the aggregation procedure's behaviour.
         "schedule_interval": values["scheduleInterval"],
         "schedule_delay": values["scheduleDelay"],
         "schedule_timezone": values["scheduleTimezone"],
@@ -613,7 +601,7 @@ def raise_duplicate_job(job_id, values):
     )
 
 
-def _decode_config(value):
+def decode_config(value):
     if value is None:
         return {}
     if isinstance(value, dict):
@@ -621,7 +609,7 @@ def _decode_config(value):
     return json.loads(value)
 
 
-def _config_id(config, key):
+def config_id(config, key):
     value = config.get(key)
     if value is None:
         return None
@@ -631,7 +619,7 @@ def _config_id(config, key):
         return None
 
 
-def _isoformat(value):
+def isoformat(value):
     if value is None:
         return None
     if getattr(value, "year", None) == 1:
@@ -641,9 +629,9 @@ def _isoformat(value):
     return str(value)
 
 
-def _datastream_reference(config, prefix, by_id, by_name):
+def datastream_reference(config, prefix, by_id, by_name):
     name = config.get(f"{prefix}_datastream_name")
-    datastream_id = _config_id(config, f"{prefix}_datastream_id")
+    datastream_id = config_id(config, f"{prefix}_datastream_id")
 
     datastream = by_name.get(name) if name is not None else None
     if datastream is None and datastream_id is not None:
@@ -655,7 +643,7 @@ def _datastream_reference(config, prefix, by_id, by_name):
     }
 
 
-def _serialize_job(row, config, by_id, by_name):
+def serialize_job(row, config, by_id, by_name):
     availability_ids = config.get("availability_datastream_ids") or []
     availability = []
     for value in availability_ids:
@@ -677,10 +665,10 @@ def _serialize_job(row, config, by_id, by_name):
         "id": row["job_id"],
         "enabled": row["scheduled"],
         "procedure": f"{row['proc_schema']}.{row['proc_name']}",
-        "sourceDatastream": _datastream_reference(
+        "sourceDatastream": datastream_reference(
             config, "source", by_id, by_name
         ),
-        "targetDatastream": _datastream_reference(
+        "targetDatastream": datastream_reference(
             config, "target", by_id, by_name
         ),
         "bucketInterval": PROCEDURE_INTERVALS.get(row["proc_name"]),
@@ -699,9 +687,7 @@ def _serialize_job(row, config, by_id, by_name):
         "emptyBucketResultQuality": config.get(
             "empty_bucket_result_quality", 1.0
         ),
-        "systemTimeIncremental": config.get(
-            "system_time_incremental", False
-        ),
+        "systemTimeIncremental": config.get("system_time_incremental", False),
         "systemTimeOverlap": config.get("system_time_overlap", "5 minutes"),
         "featuresOfInterestId": config.get("featuresofinterest_id"),
         "resultType": config.get("result_type"),
@@ -714,10 +700,10 @@ def _serialize_job(row, config, by_id, by_name):
             "schedule_timezone",
             config.get("bucket_timezone", "Etc/GMT-1"),
         ),
-        "initialStart": _isoformat(row["initial_start"]),
-        "nextRunAt": _isoformat(row["next_start"]),
-        "lastRunStartedAt": _isoformat(row["last_run_started_at"]),
-        "lastSuccessfulFinish": _isoformat(row["last_successful_finish"]),
+        "initialStart": isoformat(row["initial_start"]),
+        "nextRunAt": isoformat(row["next_start"]),
+        "lastRunStartedAt": isoformat(row["last_run_started_at"]),
+        "lastSuccessfulFinish": isoformat(row["last_successful_finish"]),
         "lastRunStatus": row["last_run_status"],
         "jobStatus": row["job_status"],
         "lastRunDuration": row["last_run_duration"],
@@ -760,16 +746,14 @@ async def fetch_aggregation_jobs(connection, job_id=None):
         job_id,
     )
 
-    configs = [_decode_config(row["config"]) for row in rows]
+    configs = [decode_config(row["config"]) for row in rows]
     datastream_ids = set()
     datastream_names = set()
 
     for config in configs:
         for prefix in ("source", "target"):
             name = config.get(f"{prefix}_datastream_name")
-            datastream_id = _config_id(
-                config, f"{prefix}_datastream_id"
-            )
+            datastream_id = config_id(config, f"{prefix}_datastream_id")
             if name is not None:
                 datastream_names.add(name)
             if datastream_id is not None:
@@ -801,7 +785,7 @@ async def fetch_aggregation_jobs(connection, job_id=None):
     }
 
     return [
-        _serialize_job(row, config, by_id, by_name)
+        serialize_job(row, config, by_id, by_name)
         for row, config in zip(rows, configs)
     ]
 
