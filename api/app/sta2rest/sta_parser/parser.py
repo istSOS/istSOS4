@@ -121,13 +121,19 @@ class Parser:
         """
         self.match("FILTER")
         filter = ""
+        depth = 0
 
         while (
             not self.check_token("OPTIONS_SEPARATOR")
             and not self.check_token("SUBQUERY_SEPARATOR")
             and self.current_token != None
-            and not (is_in_subquery and self.check_token("RIGHT_PAREN"))
         ):
+            if self.check_token("LEFT_PAREN"):
+                depth += 1
+            elif self.check_token("RIGHT_PAREN"):
+                if is_in_subquery and depth == 0:
+                    break
+                depth -= 1
             filter += self.current_token.value
             self.next_token()
 
