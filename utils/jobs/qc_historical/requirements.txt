@@ -1,0 +1,4 @@
+istsos4-client==0.4.0
+isodate==0.7.2
+pandas==2.3.3
+saqc==2.7.0.post3

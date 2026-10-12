@@ -6,7 +6,7 @@ location and one Datastream per measured quantity, all linked to an existing
 Thing and to a Network created on first use. Re-running is safe: existing
 entities are reused and observations already stored (HTTP 409) are skipped.
 
-Needs an istSOS4 build with STAplus (Parties) and istsos4-client >= 0.2.
+Needs an istSOS4 build with STAplus (Parties) and istsos4-client >= 0.4.
 
 ## Setup
 

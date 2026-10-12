@@ -137,11 +137,12 @@ def post_observation(target, observation):
     if target.dry_run:
         return dry_run_status(observation, "POST")
     try:
-        return target.api.post(to_observation(observation))
+        target.api.post(to_observation(observation))
     except requests.HTTPError as exc:
         if is_duplicate_observation_error(exc):
             raise DuplicateObservationError(str(exc)) from exc
         raise
+    return 201
 
 
 def post_bulk_observations(target, observations):
@@ -170,13 +171,14 @@ def patch_observation(target, observation_id, observation):
     }
     if target.dry_run:
         return dry_run_status(payload, "PATCH")
-    return target.api.patch(
+    target.api.patch(
         Observation(
             iot_id=observation_id,
             result=payload["result"],
             result_quality=payload["resultQuality"],
         )
     )
+    return 201
 
 
 def configured_columns(file_config):

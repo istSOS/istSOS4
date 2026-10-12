@@ -1,4 +1,4 @@
-istsos4-client==0.2
+istsos4-client==0.4.0
 paramiko==5.0.0
 PyYAML==6.0.3
 requests==2.34.2
