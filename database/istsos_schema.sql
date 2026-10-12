@@ -231,7 +231,7 @@ CREATE INDEX IF NOT EXISTS "idx_observation_datastream_id_phtime" ON sensorthing
 
 SELECT create_hypertable(
     'sensorthings."Observation"',
-    by_range('phenomenonTimeStart', INTERVAL '30 days')
+    by_range('phenomenonTimeStart', INTERVAL '1 year')
 );
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Observation") RETURNS text AS $$
