@@ -33,6 +33,8 @@ import json
 
 from fastapi import Request
 
+from .functions import phenomenon_time_filter
+
 
 class JsonPatchError(Exception):
     """A malformed or non-applicable RFC 6902 patch (client error)."""
@@ -254,7 +256,9 @@ def referenced_columns(operations):
     return columns
 
 
-async def load_document(connection, entity_name, entity_id, columns):
+async def load_document(
+    connection, entity_name, entity_id, columns, phenomenon_time=None
+):
     """Build the working JSON document from the entity's current columns.
 
     Only the columns referenced by the patch are read. JSON/JSONB columns are
@@ -274,9 +278,13 @@ async def load_document(connection, entity_name, entity_id, columns):
     document = {}
     if existing:
         col_list = ", ".join(f'"{col}"' for col in existing)
+        args = [entity_id]
+        if phenomenon_time is not None:
+            args.append(phenomenon_time)
         row = await connection.fetchrow(
-            f'SELECT {col_list} FROM sensorthings."{entity_name}" WHERE id = $1',
-            entity_id,
+            f'SELECT {col_list} FROM sensorthings."{entity_name}" '
+            f"WHERE id = $1{phenomenon_time_filter(phenomenon_time, 2)}",
+            *args,
         )
         if row is not None:
             for col in existing:
@@ -291,7 +299,7 @@ async def load_document(connection, entity_name, entity_id, columns):
 
 
 async def apply_json_patch_to_entity(
-    connection, entity_name, entity_id, payload
+    connection, entity_name, entity_id, payload, phenomenon_time=None
 ):
     """Normalize a PATCH body into a merge dict.
 
@@ -305,7 +313,9 @@ async def apply_json_patch_to_entity(
 
     operations = payload.operations
     columns = referenced_columns(operations)
-    document = await load_document(connection, entity_name, entity_id, columns)
+    document = await load_document(
+        connection, entity_name, entity_id, columns, phenomenon_time
+    )
     patched = apply_patch(document, operations)
     # Only the columns the patch touched are written back. A column removed at
     # the top level is set to NULL.

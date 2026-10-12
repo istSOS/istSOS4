@@ -116,6 +116,7 @@ async def handle_put_replace(
     optional_keys,
     update_entity_fn,
     post_update=None,
+    phenomenon_time=None,
 ):
     """Shared PUT (full replacement) flow for a single STA core entity.
 
@@ -137,7 +138,7 @@ async def handle_put_replace(
                 await set_role(connection, current_user)
 
             if not await check_id_exists(
-                connection, entity_db_name, entity_id
+                connection, entity_db_name, entity_id, phenomenon_time
             ):
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
@@ -157,7 +158,12 @@ async def handle_put_replace(
             if commit_id is not None:
                 payload["commit_id"] = commit_id
 
-            updated = await update_entity_fn(connection, entity_id, payload)
+            if phenomenon_time is None:
+                updated = await update_entity_fn(connection, entity_id, payload)
+            else:
+                updated = await update_entity_fn(
+                    connection, entity_id, payload, phenomenon_time
+                )
 
             if post_update is not None:
                 await post_update(connection, entity_id, payload, updated)
