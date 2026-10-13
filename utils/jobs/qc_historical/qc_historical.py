@@ -17,9 +17,11 @@ import isodate
 import numpy as np
 import pandas as pd
 from istsos4_client import Client, Datastream, Observation
+from istsos4_client.client import MAX_ROWS_PER_BULK
 from saqc import SaQC
 
-NO_DATA_VALUES = [-999, -9999, -999.0, -999.9, -999.99]  # IstsosQC.py
+NO_DATA = 999.9
+NO_DATA_VALUES = [NO_DATA, -999, -9999, -999.0, -999.9, -999.99]
 MIN_COVERAGE = 0.8  # IstsosQC.py
 WINDOW = re.compile(r"^\s*(\d+)\s*(s|min|m|h|d)\s*$", re.IGNORECASE)  # kafkaQC
 BAD = 255.0  # SaQC "float" scheme
@@ -146,7 +148,56 @@ def quality(name, constraints, times, values, targets, n, sampling):
     return q
 
 
-def check_datastream(client, datastream, start, end):
+def fill_missing(writer, datastream, before, period, start, end, sampling,
+                 commit_message=None):
+    """Create no-data observations on the sampling grid, within PERIOD only.
+
+    Anchor the grid to the last observation before PERIOD, otherwise the
+    first in it. An empty series with both bounds uses start as its anchor.
+    Reject off-grid observations rather than adding neighbours to them.
+    """
+    if sampling is None:
+        print(f"WARNING {datastream.name}: filling skipped: invalid or missing "
+              "samplingFrequency")
+        return 0
+    first = start if start is not None else (
+        pd.to_datetime(period[0].phenomenon_time, utc=True) if period else None
+    )
+    last = end if end is not None else (
+        pd.to_datetime(period[-1].phenomenon_time, utc=True) if period else None
+    )
+    if first is None or last is None:
+        return 0
+    anchor = before[-1] if before else (period[0] if period else None)
+    anchor = (pd.to_datetime(anchor.phenomenon_time, utc=True)
+              if anchor is not None else first)
+    existing = pd.to_datetime([o.phenomenon_time for o in period], utc=True)
+    if any((time - anchor) % sampling != pd.Timedelta(0) for time in existing):
+        raise ValueError("Observations are not aligned with samplingFrequency; "
+                         "filling skipped")
+    # Round up to the next grid instant, including one exactly at first.
+    first += (anchor - first) % sampling
+    missing = pd.date_range(first, last, freq=sampling).difference(existing)
+    created = 0
+    for offset in range(0, len(missing), MAX_ROWS_PER_BULK):
+        observations = [
+            Observation(
+                phenomenon_time=time.to_pydatetime(),
+                result=NO_DATA,
+                result_quality="0",
+                datastream=datastream.iot_id,
+            )
+            for time in missing[offset : offset + MAX_ROWS_PER_BULK]
+        ]
+        # No force: existing measurements must never be replaced.
+        created += writer.bulk_observations(
+            observations, commit_message=commit_message, force=False
+        )
+    return created
+
+
+def check_datastream(client, datastream, start, end, writer=None,
+                     fill_commit_message=None, commit_message=None):
     """PATCH the resultQuality of the datastream's observations in PERIOD."""
     properties = datastream.properties
     constraints = properties["constraints"]
@@ -193,6 +244,19 @@ def check_datastream(client, datastream, start, end):
             top=PAGE,
         )
     )
+    created = 0
+    if writer is not None:
+        created = fill_missing(
+            writer, datastream, before, period, start, end, sampling,
+            fill_commit_message,
+        )
+        if created:
+            print(f"{datastream.name}: {created} no-data observations created.")
+            # Read their IDs and include them in the following QC buffers.
+            period = list(client.iter_list(
+                Observation, filter=query, orderby="phenomenonTime",
+                select=fields, top=PAGE,
+            ))
     observations = before + period
 
     times = pd.to_datetime([o.phenomenon_time for o in observations], utc=True)
@@ -208,9 +272,9 @@ def check_datastream(client, datastream, start, end):
             datastream.name, constraints, times, values, targets, n, sampling
         )
 
-    # PATCH only what changes, as Flink does: same payload, no commit message
-    # (istSOS refuses one from a qc user, 403), $filter on phenomenonTime (the
-    # TimescaleDB partition key), in UTC, single-quoted.
+    # PATCH only what changes. Admin/editor users require a commit message;
+    # qc users require none. Filter on phenomenonTime (the TimescaleDB
+    # partition key), in UTC, single-quoted.
     # ponytail: istSOS returns phenomenonTime to the second, Flink sends the
     # stored instant: a sub-second one won't match once istSOS applies it
     changed = [
@@ -220,7 +284,8 @@ def check_datastream(client, datastream, start, end):
         observation = Observation(iot_id=o.iot_id, result_quality=str(q))
         utc = pd.to_datetime(o.phenomenon_time, utc=True).isoformat()
         utc = utc.replace("+00:00", "Z")
-        client.patch(observation, filter=f"phenomenonTime eq '{utc}'")
+        client.patch(observation, filter=f"phenomenonTime eq '{utc}'",
+                     commit_message=commit_message)
     print(
         f"{datastream.name}: {len(period)} observations checked, "
         f"{len(changed)} resultQuality updated."
@@ -239,6 +304,24 @@ def main():
         pd.to_datetime(p.strip(), utc=True) if p.strip() else None
         for p in (start, end)
     ]
+    if start is not None and end is not None and start > end:
+        raise ValueError("PERIOD start must not be after end")
+    commit_message = os.getenv("COMMIT_MESSAGE") or None
+    writer = None
+    fill_enabled = os.getenv("FILL_MISSING", "false").strip().lower()
+    if fill_enabled not in ("true", "false"):
+        raise ValueError("FILL_MISSING must be true or false")
+    if fill_enabled == "true":
+        fill_username = os.getenv("ISTSOS4_FILL_USERNAME")
+        fill_password = os.getenv("ISTSOS4_FILL_PASSWORD")
+        if bool(fill_username) != bool(fill_password):
+            raise ValueError("Set both ISTSOS4_FILL_USERNAME and "
+                             "ISTSOS4_FILL_PASSWORD, or leave both empty")
+        writer = (Client(os.environ["ISTSOS4_URL"], fill_username, fill_password)
+                  if fill_username else client)
+    fill_commit_message = os.getenv("FILL_COMMIT_MESSAGE") or (
+        commit_message if writer is client else None
+    )
     names, excluded = [
         [p.strip() for p in os.getenv(key, "").split(",") if p.strip()]
         for key in ("DATASTREAMS", "EXCLUDE_DATASTREAMS")
@@ -252,7 +335,8 @@ def main():
         ):
             continue
         try:  # like Flink, a datastream that fails is reported and skipped
-            check_datastream(client, datastream, start, end)
+            check_datastream(client, datastream, start, end, writer,
+                             fill_commit_message, commit_message)
         except Exception as error:
             print(f"ERROR {datastream.name}: {error!r}")
 

@@ -18,8 +18,9 @@ docker build -t ghcr.io/istsos/istsos4/utils/qc_historical:0.1 .
 
 Write `.env` values without quotes: `docker run --env-file` keeps them.
 
-Use a user with the `qc` role, as Flink does (`API_USERNAME_QC`): PATCHes
-carry no commit message, which istSOS accepts only from `qc` users.
+For QC only, a user with the `qc` role works with `COMMIT_MESSAGE` empty,
+as in Flink (`API_USERNAME_QC`). To use an `administrator`, `editor`, or
+`obs_manager` account, set `COMMIT_MESSAGE`: the API requires it for updates.
 
 ## Run
 
@@ -29,6 +30,50 @@ docker run --rm --network host --env-file .env \
 ```
 
 One line per datastream: observations checked, `resultQuality` updated.
+
+## Fill missing observations
+
+Set `FILL_MISSING=true` to create missing observations before checking quality.
+The step comes from `properties.samplingFrequency`, a positive, fixed ISO 8601
+duration such as `PT10M`. Each created observation has `result: 999.9` and
+`resultQuality: "0"`. QC treats `999.9` as no data, including in existing
+observations; the older negative no-data markers remain supported.
+
+One account can fill gaps and update quality. Leave `ISTSOS4_FILL_USERNAME`
+and `ISTSOS4_FILL_PASSWORD` empty to reuse the main account, and set
+`COMMIT_MESSAGE` for both operations. For example, with an admin account:
+
+```dotenv
+ISTSOS4_USERNAME=admin
+ISTSOS4_PASSWORD=your-password
+COMMIT_MESSAGE=Fill historical gaps and recompute QC
+FILL_MISSING=true
+```
+
+The account needs read, insert, and update permissions for the selected
+datastreams. An `editor` or `obs_manager` account with those permissions can
+also do both operations. The `qc` role cannot insert observations.
+
+Separate insert credentials remain optional: set both `ISTSOS4_FILL_USERNAME`
+and `ISTSOS4_FILL_PASSWORD` to keep a QC account for updates. With a separate
+`sensor` account, leave `FILL_COMMIT_MESSAGE` empty; with a separate
+`administrator`, `editor`, or `obs_manager`, set it. When using the main account
+for filling, `FILL_COMMIT_MESSAGE` can override `COMMIT_MESSAGE` for inserts.
+
+Only the selected `PERIOD` is filled, with inclusive bounds. An omitted start
+or end uses the first or last existing observation in the period; supplying
+both bounds also allows filling an empty period. The grid is anchored to the
+last observation before the period, otherwise its first observation, otherwise
+the explicit start. Boundaries are filled only when they lie on that grid.
+For example, with `PT10M`, observations at `00:00` and `00:30` gain no-data
+observations at `00:10` and `00:20`.
+
+Existing observations are preserved, and repeating the run creates no more
+rows. A missing or invalid frequency skips filling and still runs QC. Off-grid
+timestamps cause that datastream to be reported and skipped before any writes.
+Created observations participate in QC buffers, so filling gaps can change
+the quality of subsequent observations. Only datastreams with constraints are
+processed, using the same datastream filters as QC.
 
 ## Same as Flink
 
