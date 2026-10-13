@@ -181,7 +181,8 @@ async def test_connector_summary_endpoint_closed_network(mock_cache, monkeypatch
     monkeypatch.setattr("app.v1.connector.api.NETWORK", 1)
 
     # Mock Redis returning raw network_ids [1, 7, 2] from the shared harvest-level key.
-    monkeypatch.setattr("app.v1.connector.cache.redis.get", lambda key: b'[1, 7, 2]' if key == "connector:meta:network_ids" else None)
+    from app.v1.connector import cache as _cache
+    monkeypatch.setattr("app.v1.connector.cache.redis.get", lambda key: b'[1, 7, 2]' if key == _cache._network_ids_key() else None)
 
     network_ids = get_harvest_network_ids()
     assert 7 not in network_ids

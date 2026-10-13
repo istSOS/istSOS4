@@ -20,10 +20,31 @@ pattern. While the reader functions use `async def` to match API conventions,
 their bodies make direct, fast blocking calls (sub-millisecond) to avoid 
 introducing a separate async client pattern.
 
-Data is stored flat, allowing the API to fetch individual Catalogs, Collections, 
-or Items instantly by key without loading the entire tree. If a key is missing 
-(e.g., before the first harvest or after a deletion), these functions return 
+Data is stored flat, allowing the API to fetch individual Catalogs, Collections,
+or Items instantly by key without loading the entire tree. If a key is missing
+(e.g., before the first harvest or after a deletion), these functions return
 None, leaving the API layer to handle 404 or 503 errors.
+
+Generations
+-----------
+Each standard ("stac", "dcat") is published as a whole generation of keys:
+
+    {CONNECTOR_KEY_PREFIX}:{standard}:{generation}:{logical key}
+    {CONNECTOR_KEY_PREFIX}:{standard}:current   -> id of the served generation
+    {CONNECTOR_KEY_PREFIX}:{standard}:previous  -> id of the one before it
+
+A writer serializes everything first, writes the new generation under fresh
+keys, and only then flips ``current`` (one MULTI/EXEC). Readers resolve
+``current`` and read from that generation. So a reader never sees a gap or a
+half-written catalog, and if serialization or the write fails the pointer is
+never moved and the previous catalog keeps being served. The previous
+generation is kept for one more cycle, so a reader that resolved the old
+pointer just before the flip still finds its keys; anything older is deleted.
+The cost is that Redis holds up to two generations of each standard.
+
+Every key is namespaced by CONNECTOR_KEY_PREFIX (derived from the deployment's
+HOSTNAME + SUBPATH + VERSION by default), so several deployments can share one
+Redis without overwriting each other.
 """
 
 
@@ -32,30 +53,87 @@ from __future__ import annotations
 import json
 import logging
 import time
+import uuid
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 from rdflib import Graph
 
 from app.db.redis_db import redis
-from app.v1.connector.config import CATALOG_CLOSED_NETWORKS
+from app.v1.connector.config import CATALOG_CLOSED_NETWORKS, CONNECTOR_KEY_PREFIX
+from app.v1.connector.serialization import serialize_turtle
 from app.v1.connector.utils import flatten_stac_catalog
 
 logger = logging.getLogger(__name__)
 
-_STAC_KEY_PREFIX = "stac:*"
+_STAC = "stac"
+_DCAT = "dcat"
 
-# DCAT-AP graphs are cached whole per scope -- unlike STAC's flat
-# per-Collection/per-Item keys, there is no cross-scope merge to
-# invalidate, so each scope's serialized Turtle is written and purged
-# under its own "dcat:*" prefix, entirely independent of "stac:*".
-_DCAT_KEY_PREFIX = "dcat:*"
+
+def _pointer_key(standard: str, which: str) -> str:
+    return f"{CONNECTOR_KEY_PREFIX}:{standard}:{which}"
+
+
+def _gen_key(standard: str, generation: str, key: str) -> str:
+    return f"{CONNECTOR_KEY_PREFIX}:{standard}:{generation}:{key}"
+
+
+def _current_generation(standard: str) -> Optional[str]:
+    raw = redis.get(_pointer_key(standard, "current"))
+    if raw is None:
+        return None
+    return raw.decode("utf-8") if isinstance(raw, bytes) else raw
+
+
+def _get(standard: str, key: str):
+    """Read one logical key from the generation currently served, or None."""
+    generation = _current_generation(standard)
+    if generation is None:
+        return None
+    return redis.get(_gen_key(standard, generation, key))
+
+
+def _publish(standard: str, values: Dict[str, Any]) -> int:
+    """
+    Write ``values`` (logical key -> str/bytes) as a new generation, flip the
+    ``current`` pointer to it atomically, then drop every generation older than
+    the one it replaced. Returns the number of keys written.
+    """
+    # time-ordered and unique: the clock alone is too coarse on some platforms
+    generation = f"{time.time_ns():x}-{uuid.uuid4().hex[:8]}"
+    pipe = redis.pipeline(transaction=False)
+    for key, value in values.items():
+        pipe.set(_gen_key(standard, generation, key), value)
+    pipe.execute()
+
+    previous = _current_generation(standard)
+    flip = redis.pipeline(transaction=True)
+    flip.set(_pointer_key(standard, "current"), generation)
+    if previous is not None:
+        flip.set(_pointer_key(standard, "previous"), previous)
+    flip.execute()
+
+    keep = {generation, previous}
+    prefix = f"{CONNECTOR_KEY_PREFIX}:{standard}:"
+    stale: list = []
+    for raw_key in redis.scan_iter(match=prefix + "*", count=1000):
+        key = raw_key.decode("utf-8") if isinstance(raw_key, bytes) else raw_key
+        gen = key[len(prefix):].split(":", 1)[0]
+        if gen not in keep and gen not in ("current", "previous"):
+            stale.append(raw_key)
+    for i in range(0, len(stale), 1000):
+        redis.delete(*stale[i:i + 1000])
+    return len(values)
+
+
+def _network_ids_key() -> str:
+    return f"{CONNECTOR_KEY_PREFIX}:meta:network_ids"
 
 
 def get_stac_metadata() -> Dict[str, Any]:
     """Helper to fetch all metadata from Redis safely with defaults."""
-    raw_avail = redis.get("stac:meta:availability")
-    raw_harvested_at = redis.get("stac:meta:last_harvested_at")
+    raw_avail = _get(_STAC, "stac:meta:availability")
+    raw_harvested_at = _get(_STAC, "stac:meta:last_harvested_at")
 
     return {
         "stac_availability": json.loads(raw_avail) if raw_avail else False,
@@ -74,8 +152,8 @@ def get_dcat_metadata() -> Dict[str, Any]:
     since which Networks exist is a harvest-level fact shared by both
     standards, not a DCAT-owned one.
     """
-    raw_avail = redis.get("dcat:meta:availability")
-    raw_harvested_at = redis.get("dcat:meta:last_harvested_at")
+    raw_avail = _get(_DCAT, "dcat:meta:availability")
+    raw_harvested_at = _get(_DCAT, "dcat:meta:last_harvested_at")
 
     return {
         "dcat_availability": json.loads(raw_avail) if raw_avail else False,
@@ -97,7 +175,7 @@ def get_harvest_network_ids() -> list:
     DCAT_TRANSFORMER are actually on. Returns [] if NETWORK=0 or no
     harvest cycle has completed yet.
     """
-    raw_network_ids = redis.get("connector:meta:network_ids")
+    raw_network_ids = redis.get(_network_ids_key())
     all_ids = json.loads(raw_network_ids) if raw_network_ids else []
     return [nid for nid in all_ids if nid not in CATALOG_CLOSED_NETWORKS]
 
@@ -110,7 +188,7 @@ def write_harvest_network_ids(network_ids: list) -> None:
     this is what get_harvest_network_ids() reads back, filtering closed
     networks at read time.
     """
-    redis.set("connector:meta:network_ids", json.dumps(network_ids))
+    redis.set(_network_ids_key(), json.dumps(network_ids))
 
 
 def _dcat_root_key() -> str:
@@ -131,8 +209,8 @@ def _dcat_network_key(network_id) -> str:
 
 # JSON-LD is cached alongside Turtle under the same scope, one key per
 # format rather than one key holding both -- readers ask for exactly the
-# bytes they want, and _purge_dcat_keys()'s "dcat:*" scan already covers
-# both suffixes so no separate purge logic is needed.
+# bytes they want, and each generation holds both, so the two formats
+# are always served from the same cycle.
 
 def _dcat_root_jsonld_key() -> str:
     return "dcat:graph:root:jsonld"
@@ -171,7 +249,7 @@ async def get_catalog() -> Optional[dict]:
     Return the cached root Catalog dict (collection_ids list, no embedded
     Collections), or None if no harvest cycle has written it yet.
     """
-    raw = redis.get("stac:catalog")
+    raw = _get(_STAC, "stac:catalog")
     if raw is None:
         return None
     return json.loads(raw)
@@ -184,7 +262,7 @@ async def get_collection(collection_id: str) -> Optional[dict]:
     harvest cycle has completed yet, or the Thing it was built from no
     longer exists in the current catalog.
     """
-    raw = redis.get(_collection_key(collection_id))
+    raw = _get(_STAC, _collection_key(collection_id))
     if raw is None:
         return None
     return json.loads(raw)
@@ -198,7 +276,7 @@ async def get_item(collection_id: str, item_id: str) -> Optional[dict]:
     collection_id is required, not inferred, since the cache key is
     namespaced by collection_id.
     """
-    raw = redis.get(_item_key(collection_id, item_id))
+    raw = _get(_STAC, _item_key(collection_id, item_id))
     if raw is None:
         return None
     return json.loads(raw)
@@ -207,52 +285,38 @@ async def get_item(collection_id: str, item_id: str) -> Optional[dict]:
 async def get_network_catalog(network_id) -> Optional[dict]:
     """Cached subcatalog dict for one Network, or None if it hasn't been written
     (NETWORK disabled, or this network_id doesn't exist)."""
-    raw = redis.get(_network_catalog_key(network_id))
+    raw = _get(_STAC, _network_catalog_key(network_id))
     return json.loads(raw) if raw is not None else None
 
 
 async def get_network_collection(network_id, collection_id: str) -> Optional[dict]:
-    raw = redis.get(_network_collection_key(network_id, collection_id))
+    raw = _get(_STAC, _network_collection_key(network_id, collection_id))
     return json.loads(raw) if raw is not None else None
 
 
 async def get_network_item(network_id, collection_id: str, item_id: str) -> Optional[dict]:
-    raw = redis.get(_network_item_key(network_id, collection_id, item_id))
+    raw = _get(_STAC, _network_item_key(network_id, collection_id, item_id))
     return json.loads(raw) if raw is not None else None
 
 
 def write_stac_catalog(root_dict: dict) -> None:
     """
-    Flattens and writes the STAC catalog to Redis, clearing old keys first.
+    Flatten the STAC catalog and publish it as a new generation.
 
     root_dict is the direct output of stac_transformer.build_stac_catalog():
     {"catalog": {...}, "collections": [...]} -- flatten_stac_catalog (utils.py)
     unwraps "catalog" and walks each collection's "items" list to produce the
     flat stac:catalog / stac:collection:{id} / stac:item:{cid}:{id} keys.
 
-    Following the sta2rest pattern, this uses the synchronous redis client 
-    imported from app.db.redis_db. It runs safely as a background task. 
-
-    To prevent orphaned data, it purges old keys using `SCAN` before saving 
-    the new set. Readers hitting the cache mid-write may see a temporary miss.
+    Everything is encoded before anything is written, and the served
+    generation only changes once the whole new set is in Redis (see the
+    module docstring), so readers never see a partial catalog.
     """
-    cursor = 0
-    stale_keys: list[str] = []
-    while True:
-        cursor, keys = redis.scan(cursor=cursor, match=_STAC_KEY_PREFIX)
-        stale_keys.extend(keys)
-        if cursor == 0:
-            break
-    if stale_keys:
-        redis.delete(*stale_keys)
-
     flat = flatten_stac_catalog(root_dict)
-    pipe = redis.pipeline(transaction=False)
-    for key, value in flat.items():
-        pipe.set(key, json.dumps(value, default=str))
-    pipe.set("stac:meta:availability", json.dumps(True))
-    pipe.set("stac:meta:last_harvested_at", datetime.now(timezone.utc).isoformat())
-    pipe.execute()
+    values = {key: json.dumps(value, default=str) for key, value in flat.items()}
+    values["stac:meta:availability"] = json.dumps(True)
+    values["stac:meta:last_harvested_at"] = datetime.now(timezone.utc).isoformat()
+    _publish(_STAC, values)
 
     logger.info(
         "STAC cache written to Redis: %d keys (1 catalog, %d collections, %d items)",
@@ -264,28 +328,18 @@ def write_stac_catalog(root_dict: dict) -> None:
 
 def write_stac_catalog_with_networks(root_dict: dict) -> None:
     """
-    Flattens and writes the NETWORK=1 hierarchy to Redis, same purge-then-write
-    as write_stac_catalog (single stac:* scan covers both namespaces).
+    Flatten the NETWORK=1 hierarchy and publish it as a new generation, same
+    encode-then-swap order as write_stac_catalog.
 
     root_dict is build_stac_catalog_with_networks()'s output:
         {"catalog": {...}, "networks": [{"network_id", "catalog", "collections"}]}
 
-    Key layout:
+    Logical key layout (inside a generation):
         stac:catalog                          -> root (network_ids only, no directly-attached collections)
         stac:network:{nid}                    -> Network subcatalog
         stac:network:{nid}:collection:{cid}   -> Network-scoped Collection
         stac:network:{nid}:item:{cid}:{iid}   -> Network-scoped Item
     """
-    cursor = 0
-    stale_keys: list[str] = []
-    while True:
-        cursor, keys = redis.scan(cursor=cursor, match=_STAC_KEY_PREFIX)
-        stale_keys.extend(keys)
-        if cursor == 0:
-            break
-    if stale_keys:
-        redis.delete(*stale_keys)
-
     flat: Dict[str, Any] = {"stac:catalog": root_dict["catalog"]}
 
     net_collections = 0
@@ -301,12 +355,10 @@ def write_stac_catalog_with_networks(root_dict: dict) -> None:
             flat[_network_collection_key(nid, cid)] = {k: v for k, v in coll.items() if k != "items"}
             net_collections += 1
 
-    pipe = redis.pipeline(transaction=False)
-    for key, value in flat.items():
-        pipe.set(key, json.dumps(value, default=str))
-    pipe.set("stac:meta:availability", json.dumps(True))
-    pipe.set("stac:meta:last_harvested_at", datetime.now(timezone.utc).isoformat())
-    pipe.execute()
+    values = {key: json.dumps(value, default=str) for key, value in flat.items()}
+    values["stac:meta:availability"] = json.dumps(True)
+    values["stac:meta:last_harvested_at"] = datetime.now(timezone.utc).isoformat()
+    _publish(_STAC, values)
 
     logger.info(
         "STAC network cache written to Redis: %d keys (1 catalog, "
@@ -335,7 +387,7 @@ async def get_dcat_root() -> Optional[str]:
     (Catalog + DataService + Agents + dct:hasPart links), see
     get_dcat_network for the scopes that carry data.
     """
-    raw = redis.get(_dcat_root_key())
+    raw = _get(_DCAT, _dcat_root_key())
     if raw is None:
         return None
     return raw.decode("utf-8") if isinstance(raw, bytes) else raw
@@ -351,7 +403,7 @@ async def get_dcat_root_all() -> Optional[str]:
     Intended only for authenticated callers -- see api.py's dcat_root,
     which mirrors stac_transformer.py's closed_network_ids reveal rule.
     """
-    raw = redis.get(_dcat_root_all_key())
+    raw = _get(_DCAT, _dcat_root_all_key())
     if raw is None:
         return None
     return raw.decode("utf-8") if isinstance(raw, bytes) else raw
@@ -363,7 +415,7 @@ async def get_dcat_network(network_id) -> Optional[str]:
     or None if this network_id doesn't exist, NETWORK=0, or no harvest cycle
     has completed yet.
     """
-    raw = redis.get(_dcat_network_key(network_id))
+    raw = _get(_DCAT, _dcat_network_key(network_id))
     if raw is None:
         return None
     return raw.decode("utf-8") if isinstance(raw, bytes) else raw
@@ -375,7 +427,7 @@ async def get_dcat_network(network_id) -> Optional[str]:
 async def get_dcat_root_jsonld() -> Optional[str]:
     """Return the cached root DCAT-AP JSON-LD document, or None if no
     harvest cycle has written it yet. Same scope rules as get_dcat_root."""
-    raw = redis.get(_dcat_root_jsonld_key())
+    raw = _get(_DCAT, _dcat_root_jsonld_key())
     if raw is None:
         return None
     return raw.decode("utf-8") if isinstance(raw, bytes) else raw
@@ -384,7 +436,7 @@ async def get_dcat_root_jsonld() -> Optional[str]:
 async def get_dcat_root_all_jsonld() -> Optional[str]:
     """JSON-LD sibling of get_dcat_root_all. Same None-if-missing contract,
     same NETWORK=1-only / authenticated-callers-only scope."""
-    raw = redis.get(_dcat_root_all_jsonld_key())
+    raw = _get(_DCAT, _dcat_root_all_jsonld_key())
     if raw is None:
         return None
     return raw.decode("utf-8") if isinstance(raw, bytes) else raw
@@ -395,55 +447,39 @@ async def get_dcat_network_jsonld(network_id) -> Optional[str]:
     sub-catalog, or None if this network_id doesn't exist, NETWORK=0, or
     no harvest cycle has completed yet. Same scope rules as
     get_dcat_network."""
-    raw = redis.get(_dcat_network_jsonld_key(network_id))
+    raw = _get(_DCAT, _dcat_network_jsonld_key(network_id))
     if raw is None:
         return None
     return raw.decode("utf-8") if isinstance(raw, bytes) else raw
 
 
-def _purge_dcat_keys() -> None:
-    cursor = 0
-    stale_keys: list[str] = []
-    while True:
-        cursor, keys = redis.scan(cursor=cursor, match=_DCAT_KEY_PREFIX)
-        stale_keys.extend(keys)
-        if cursor == 0:
-            break
-    if stale_keys:
-        redis.delete(*stale_keys)
+def _serialize_scope(graph: Graph) -> tuple[bytes, bytes]:
+    """Turtle and JSON-LD bytes for one scope. Turtle goes through
+    serialization.serialize_turtle, which avoids rdflib's quadratic
+    prefix lookup on large graphs (see that module)."""
+    return serialize_turtle(graph), graph.serialize(format="json-ld", encoding="utf-8")
 
 
 def write_dcat_catalog(result: Dict[str, Graph]) -> None:
     """
-    Serialize and write the NETWORK=0 DCAT-AP graph to Redis.
+    Serialize the NETWORK=0 DCAT-AP graph and publish it as a new generation.
 
     result is build_dcat_catalog()'s direct output: {"root": Graph}.
-    Following the sta2rest / write_stac_catalog pattern, this uses the
-    synchronous redis client and purges stale "dcat:*" keys before writing,
-    so readers hitting the cache mid-write may see a temporary miss rather
-    than a mixed old/new graph.
-
-    Unlike STAC's writer, this does real CPU-bound work of its own before
-    any Redis I/O happens (rdflib Turtle + JSON-LD serialization), so
-    serialize time and Redis-write time are timed and logged separately --
-    a slow cycle is either the serializer or Redis, never an ambiguous
-    combined number.
+    Serialization is CPU-bound and happens entirely before any Redis write;
+    if it raises, nothing is written and the previous catalog stays served.
+    Serialize time and Redis-write time are timed and logged separately.
     """
-    _purge_dcat_keys()
-
     serialize_start = time.monotonic()
-    root_graph = result["root"]
-    root_ttl = root_graph.serialize(format="turtle")
-    root_jsonld = root_graph.serialize(format="json-ld")
+    root_ttl, root_jsonld = _serialize_scope(result["root"])
     serialize_elapsed = time.monotonic() - serialize_start
 
     write_start = time.monotonic()
-    pipe = redis.pipeline(transaction=False)
-    pipe.set(_dcat_root_key(), root_ttl)
-    pipe.set(_dcat_root_jsonld_key(), root_jsonld)
-    pipe.set("dcat:meta:availability", json.dumps(True))
-    pipe.set("dcat:meta:last_harvested_at", datetime.now(timezone.utc).isoformat())
-    pipe.execute()
+    _publish(_DCAT, {
+        _dcat_root_key(): root_ttl,
+        _dcat_root_jsonld_key(): root_jsonld,
+        "dcat:meta:availability": json.dumps(True),
+        "dcat:meta:last_harvested_at": datetime.now(timezone.utc).isoformat(),
+    })
     write_elapsed = time.monotonic() - write_start
 
     logger.info(
@@ -455,12 +491,12 @@ def write_dcat_catalog(result: Dict[str, Graph]) -> None:
 
 def write_dcat_catalog_with_networks(result: Dict[str, Any]) -> None:
     """
-    Serialize and write the NETWORK=1 DCAT-AP graphs to Redis.
+    Serialize the NETWORK=1 DCAT-AP graphs and publish them as one generation.
 
     result is build_dcat_catalog_with_networks()'s output:
         {"root": Graph, "root_all": Graph, "networks": {network_id: Graph, ...}}
 
-    Key layout:
+    Logical key layout (inside a generation):
         dcat:graph:root        -> structural-only root (Catalog + DataService),
                                    closed Networks omitted from hasPart/dcat:catalog
         dcat:graph:root:all    -> same root scope, closed Networks included --
@@ -468,45 +504,35 @@ def write_dcat_catalog_with_networks(result: Dict[str, Any]) -> None:
                                    api.py's dcat_root/dcat_root_ttl
         dcat:graph:net-{id}    -> one per Network (full Dataset/DatasetSeries content)
 
-    Like write_dcat_catalog, serialize time (rdflib Turtle + JSON-LD across
-    every scope) and Redis-write time (one pipelined round trip) are timed
-    and logged separately.
+    Same order as write_dcat_catalog: serialize every scope, then write, then
+    swap; serialize and Redis-write times are logged separately.
     """
-    _purge_dcat_keys()
-
     serialize_start = time.monotonic()
-    serialized: Dict[str, tuple[bytes, bytes]] = {
-        "root": (result["root"].serialize(format="turtle"), result["root"].serialize(format="json-ld")),
-        "root_all": (result["root_all"].serialize(format="turtle"), result["root_all"].serialize(format="json-ld")),
-    }
-    network_serialized: dict[Any, tuple[bytes, bytes]] = {
-        network_id: (graph.serialize(format="turtle"), graph.serialize(format="json-ld"))
-        for network_id, graph in result["networks"].items()
-    }
+    root = _serialize_scope(result["root"])
+    root_all = _serialize_scope(result["root_all"])
+    networks = {nid: _serialize_scope(g) for nid, g in result["networks"].items()}
     serialize_elapsed = time.monotonic() - serialize_start
 
+    values: Dict[str, Any] = {
+        _dcat_root_key(): root[0],
+        _dcat_root_jsonld_key(): root[1],
+        _dcat_root_all_key(): root_all[0],
+        _dcat_root_all_jsonld_key(): root_all[1],
+    }
+    for network_id, (ttl, jsonld) in networks.items():
+        values[_dcat_network_key(network_id)] = ttl
+        values[_dcat_network_jsonld_key(network_id)] = jsonld
+    values["dcat:meta:availability"] = json.dumps(True)
+    values["dcat:meta:last_harvested_at"] = datetime.now(timezone.utc).isoformat()
+
     write_start = time.monotonic()
-    pipe = redis.pipeline(transaction=False)
-    pipe.set(_dcat_root_key(), serialized["root"][0])
-    pipe.set(_dcat_root_jsonld_key(), serialized["root"][1])
-    pipe.set(_dcat_root_all_key(), serialized["root_all"][0])
-    pipe.set(_dcat_root_all_jsonld_key(), serialized["root_all"][1])
-
-    network_ids = []
-    for network_id, (ttl, jsonld) in network_serialized.items():
-        pipe.set(_dcat_network_key(network_id), ttl)
-        pipe.set(_dcat_network_jsonld_key(network_id), jsonld)
-        network_ids.append(network_id)
-
-    pipe.set("dcat:meta:availability", json.dumps(True))
-    pipe.set("dcat:meta:last_harvested_at", datetime.now(timezone.utc).isoformat())
-    pipe.execute()
+    _publish(_DCAT, values)
     write_elapsed = time.monotonic() - write_start
 
     logger.info(
         "DCAT network cache written to Redis: 1 root graph (%d triples), "
         "1 root-all graph (%d triples), %d Network graphs -- "
         "serialize=%.3fs, redis_write=%.3fs",
-        len(result["root"]), len(result["root_all"]), len(network_ids),
+        len(result["root"]), len(result["root_all"]), len(networks),
         serialize_elapsed, write_elapsed,
     )

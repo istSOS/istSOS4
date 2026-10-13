@@ -142,10 +142,12 @@ dcat:meta:availability / dcat:meta:last_harvested_at
 Network ids are tracked separately from either standard, since the same Networks back both STAC's subcatalogs and DCAT's Network graphs:
 
 ```
-connector:meta:network_ids          all Network ids seen by the last harvest cycle (NETWORK=1 only)
+{CONNECTOR_KEY_PREFIX}:meta:network_ids   all Network ids seen by the last harvest cycle (NETWORK=1 only)
 ```
 
-Every write purges the previous cycle's keys (`SCAN` + `DELETE` on the relevant prefix) before writing the new set, so a reader hitting the cache mid-write sees a transient miss rather than a mix of old and new data.
+These are logical key names. In Redis each standard is published as a whole *generation*: every key is stored as `{CONNECTOR_KEY_PREFIX}:{stac|dcat}:{generation}:{logical key}`, and `{CONNECTOR_KEY_PREFIX}:{stac|dcat}:current` names the generation being served. A cycle serializes everything first, writes the new generation under fresh keys, and only then flips `current` in one MULTI/EXEC. A reader therefore never sees a gap or a half-written catalog, and if serialization or the write fails the pointer is not moved and the previous catalog keeps being served. The previous generation is kept for one more cycle for readers that resolved the old pointer just before the flip; older ones are deleted. Redis therefore holds up to two generations of each standard.
+
+`CONNECTOR_KEY_PREFIX` defaults to `connector:` plus the deployment's `HOSTNAME`+`SUBPATH`+`VERSION`, so several istSOS4 deployments can share one Redis without serving each other's catalogs. The Redis host and port come from `REDIS_HOST` (default `redis`) and `REDIS_PORT` (default `6379`).
 
 ---
 
@@ -158,6 +160,8 @@ Everything below lives in `config.py`, either as a `Settings` (pydantic) field o
 | `STAC_TRANSFORMER` | `0` | Master switch for the STAC 1.0 side. Routes 404 while off. |
 | `DCAT_TRANSFORMER` | `0` | Master switch for the DCAT-AP 3.0 side. Routes 404 while off. |
 | `NETWORK` | `0` | Scope harvesting/serving by SensorThings `Network` instead of one flat catalog. |
+| `CONNECTOR_KEY_PREFIX` | derived from `HOSTNAME`+`SUBPATH`+`VERSION` | Namespace for every Redis key the connector writes, so deployments sharing one Redis stay separate. |
+| `REDIS_HOST` / `REDIS_PORT` | `redis` / `6379` | Redis server used by istSOS4 and the connector cache. |
 | `OPEN_CATALOG_METADATA` | `1` | In strict auth mode, whether shallow catalog routes stay public. |
 | `CATALOG_CLOSED_NETWORKS` | *(unset)* | Comma-separated network ids and/or names to hide from unauthenticated callers. |
 | `STAC_AUTH_DESCRIPTION` | *(a sensible default)* | Text shown in the STAC auth extension's login instructions. |

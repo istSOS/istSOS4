@@ -50,6 +50,19 @@ DCAT_TRANSFORMER: bool = os.getenv("DCAT_TRANSFORMER", "0").strip() == "1"
 # /collections, /dcat/root etc.).
 OPEN_CATALOG_METADATA: bool = os.getenv("OPEN_CATALOG_METADATA", "1").strip() == "1"
 
+# Namespace for every Redis key the connector writes. Two deployments that
+# share one Redis would otherwise overwrite each other's catalogs, since the
+# key names are the same for every deployment. The default is derived from the
+# deployment's own public URL (HOSTNAME + SUBPATH + VERSION), so it is unique
+# per deployment without any configuration; set it explicitly to pin it.
+_DEFAULT_KEY_PREFIX = "{}{}{}".format(
+    os.getenv("HOSTNAME", ""), os.getenv("SUBPATH", ""), os.getenv("VERSION", "")
+)
+CONNECTOR_KEY_PREFIX: str = "connector:" + re.sub(
+    r"[^A-Za-z0-9._-]+", "_",
+    os.getenv("CONNECTOR_KEY_PREFIX", "").strip() or _DEFAULT_KEY_PREFIX or "default",
+).strip("_")
+
 # Comma-separated network ids and/or names whose existence must not be
 # leaked to unauthenticated callers (returns 404, not 401). Only applied
 # when AUTHORIZATION=1 and ANONYMOUS_VIEWER=0, ignored with a warning otherwise.
