@@ -27,6 +27,7 @@ from app.utils.utils import (
 )
 from app.v1.endpoints.error_response import error_response
 from app.v1.endpoints.functions import (
+    get_observation_type,
     set_role,
     update_datastream_time_ranges,
 )
@@ -135,6 +136,10 @@ async def data_array_observation(
                         "Missing required properties 'phenomenonTime' or 'result' in components.",
                     )
 
+                observation_type = await get_observation_type(
+                    conn, datastream_id
+                )
+
                 for data in data_array:
                     try:
                         observation_payload = {
@@ -162,6 +167,7 @@ async def data_array_observation(
                                 observation_payload,
                                 conn,
                                 commit_id=commit_id,
+                                observation_type=observation_type,
                             )
                         )
                         response_urls.append(observation_selfLink)
@@ -193,7 +199,7 @@ async def data_array_observation(
 
 
 async def insertDataArrayObservation(
-    payload, conn, datastream_id=None, commit_id=None
+    payload, conn, datastream_id=None, commit_id=None, observation_type=None
 ):
     """
     Inserts observation data into the database.
@@ -202,6 +208,7 @@ async def insertDataArrayObservation(
         payload (dict or list): The payload containing the observation(s) to be inserted.
         conn (connection): The database connection object.
         datastream_id (int, optional): The ID of the datastream associated with the observation. Defaults to None.
+        observation_type (str, optional): The observationType of the datastream the results must conform to.
 
     Returns:
         tuple: A tuple containing the ID and selfLink of the inserted observation.
@@ -271,7 +278,7 @@ async def insertDataArrayObservation(
 
             check_missing_properties(obs, ["Datastream", "FeaturesOfInterest"])
             handle_datetime_fields(obs)
-            handle_result_field(obs)
+            handle_result_field(obs, observation_type)
 
             if obs.get("phenomenonTimeStart") is None:
                 current_time = datetime.now()

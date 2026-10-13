@@ -63,6 +63,17 @@ async def insert_commit(connection, payload, action):
         return await connection.fetchval(query, *payload.values())
 
 
+async def get_observation_type(connection, datastream_id):
+    return await connection.fetchval(
+        """
+            SELECT "observationType"
+            FROM sensorthings."Datastream"
+            WHERE id = $1::bigint;
+        """,
+        datastream_id,
+    )
+
+
 async def get_datastreams_from_foi(connection, feature_of_interest_id):
     async with connection.transaction():
         query = """
