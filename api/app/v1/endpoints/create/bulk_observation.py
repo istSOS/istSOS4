@@ -13,15 +13,25 @@
 # limitations under the License.
 
 
+import json
+
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
-from app.utils.utils import safe_parse_datetime
+from app.utils.utils import (
+    coerce_result,
+    get_result_type_and_column,
+    safe_parse_datetime,
+)
 from app.v1.endpoints.delete.filtered_delete_observation import (
     delete_observations_by_ids,
 )
 from app.v1.endpoints.exceptions import BadRequest
-from app.v1.endpoints.functions import set_role, update_datastream_time_ranges
+from app.v1.endpoints.functions import (
+    get_observation_type,
+    set_role,
+    update_datastream_time_ranges,
+)
 from asyncpg.types import Range
 from fastapi import APIRouter, Body, Depends, Header, Query, status
 from fastapi.responses import Response
@@ -29,6 +39,8 @@ from fastapi.responses import Response
 from .functions import create_entity, set_commit, update_datastream_last_foi_id
 
 v1 = APIRouter()
+
+RESULT_COLUMNS = ["resultNumber", "resultBoolean", "resultString", "resultJSON"]
 
 
 user = Header(default=None, include_in_schema=False)
@@ -163,34 +175,30 @@ async def insertBulkObservation(
     """
 
     async with conn.transaction():
-        result_time_idx = -1
-        if components:
-            result_idx = components.index("result")
-            ph_idx = components.index("phenomenonTime")
-            if "resultTime" in components:
-                result_time_idx = components.index("resultTime")
-            if isinstance(payload[0][result_idx], str):
-                result_type = 3
-                observation_type = "resultString"
-            elif isinstance(payload[0][result_idx], bool):
-                result_type = 1
-                observation_type = "resultBoolean"
-            elif isinstance(payload[0][result_idx], dict):
-                result_type = 2
-                observation_type = "resultJSON"
-            else:
-                result_type = 0
-                observation_type = "resultNumber"
-        else:
-            result_type = 0
-            observation_type = "resultNumber"
-            ph_idx = 0
+        result_idx = components.index("result")
+        row_components = [c for c in components if c != "result"]
+        ph_idx = row_components.index("phenomenonTime")
+        result_time_idx = (
+            row_components.index("resultTime")
+            if "resultTime" in row_components
+            else -1
+        )
+        datastream_observation_type = await get_observation_type(
+            conn, datastream_id
+        )
 
         data = []
         ph_min_start = None
         ph_max_end = None
         rt_interval = None
         for obs in payload:
+            result_type, values, columns = get_result_type_and_column(
+                coerce_result(obs.pop(result_idx), datastream_observation_type)
+            )
+            result = dict(zip(columns, values))
+            if result["resultJSON"] is not None:
+                result["resultJSON"] = json.dumps(result["resultJSON"])
+
             if result_time_idx > -1:
                 obs[result_time_idx] = safe_parse_datetime(
                     obs[result_time_idx]
@@ -226,69 +234,29 @@ async def insertBulkObservation(
             ):
                 ph_max_end = ph_end
 
-            default_obs = [result_type, datastream_id, foi_id]
+            default_obs = [result[column] for column in RESULT_COLUMNS] + [
+                result_type,
+                datastream_id,
+                foi_id,
+            ]
 
             if (VERSIONING or AUTHORIZATION) and commit_id is not None:
                 default_obs.append(commit_id)
 
             data.append(obs + default_obs)
 
-        observation_types = [
-            ot
-            for ot in [
-                "resultNumber",
-                "resultBoolean",
-                "resultString",
-                "resultJSON",
-            ]
-            if ot != observation_type
-        ]
-        cols = observation_types + [
+        row_components[ph_idx : ph_idx + 1] = [
             "phenomenonTimeStart",
             "phenomenonTimeEnd",
-            observation_type,
-            "resultType",
-            "datastream_id",
-            "featuresofinterest_id",
         ]
-
-        if components:
-            idx = 0
-            for c in components:
-                if c == "result":
-                    components[idx] = observation_type
-                idx += 1
-
-            ph_components_idx = components.index("phenomenonTime")
-            components[ph_components_idx : ph_components_idx + 1] = [
-                "phenomenonTimeStart",
-                "phenomenonTimeEnd",
-            ]
-
-            cols = (
-                observation_types
-                + components
-                + [
-                    "resultType",
-                    "datastream_id",
-                    "featuresofinterest_id",
-                ]
-            )
+        cols = (
+            row_components
+            + RESULT_COLUMNS
+            + ["resultType", "datastream_id", "featuresofinterest_id"]
+        )
 
         if (VERSIONING or AUTHORIZATION) and commit_id is not None:
             cols.append("commit_id")
-
-        for item in data:
-            value = item[0]
-            if observation_type == "resultNumber":
-                inserts = [None, str(value), None]
-            elif observation_type == "resultBoolean":
-                inserts = [None, str(value).lower(), None]
-            elif observation_type in {"resultString", "resultJSON"}:
-                inserts = [None, None, None]
-
-            for val in reversed(inserts):
-                item.insert(0, val)
 
         column_names = ", ".join(f'"{col}"' for col in cols)
 

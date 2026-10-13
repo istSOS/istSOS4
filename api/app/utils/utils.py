@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import math
 import re
 from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
@@ -164,12 +165,55 @@ def handle_datetime_fields(payload, datastream=False):
                     payload[key] = parsed_time
 
 
-def handle_result_field(payload):
+def coerce_result(value, observation_type):
+    """
+    Converts a result to the type required by the Datastream observationType
+    (OGC 10-004r3 / ISO 19156:2011, Table 12).
+
+    OM_Observation and unknown observation types accept any result as is.
+
+    Raises:
+        BadRequest: If the result cannot be converted.
+    """
+    kind = (observation_type or "").rsplit("/", 1)[-1]
+    try:
+        if kind == "OM_Measurement":
+            if isinstance(value, bool):
+                raise ValueError
+            value = float(value)
+            if not math.isfinite(value):
+                raise ValueError
+        elif kind == "OM_CountObservation":
+            if isinstance(value, bool):
+                raise ValueError
+            if not isinstance(value, int):
+                number = float(value)
+                if not number.is_integer():
+                    raise ValueError
+                value = int(number)
+        elif kind == "OM_TruthObservation":
+            if isinstance(value, str) and value.lower() in ("true", "false"):
+                value = value.lower() == "true"
+            elif not isinstance(value, bool):
+                raise ValueError
+        elif kind == "OM_CategoryObservation":
+            if not isinstance(value, str):
+                raise ValueError
+    except (TypeError, ValueError, OverflowError):
+        raise BadRequest(
+            f"Result {value!r} is not valid for observationType {kind}"
+        )
+    return value
+
+
+def handle_result_field(payload, observation_type=None):
     """
     Updates the payload dictionary by handling the 'result' field.
 
     Args:
         payload (dict): The dictionary containing the payload.
+        observation_type (str, optional): The Datastream observationType
+            the result must conform to.
 
     Returns:
         None
@@ -177,7 +221,7 @@ def handle_result_field(payload):
     for key in list(payload.keys()):
         if key == "result":
             result_type, values, columns = get_result_type_and_column(
-                payload[key]
+                coerce_result(payload[key], observation_type)
             )
             for value, column in zip(values, columns):
                 payload[column] = value

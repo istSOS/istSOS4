@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 from datetime import datetime
 
 from app import AUTHORIZATION, POSTGRES_PORT_WRITE, VERSIONING
@@ -63,11 +64,20 @@ ALLOWED_KEYS = [
 ]
 
 
-def parse_phenomenon_time(phenomenon_time: str = Query(None)):
-    if phenomenon_time is None:
+def parse_phenomenon_time(
+    filter: str = Query(
+        None,
+        alias="$filter",
+        description="Only `phenomenonTime eq <datetime>` is supported.",
+    ),
+):
+    if filter is None:
         return None
+    match = re.fullmatch(r"\s*phenomenonTime\s+eq\s+'?([^'\s]+)'?\s*", filter)
+    if match is None:
+        raise BadRequest("Only $filter=phenomenonTime eq <datetime> is supported")
     try:
-        return datetime.fromisoformat(phenomenon_time.split("/")[0])
+        return datetime.fromisoformat(match.group(1).split("/")[0])
     except ValueError:
         raise BadRequest("Invalid phenomenonTime")
 

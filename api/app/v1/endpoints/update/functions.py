@@ -22,7 +22,7 @@ from app.utils.utils import (
     validate_epsg,
 )
 from app.v1.endpoints.exceptions import BadRequest, Forbidden
-from app.v1.endpoints.functions import insert_commit
+from app.v1.endpoints.functions import get_observation_type, insert_commit
 
 
 def phenomenon_time_filter(phenomenon_time, index):
@@ -455,9 +455,25 @@ async def update_observation_entity(
 ):
     handle_datetime_fields(payload)
 
-    handle_result_field(payload)
-
     handle_associations(payload, ["Datastream", "FeatureOfInterest"])
+
+    if "result" in payload:
+        if "datastream_id" in payload:
+            observation_type = await get_observation_type(
+                connection, payload["datastream_id"]
+            )
+        else:
+            observation_type = await connection.fetchval(
+                f"""
+                    SELECT d."observationType"
+                    FROM sensorthings."Observation" o
+                    JOIN sensorthings."Datastream" d ON d.id = o.datastream_id
+                    WHERE o.id = $1{phenomenon_time_filter(phenomenon_time, 2)}
+                """,
+                observation_id,
+                *([] if phenomenon_time is None else [phenomenon_time]),
+            )
+        handle_result_field(payload, observation_type)
 
     if payload:
         return await update_entity(
