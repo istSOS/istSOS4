@@ -208,13 +208,19 @@ def check_datastream(client, datastream, start, end):
             datastream.name, constraints, times, values, targets, n, sampling
         )
 
-    # PATCH only what changes, with Flink's payload and commit message
+    # PATCH only what changes, as Flink does: same payload, no commit message
+    # (istSOS refuses one from a qc user, 403), $filter on phenomenonTime (the
+    # TimescaleDB partition key), in UTC, single-quoted.
+    # ponytail: istSOS returns phenomenonTime to the second, Flink sends the
+    # stored instant: a sub-second one won't match once istSOS applies it
     changed = [
         (o, q) for o, q in zip(period, new) if str(o.result_quality) != str(q)
     ]
     for o, q in changed:
         observation = Observation(iot_id=o.iot_id, result_quality=str(q))
-        client.patch(observation, commit_message="QC update")
+        utc = pd.to_datetime(o.phenomenon_time, utc=True).isoformat()
+        utc = utc.replace("+00:00", "Z")
+        client.patch(observation, filter=f"phenomenonTime eq '{utc}'")
     print(
         f"{datastream.name}: {len(period)} observations checked, "
         f"{len(changed)} resultQuality updated."

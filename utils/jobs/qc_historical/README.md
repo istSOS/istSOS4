@@ -18,6 +18,9 @@ docker build -t ghcr.io/istsos/istsos4/utils/qc_historical:0.1 .
 
 Write `.env` values without quotes: `docker run --env-file` keeps them.
 
+Use a user with the `qc` role, as Flink does (`API_USERNAME_QC`): PATCHes
+carry no commit message, which istSOS accepts only from `qc` users.
+
 ## Run
 
 ```bash
@@ -31,8 +34,9 @@ One line per datastream: observations checked, `resultQuality` updated.
 
 - Datastreams: those with `constraints` in their `properties`, filtered by
   `DATASTREAMS` / `EXCLUDE_DATASTREAMS`.
-- Each observation in `PERIOD` is checked the way Flink checks a new one:
-  with the N-1 observations before it, N = largest window /
+- Each observation whose `phenomenonTime` is in `PERIOD` (bounds included)
+  is checked the way Flink checks a new one: at its `phenomenonTime`, in a
+  buffer of N observations sorted by `phenomenonTime`, N = largest window /
   `samplingFrequency` + 3 (50 without them). Only its own `resultQuality` is
   written, so e.g. the start of a flat line stays "passed".
 - Each constraint is the same SaQC call: `type` is the SaQC function, the
@@ -52,10 +56,12 @@ time, as slow as Flink. Prefer time windows.
 
 ## Different from Flink
 
-- Observations are taken in `phenomenonTime` order, Flink takes them in
-  arrival order: the same for data that arrived in order.
-- Only observations whose `resultQuality` changes are PATCHed (commit message
-  `QC update`), so a re-run writes nothing new.
+- Flink's buffer holds the last N observations to arrive, here the checked
+  one and the N-1 before it in `phenomenonTime`: the same for data that
+  arrived in order. Late data is checked here as if it had arrived in order,
+  with its full window, and is in the window of the observations after it.
+- Only observations whose `resultQuality` changes are PATCHed, so a re-run
+  writes nothing new.
 - Any SaQC function runs. Flink runs only those in its
   `ALLOWED_CONSTRAINTS` (`IstsosQC.py`): add new ones there too.
 - A datastream that fails is reported and skipped; the run goes on.
