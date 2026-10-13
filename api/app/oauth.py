@@ -15,12 +15,14 @@
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import asyncpg
 import jwt
 from app import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     ALGORITHM,
+    AUTHORIZATION,
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PORT,
@@ -35,6 +37,9 @@ from jwt.exceptions import InvalidTokenError
 
 logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="Login")
+# auto_error=False: a missing Authorization header yields None instead of an
+# automatic 401, so callers can treat it as an anonymous request.
+optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="Login", auto_error=False)
 
 
 async def get_user_from_db(username: str):
@@ -171,7 +176,11 @@ def decode_token(token: str):
     return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def _validate_token(token: str) -> dict:
+    """
+    Validate a bearer token (revocation, signature, expiry) and return the
+    matching user. Raises 401 on any failure.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -193,3 +202,23 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     if user is None:
         raise credentials_exception
     return user
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    return await _validate_token(token)
+
+
+async def get_current_user_optional(
+    token: Optional[str] = Depends(optional_oauth2_scheme),
+) -> Optional[dict]:
+    """
+    Return the authenticated user, or None for an anonymous request.
+
+    A missing Authorization header is anonymous; a present but invalid
+    token (expired, revoked, malformed) still raises 401. With
+    AUTHORIZATION disabled there are no users to resolve, so every request
+    is anonymous and the header is ignored.
+    """
+    if not AUTHORIZATION or token is None:
+        return None
+    return await _validate_token(token)
