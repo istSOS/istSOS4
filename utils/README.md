@@ -11,9 +11,10 @@ and its own build context (`docker build -t <image> <folder>`).
 | [mqtt2istsos](services/mqtt2istsos/) | service | `docker compose up -d` |
 | [ftp2istsos](jobs/ftp2istsos/) | job, cron | `./run.sh` |
 | [eyeonwater2istsos](jobs/eyeonwater2istsos/) | job, cron or manual | `./fetch.sh`, `./run.sh FILE.json` |
-| [xlsx2istsos](jobs/xlsx2istsos/) | job, manual | `./run.sh FILE.xlsx` |
+| [xlsx2istsos](jobs/xlsx2istsos/) | job, manual | `./run.sh FILE.xlsx [--observations]` |
 | [istsos2_to_istsos4](jobs/istsos2_to_istsos4/) | job, one-off migration | `docker run`, see its README |
 | [istsos4_to_istsos4](jobs/istsos4_to_istsos4/) | job, one-off migration | `docker run`, see its README |
+| [qc_historical](jobs/qc_historical/) | job, manual | `docker run`, see its README |
 
 ## Conventions
 
