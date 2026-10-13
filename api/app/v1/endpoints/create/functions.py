@@ -26,6 +26,7 @@ from app.utils.utils import (
 )
 from app.v1.endpoints.exceptions import BadRequest, Forbidden
 from app.v1.endpoints.functions import (
+    get_observation_type,
     insert_commit,
     update_datastream_time_ranges,
 )
@@ -528,7 +529,10 @@ async def insert_observation_entity(
 
         check_missing_properties(payload, ["Datastream", "FeaturesOfInterest"])
         handle_datetime_fields(payload)
-        handle_result_field(payload)
+        handle_result_field(
+            payload,
+            await get_observation_type(connection, payload["datastream_id"]),
+        )
 
         if payload.get("phenomenonTimeStart") is None:
             current_time = datetime.now()
