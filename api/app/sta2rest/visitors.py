@@ -103,9 +103,7 @@ class NodeVisitor(Visitor):
         if "@iot" in prefix:
             prefix = prefix.split(".")[1]
         converted_prefix = sta2rest.STA2REST.SELECT_MAPPING.get(prefix, prefix)
-        node.name = (
-            f"{converted_prefix}/{suffix[0]}" if suffix else converted_prefix
-        )
+        node.name = f"{converted_prefix}/{suffix[0]}" if suffix else converted_prefix
         return node.name
 
     def visit_SelectNode(self, node: SelectNode):
@@ -171,15 +169,11 @@ class NodeVisitor(Visitor):
             str: The converted orderby node.
         """
 
-        identifiers = [
-            self.visit(identifier) for identifier in node.identifiers
-        ]
+        identifiers = [self.visit(identifier) for identifier in node.identifiers]
         attributes, orders = [], []
         for identifier in identifiers:
             attribute_name, *_, order = identifier.split(".")
-            attributes.append(
-                [resolve_field(globals()[entity], attribute_name)]
-            )
+            attributes.append([resolve_field(globals()[entity], attribute_name)])
             orders.append(order)
         return attributes, orders
 
@@ -252,8 +246,7 @@ class NodeVisitor(Visitor):
                     self.visit(identifier)
                     for identifier in expand_identifier.subquery.select.identifiers
                 ]
-                if expand_identifier.subquery
-                and expand_identifier.subquery.select
+                if expand_identifier.subquery and expand_identifier.subquery.select
                 else [
                     identifier
                     for identifier in sta2rest.STA2REST.get_default_column_names(
@@ -284,9 +277,7 @@ class NodeVisitor(Visitor):
                 attribute_name = expand_identifier.identifier.replace(
                     "TravelTime", ""
                 ).lower()
-                relationship_entity = getattr(
-                    parent_class, attribute_name
-                ).property
+                relationship_entity = getattr(parent_class, attribute_name).property
 
                 # Check for ONETOMANY relationship and get the foreign key attribute
                 if relationship_entity.direction.name == "ONETOMANY":
@@ -295,10 +286,7 @@ class NodeVisitor(Visitor):
 
             # Process orderby clause if exists
             ordering = []
-            if (
-                expand_identifier.subquery
-                and expand_identifier.subquery.orderby
-            ):
+            if expand_identifier.subquery and expand_identifier.subquery.orderby:
                 attrs, orders = self.visit_OrderByNode(
                     expand_identifier.subquery.orderby,
                     expand_identifier.identifier,
@@ -310,34 +298,28 @@ class NodeVisitor(Visitor):
             # Process skip clause  if exists
             skip_value = (
                 self.visit_SkipNode(expand_identifier.subquery.skip)
-                if expand_identifier.subquery
-                and expand_identifier.subquery.skip
+                if expand_identifier.subquery and expand_identifier.subquery.skip
                 else 0
             )
 
             # Process top clause  if exists
             top_value = (
                 self.visit_TopNode(expand_identifier.subquery.top) + 1
-                if expand_identifier.subquery
-                and expand_identifier.subquery.top
+                if expand_identifier.subquery and expand_identifier.subquery.top
                 else TOP_VALUE + 1
             )
 
             # Process count clause  if exists
             is_count = (
                 self.visit_CountNode(expand_identifier.subquery.count)
-                if expand_identifier.subquery
-                and expand_identifier.subquery.count
+                if expand_identifier.subquery and expand_identifier.subquery.count
                 else False
             )
 
             # Handle nested expand  if exists
             labels = {}
             json_expands = []
-            if (
-                expand_identifier.subquery
-                and expand_identifier.subquery.expand
-            ):
+            if expand_identifier.subquery and expand_identifier.subquery.expand:
                 for i in expand_identifier.subquery.expand.identifiers:
                     select_node = ""
                     if i.subquery and i.subquery.select:
@@ -364,22 +346,16 @@ class NodeVisitor(Visitor):
                 for nested_expand_query in nested_expand_queries:
                     entity = nested_expand_query[2].replace("TravelTime", "")
                     attribute_sub_entity = (
-                        nested_expand_query[5]
-                        .replace("TravelTime", "")
-                        .lower()
+                        nested_expand_query[5].replace("TravelTime", "").lower()
                     )
                     relationship_nested = getattr(
                         globals()[entity],
                         attribute_sub_entity,
                     ).property
 
-                    navigation_link_attr = (
-                        f"{attribute_sub_entity}_navigation_link"
-                    )
+                    navigation_link_attr = f"{attribute_sub_entity}_navigation_link"
 
-                    navigation_link_value = getattr(
-                        sub_entity, navigation_link_attr
-                    )
+                    navigation_link_value = getattr(sub_entity, navigation_link_attr)
                     label_name = navigation_link_value.name.split("@")[0]
                     if relationship_nested.direction.name != "MANYTOONE":
                         labels[label_name] = nested_expand_query[8]
@@ -408,10 +384,7 @@ class NodeVisitor(Visitor):
             sub_query = select(*query_fields).order_by(*ordering)
 
             # Process filter clause if exists
-            if (
-                expand_identifier.subquery
-                and expand_identifier.subquery.filter
-            ):
+            if expand_identifier.subquery and expand_identifier.subquery.filter:
                 filter, join_relationships = self.visit_FilterNode(
                     expand_identifier.subquery.filter,
                     expand_identifier.identifier,
@@ -555,9 +528,7 @@ class NodeVisitor(Visitor):
                 field_name = field.split(".", 1)[-1]
                 if "/" in field_name:
                     field, *field_parts = field_name.split("/", 1)
-                    field_parts = (
-                        field_parts[0].split("/") if field_parts else []
-                    )
+                    field_parts = field_parts[0].split("/") if field_parts else []
                     json_path = self.resolve_select_field(main_entity, field)
                     for part in field_parts:
                         json_path = json_path.op("->")(part)
@@ -591,15 +562,11 @@ class NodeVisitor(Visitor):
             # Extract identifiers that act as filters
             filter_identifiers_path = {
                 "expand": {
-                    "identifiers": [
-                        e for e in node.expand.identifiers if not e.expand
-                    ]
+                    "identifiers": [e for e in node.expand.identifiers if not e.expand]
                 }
             }
             # Update node.expand.identifiers to keep only those with a nested expand
-            node.expand.identifiers = [
-                e for e in node.expand.identifiers if e.expand
-            ]
+            node.expand.identifiers = [e for e in node.expand.identifiers if e.expand]
 
             if filter_identifiers_path["expand"]["identifiers"]:
                 identifiers = filter_identifiers_path["expand"]["identifiers"]
@@ -611,11 +578,9 @@ class NodeVisitor(Visitor):
                         current_identifier.subquery
                         and current_identifier.subquery.filter
                     ):
-                        filter_clause, join_relationships = (
-                            self.visit_FilterNode(
-                                current_identifier.subquery.filter,
-                                current_identifier.identifier,
-                            )
+                        filter_clause, join_relationships = self.visit_FilterNode(
+                            current_identifier.subquery.filter,
+                            current_identifier.identifier,
                         )
                         filters.append(filter_clause)
                         main_query = main_query.filter(filter_clause)
@@ -628,15 +593,13 @@ class NodeVisitor(Visitor):
                                 joins.append(relationship)
                                 main_query = main_query.join(relationship)
                                 query_count = query_count.join(relationship)
-                                query_estimate_count = (
-                                    query_estimate_count.join(relationship)
+                                query_estimate_count = query_estimate_count.join(
+                                    relationship
                                 )
 
                     # Determine current and nested identifiers
                     identifier = (
-                        current_identifier.identifier
-                        if i > 0
-                        else self.main_entity
+                        current_identifier.identifier if i > 0 else self.main_entity
                     )
                     nested_identifier = (
                         identifiers[i - 1].identifier
@@ -645,9 +608,7 @@ class NodeVisitor(Visitor):
                     )
 
                     # Retrieve the relationship property for the current identifiers
-                    entity_class = globals()[
-                        identifier.replace("TravelTime", "")
-                    ]
+                    entity_class = globals()[identifier.replace("TravelTime", "")]
                     nested_entity_class = globals()[nested_identifier]
                     relationship = getattr(
                         entity_class,
@@ -685,9 +646,7 @@ class NodeVisitor(Visitor):
                     filters.append(filter_condition)
                     main_query = main_query.filter(filter_condition)
                     query_count = query_count.filter(filter_condition)
-                    query_estimate_count = query_estimate_count.filter(
-                        filter_condition
-                    )
+                    query_estimate_count = query_estimate_count.filter(filter_condition)
 
             # here we create the sub queries for the expand identifiers
             if node.expand.identifiers:
@@ -711,9 +670,7 @@ class NodeVisitor(Visitor):
                         expand_node = build_expand(i.subquery.expand)
 
                 # Visit the expand node
-                expand_queries = self.visit_ExpandNode(
-                    node.expand, self.main_entity
-                )
+                expand_queries = self.visit_ExpandNode(node.expand, self.main_entity)
                 for expand_query in expand_queries:
                     entity = self.main_entity.replace("TravelTime", "")
                     attribute_sub_entity = (
@@ -724,13 +681,9 @@ class NodeVisitor(Visitor):
                         attribute_sub_entity,
                     ).property
 
-                    navigation_link_attr = (
-                        f"{attribute_sub_entity}_navigation_link"
-                    )
+                    navigation_link_attr = f"{attribute_sub_entity}_navigation_link"
 
-                    navigation_link_value = getattr(
-                        main_entity, navigation_link_attr
-                    )
+                    navigation_link_value = getattr(main_entity, navigation_link_attr)
                     label_name = navigation_link_value.name.split("@")[0]
 
                     if relationship.direction.name != "MANYTOONE":
@@ -760,13 +713,9 @@ class NodeVisitor(Visitor):
         else:
             if result_format == "DataArray":
                 select_args.append(
-                    getattr(main_entity, "datastream_id").label(
-                        "datastream_id"
-                    )
+                    getattr(main_entity, "datastream_id").label("datastream_id")
                 )
-                select_args.append(
-                    cast(components, ARRAY(String)).label("components")
-                )
+                select_args.append(cast(components, ARRAY(String)).label("components"))
 
             main_query = select(*select_args)
 
@@ -790,9 +739,7 @@ class NodeVisitor(Visitor):
                     for relationship in join_relationships:
                         main_query = main_query.join(relationship)
                         query_count = query_count.join(relationship)
-                        query_estimate_count = query_estimate_count.join(
-                            relationship
-                        )
+                        query_estimate_count = query_estimate_count.join(relationship)
                 else:
                     id_attr = getattr(main_entity, "id")
                     id_subquery = select(id_attr)
@@ -807,16 +754,12 @@ class NodeVisitor(Visitor):
         # Process orderby clause if exists
         ordering = []
         if node.orderby:
-            attrs, orders = self.visit_OrderByNode(
-                node.orderby, self.main_entity
-            )
+            attrs, orders = self.visit_OrderByNode(node.orderby, self.main_entity)
             ordering = get_orderby_attr(attrs, orders)
         else:
             ordering = [asc(getattr(main_entity, "id"))]
             if VERSIONING and node.from_to:
-                ordering.append(
-                    asc(getattr(main_entity, "system_time_validity"))
-                )
+                ordering.append(asc(getattr(main_entity, "system_time_validity")))
 
         main_query = main_query.order_by(*ordering)
 
@@ -824,9 +767,7 @@ class NodeVisitor(Visitor):
         skip_value = self.visit_SkipNode(node.skip) if node.skip else 0
 
         # Process top clause  if exists
-        top_value = (
-            self.visit_TopNode(node.top) + 1 if node.top else TOP_VALUE + 1
-        )
+        top_value = self.visit_TopNode(node.top) + 1 if node.top else TOP_VALUE + 1
 
         # Process count clause  if exists
         is_count = self.visit_CountNode(node.count) if node.count else False
@@ -842,9 +783,7 @@ class NodeVisitor(Visitor):
                 )
                 limited_count_query_str = str(
                     select(func.count())
-                    .select_from(
-                        query_estimate_count.limit(COUNT_ESTIMATE_THRESHOLD)
-                    )
+                    .select_from(query_estimate_count.limit(COUNT_ESTIMATE_THRESHOLD))
                     .compile(
                         dialect=engine.dialect,
                         compile_kwargs={"literal_binds": True},
@@ -897,9 +836,7 @@ class NodeVisitor(Visitor):
 
         if columns_to_select is not None:
             main_query = (
-                select(*columns_to_select)
-                .select_from(main_query)
-                .alias("main_query")
+                select(*columns_to_select).select_from(main_query).alias("main_query")
             )
         else:
             main_query = main_query.alias("main_query")
@@ -1015,22 +952,16 @@ def get_select_attr(attr, label, nested=False, as_of=None):
         lower_bound = func.lower(attr)
         upper_bound = func.upper(attr)
         if VERSIONING and attr.name == "systemTimeValidity":
-            return case(
-                (
-                    lower_bound == upper_bound,
-                    func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-                ),
-                else_=func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+            return (
+                func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
                 + "/"
                 + case(
                     (
                         (upper_bound == "infinity"),
                         "infinity",
                     ),
-                    else_=func.to_char(
-                        upper_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'
-                    ),
-                ),
+                    else_=func.to_char(upper_bound, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+                )
             ).label(label)
         else:
             return case(
@@ -1066,13 +997,9 @@ def get_orderby_attr(attrs, orders):
         for a in attr:
             collation = "C" if isinstance(a.type, (String, Text)) else None
             if order == "asc":
-                ordering.append(
-                    asc(a.collate(collation)) if collation else asc(a)
-                )
+                ordering.append(asc(a.collate(collation)) if collation else asc(a))
             else:
-                ordering.append(
-                    desc(a.collate(collation)) if collation else desc(a)
-                )
+                ordering.append(desc(a.collate(collation)) if collation else desc(a))
     return ordering
 
 
@@ -1128,11 +1055,7 @@ def expand_function(
         str(compiled_query),
         ("{}".format(sub_query[1].name) if sub_query[1] is not None else "id"),
         (
-            text(
-                '"{}".id::integer'.format(
-                    globals()[sub_query[2]].__tablename__
-                )
-            )
+            text('"{}".id::integer'.format(globals()[sub_query[2]].__tablename__))
             if sub_query[1] is not None
             else text(
                 '"{}".{}_id::integer'.format(

@@ -44,9 +44,9 @@ BEGIN
             RAISE EXCEPTION 'the ID must not be changed (%)', NEW.id;
         END IF;
 
-        IF to_jsonb(NEW) - ARRAY['commit_id', 'systemTimeValidity']
+        IF to_jsonb(NEW) - ARRAY['systemTimeValidity']
             IS NOT DISTINCT FROM
-            to_jsonb(OLD) - ARRAY['commit_id', 'systemTimeValidity'] THEN
+            to_jsonb(OLD) - ARRAY['systemTimeValidity'] THEN
             RETURN NULL;
         END IF;
 
@@ -88,7 +88,7 @@ BEGIN
 
     IF (TG_OP = 'DELETE') THEN
         -- Set the END systemTimeValidity to the 'timestamp_now'
-        OLD."systemTimeValidity" := tstzrange(lower(OLD."systemTimeValidity"), timestamp_now);
+        OLD."systemTimeValidity" := tstzrange(lower(OLD."systemTimeValidity"), timestamp_now, '[]');
         -- Copy the original row to the history table
         EXECUTE format('INSERT INTO %I.%I SELECT ($1).*', target_schema || '_history', target_table) USING OLD;
         RETURN OLD;

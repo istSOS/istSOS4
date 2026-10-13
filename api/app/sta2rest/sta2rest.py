@@ -301,19 +301,13 @@ class STA2REST:
     if VERSIONING or AUTHORIZATION:
         for key in DEFAULT_SELECT:
             if key not in {"Commit", "ObservationDataArray"}:
-                insert_navigation_link(
-                    DEFAULT_SELECT, key, "commit_navigation_link"
-                )
+                insert_navigation_link(DEFAULT_SELECT, key, "commit_navigation_link")
 
     if NETWORK:
-        insert_navigation_link(
-            DEFAULT_SELECT, "Datastream", "network_navigation_link"
-        )
+        insert_navigation_link(DEFAULT_SELECT, "Datastream", "network_navigation_link")
 
         if VERSIONING or AUTHORIZATION:
-            insert_navigation_link(
-                DEFAULT_SELECT, "Commit", "network_navigation_link"
-            )
+            insert_navigation_link(DEFAULT_SELECT, "Commit", "network_navigation_link")
 
         if VERSIONING:
             insert_navigation_link(
@@ -410,22 +404,20 @@ class STA2REST:
             if as_of_value.tzinfo is None:
                 local_datetime = as_of_value.replace(tzinfo=local_timezone)
                 utc_datetime = local_datetime.astimezone(timezone.utc)
-                query_ast.as_of.value = utc_datetime.isoformat(
-                    timespec="seconds"
-                ).replace("+00:00", "Z")
+                query_ast.as_of.value = utc_datetime.isoformat(timespec="auto").replace(
+                    "+00:00", "Z"
+                )
             else:
                 utc_datetime = as_of_value.astimezone(timezone.utc)
-                query_ast.as_of.value = utc_datetime.isoformat(
-                    timespec="seconds"
-                ).replace("+00:00", "Z")
+                query_ast.as_of.value = utc_datetime.isoformat(timespec="auto").replace(
+                    "+00:00", "Z"
+                )
 
             if isoparse(query_ast.as_of.value) > datetime.now(timezone.utc):
                 raise Exception("AS_OF value cannot be in the future")
 
             main_entity += "TravelTime"
-            entities = [
-                (entity + "TravelTime", value) for entity, value in entities
-            ]
+            entities = [(entity + "TravelTime", value) for entity, value in entities]
             as_of_filter = f"system_time_validity eq {query_ast.as_of.value}"
             query_ast.filter = FilterNode(
                 query_ast.filter.filter + f" and {as_of_filter}"
@@ -456,8 +448,7 @@ class STA2REST:
                     if identifier.identifier != "Commit":
                         identifier.identifier += "TravelTime"
                         identifier.subquery.filter = FilterNode(
-                            identifier.subquery.filter.filter
-                            + f" and {as_of_filter}"
+                            identifier.subquery.filter.filter + f" and {as_of_filter}"
                             if identifier.subquery.filter
                             else as_of_filter
                         )
@@ -494,15 +485,11 @@ class STA2REST:
                     timespec="seconds"
                 ).replace("+00:00", "Z")
 
-            if isoparse(query_ast.from_to.value1) > isoparse(
-                query_ast.from_to.value2
-            ):
+            if isoparse(query_ast.from_to.value1) > isoparse(query_ast.from_to.value2):
                 raise Exception("FROM_TO value1 cannot be greater than value2")
 
             main_entity += "TravelTime"
-            entities = [
-                (entity + "TravelTime", value) for entity, value in entities
-            ]
+            entities = [(entity + "TravelTime", value) for entity, value in entities]
             from_to_filter = f"system_time_validity eq ({query_ast.from_to.value1}, {query_ast.from_to.value2})"
             query_ast.filter = FilterNode(
                 query_ast.filter.filter + f" and {from_to_filter}"
@@ -568,9 +555,7 @@ class STA2REST:
                     sub_query.filter = FilterNode(f"id eq {entity[1]}")
 
                 if query_ast.as_of:
-                    as_of_filter = (
-                        f"system_time_validity eq {query_ast.as_of.value}"
-                    )
+                    as_of_filter = f"system_time_validity eq {query_ast.as_of.value}"
                     if sub_query.filter:
                         sub_query.filter = FilterNode(
                             sub_query.filter.filter + f" and {as_of_filter}"
@@ -788,17 +773,13 @@ class STA2REST:
                 entities.append(result)
             elif entity == "$ref":
                 if property_name:
-                    raise Exception(
-                        "Error parsing uri: $ref after property name"
-                    )
+                    raise Exception("Error parsing uri: $ref after property name")
                 ref = True
             elif entity == "$value":
                 if property_name:
                     value = True
                 else:
-                    raise Exception(
-                        "Error parsing uri: $value without property name"
-                    )
+                    raise Exception("Error parsing uri: $value without property name")
             else:
                 property_name += entity
                 if (
