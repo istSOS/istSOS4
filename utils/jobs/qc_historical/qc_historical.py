@@ -197,7 +197,8 @@ def fill_missing(writer, datastream, before, period, start, end, sampling,
 
 
 def check_datastream(client, datastream, start, end, writer=None,
-                     fill_commit_message=None, commit_message=None):
+                     fill_commit_message=None, commit_message=None,
+                     set_flag=None):
     """PATCH the resultQuality of the datastream's observations in PERIOD."""
     properties = datastream.properties
     constraints = properties["constraints"]
@@ -267,7 +268,9 @@ def check_datastream(client, datastream, start, end, writer=None,
     values[np.isin(values, NO_DATA_VALUES)] = np.nan
     targets = np.arange(len(before), len(observations))
     new = []
-    if period:
+    if set_flag is not None:  # SET_FLAG: this value everywhere, no QC
+        new = [set_flag] * len(period)
+    elif period:
         new = quality(
             datastream.name, constraints, times, values, targets, n, sampling
         )
@@ -275,8 +278,9 @@ def check_datastream(client, datastream, start, end, writer=None,
     # PATCH only what changes. Admin/editor users require a commit message;
     # qc users require none. Filter on phenomenonTime (the TimescaleDB
     # partition key), in UTC, single-quoted.
-    # ponytail: istSOS returns phenomenonTime to the second, Flink sends the
-    # stored instant: a sub-second one won't match once istSOS applies it
+    # ponytail: istSOS returns phenomenonTime to the second but matches it
+    # exactly, so one stored with sub-seconds gets 404 and its datastream
+    # fails; retry without $filter on 404 if such data shows up
     changed = [
         (o, q) for o, q in zip(period, new) if str(o.result_quality) != str(q)
     ]
@@ -307,6 +311,10 @@ def main():
     if start is not None and end is not None and start > end:
         raise ValueError("PERIOD start must not be after end")
     commit_message = os.getenv("COMMIT_MESSAGE") or None
+    set_flag = os.getenv("SET_FLAG", "").strip()
+    if set_flag and not set_flag.isdigit():
+        raise ValueError("SET_FLAG must be a non-negative integer")
+    set_flag = int(set_flag) if set_flag else None
     writer = None
     fill_enabled = os.getenv("FILL_MISSING", "false").strip().lower()
     if fill_enabled not in ("true", "false"):
@@ -336,7 +344,7 @@ def main():
             continue
         try:  # like Flink, a datastream that fails is reported and skipped
             check_datastream(client, datastream, start, end, writer,
-                             fill_commit_message, commit_message)
+                             fill_commit_message, commit_message, set_flag)
         except Exception as error:
             print(f"ERROR {datastream.name}: {error!r}")
 

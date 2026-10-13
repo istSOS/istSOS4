@@ -31,6 +31,13 @@ docker run --rm --network host --env-file .env \
 
 One line per datastream: observations checked, `resultQuality` updated.
 
+## Set a fixed resultQuality
+
+Set `SET_FLAG` to an integer to write that `resultQuality` on every
+observation in `PERIOD`, no-data ones included, instead of running QC. It
+applies to the datastreams QC would check. As with QC, observations that
+already have that value are not PATCHed. Empty runs QC.
+
 ## Fill missing observations
 
 Set `FILL_MISSING=true` to create missing observations before checking quality.
@@ -82,8 +89,10 @@ processed, using the same datastream filters as QC.
 - Each observation whose `phenomenonTime` is in `PERIOD` (bounds included)
   is checked the way Flink checks a new one: at its `phenomenonTime`, in a
   buffer of N observations sorted by `phenomenonTime`, N = largest window /
-  `samplingFrequency` + 3 (50 without them). Only its own `resultQuality` is
-  written, so e.g. the start of a flat line stays "passed".
+  `samplingFrequency` + 3 (50 without them). The first ones in `PERIOD` get
+  the N-1 observations before it, read to fill their window, not checked.
+  Only its own `resultQuality` is written, so e.g. the start of a flat line
+  stays "passed".
 - Each constraint is the same SaQC call: `type` is the SaQC function, the
   other keys its arguments. One that SaQC rejects leaves its slot `00`.
 
