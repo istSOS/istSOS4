@@ -292,14 +292,14 @@ def _catalog_uri(network_id: Optional[int] = None) -> URIRef:
 
 # Publisher agent
 
-def _add_publisher_agent(g: Graph, settings: Settings) -> Optional[URIRef]:
+def _add_publisher_agent(g: Graph, settings: Settings) -> Optional[Union[URIRef, BNode]]:
     """
-    Add the foaf:Agent / org:Organization node for the publisher. Returns
-    the URIRef when DCAT_PUBLISHER_URI is set, None when only
-    DCAT_PUBLISHER_NAME is set (BNode emitted, but not returned -- a BNode
-    publisher can't be referenced across the independent per-scope graphs
-    this transformer produces, since each is cached and served separately)
-    or when DCAT_PUBLISHER_NAME itself is unset (no publisher at all).
+    Add the foaf:Agent / org:Organization node for the publisher and return
+    it: a URIRef when DCAT_PUBLISHER_URI is set, otherwise a blank node, and
+    None only when DCAT_PUBLISHER_NAME itself is unset. Every per-scope graph
+    calls this on itself, so a blank-node publisher is only ever referenced
+    inside the graph that describes it. (Returning None for the blank node,
+    as before, left dct:publisher off the Catalog, which DCAT-AP requires.)
     """
     if not settings.DCAT_PUBLISHER_NAME:
         return None
@@ -324,7 +324,7 @@ def _add_publisher_agent(g: Graph, settings: Settings) -> Optional[URIRef]:
             mbox = f"mailto:{mbox}"
         g.add((pub_node, FOAF.mbox, URIRef(mbox)))
 
-    return pub_node if isinstance(pub_node, URIRef) else None
+    return pub_node
 
 
 # Distribution builder
@@ -468,6 +468,15 @@ def _build_dataset(
             # flowing through, in case some point at plain documentation
             # pages instead.
             g.add((op_def_uri, RDF.type, SKOS.Concept))
+            # DCAT-AP's skos:ConceptShape requires skos:prefLabel (minCount 1)
+            # on every concept the graph types. The ObservedProperty name is the
+            # label the deployment already uses for this definition. Without it
+            # every real definition URI (EIONET pollutants, GEMET, ...) is a
+            # SHACL violation; the dummy data never hit this because its
+            # definitions are not http(s) URIs.
+            op_name = op.get("name")
+            if op_name and (op_def_uri, SKOS.prefLabel, None) not in g:
+                g.add((op_def_uri, SKOS.prefLabel, Literal(op_name, lang=lang)))
         # NOTE(future): observed_property_definition is a placeholder string
         # in dummy data, not a real OGC-style URI -- once that's addressed
         # upstream, dcat:theme/dct:subject will start resolving for every
@@ -505,8 +514,9 @@ def _build_dataset(
         props.get("license") or settings.DCAT_DEFAULT_LICENSE,
         context=f"Datastream {ds_id}",
     )
-    if license_uri:
-        g.add((dataset_uri, DCT.license, URIRef(license_uri)))
+    # The licence is asserted on each Distribution (_add_distributions below),
+    # not on the Dataset: DCAT-AP 3.0 defines dct:license for Distribution and
+    # Data Service only, and harvesters read it from the Distributions.
 
     access_rights = props.get("accessRights") or settings.DCAT_DEFAULT_ACCESS_RIGHTS
     if access_rights:
@@ -558,8 +568,13 @@ def _build_dataset_series(
     g.add((series_uri, RDF.type, DCAT.DatasetSeries))
     g.add((series_uri, DCT.identifier, Literal(f"thing-{thing.id}")))
     g.add((series_uri, DCT.title, Literal(thing.name, lang=lang)))
-    if thing.description:
-        g.add((series_uri, DCT.description, Literal(thing.description, lang=lang)))
+    # dct:description is mandatory for dcat:DatasetSeries in DCAT-AP 3.0, and
+    # STA leaves Thing.description optional, so fall back to a sentence that
+    # states only what the series is.
+    description = thing.description or (
+        f"Datastreams of the SensorThings Thing {thing.name or thing.id}."
+    )
+    g.add((series_uri, DCT.description, Literal(description, lang=lang)))
 
     for kw in _extract_series_keywords(thing, scoped_datastreams):
         g.add((series_uri, DCAT.keyword, Literal(kw, lang=lang)))
@@ -608,6 +623,7 @@ def _build_scope(
     """
     dataset_count = 0
     skipped_count = 0
+    series_skipped = 0
 
     for thing in things:
         records = []
@@ -619,12 +635,18 @@ def _build_scope(
             records.append(result)
             dataset_count += 1
 
-        if not records and thing.datastreams:
-            logger.warning(
-                "Thing %s (%s): all %d Datastreams were skipped -- "
-                "DatasetSeries will have no seriesMember",
-                thing.id, thing.name, len(thing.datastreams),
-            )
+        if not records:
+            # DCAT-AP's usage notes discourage empty Dataset Series, and a
+            # series with no member has nothing to find. The STAC side still
+            # publishes the Thing as an (empty) Collection.
+            if thing.datastreams:
+                logger.warning(
+                    "Thing %s (%s): all %d Datastreams were skipped -- "
+                    "no DatasetSeries emitted",
+                    thing.id, thing.name, len(thing.datastreams),
+                )
+            series_skipped += 1
+            continue
 
         # series_uri is the DatasetSeries for this Thing (one Series
         # groups all of a Thing's Datastreams). It does NOT go in
@@ -657,7 +679,7 @@ def _build_scope(
         for dataset_uri, _bbox, _start, _end in records:
             g.add((catalog_uri, DCAT.dataset, dataset_uri))
 
-    return len(things), dataset_count, skipped_count
+    return len(things) - series_skipped, dataset_count, skipped_count
 
 
 # Catalog / DataService builder (root scope only)
