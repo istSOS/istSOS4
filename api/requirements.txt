@@ -1,11 +1,14 @@
+apscheduler==3.11.3
 asyncpg==0.31.0
 fastapi==0.142.2
 geoalchemy2==0.20.0
 passlib[bcrypt]==1.7.4
 pydantic==2.13.5
+pydantic-settings==2.15.0
 pyjwt==2.15.1
 python-dateutil==2.9.0.post0
 python-multipart==0.0.32
+rdflib==7.1.1
 redis==8.1.0
 sly==0.5
 sqlalchemy[asyncio]==2.1.3
