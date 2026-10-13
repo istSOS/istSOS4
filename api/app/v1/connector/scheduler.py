@@ -193,15 +193,21 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
         write_harvest_network_ids([net.id for net in network_catalog.networks])
 
         if STAC_TRANSFORMER:
-            t0 = time.monotonic()
-            stac_dict = await asyncio.to_thread(
-                build_stac_catalog_with_networks, network_catalog
-            )
-            logger.info("STAC build stage: %.3fs", time.monotonic() - t0)
+            try:
+                t0 = time.monotonic()
+                stac_dict = await asyncio.to_thread(
+                    build_stac_catalog_with_networks, network_catalog
+                )
+                logger.info("STAC build stage: %.3fs", time.monotonic() - t0)
 
-            t0 = time.monotonic()
-            await asyncio.to_thread(write_stac_catalog_with_networks, stac_dict)
-            logger.info("STAC write stage: %.3fs", time.monotonic() - t0)
+                t0 = time.monotonic()
+                await asyncio.to_thread(write_stac_catalog_with_networks, stac_dict)
+                logger.info("STAC write stage: %.3fs", time.monotonic() - t0)
+            except Exception:
+                logger.exception(
+                    "STAC transform/write failed this cycle -- the previous STAC "
+                    "generation is still served, DCAT continues below"
+                )
 
         if dcat_ready:
             try:
@@ -214,20 +220,26 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
                 await asyncio.to_thread(write_dcat_catalog_with_networks, dcat_dict)
             except Exception:
                 logger.exception(
-                    "DCAT transform/write failed this cycle -- STAC write above is "
-                    "unaffected, previous DCAT cache left untouched"
+                    "DCAT transform/write failed this cycle -- STAC is unaffected and "
+                    "the previous DCAT generation is still served"
                 )
     else:
         catalog = await harvest(connection)
 
         if STAC_TRANSFORMER:
-            t0 = time.monotonic()
-            stac_dict = await asyncio.to_thread(build_stac_catalog, catalog)
-            logger.info("STAC build stage: %.3fs", time.monotonic() - t0)
+            try:
+                t0 = time.monotonic()
+                stac_dict = await asyncio.to_thread(build_stac_catalog, catalog)
+                logger.info("STAC build stage: %.3fs", time.monotonic() - t0)
 
-            t0 = time.monotonic()
-            await asyncio.to_thread(write_stac_catalog, stac_dict)
-            logger.info("STAC write stage: %.3fs", time.monotonic() - t0)
+                t0 = time.monotonic()
+                await asyncio.to_thread(write_stac_catalog, stac_dict)
+                logger.info("STAC write stage: %.3fs", time.monotonic() - t0)
+            except Exception:
+                logger.exception(
+                    "STAC transform/write failed this cycle -- the previous STAC "
+                    "generation is still served, DCAT continues below"
+                )
 
         if dcat_ready:
             try:
@@ -238,6 +250,6 @@ async def _run_cycle(connection: asyncpg.Connection, config) -> None:
                 await asyncio.to_thread(write_dcat_catalog, dcat_dict)
             except Exception:
                 logger.exception(
-                    "DCAT transform/write failed this cycle -- STAC write above is "
-                    "unaffected, previous DCAT cache left untouched"
+                    "DCAT transform/write failed this cycle -- STAC is unaffected and "
+                    "the previous DCAT generation is still served"
                 )
