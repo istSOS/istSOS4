@@ -424,9 +424,13 @@ def _build_item_dict(
     Datetime rule (STAC 1.0 spec), all values normalised to UTC:
       - Closed interval (start + end both known):  datetime = null,
         start_datetime and end_datetime carry the interval.
-      - Open-ended / live stream (no end):         datetime = start, and
-        no start_datetime/end_datetime (the spec requires them as a pair,
-        and neither may be null).
+      - Open-ended / live stream (no end):         datetime = null,
+        start_datetime = start and end_datetime = the time this catalog is
+        built (the spec requires the pair and allows neither to be null; the
+        stream's data extend at least to now). "sta:ongoing": true marks the
+        Item so the Collection extent stays open-ended. A single instant at
+        the start would make a live stream invisible to any query for a
+        recent period.
       - No parseable phenomenon_time:              Item is skipped entirely.
 
     Links: all navigation links (self, root, parent, collection) plus the
@@ -453,7 +457,12 @@ def _build_item_dict(
             "end_datetime":   _utc_iso(end),
         }
     else:
-        time_props = {"datetime": _utc_iso(start)}
+        time_props = {
+            "datetime":       None,
+            "start_datetime": _utc_iso(start),
+            "end_datetime":   _utc_iso(datetime.now(timezone.utc)),
+            "sta:ongoing":    True,
+        }
 
     properties: dict = {
         **time_props,
@@ -650,10 +659,11 @@ def _build_collection_dict(
     # they are always ISO strings at this point (never asyncpg.Range).
     starts: list[datetime] = []
     ends: list[Optional[datetime]] = []
-    # Open-ended Items carry only "datetime" (see _build_item_dict).
+    # Open-ended Items are marked "sta:ongoing" (see _build_item_dict); their
+    # end_datetime is the build time, so they keep the Collection open-ended.
     for item in items:
         s = item["properties"].get("start_datetime") or item["properties"].get("datetime")
-        e = item["properties"].get("end_datetime")
+        e = None if item["properties"].get("sta:ongoing") else item["properties"].get("end_datetime")
         if s:
             dt = _parse_iso(s)
             if dt:

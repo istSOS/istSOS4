@@ -62,12 +62,16 @@ def _strip_tracking(collection: dict) -> dict:
     return {k: v for k, v in collection.items() if k not in ("items", "item_ids")}
 
 
-def test_open_ended_item_uses_datetime_only(thing):
+def test_open_ended_item_uses_interval_to_build_time(thing):
+    # A live stream is published as an interval from its start to the build
+    # time, so that queries for a recent period find it; "sta:ongoing" keeps
+    # the Collection extent open-ended.
     item = _build_item_dict(thing, thing.datastreams[0], "thing-1")
     props = item["properties"]
-    assert props["datetime"] == "2024-01-01T11:00:00Z"
-    assert "start_datetime" not in props
-    assert "end_datetime" not in props
+    assert props["datetime"] is None
+    assert props["start_datetime"] == "2024-01-01T11:00:00Z"
+    assert props["end_datetime"] >= props["start_datetime"]
+    assert props["sta:ongoing"] is True
 
 
 def test_closed_item_uses_utc_interval(thing):

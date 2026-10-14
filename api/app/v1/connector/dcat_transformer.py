@@ -417,11 +417,10 @@ def _build_dataset(
     """
     Add a dcat:Dataset node for one Datastream dict.
 
-    Returns None (with a WARNING logged) when there is no parseable
-    phenomenon_time -- same skip rule as a STAC Item without a datetime,
-    a Dataset with no dct:temporal is allowed by the spec but is useless
-    for a sensor-observation catalog, so it is dropped rather than emitted
-    as a dead-end node.
+    A Datastream with no parseable phenomenon_time (typically one with no
+    Observations yet) is still published, without dct:temporal: DCAT-AP does
+    not require a temporal extent, and the Dataset stays findable by space,
+    keyword and theme. (STAC has to skip it, since an Item needs a time.)
 
     On success, returns (dataset_uri, bbox, start, end) so the caller can
     fold this Dataset's spatial/temporal footprint into its DatasetSeries'
@@ -430,12 +429,11 @@ def _build_dataset(
     ds_id = ds.get("id")
     start, end = _parse_phenomenon_time(ds.get("phenomenon_time"))
     if start is None:
-        logger.warning(
-            "Skipping Datastream %s in Thing %s: no usable phenomenon_time -- "
-            "a Dataset without dct:temporal provides no value in this catalog",
+        logger.info(
+            "Datastream %s in Thing %s has no usable phenomenon_time -- "
+            "published without dct:temporal",
             ds_id, thing.id,
         )
-        return None
 
     dataset_uri = _dataset_uri(ds_id)
     lang = settings.DCAT_LANGUAGE
@@ -501,7 +499,6 @@ def _build_dataset(
     g.add((dataset_uri, DCAT.inSeries, series_uri))
     g.add((dataset_uri, DCT.isPartOf, series_uri))
     ds_href = URIRef(_datastream_href(ds_id))
-    g.add((dataset_uri, OWL.sameAs, ds_href))
     g.add((dataset_uri, DCAT.landingPage, ds_href))
     # dcat:landingPage must point at a foaf:Document.
     g.add((ds_href, RDF.type, FOAF.Document))
@@ -598,7 +595,6 @@ def _build_dataset_series(
         _add_temporal(g, series_uri, min(starts), series_end)
 
     g.add((series_uri, DCT.isPartOf, catalog_uri))
-    g.add((series_uri, OWL.sameAs, URIRef(_thing_href(thing.id))))
     g.add((series_uri, FOAF.homepage, URIRef(_thing_href(thing.id))))
 
     if publisher_node:

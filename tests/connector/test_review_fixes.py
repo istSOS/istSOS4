@@ -60,9 +60,13 @@ def _catalog():
             # no description: the DatasetSeries must still get dct:description
             HarvestedThing(id=1, name="Station A", description=None, properties=None,
                            locations=[], datastreams=[_datastream(1), _datastream(2)]),
-            # every Datastream skipped (no phenomenonTime): no DatasetSeries at all
+            # a Datastream with no phenomenonTime (no Observations yet): published
+            # in DCAT-AP without dct:temporal (STAC has to skip it)
             HarvestedThing(id=2, name="Station B", description="b", properties=None,
                            locations=[], datastreams=[_datastream(3, phenomenon_time=False)]),
+            # no Datastreams at all: no DatasetSeries
+            HarvestedThing(id=3, name="Station C", description="c", properties=None,
+                           locations=[], datastreams=[]),
         ],
         harvested_at="2026-10-13T00:00:00Z",
     )
@@ -90,9 +94,16 @@ def test_theme_concepts_have_preflabel(dcat_graph):
 
 
 def test_series_without_thing_description_still_has_description(dcat_graph):
-    series = list(dcat_graph.subjects(RDF.type, DCAT.DatasetSeries))
-    assert len(series) == 1, "only Station A has a member Dataset, so only it gets a series"
-    assert (series[0], DCT.description, None) in dcat_graph
+    series = set(dcat_graph.subjects(RDF.type, DCAT.DatasetSeries))
+    assert len(series) == 2, "Stations A and B have Datasets; C has none and gets no series"
+    for s in series:
+        assert (s, DCT.description, None) in dcat_graph
+
+
+def test_dataset_without_phenomenon_time_is_published_without_temporal(dcat_graph):
+    datasets = [d for d in dcat_graph.subjects(RDF.type, DCAT.Dataset) if str(d).endswith("datastream-3")]
+    assert datasets, "a Datastream with no phenomenonTime must still be published in DCAT-AP"
+    assert (datasets[0], DCT.temporal, None) not in dcat_graph
 
 
 def test_no_empty_dataset_series(dcat_graph):
