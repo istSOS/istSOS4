@@ -402,7 +402,9 @@ class Settings(BaseSettings):
             "locn:Geometry node carrying geosparql:asGeoJSON, as the DCAT-AP 3.0.x SHACL shapes require. "
             "'literal': locn:geometry is a GeoJSON literal, the GeoDCAT-AP practice that ckanext-dcat "
             "(2.4.x) reads; that harvester fails on the node form, and the literal form violates one "
-            "DCAT-AP range shape. Choose by the consumers the catalog is published for."
+            "DCAT-AP range shape. 'bbox': no locn:geometry; dcat:bbox and dcat:centroid WKT literals, "
+            "which conform to the shapes and which ckanext-dcat reads (as spatial_bbox / spatial_centroid), "
+            "at the cost of the exact geometry. Choose by the consumers the catalog is published for."
         ),
     )
 
@@ -410,8 +412,8 @@ class Settings(BaseSettings):
     @classmethod
     def _validate_geometry_encoding(cls, v: str) -> str:
         v = (v or "node").strip().lower()
-        if v not in ("node", "literal"):
-            raise ValueError("DCAT_GEOMETRY_ENCODING must be 'node' or 'literal'")
+        if v not in ("node", "literal", "bbox"):
+            raise ValueError("DCAT_GEOMETRY_ENCODING must be 'node', 'literal' or 'bbox'")
         return v
 
     # DCAT-AP publisher agent

@@ -178,10 +178,24 @@ def _add_spatial(g: Graph, subject: Union[URIRef, BNode], geometry: Optional[dic
     g.add((subject, DCT.spatial, loc_node))
     g.add((loc_node, RDF.type, DCT.Location))
 
-    if get_settings().DCAT_GEOMETRY_ENCODING == "literal":
+    encoding = get_settings().DCAT_GEOMETRY_ENCODING
+    if encoding == "literal":
         # GeoDCAT-AP practice, read by ckanext-dcat; see DCAT_GEOMETRY_ENCODING in config.py.
         g.add((loc_node, LOCN.geometry,
                Literal(json.dumps(geometry), datatype=URIRef(_GEOJSON_MEDIA_TYPE))))
+        return
+    if encoding == "bbox":
+        # dcat:bbox and dcat:centroid are literals in DCAT-AP 3.0, and ckanext-dcat reads both;
+        # no locn:geometry, so the output conforms and stays harvestable by CKAN.
+        bbox = _bbox_from_geometry(geometry)
+        if bbox is None:
+            return
+        minx, miny, maxx, maxy = bbox
+        g.add((loc_node, DCAT.bbox, Literal(
+            f"POLYGON(({minx} {miny}, {maxx} {miny}, {maxx} {maxy}, {minx} {maxy}, {minx} {miny}))",
+            datatype=GEOSPARQL.wktLiteral)))
+        g.add((loc_node, DCAT.centroid, Literal(
+            f"POINT({(minx + maxx) / 2} {(miny + maxy) / 2})", datatype=GEOSPARQL.wktLiteral)))
         return
 
     geom_node = BNode()

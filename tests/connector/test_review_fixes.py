@@ -275,7 +275,7 @@ def test_stac_failure_does_not_block_dcat(monkeypatch):
 # ---------------------------------------------------------------- geometry encoding
 
 
-@pytest.mark.parametrize("encoding", ["node", "literal"])
+@pytest.mark.parametrize("encoding", ["node", "literal", "bbox"])
 def test_geometry_encoding_setting(monkeypatch, encoding):
     # The DCAT-AP 3.0.x shapes require locn:geometry to point at a locn:Geometry node; ckanext-dcat
     # (2.4.x) reads only a literal and fails on the node. DCAT_GEOMETRY_ENCODING chooses between them.
@@ -291,6 +291,14 @@ def test_geometry_encoding_setting(monkeypatch, encoding):
     finally:
         get_settings.cache_clear()
     values = list(g.objects(None, LOCN.geometry))
+    if encoding == "bbox":
+        DCAT = Namespace("http://www.w3.org/ns/dcat#")
+        assert not values
+        bboxes, centroids = list(g.objects(None, DCAT.bbox)), list(g.objects(None, DCAT.centroid))
+        assert bboxes and len(bboxes) == len(centroids)
+        assert all(str(b).startswith("POLYGON((") for b in bboxes)
+        assert all(str(c).startswith("POINT(") for c in centroids)
+        return
     assert values
     if encoding == "literal":
         assert all(isinstance(v, RdfLiteral) and v.datatype is not None for v in values)
