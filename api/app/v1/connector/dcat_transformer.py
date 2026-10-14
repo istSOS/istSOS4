@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime
 from typing import Optional, Union
 
@@ -227,6 +228,32 @@ def _add_temporal(
 
 
 # Keyword / description helpers
+
+# CKAN's tag rule: letters, digits, spaces, "-", "_" and "."; 2 to 100 characters.
+_CKAN_TAG_DISALLOWED = re.compile(r"[^\w \-.]+")
+_CKAN_TAG_MAX = 100
+
+
+def _ckan_tag(keyword: str) -> Optional[str]:
+    """Rewrite a free-text keyword into a tag CKAN accepts, or None if nothing usable is left."""
+    tag = " ".join(_CKAN_TAG_DISALLOWED.sub(" ", keyword).split())
+    if len(tag) > _CKAN_TAG_MAX:
+        cut = tag[:_CKAN_TAG_MAX]
+        tag = cut.rsplit(" ", 1)[0] if " " in cut else cut
+    return tag if len(tag) >= 2 else None
+
+
+def _keywords_for_output(keywords: list[str]) -> list[str]:
+    """Apply DCAT_KEYWORD_NORMALIZATION to a keyword list, keeping order and dropping duplicates."""
+    if get_settings().DCAT_KEYWORD_NORMALIZATION != "ckan":
+        return keywords
+    out: list[str] = []
+    for kw in keywords:
+        tag = _ckan_tag(kw)
+        if tag and tag not in out:
+            out.append(tag)
+    return out
+
 
 def _extract_keywords(ds: dict, thing: HarvestedThing) -> list[str]:
     """
@@ -468,7 +495,7 @@ def _build_dataset(
     g.add((dataset_uri, DCT.title, Literal(title, lang=lang)))
     g.add((dataset_uri, DCT.description, Literal(_compose_dataset_description(ds, thing), lang=lang)))
 
-    for kw in _extract_keywords(ds, thing):
+    for kw in _keywords_for_output(_extract_keywords(ds, thing)):
         g.add((dataset_uri, DCAT.keyword, Literal(kw, lang=lang)))
 
     op = ds.get("observed_property")
@@ -596,7 +623,7 @@ def _build_dataset_series(
     )
     g.add((series_uri, DCT.description, Literal(description, lang=lang)))
 
-    for kw in _extract_series_keywords(thing, scoped_datastreams):
+    for kw in _keywords_for_output(_extract_series_keywords(thing, scoped_datastreams)):
         g.add((series_uri, DCAT.keyword, Literal(kw, lang=lang)))
 
     for dataset_uri, _bbox, _start, _end in dataset_records:

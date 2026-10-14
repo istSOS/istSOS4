@@ -416,6 +416,24 @@ class Settings(BaseSettings):
             raise ValueError("DCAT_GEOMETRY_ENCODING must be 'node', 'literal' or 'bbox'")
         return v
 
+    # DCAT-AP keyword normalisation
+    DCAT_KEYWORD_NORMALIZATION: str = Field(
+        default="none",
+        description=(
+            "'none' (default): dcat:keyword values are written as they are, free text as DCAT-AP allows. "
+            "'ckan': keywords are rewritten to CKAN's tag rule (letters, digits, spaces, '-', '_', '.'; "
+            "2 to 100 characters), since CKAN rejects a whole record with one invalid tag."
+        ),
+    )
+
+    @field_validator("DCAT_KEYWORD_NORMALIZATION")
+    @classmethod
+    def _validate_keyword_normalization(cls, v: str) -> str:
+        v = (v or "none").strip().lower()
+        if v not in ("none", "ckan"):
+            raise ValueError("DCAT_KEYWORD_NORMALIZATION must be 'none' or 'ckan'")
+        return v
+
     # DCAT-AP publisher agent
     DCAT_PUBLISHER_NAME: Optional[str] = Field(
         default=None,

@@ -304,3 +304,25 @@ def test_geometry_encoding_setting(monkeypatch, encoding):
         assert all(isinstance(v, RdfLiteral) and v.datatype is not None for v in values)
     else:
         assert not any(isinstance(v, RdfLiteral) for v in values)
+
+
+# ---------------------------------------------------------------- keyword normalisation
+
+
+def test_ckan_keyword_normalization(monkeypatch):
+    # CKAN rejects a whole record when one tag has characters outside [\w \-.] or exceeds 100 characters.
+    from app.v1.connector.config import get_settings
+    assert dcat_transformer._ckan_tag("GWM Schule (Thiene)") == "GWM Schule Thiene"
+    assert dcat_transformer._ckan_tag("PM2.5") == "PM2.5"
+    assert dcat_transformer._ckan_tag("(") is None
+    long_tag = dcat_transformer._ckan_tag("Verkehrszählung " + "Standort " * 20)
+    assert long_tag and len(long_tag) <= 100 and not long_tag.endswith(" ")
+    monkeypatch.setenv("DCAT_KEYWORD_NORMALIZATION", "ckan")
+    get_settings.cache_clear()
+    try:
+        assert dcat_transformer._keywords_for_output(["a (b)", "a b", "x"]) == ["a b"]
+        monkeypatch.setenv("DCAT_KEYWORD_NORMALIZATION", "none")
+        get_settings.cache_clear()
+        assert dcat_transformer._keywords_for_output(["a (b)"]) == ["a (b)"]
+    finally:
+        get_settings.cache_clear()

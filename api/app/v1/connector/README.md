@@ -183,6 +183,7 @@ Everything below lives in `config.py`, either as a `Settings` (pydantic) field o
 | `DCAT_PUBLISHER_HOMEPAGE` | *(unset)* | `foaf:homepage` of the publisher Agent. |
 | `DCAT_PUBLISHER_MBOX` | *(unset)* | Publisher contact email. `mailto:` is prepended automatically if missing. |
 | `DCAT_GEOMETRY_ENCODING` | `node` | How `dct:spatial` geometries are written. `node`: `locn:geometry` points at a `locn:Geometry` node, as the DCAT-AP 3.0 shapes require. `bbox`: `dcat:bbox` and `dcat:centroid` WKT literals, which conform and which CKAN (ckanext-dcat) harvests. `literal`: `locn:geometry` as a GeoJSON literal, harvestable by CKAN but violating one DCAT-AP shape. |
+| `DCAT_KEYWORD_NORMALIZATION` | `none` | `none`: keywords are written as free text. `ckan`: keywords are rewritten to CKAN's tag rule (letters, digits, spaces, `-`, `_`, `.`; 2 to 100 characters), because CKAN rejects a record with one invalid tag. Use it with `DCAT_GEOMETRY_ENCODING=bbox` when CKAN harvests the catalog. |
 
 If `DCAT_TRANSFORMER=1` but `DCAT_CATALOG_TITLE`, `DCAT_CATALOG_DESCRIPTION`, or `DCAT_PUBLISHER_NAME` is left unset, the scheduler logs a warning naming the missing fields and skips the DCAT write on every cycle -- a DCAT-AP graph missing mandatory fields is worse than none, so the connector will not cache or serve one. `/connector` reports this as `dcat.configured: false`.
 
