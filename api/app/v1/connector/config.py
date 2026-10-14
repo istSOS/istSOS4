@@ -394,6 +394,26 @@ class Settings(BaseSettings):
         description="Fallback dct:accessRights URI (e.g. an MDR-AccessRights value like PUBLIC) for Datastreams with no accessRights of their own.",
     )
 
+    # DCAT-AP geometry encoding
+    DCAT_GEOMETRY_ENCODING: str = Field(
+        default="node",
+        description=(
+            "How dct:spatial geometries are written. 'node' (default): locn:geometry points at a "
+            "locn:Geometry node carrying geosparql:asGeoJSON, as the DCAT-AP 3.0.x SHACL shapes require. "
+            "'literal': locn:geometry is a GeoJSON literal, the GeoDCAT-AP practice that ckanext-dcat "
+            "(2.4.x) reads; that harvester fails on the node form, and the literal form violates one "
+            "DCAT-AP range shape. Choose by the consumers the catalog is published for."
+        ),
+    )
+
+    @field_validator("DCAT_GEOMETRY_ENCODING")
+    @classmethod
+    def _validate_geometry_encoding(cls, v: str) -> str:
+        v = (v or "node").strip().lower()
+        if v not in ("node", "literal"):
+            raise ValueError("DCAT_GEOMETRY_ENCODING must be 'node' or 'literal'")
+        return v
+
     # DCAT-AP publisher agent
     DCAT_PUBLISHER_NAME: Optional[str] = Field(
         default=None,

@@ -270,3 +270,29 @@ def test_stac_failure_does_not_block_dcat(monkeypatch):
     config = type("Cfg", (), {"has_mandatory_dcat_fields": True})()
     asyncio.run(scheduler._run_cycle(object(), config))
     assert calls == ["dcat-build", "dcat-write"]
+
+
+# ---------------------------------------------------------------- geometry encoding
+
+
+@pytest.mark.parametrize("encoding", ["node", "literal"])
+def test_geometry_encoding_setting(monkeypatch, encoding):
+    # The DCAT-AP 3.0.x shapes require locn:geometry to point at a locn:Geometry node; ckanext-dcat
+    # (2.4.x) reads only a literal and fails on the node. DCAT_GEOMETRY_ENCODING chooses between them.
+    from rdflib import Literal as RdfLiteral
+    from app.v1.connector.config import get_settings
+    LOCN = Namespace("http://www.w3.org/ns/locn#")
+    for k, v in {"DCAT_CATALOG_TITLE": "T", "DCAT_CATALOG_DESCRIPTION": "D", "DCAT_PUBLISHER_NAME": "P",
+                 "DCAT_GEOMETRY_ENCODING": encoding}.items():
+        monkeypatch.setenv(k, v)
+    get_settings.cache_clear()
+    try:
+        g = dcat_transformer.build_dcat_catalog(_catalog())["root"]
+    finally:
+        get_settings.cache_clear()
+    values = list(g.objects(None, LOCN.geometry))
+    assert values
+    if encoding == "literal":
+        assert all(isinstance(v, RdfLiteral) and v.datatype is not None for v in values)
+    else:
+        assert not any(isinstance(v, RdfLiteral) for v in values)

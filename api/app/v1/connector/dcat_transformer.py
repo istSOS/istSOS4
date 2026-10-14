@@ -96,6 +96,9 @@ VCARD = Namespace("http://www.w3.org/2006/vcard/ns#")
 # Catalog node (root and each Network sub-catalog).
 _DCAT_AP_PROFILE_URI = URIRef("https://semiceu.github.io/DCAT-AP/releases/3.0.0/")
 
+# Datatype ckanext-dcat expects on a GeoJSON locn:geometry literal (DCAT_GEOMETRY_ENCODING=literal).
+_GEOJSON_MEDIA_TYPE = "https://www.iana.org/assignments/media-types/application/vnd.geo+json"
+
 # Same OGC SensorThings conformance URI stac_transformer.py's DataService
 # equivalent would use -- asserted on the root DataService node only.
 _STA_CONFORMANCE_URI = URIRef("http://www.opengis.net/spec/iot_sensing/1.1/req/datamodel")
@@ -174,6 +177,12 @@ def _add_spatial(g: Graph, subject: Union[URIRef, BNode], geometry: Optional[dic
     loc_node = BNode()
     g.add((subject, DCT.spatial, loc_node))
     g.add((loc_node, RDF.type, DCT.Location))
+
+    if get_settings().DCAT_GEOMETRY_ENCODING == "literal":
+        # GeoDCAT-AP practice, read by ckanext-dcat; see DCAT_GEOMETRY_ENCODING in config.py.
+        g.add((loc_node, LOCN.geometry,
+               Literal(json.dumps(geometry), datatype=URIRef(_GEOJSON_MEDIA_TYPE))))
+        return
 
     geom_node = BNode()
     g.add((loc_node, LOCN.geometry, geom_node))
