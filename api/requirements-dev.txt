@@ -1,0 +1,9 @@
+# Everything needed to run the tests in tests/.
+# Install from the repo root:  pip install -r api/requirements-dev.txt
+-r requirements.txt
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx==0.28.1
+requests==2.34.2
+pyshacl==0.31.0
+pystac[validation]==1.15.2
