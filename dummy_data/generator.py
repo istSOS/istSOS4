@@ -35,6 +35,7 @@ pg_port = os.getenv("POSTGRES_PORT", "5432")
 pg_write_port = os.getenv("POSTGRES_PORT_WRITE")
 create_dummy_data = int(os.getenv("DUMMY_DATA", 1))
 delete_dummy_data = int(os.getenv("CLEAR_DATA", 0))
+resume_data = int(os.getenv("RESUME", "0"))
 n_things = int(os.getenv("N_THINGS", 10))
 n_observed_properties = int(os.getenv("N_OBSERVED_PROPERTIES", 2))
 interval = isodate.parse_duration(os.getenv("INTERVAL", "P1Y"))
@@ -518,6 +519,8 @@ def observations_per_stream():
 
 
 def validate_config():
+    if resume_data and delete_dummy_data:
+        raise ValueError("RESUME=1 cannot be combined with CLEAR_DATA=1")
     if n_things <= 0 or n_observed_properties <= 0 or batch_size <= 0:
         raise ValueError("N_THINGS, N_OBSERVED_PROPERTIES and BATCH_SIZE must be positive")
     if date.tzinfo is None or date.utcoffset() is None:
@@ -528,6 +531,160 @@ def validate_config():
         raise ValueError("ST_AGGREGATE must be CONVEX_HULL or ENVELOPE")
     if log_interval < 0:
         raise ValueError("LOG_INTERVAL_SECONDS must be nonnegative")
+
+
+async def existing_ids(conn, table, names, pattern):
+    """Match the entire generated entity family, rejecting ambiguous/changed profiles."""
+    rows = await conn.fetch(
+        f'SELECT id, name FROM sensorthings."{table}" WHERE name ~ $1', pattern
+    )
+    by_name = {row["name"]: row["id"] for row in rows}
+    if len(by_name) != len(rows) or set(by_name) != set(names):
+        raise ValueError(
+            f"Cannot resume: {table} names/counts differ from the configured dataset "
+            "or contain duplicates; keep the original dataset settings"
+        )
+    return [by_name[name] for name in names]
+
+
+async def resume_metadata(conn):
+    """Resolve old or new loader metadata by names and check its relationships."""
+    thing_ids = await existing_ids(
+        conn, "Thing", [f"thing_name_{i}" for i in range(1, n_things + 1)], r"^thing_name_[0-9]+$"
+    )
+    location_ids = await existing_ids(
+        conn, "Location", [f"location_name_{i}" for i in range(1, n_things + 1)], r"^location_name_[0-9]+$"
+    )
+    feature_ids = await existing_ids(
+        conn, "FeaturesOfInterest", [f"featuresofinterest_name_{i}" for i in range(1, n_things + 1)],
+        r"^featuresofinterest_name_[0-9]+$",
+    )
+    keys = list(mapping_op)
+    property_ids = await existing_ids(
+        conn, "ObservedProperty", [f"{keys[i % len(keys)]}_{i + 1}" for i in range(n_observed_properties)],
+        r"^meteo:air:(rainfall|temperature|humidity)_[0-9]+$",
+    )
+    count = n_things * n_observed_properties
+    sensor_ids = await existing_ids(
+        conn, "Sensor", [f"sensor_name_{i}" for i in range(1, count + 1)], r"^sensor_name_[0-9]+$"
+    )
+    names = [
+        f"{mapping_op[keys[(i % n_observed_properties) % len(keys)]][0]}_datastream_{i + 1}"
+        for i in range(count)
+    ]
+    stream_ids = await existing_ids(conn, "Datastream", names, r"^[PTH]_datastream_[0-9]+$")
+    streams = await conn.fetch(
+        'SELECT id, thing_id, sensor_id, observedproperty_id FROM sensorthings."Datastream" WHERE id = ANY($1::bigint[])',
+        stream_ids,
+    )
+    by_id = {row["id"]: row for row in streams}
+    for i, stream_id in enumerate(stream_ids):
+        row = by_id[stream_id]
+        if (row["thing_id"], row["sensor_id"], row["observedproperty_id"]) != (
+            thing_ids[i // n_observed_properties], sensor_ids[i], property_ids[i % n_observed_properties]
+        ):
+            raise ValueError(f"Cannot resume: inconsistent relationships for Datastream {stream_id}")
+
+    # Historical locations also record the original start/frequency, even on an empty load.
+    links = await conn.fetch('''
+        SELECT t.thing_id, t.location_id, h.time, lh.location_id AS historical_location_id
+        FROM sensorthings."Thing_Location" t
+        JOIN sensorthings."HistoricalLocation" h ON h.thing_id = t.thing_id
+        LEFT JOIN sensorthings."Location_HistoricalLocation" lh ON lh.historicallocation_id = h.id
+        WHERE t.thing_id = ANY($1::bigint[])
+    ''', thing_ids)
+    by_thing = {row["thing_id"]: row for row in links}
+    if len(links) != n_things or len(by_thing) != n_things:
+        raise ValueError("Cannot resume: incomplete or ambiguous Location/HistoricalLocation relationships")
+    timestamp = date
+    for thing_id, location_id in zip(thing_ids, location_ids):
+        timestamp += frequency
+        row = by_thing[thing_id]
+        if (row["location_id"], row["historical_location_id"], row["time"]) != (location_id, location_id, timestamp):
+            raise ValueError("Cannot resume: Location links or START_DATETIME/FREQUENCY differ from the original load")
+    return stream_ids, feature_ids
+
+
+async def inspect_resume(conn, stream_ids, feature_ids):
+    """Validate exact contiguous prefixes; count/deduplicate in PostgreSQL, not Python."""
+    planned = observations_per_stream()
+    calendar_times = []
+    if isinstance(frequency, timedelta):
+        last_sample = date + frequency * planned
+        schedule_check = 'mod(extract(epoch FROM ("phenomenonTimeStart" - $2)) * 1000000, $5::numeric) = 0'
+        schedule_arg = frequency // timedelta(microseconds=1)
+    else:
+        timestamp = date
+        for _ in range(planned):
+            timestamp += frequency
+            calendar_times.append(timestamp)
+        last_sample = calendar_times[-1]
+        schedule_check = '"phenomenonTimeStart" = ANY($5::timestamptz[])'
+        schedule_arg = calendar_times
+
+    states = {}
+    total = 0
+    last_log = perf_counter()
+    LOG.info("RESUME: checking stored observations in %s Datastreams; stop the old loader first", len(stream_ids))
+    for index, stream_id in enumerate(stream_ids, 1):
+        row = await conn.fetchrow(f'''
+            SELECT count(*) AS rows, count(DISTINCT "phenomenonTimeStart") AS timestamps,
+                   min("phenomenonTimeStart") AS first, max("phenomenonTimeStart") AS last,
+                   array_agg(DISTINCT featuresofinterest_id) AS features,
+                   bool_and(COALESCE(
+                       "phenomenonTimeStart" > $2 AND "phenomenonTimeStart" <= $3
+                       AND {schedule_check}
+                       AND "phenomenonTimeEnd" = "phenomenonTimeStart"
+                       AND "resultTime" = "phenomenonTimeStart" AND "resultType" = 0
+                       AND featuresofinterest_id = ANY($4::bigint[]), false)) AS valid
+            FROM sensorthings."Observation" WHERE datastream_id = $1
+        ''', stream_id, date, last_sample, feature_ids, schedule_arg)
+        count = row["rows"]
+        expected_last = date
+        if count and count <= planned:
+            expected_last = date + frequency * count if not calendar_times else calendar_times[count - 1]
+        if count and (
+            count > planned or row["timestamps"] != count or not row["valid"]
+            or row["first"] != date + frequency or row["last"] != expected_last
+        ):
+            raise ValueError(
+                f"Cannot resume Datastream {stream_id}: observations have gaps, duplicates, "
+                "or do not match START_DATETIME/INTERVAL/FREQUENCY; no observations were added"
+            )
+        states[stream_id] = dict(rows=count, last=expected_last, feature_ids=set(row["features"] or []))
+        total += count
+        now = perf_counter()
+        if now - last_log >= log_interval or index == len(stream_ids):
+            LOG.info("RESUME checked %s/%s Datastreams: %s observations already stored",
+                     index, len(stream_ids), f"{total:,}")
+            last_log = now
+    LOG.info("RESUME: %s/%s observations already stored (%.1f%%); %s remaining",
+             f"{total:,}", f"{planned * len(stream_ids):,}",
+             100 * total / (planned * len(stream_ids)), f"{planned * len(stream_ids) - total:,}")
+    return states
+
+
+async def repair_resume_fields(conn, states):
+    """Old loaders may commit observations before updating the cached Datastream fields."""
+    for stream_id, state in states.items():
+        if not state["rows"]:
+            await conn.execute('''
+                UPDATE sensorthings."Datastream"
+                SET "phenomenonTime" = NULL, "resultTime" = NULL, "observedArea" = NULL, last_foi_id = NULL
+                WHERE id = $1
+            ''', stream_id)
+            continue
+        last_foi = await conn.fetchval('''
+            SELECT featuresofinterest_id FROM sensorthings."Observation"
+            WHERE datastream_id = $1 ORDER BY "phenomenonTimeStart" DESC, id DESC LIMIT 1
+        ''', stream_id)
+        await conn.execute('''
+            UPDATE sensorthings."Datastream"
+            SET "phenomenonTime" = tstzrange($1::timestamptz, $2::timestamptz, '[]'),
+                "resultTime" = tstzrange($1::timestamptz, $2::timestamptz, '[]'), last_foi_id = $3
+            WHERE id = $4
+        ''', date + frequency, state["last"], last_foi, stream_id)
+        await update_datastream_observed_area(conn, stream_id, state["feature_ids"])
 
 
 async def insert_observations(conn, observations, commit_id):
@@ -578,23 +735,31 @@ async def update_datastream_observed_area(conn, datastream_id, feature_ids):
     )
 
 
-async def generate_observations(conn, commit_id, datastream_ids, feature_ids):
+async def generate_observations(conn, commit_id, datastream_ids, feature_ids, resume_states=None):
     """COPY bounded batches, committing their derived fields atomically."""
     started = perf_counter()
     stats = dict(rows=0, batches=0, generation_seconds=0.0, copy_seconds=0.0,
                  derived_seconds=0.0, transaction_seconds=0.0)
+    resume_states = resume_states or {}
+    stats["existing_rows"] = sum(state["rows"] for state in resume_states.values())
+    stats["streams_skipped"] = 0
     planned = observations_per_stream() * len(datastream_ids)
+    stats["planned_rows"] = planned
     end = date + interval
     last_log = started
-    LOG.info("Loading %s observations in %s Datastreams; BATCH_SIZE=%s",
-             f"{planned:,}", len(datastream_ids), batch_size)
+    LOG.info("Loading %s remaining observations in %s Datastreams; BATCH_SIZE=%s",
+             f'{planned - stats["existing_rows"]:,}', len(datastream_ids), batch_size)
 
     for datastream_id in datastream_ids:
         observations = []
-        used_features = set()
-        persisted_features = set()
-        timestamp = date
-        chunk_start = date
+        state = resume_states.get(datastream_id, {})
+        used_features = set(state.get("feature_ids", ()))
+        persisted_features = used_features.copy()
+        timestamp = state.get("last", date)
+        if timestamp >= end:
+            stats["streams_skipped"] += 1
+            continue
+        chunk_start = timestamp
         generation_started = perf_counter()
         while timestamp < end:
             timestamp += frequency
@@ -627,9 +792,10 @@ async def generate_observations(conn, commit_id, datastream_ids, feature_ids):
             stats["batches"] += 1
             persisted_features = used_features.copy()
             now = perf_counter()
-            if now - last_log >= log_interval or stats["rows"] == planned:
+            committed = stats["existing_rows"] + stats["rows"]
+            if now - last_log >= log_interval or committed == planned:
                 LOG.info("Committed %s/%s observations (%.1f%%), %.0f rows/s, Datastream %s",
-                         f'{stats["rows"]:,}', f"{planned:,}", 100 * stats["rows"] / planned,
+                         f"{committed:,}", f"{planned:,}", 100 * committed / planned,
                          stats["rows"] / (now - started), datastream_id)
                 last_log = now
             observations = []
@@ -637,6 +803,7 @@ async def generate_observations(conn, commit_id, datastream_ids, feature_ids):
             generation_started = perf_counter()
 
     stats["seconds"] = perf_counter() - started
+    stats["total_rows"] = stats["existing_rows"] + stats["rows"]
     LOG.info("Observation timings: generation=%.3fs COPY=%.3fs derived=%.3fs transaction=%.3fs",
              stats["generation_seconds"], stats["copy_seconds"],
              stats["derived_seconds"], stats["transaction_seconds"])
@@ -658,13 +825,9 @@ async def create_data():
             if not await conn.fetchval("SELECT pg_try_advisory_lock(hashtext('istsos4_dummy_data'))"):
                 raise RuntimeError("Another dummy-data loader is running")
             try:
+                resume_states = None
+                resume_check_seconds = 0.0
                 async with conn.transaction():
-                    exists = await conn.fetchval(
-                        'SELECT EXISTS(SELECT 1 FROM sensorthings."Thing" WHERE name = ANY($1::text[]))',
-                        [f"thing_name_{i}" for i in range(1, n_things + 1)],
-                    )
-                    if exists:
-                        raise ValueError("Dummy Things already exist; use a fresh database or explicitly CLEAR_DATA=1")
                     user_id, user_uri = None, "anonymous"
                     if authorization:
                         user = await get_user(conn)
@@ -672,30 +835,54 @@ async def create_data():
                             raise ValueError("ISTSOS_ADMIN has no User record")
                         user_id, user_uri = user["id"], user["uri"]
                     commit_id = None
-                    if versioning or authorization:
-                        commit_id = await generate_commit(conn, user_id, user_uri)
-                    network_ids = await generate_networks(conn, commit_id) if network else []
-                    thing_ids = await generate_things(conn, commit_id)
-                    location_ids = await generate_locations(conn, commit_id)
-                    await generate_things_locations(conn, thing_ids, location_ids)
-                    historical_ids = await generate_historicallocations(conn, commit_id, thing_ids)
-                    await generate_locations_historicallocations(conn, location_ids, historical_ids)
-                    property_ids = await generate_observedProperties(conn, commit_id)
-                    sensor_ids = await generate_sensors(conn, commit_id)
-                    stream_ids = await generate_datastreams(
-                        conn, commit_id, network_ids, thing_ids, sensor_ids, property_ids
-                    )
-                    feature_ids = await generate_featuresofinterest(conn, commit_id)
+                    if resume_data:
+                        check_started = perf_counter()
+                        try:
+                            await conn.execute('LOCK TABLE sensorthings."Observation" IN SHARE ROW EXCLUSIVE MODE NOWAIT')
+                        except asyncpg.LockNotAvailableError as exc:
+                            raise RuntimeError("Cannot resume while Observation is being written; stop the previous loader and other writers") from exc
+                        stream_ids, feature_ids = await resume_metadata(conn)
+                        resume_states = await inspect_resume(conn, stream_ids, feature_ids)
+                        # Validate every stream before modifying even the cached fields.
+                        await repair_resume_fields(conn, resume_states)
+                        remaining = observations_per_stream() * len(stream_ids) - sum(
+                            state["rows"] for state in resume_states.values()
+                        )
+                        if remaining and (versioning or authorization):
+                            commit_id = await generate_commit(conn, user_id, user_uri)
+                        resume_check_seconds = perf_counter() - check_started
+                    else:
+                        exists = await conn.fetchval(
+                            'SELECT EXISTS(SELECT 1 FROM sensorthings."Thing" WHERE name = ANY($1::text[]))',
+                            [f"thing_name_{i}" for i in range(1, n_things + 1)],
+                        )
+                        if exists:
+                            raise ValueError("Dummy Things already exist; use RESUME=1, a fresh database or explicitly CLEAR_DATA=1")
+                        if versioning or authorization:
+                            commit_id = await generate_commit(conn, user_id, user_uri)
+                        network_ids = await generate_networks(conn, commit_id) if network else []
+                        thing_ids = await generate_things(conn, commit_id)
+                        location_ids = await generate_locations(conn, commit_id)
+                        await generate_things_locations(conn, thing_ids, location_ids)
+                        historical_ids = await generate_historicallocations(conn, commit_id, thing_ids)
+                        await generate_locations_historicallocations(conn, location_ids, historical_ids)
+                        property_ids = await generate_observedProperties(conn, commit_id)
+                        sensor_ids = await generate_sensors(conn, commit_id)
+                        stream_ids = await generate_datastreams(
+                            conn, commit_id, network_ids, thing_ids, sensor_ids, property_ids
+                        )
+                        feature_ids = await generate_featuresofinterest(conn, commit_id)
                 metadata_seconds = perf_counter() - started
                 LOG.info("Metadata committed in %.3fs", metadata_seconds)
-                stats = await generate_observations(conn, commit_id, stream_ids, feature_ids)
+                stats = await generate_observations(conn, commit_id, stream_ids, feature_ids, resume_states)
+                stats["resume_check_seconds"] = resume_check_seconds
                 analyze_started = perf_counter()
                 await conn.execute('ANALYZE sensorthings."Observation"; ANALYZE sensorthings."Datastream"')
                 stats["analyze_seconds"] = perf_counter() - analyze_started
                 stats["metadata_seconds"] = metadata_seconds
                 stats["total_seconds"] = perf_counter() - started
-                LOG.info("Finished: %s observations in %.3fs (%.0f rows/s)",
-                         f'{stats["rows"]:,}', stats["total_seconds"],
+                LOG.info("Finished: %s new observations, %s total, in %.3fs (%.0f new rows/s)",
+                         f'{stats["rows"]:,}', f'{stats["total_rows"]:,}', stats["total_seconds"],
                          stats["rows"] / stats["total_seconds"])
                 LOG.info("STATS %s", json.dumps(stats, sort_keys=True))
                 return stats
@@ -707,6 +894,8 @@ async def create_data():
 
 async def delete_data():
     """Explicitly clear core data transactionally, preserving the configured User."""
+    if resume_data:
+        raise ValueError("RESUME=1 cannot be combined with CLEAR_DATA=1")
     pool = await get_pool()
     try:
         async with pool.acquire() as conn:

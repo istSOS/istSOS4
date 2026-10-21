@@ -61,11 +61,55 @@ remain the same: the first sample follows `START_DATETIME` by one `FREQUENCY`, a
 the final sample may exceed the interval if it is not evenly divisible.
 
 On failure the process exits nonzero and only the current transaction rolls back;
-earlier batches remain committed. There is no automatic resume. Duplicate
-generated Thing names are rejected: use a fresh database, or deliberately clear
-before reloading. **`CLEAR_DATA=1` deletes all core data, including non-dummy data**;
+earlier batches remain committed. Set `RESUME=1` to continue an interrupted load
+as described below. Without this option, duplicate generated Thing names are
+rejected. **`CLEAR_DATA=1` deletes all core data, including non-dummy data**;
 it preserves the configured authorization User and does not reset sequences.
 Clearing is transactional and maintains normal versioning behavior.
+
+## Resume an interrupted load
+
+`RESUME` defaults to `0`. Set `RESUME=1`, `CLEAR_DATA=0` and `DUMMY_DATA=1` to
+reuse the existing metadata, count stored observations per Datastream and append
+only the missing tail of each stream. This also supports data written by the
+original loader, including stale Datastream time ranges and observed areas.
+Completed streams are skipped, and rerunning resume after completion adds no rows
+or Commits. Entity IDs do not need to start at 1.
+
+**Stop the previous loader and other writers before resuming.** Keep the same
+`N_THINGS`, `N_OBSERVED_PROPERTIES`, `START_DATETIME`, `FREQUENCY`, `INTERVAL`,
+`VERSIONING`, `AUTHORIZATION` and `NETWORK` settings used for the original load.
+With the development Compose file:
+
+```bash
+docker compose -f dev_docker-compose.yml build dummy_data
+docker compose -f dev_docker-compose.yml stop dummy_data
+docker compose -f dev_docker-compose.yml run --rm --no-deps \
+  -e RESUME=1 -e CLEAR_DATA=0 -e DUMMY_DATA=1 dummy_data
+```
+
+For the production Compose file, first rebuild/publish and select the updated
+loader image, then use that file for the stop/run commands.
+
+Resume checks all expected entity names and relationships, then reads existing
+observations to verify each stream is a continuous prefix of the configured
+sampling schedule. This initial check can take time on very large datasets; logs
+show checked streams, the existing count/percentage and the remaining count.
+It refuses incomplete metadata, duplicate timestamps, holes or incompatible
+sampling settings before adding observations. Filling holes in existing data is
+not supported. `RESUME=1` combined with `CLEAR_DATA=1` is rejected before deleting
+anything. A conflicting active writer causes the initial table-lock attempt to
+fail immediately; normal reads remain allowed.
+
+After validation, cached time ranges, last FeatureOfInterest and observed areas
+are repaired from the actual stored data. Existing observations stay unchanged.
+Each new batch commits its rows and derived fields together. Versioned/authorized
+loads create a new CREATE Commit for appended rows and keep existing Commit
+references. Random values in the appended tail may differ from an uninterrupted
+run, even with the same `RANDOM_SEED`; prior random draws are not replayed.
+
+The final `STATS` record includes `existing_rows`, newly added `rows`,
+`total_rows`, `planned_rows`, `streams_skipped` and `resume_check_seconds`.
 
 The production Compose file uses a registry image: rebuild and publish that image
 before expecting the new loader behavior there. For a local development build:
