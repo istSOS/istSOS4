@@ -13,6 +13,7 @@ utils/**/config.yaml
 docs/mkdocs/site
 database/schemaspy
 logs/
+dummy_data/benchmark-results/
 *.log
 
 # Editors & agents
