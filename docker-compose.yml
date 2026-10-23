@@ -82,7 +82,7 @@ services:
       - istsos4-network
 
   dummy_data:
-    image: ghcr.io/istsos/istsos4/dummy_data:1.11
+    image: ghcr.io/istsos/istsos4/dummy_data:1.12
     restart: on-failure
     container_name: istsos4-dummy-data
     environment:
@@ -105,6 +105,9 @@ services:
       FREQUENCY: ${FREQUENCY}
       START_DATETIME: ${START_DATETIME}
       CHUNK_INTERVAL: ${CHUNK_INTERVAL}
+      BATCH_SIZE: ${BATCH_SIZE:-10000}
+      LOG_INTERVAL_SECONDS: ${LOG_INTERVAL_SECONDS:-5}
+      RANDOM_SEED: ${RANDOM_SEED:-}
       EPSG: ${EPSG}
       AUTHORIZATION: ${AUTHORIZATION}
       NETWORK: ${NETWORK}
