@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     container_name: istsos4-database
+    mem_limit: ${POSTGRES_MEM_LIMIT:-0}
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -138,7 +139,6 @@ services:
       - ./docs/mkdocs:/docs
     networks:
       - istsos4-network
-
 
 # You might need to run `sudo chown -R $USER schemaspy/` to fix permissions
 # schemaspy:

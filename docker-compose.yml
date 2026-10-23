@@ -3,6 +3,7 @@ services:
     image: ghcr.io/istsos/istsos4/database:1.17
     restart: always
     container_name: istsos4-database
+    mem_limit: ${POSTGRES_MEM_LIMIT:-0}
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -109,7 +110,7 @@ services:
       NETWORK: ${NETWORK}
       ST_AGGREGATE: ${ST_AGGREGATE}
     command: python3 generator.py
-    working_dir: /dummy_data    
+    working_dir: /dummy_data
     depends_on:
       database:
         condition: service_healthy
@@ -119,7 +120,7 @@ services:
 networks:
   istsos4-network:
     name: istsos4-network
-    
+
 volumes:
   v-istsos4-database-data:
     name: v-istsos4-database-data
