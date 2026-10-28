@@ -844,7 +844,9 @@ class NodeVisitor(Visitor):
                 limited_count_query_str = str(
                     select(func.count())
                     .select_from(
-                        query_estimate_count.limit(COUNT_ESTIMATE_THRESHOLD)
+                        query_estimate_count.limit(
+                            COUNT_ESTIMATE_THRESHOLD
+                        ).subquery()
                     )
                     .compile(
                         dialect=engine.dialect,
