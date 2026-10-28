@@ -459,7 +459,7 @@ BEGIN
                     query_, fk_field_, fk_id_, count_estimate_threshold_
                 ) INTO preliminary_count;
 
-                IF preliminary_count == count_estimate_threshold_ THEN
+                IF preliminary_count = count_estimate_threshold_ THEN
                     -- Use count estimate if preliminary count exceeds threshold
                     EXECUTE format(
                         'SELECT sensorthings.count_estimate(
