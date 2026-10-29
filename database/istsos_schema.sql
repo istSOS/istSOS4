@@ -443,6 +443,11 @@ BEGIN
             next_link := NULL;
         END IF;
 
+        -- $top=0 never advances $skip, so there is no next page
+        IF limit_ <= 1 THEN
+            next_link := NULL;
+        END IF;
+
         IF is_count THEN
             -- Handle count based on count_mode_
             IF count_mode_ = 'FULL' THEN
@@ -595,6 +600,11 @@ BEGIN
                 ELSE '' 
             END;
     ELSE
+        next_link := NULL;
+    END IF;
+
+    -- $top=0 never advances $skip, so there is no next page
+    IF limit_ <= 1 THEN
         next_link := NULL;
     END IF;
 

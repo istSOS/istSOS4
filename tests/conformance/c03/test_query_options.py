@@ -391,6 +391,19 @@ def test_nextlink_absent_when_all_fit(client, seed):
     assert "@iot.nextLink" not in doc
 
 
+def test_expand_nextlink_absent_when_top_zero(client, seed):
+    """req/request-data/top + pagination -- $top=0 inside $expand is valid;
+    the expanded collection is not partial, so it SHALL NOT carry a nested
+    nextLink (one that does not advance $skip loops paging clients)."""
+    doc = fetch(
+        client,
+        f"Datastreams({format_id(seed.ds1.id)})",
+        {"$expand": "Observations($top=0)"},
+    )
+    assert doc["Observations"] == []
+    assert not doc.get("Observations@iot.nextLink")
+
+
 def test_pagination_top_nextlink_walks_full_seed(client, seed):
     """req/request-data/pagination -- $top + @iot.nextLink server-driven paging walks the
     ENTIRE seed Observation set (4 rows) exactly once. With $top=1 the service returns one
