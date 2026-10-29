@@ -73,6 +73,36 @@ class TestErrorHandling:
             resp.status_code == 404
         ), f"Unknown collection must return 404, got {resp.status_code}"
 
+    @pytest.mark.parametrize(
+        "collection, entity, parent",
+        [
+            ("Commits", "Commit", "Things"),
+            ("Networks", "Network", "Datastreams"),
+        ],
+    )
+    def test_disabled_collection_returns_404(
+        self, client, seed, collection, entity, parent
+    ):
+        """req/resource-path — Commit/Network only exist when versioning /
+        authorization / network support is enabled. When disabled (entities
+        carry no <Entity>@iot.navigationLink), addressing them is an unknown
+        collection or property: 404, not 5xx.
+        """
+        parent_id = seed.thing_id if parent == "Things" else seed.ds1.id
+        parent_path = f"{parent}({format_id(parent_id)})"
+        if f"{entity}@iot.navigationLink" in client.get(parent_path).json():
+            pytest.skip(f"{entity} is enabled on this server")
+
+        for path in (
+            collection,
+            f"{collection}(1)",
+            f"{parent_path}/{entity}",
+        ):
+            resp = client.get(path)
+            assert (
+                resp.status_code == 404
+            ), f"Disabled {path} must return 404, got {resp.status_code}"
+
     def test_property_of_nonexistent_entity_returns_404(self, client):
         """req/resource-path — /Things(999999999)/name → 404 (entity not found)."""
         resp = client.get("Things(999999999)/name")

@@ -740,10 +740,18 @@ class STA2REST:
             entity = entity.replace(match.group(0), "")
 
         # Check if the entity is in the ENTITY_MAPPING
+        name = entity
         if entity in STA2REST.ENTITY_MAPPING:
             entity = STA2REST.ENTITY_MAPPING[entity]
         else:
             return None
+
+        # Network and Commit only exist when their feature is enabled;
+        # otherwise they are unknown, also as a navigation segment
+        if (entity == "Network" and not NETWORK) or (
+            entity == "Commit" and not (VERSIONING or AUTHORIZATION)
+        ):
+            raise InvalidCollectionException(name)
 
         return (entity, id)
 
