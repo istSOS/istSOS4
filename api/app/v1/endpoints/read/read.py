@@ -124,6 +124,18 @@ async def stream_or_error(result, media_type="application/json"):
                 "message": "Database temporarily unavailable",
             },
         )
+    except asyncpg.DataError:
+        # The database rejected a value from the request (e.g. a
+        # non-numeric @iot.id or an invalid date): a client error.
+        logger.info("Invalid value in request", exc_info=True)
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "code": 400,
+                "type": "error",
+                "message": "Invalid value in request",
+            },
+        )
     except asyncpg.PostgresError:
         logger.exception("PostgreSQL error during initial stream fetch")
         return JSONResponse(
