@@ -30,7 +30,7 @@ same call without the wrapper:
 ```bash
 docker run --rm --network host --env-file .env \
   -v /absolute/path/to/file.xlsx:/data/file.xlsx:ro \
-  ghcr.io/istsos/istsos4/utils/xlsx2istsos:0.3 /data/file.xlsx
+  ghcr.io/istsos/istsos4/utils/xlsx2istsos:0.4 /data/file.xlsx
 ```
 
 ## Observations

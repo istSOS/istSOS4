@@ -36,7 +36,7 @@ fi
 FILE_DIR="$(cd "$(dirname "$FILE")" && pwd -P)"
 FILE_NAME="$(basename "$FILE")"
 FILE="${FILE_DIR}/${FILE_NAME}"
-IMAGE="${IMAGE_NAME:-ghcr.io/istsos/istsos4/utils/xlsx2istsos:0.1}"
+IMAGE="${IMAGE_NAME:-ghcr.io/istsos/istsos4/utils/xlsx2istsos:0.4}"
 DOCKER="${DOCKER:-/usr/bin/docker}"
 
 "${DOCKER}" run --rm \

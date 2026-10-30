@@ -17,20 +17,47 @@ from istsos4_client import (
 from observations import import_observations
 
 UOM_MAPPING = {
+    # Electrical
     "V": "Voltage",
-    "°C": "Celsius degree",
-    "mm": "Millimeter",
-    "%": "Percentage",
-    "g": "Gram",
-    "m": "Meter",
-    "m³/s": "Cubic meter per second",
-    "m asl": "Meter above sea level",
+    "mV": "Millivolt",
+    "mA": "Milliampere",
     "mAh": "Milliampere hour",
-    "mg/L": "Milligram per liter",
-    "ppm": "Parts per million",
-    "μg/L": "Microgram per liter",
-    "m/s²": "Meter per second squared",
+    # Temperature
+    "°C": "Celsius degree",
+    # Length and level
+    "mm": "Millimeter",
+    "m": "Meter",
+    "m asl": "Meter above sea level",
+    # Angle
     "°": "Degree",
+    # Speed and acceleration
+    "m/s": "Meter per second",
+    "m/s²": "Meter per second squared",
+    # Discharge
+    "m³/s": "Cubic meter per second",
+    "l/s": "Liter per second",
+    # Pressure
+    "mbar": "Millibar",
+    "hPa": "Hectopascal",
+    "kPa": "Kilopascal",
+    # Mass and concentration
+    "g": "Gram",
+    "mg/L": "Milligram per liter",
+    "μg/L": "Microgram per liter",
+    "ppm": "Parts per million",
+    # Conductivity
+    "mS/cm": "Millisiemens per centimeter",
+    "μS/cm": "Microsiemens per centimeter",
+    # Radiation
+    "W/m²": "Watt per square meter",
+    "μmol/m²/s": "Micromole per square meter per second",
+    # Turbidity and fluorescence
+    "NTU": "Nephelometric turbidity unit",
+    "RFU": "Relative fluorescence unit",
+    "RFUB": "Relative fluorescence unit (blue-green algae)",
+    # Ratios
+    "%": "Percentage",
+    "-": "Dimensionless",
 }
 
 
@@ -311,6 +338,9 @@ def create_entities(procedure, client, commit_message):
                 "samplingFrequency": procedure.get("sampling_frequency"),
                 "acquisitionFrequency": procedure.get("acquisition_frequency"),
                 "constraints": constraints or None,
+                "calculationMethod": clean_value(
+                    procedure.get("calculation_method")
+                ),
             }
 
             properties = {
