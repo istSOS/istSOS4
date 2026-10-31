@@ -17,6 +17,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Dummy-data Compose defaults
+        run: python -m unittest discover -s tests/unit -p test_dummy_data_compose.py -v
+
       - name: Start stack
         run: |
           cp .env.example .env
