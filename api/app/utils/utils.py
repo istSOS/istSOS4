@@ -108,6 +108,22 @@ def extract_iot_id(data):
     return iot_id
 
 
+def parse_time_or_raise(key, value):
+    """
+    Parse a time value from a request payload.
+
+    Raises:
+        ValueError: if the value is not a valid ISO 8601 time, so the
+        request is rejected with 400 instead of the value being dropped.
+    """
+    parsed = safe_parse_datetime(value)
+    if parsed is None:
+        raise ValueError(
+            f"Invalid {key}: '{value}' is not a valid ISO 8601 time"
+        )
+    return parsed
+
+
 def handle_datetime_fields(payload, datastream=False):
     """
     Converts datetime fields in the payload to datetime objects.
@@ -122,13 +138,15 @@ def handle_datetime_fields(payload, datastream=False):
         if "time" in key.lower():
             if payload[key] is None:
                 continue
+            if not isinstance(payload[key], str):
+                raise ValueError(f"Invalid {key}: expected an ISO 8601 string")
             is_observation_phenomenon = (
                 key == "phenomenonTime" and not datastream
             )
             if "/" in payload[key]:
                 start_str, end_str = payload[key].split("/", 1)
-                start_time = safe_parse_datetime(start_str)
-                end_time = safe_parse_datetime(end_str)
+                start_time = parse_time_or_raise(key, start_str)
+                end_time = parse_time_or_raise(key, end_str)
                 if is_observation_phenomenon:
                     payload.pop("phenomenonTime")
                     valid = bool(start_time and end_time)
@@ -145,7 +163,7 @@ def handle_datetime_fields(payload, datastream=False):
                 else:
                     payload[key] = None
             else:
-                parsed_time = safe_parse_datetime(payload[key])
+                parsed_time = parse_time_or_raise(key, payload[key])
                 if is_observation_phenomenon:
                     payload.pop("phenomenonTime")
                     payload["phenomenonTimeStart"] = parsed_time
