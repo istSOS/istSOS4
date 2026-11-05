@@ -3,21 +3,23 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
-import pandas as pd
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+import pandas as pd
 import yaml
+from istsos2_client import IstSOS2Client, parse_result_value
 from istsos4_client import Client, Datastream, Observation
 
-from istsos2_client import IstSOS2Client, parse_result_value
-
 HERE = Path(__file__).resolve().parent
-DEFAULT_CONFIG_PATH = HERE / "config.yaml"
+DEFAULT_CONFIG_DIR = HERE / "config"
 
 logger = logging.getLogger(__name__)
+
+QI_RENAME = {"130": "132", "200": "208"}
 
 
 def load_env(path: Path = HERE / ".env") -> None:
@@ -63,7 +65,7 @@ def is_nodata(
     return abs(number - nodata_value) <= tolerance
 
 
-def load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
+def load_config(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise ValueError(f"Config file is not accessible: {path}")
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -74,6 +76,24 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
     return config["istsos"]
 
 
+def load_jobs(config_dir: Path = DEFAULT_CONFIG_DIR) -> list[dict[str, Any]]:
+    """Jobs from every config_dir/*.yaml (one file per service), in file order.
+
+    Each job inherits ``continue_on_error`` from its own file.
+    """
+    paths = sorted(config_dir.glob("*.yaml"))
+    if not paths:
+        raise ValueError(f"No config files (*.yaml) in {config_dir}")
+    jobs = []
+    for path in paths:
+        config = load_config(path)
+        continue_on_error = bool(config.get("continue_on_error", False))
+        for job in config.get("imports") or []:
+            job.setdefault("continue_on_error", continue_on_error)
+            jobs.append(job)
+    return jobs
+
+
 def parse_istsos2_datetime(value: str) -> datetime:
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -82,7 +102,8 @@ def parse_istsos2_datetime(value: str) -> datetime:
 
 
 def format_istsos2_datetime(value: datetime) -> str:
-    return value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    # The Z suffix requires UTC: convert, or +02:00 times shift by 2 hours.
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 def parse_iso_duration(value: str) -> pd.Timedelta:
@@ -161,32 +182,28 @@ def iter_time_windows(
 
 def validate_import_job(job: dict[str, Any]) -> None:
     name = job.get("name", "unnamed_job")
-    required = {
-        "service",
-        "procedures_istsos2",
-        "procedures_istsos4",
-        "step_days",
-    }
+    required = {"service", "datastreams", "step_days"}
     missing = sorted(required - set(job))
     if missing:
         raise ValueError(f"Missing keys in job '{name}': {missing}")
 
-    source_procedures = job["procedures_istsos2"]
-    target_procedures = job["procedures_istsos4"]
-    if not isinstance(source_procedures, list):
+    datastreams = job["datastreams"]
+    if not isinstance(datastreams, dict):
         raise ValueError(
-            f"'procedures_istsos2' must be a list in job '{name}'"
+            f"'datastreams' must be a mapping "
+            f"'PROCEDURE.observed-property: DATASTREAM' "
+            f"in job '{name}'"
         )
-    if not isinstance(target_procedures, list):
-        raise ValueError(
-            f"'procedures_istsos4' must be a list in job '{name}'"
-        )
-    if len(source_procedures) != len(target_procedures):
-        raise ValueError(
-            f"Config mismatch in job '{name}': procedures_istsos2 has "
-            f"{len(source_procedures)} items and procedures_istsos4 has "
-            f"{len(target_procedures)}"
-        )
+    for source_procedure, target_procedure in datastreams.items():
+        if (
+            not isinstance(source_procedure, str)
+            or "." not in source_procedure
+            or not isinstance(target_procedure, str)
+        ):
+            raise ValueError(
+                f"Invalid procedure mapping in job '{name}': "
+                f"{source_procedure!r}: {target_procedure!r}"
+            )
     try:
         step_days = float(job["step_days"])
     except (TypeError, ValueError) as exc:
@@ -313,6 +330,7 @@ def import_procedure(
     window_end: datetime | None,
     aggregate_window: timedelta | None,
     override: bool | None,
+    import_qi: bool,
 ) -> tuple[int, int]:
     ds_id = datastream_id(target, target_procedure)
     procedure, observed_property_name = source_procedure.split(".", 1)
@@ -322,6 +340,11 @@ def import_procedure(
         procedure,
         observed_property_name,
     )
+    # istSOS2 eventtime is (begin, end]: start 1 s early, or the procedure's
+    # first observation (at the interval start) is never imported. A
+    # start_date is kept exclusive, so resuming from a window end is safe.
+    if window_start is None or window_start < start:
+        start -= timedelta(seconds=1)
     # Clamp the procedure's data interval to the configured time window.
     if window_start is not None:
         start = max(start, window_start)
@@ -351,6 +374,27 @@ def import_procedure(
         # override patches the same phenomenonTime a bulk insert would create.
         # Row layout: [result, phenomenonTime, resultTime, resultQuality].
         data_array = build_data_array(values)
+        # Empty or NaN/inf istSOS2 values reach istSOS4 as a null result,
+        # rejected for OM_Measurement: store them as NODATA_VALUE instead.
+        # Aggregated jobs skip this: aggregate_data_array already drops them.
+        nodata_fill = float(os.getenv("NODATA_VALUE", "-999.9"))
+        filled = 0
+        for row in data_array if aggregate_window is None else []:
+            if row[0] is None or (
+                isinstance(row[0], float) and not math.isfinite(row[0])
+            ):
+                row[0] = nodata_fill
+                filled += 1
+        if filled:
+            logger.warning(
+                "%s -> %s: %d empty/NaN results set to %s from %s to %s",
+                source_procedure,
+                target_procedure,
+                filled,
+                nodata_fill,
+                format_istsos2_datetime(window_start),
+                format_istsos2_datetime(window_end),
+            )
         if nodata_value is not None:
             kept = [
                 row
@@ -361,6 +405,8 @@ def import_procedure(
             data_array = kept
         if aggregate_window is not None:
             data_array = aggregate_data_array(data_array, aggregate_window)
+        for row in data_array:
+            row[3] = QI_RENAME.get(row[3], row[3]) if import_qi else "3"
         if override:
             # Patch already-existing istSOS4 observations in place instead of
             # bulk inserting.
@@ -403,6 +449,7 @@ def run_job(
     source: IstSOS2Client,
     target: Client,
     nodata_value: float | None,
+    import_qi: bool,
 ) -> tuple[int, int]:
     validate_import_job(job)
     service = job["service"]
@@ -421,10 +468,7 @@ def run_job(
         )
     inserted = 0
     skipped_nodata = 0
-    for source_procedure, target_procedure in zip(
-        job["procedures_istsos2"],
-        job["procedures_istsos4"],
-    ):
+    for source_procedure, target_procedure in job["datastreams"].items():
         proc_inserted, proc_skipped_nodata = import_procedure(
             source,
             target,
@@ -437,6 +481,7 @@ def run_job(
             window_end,
             aggregate_window,
             override,
+            import_qi,
         )
         inserted += proc_inserted
         skipped_nodata += proc_skipped_nodata
@@ -450,10 +495,9 @@ def run_all_imports() -> None:
         format="%(asctime)s %(levelname)s %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    config = load_config()
-    jobs = config.get("imports", [])
+    jobs = load_jobs()
     if not jobs:
-        raise ValueError(f"No imports configured in {DEFAULT_CONFIG_PATH}")
+        raise ValueError(f"No imports configured in {DEFAULT_CONFIG_DIR}")
 
     import_nodata = parse_bool(os.getenv("IMPORT_NODATA", "true"))
     nodata_value: float | None = None
@@ -466,6 +510,8 @@ def run_all_imports() -> None:
                 f"NODATA_VALUE must be a number: {raw_nodata}"
             ) from exc
 
+    import_qi = parse_bool(os.getenv("IMPORT_QI", "false"))
+
     source = IstSOS2Client(
         required_env("ISTSOS2_URL"),
         required_env("ISTSOS2_USER"),
@@ -476,7 +522,6 @@ def run_all_imports() -> None:
         required_env("ISTSOS4_USER"),
         required_env("ISTSOS4_PASSWORD"),
     )
-    continue_on_error = bool(config.get("continue_on_error", False))
     completed = failed = skipped = inserted_total = 0
     skipped_nodata_total = 0
 
@@ -494,7 +539,7 @@ def run_all_imports() -> None:
         try:
             logger.info("Starting job '%s'", name)
             job_inserted, job_skipped_nodata = run_job(
-                job, source, target, nodata_value
+                job, source, target, nodata_value, import_qi
             )
             inserted_total += job_inserted
             skipped_nodata_total += job_skipped_nodata
@@ -503,7 +548,7 @@ def run_all_imports() -> None:
         except Exception as exc:
             failed += 1
             logger.error("job '%s' failed: %s", name, exc)
-            if not continue_on_error:
+            if not job["continue_on_error"]:
                 raise
 
     summary = (

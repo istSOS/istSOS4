@@ -9,8 +9,16 @@ from __future__ import annotations
 from typing import Any
 
 import requests
+import urllib3
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = 60
+# Read-only GETs: retry transient gateway errors (~1 min of backoff in total).
+RETRY = Retry(total=5, backoff_factor=2, status_forcelist=(502, 503, 504))
+
+# TLS verification is disabled on purpose (verify = False below).
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def parse_result_value(value: Any) -> Any:
@@ -41,6 +49,9 @@ class IstSOS2Client:
         self.session = requests.Session()
         self.session.auth = (username, password)
         self.session.verify = False
+        adapter = HTTPAdapter(max_retries=RETRY)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
 
     def request(self, path: str) -> dict[str, Any]:
         response = self.session.get(

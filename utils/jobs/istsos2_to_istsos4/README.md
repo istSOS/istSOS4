@@ -16,10 +16,10 @@ Run every command below from this directory:
 ```bash
 cd utils/jobs/istsos2_to_istsos4
 cp .env.example .env
-cp config.example.yaml config.yaml
+mkdir -p config && cp config.example.yaml config/
 ```
 
-`.env` and `config.yaml` stay local (ignored by git) and are never copied into
+`.env` and `config/` stay local (ignored by git) and are never copied into
 the image.
 
 ## Configuration
@@ -37,15 +37,28 @@ ISTSOS4_PASSWORD=target-password
 
 IMPORT_NODATA=true
 NODATA_VALUE=-999.9
+IMPORT_QI=false
 ```
 
 `IMPORT_NODATA` decides whether "no data" observations are imported too: `true`
 (default) imports them, `false` drops them. `NODATA_VALUE` is the sentinel value
 to drop (default `-999.9`, compared numerically) and is only used when
-`IMPORT_NODATA=false`.
+`IMPORT_NODATA=false`. Empty and `NaN` istSOS2 results are stored as
+`NODATA_VALUE` (istSOS4 rejects a null result), so `IMPORT_NODATA=false` drops
+them too; aggregated jobs leave them out of the average.
 
-`config.yaml` defines the jobs. Procedures in the two lists are paired by
-position:
+`IMPORT_QI=true` copies the istSOS2 quality index (e.g. `210`) as-is into
+`resultQuality`, except `130` → `132` and `200` → `208`: those two are also
+valid istSOS4 bitmasks; `false` (default) sets `resultQuality` to 3 (data present, no
+checks).
+
+Jobs live in `config/`, one YAML file per istSOS2 service (e.g.
+`config/sosraw.yaml`, `config/sos.yaml`; `config.example.yaml` has one example
+job per service type); every `config/*.yaml` is loaded, in
+file-name order. `continue_on_error` applies to the jobs of its own file.
+`datastreams` maps each istSOS2
+`PROCEDURE.observed-property` to the istSOS4 datastream name; comment a line to
+skip that pair:
 
 ```yaml
 istsos:
@@ -55,10 +68,8 @@ istsos:
       enabled: true
       service: sosraw
       step_days: 1
-      procedures_istsos2:
-        - SOURCE_PROCEDURE
-      procedures_istsos4:
-        - TARGET_DATASTREAM
+      datastreams:
+        SOURCE_PROCEDURE.observed-property: TARGET_DATASTREAM
 ```
 
 `step_days` sets the time window read from istSOS2 per request; tune it to the
@@ -69,19 +80,25 @@ istSOS4 into batches that stay below the target database's parameter limit.
 ## Build
 
 ```bash
-docker build -t istsos2-to-istsos4:local .
+docker build -t ghcr.io/istsos/istsos4/utils/istsos2-to-istsos4:0.1 .
+```
+
+## Push
+
+```bash
+docker push ghcr.io/istsos/istsos4/utils/istsos2-to-istsos4:0.1
 ```
 
 ## Run
 
-`config.yaml` is mounted at run time, so editing it needs no rebuild.
+`config/` is mounted at run time, so editing it needs no rebuild.
 
 ```bash
 docker run --rm \
   --network host \
   --env-file .env \
-  -v "$PWD/config.yaml:/app/config.yaml:ro" \
-  istsos2-to-istsos4:local
+  -v "$PWD/config:/app/config:ro" \
+  ghcr.io/istsos/istsos4/utils/istsos2-to-istsos4:0.1
 ```
 
 ## Logs
@@ -101,7 +118,7 @@ On Docker Desktop use `host.docker.internal` in the URLs instead of
 
 ## Running without Docker
 
-The script reads `.env` and `config.yaml` from its own directory:
+The script reads `.env` and `config/` from its own directory:
 
 ```bash
 python3 istsos2_to_istsos4.py
