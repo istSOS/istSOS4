@@ -90,7 +90,21 @@ async def delete_observation(
                     obs_result_time,
                 )
 
-                await update_datastream_observedArea(connection, datastream_id)
+                foi_still_used = await connection.fetchval(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1 FROM sensorthings."Observation"
+                        WHERE "datastream_id" = $1
+                          AND "featuresofinterest_id" = $2
+                    );
+                    """,
+                    datastream_id,
+                    deleted["featuresofinterest_id"],
+                )
+                if not foi_still_used:
+                    await update_datastream_observedArea(
+                        connection, datastream_id
+                    )
 
             if id_deleted is None:
                 if current_user is not None:

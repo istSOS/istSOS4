@@ -53,7 +53,7 @@ async def delete_entity(connection, entity_name, entity_id, obs=False):
                 f"""
                     DELETE FROM sensorthings."{entity_name}"
                     WHERE id = $1
-                    RETURNING id, "phenomenonTimeStart", "phenomenonTimeEnd", "resultTime", "datastream_id";
+                    RETURNING id, "phenomenonTimeStart", "phenomenonTimeEnd", "resultTime", "datastream_id", "featuresofinterest_id";
                 """,
                 entity_id,
             )
