@@ -354,6 +354,9 @@ def build_nextLink(full_path, count_links):
     else:
         query_params["$top"] = [str(new_top_value)]
 
+    if new_top_value == 0:
+        return None
+
     # ---- Handle $skip ----
     if "$skip" in query_params:
         skip_value = int(query_params["$skip"][0])
