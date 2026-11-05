@@ -13,7 +13,7 @@ The `datastream_begin` column is ignored: istSOS4 computes a Datastream's
 
 ```bash
 cp .env.example .env    # istSOS4 URL and credentials
-docker build -t ghcr.io/istsos/istsos4/utils/xlsx2istsos:0.3 .
+docker build -t ghcr.io/istsos/istsos4/utils/xlsx2istsos:0.4 .
 ```
 
 ## Run
@@ -31,6 +31,15 @@ same call without the wrapper:
 docker run --rm --network host --env-file .env \
   -v /absolute/path/to/file.xlsx:/data/file.xlsx:ro \
   ghcr.io/istsos/istsos4/utils/xlsx2istsos:0.4 /data/file.xlsx
+```
+
+Without Docker, export `.env` into the shell and run the script with Python:
+
+```bash
+set -a
+source .env
+set +a
+python3 xlsx2istsos.py file.xlsx
 ```
 
 ## Observations
