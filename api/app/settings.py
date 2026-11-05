@@ -63,7 +63,6 @@ serverSettings = {
         "http://www.opengis.net/spec/iot_sensing/1.1/req/create-update-delete/delete-entity",
         "http://www.opengis.net/spec/iot_sensing/1.1/req/create-update-delete/historical-location-auto-creation",
         "http://www.opengis.net/spec/iot_sensing/1.1/req/create-update-delete/update-entity-put",
-        "http://www.opengis.net/spec/iot_sensing/1.1/req/create-update-delete/update-entity-jsonpatch",
         "http://www.opengis.net/spec/iot_sensing/1.1/req/data-array/data-array",
     ],
 }

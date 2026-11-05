@@ -28,29 +28,28 @@ PUT replaces the whole entity, unlike PATCH which merges:
   a relation that IS supplied is re-linked through the very same update
   machinery used by PATCH.
 
-The actual column writes reuse the existing ``update_*_entity`` functions and
-the same ``validate_required_keys`` / ``validate_payload_keys`` validators as
-the create path, rather than introducing a parallel validator.
+Each PUT handler expands the body with ``build_put_payload`` and then calls
+the entity's PATCH handler, so PUT and PATCH share one code path.
 """
 
 import json
 
-from app.utils.utils import validate_payload_keys, validate_required_keys
-from app.v1.endpoints.error_response import error_response
+from app.utils.utils import validate_required_keys
 from app.v1.endpoints.exceptions import BadRequest
-from app.v1.endpoints.functions import set_role
-from fastapi import Request, status
-from fastapi.responses import Response
-
-from .functions import check_id_exists, set_commit
+from fastapi import Request
 
 
-async def parse_put_body(request: Request) -> dict:
-    """Parse a PUT body, which must be a single JSON object (the entity).
+# Keys the client may echo from a GET but cannot change: the entity id, its
+# selfLink and the navigation links. 18-088 §10.3.1: the service ignores them.
+READ_ONLY_SUFFIXES = ("@iot.id", "@iot.selfLink", "@iot.navigationLink")
 
-    An empty body is returned as ``{}`` so the mandatory-property check below
-    turns it into a 400 (rather than a 422), keeping error semantics aligned
-    with the rest of the create/update paths.
+
+async def parse_body(request: Request) -> dict:
+    """Parse a PATCH/PUT body, which must be a single JSON object (the entity),
+    dropping the read-only top-level keys.
+
+    An empty body is returned as ``{}`` so PUT's mandatory-property check turns
+    it into a 400 (rather than a 422), and PATCH treats it as a no-op.
     """
     raw = await request.body()
     if not raw:
@@ -60,10 +59,12 @@ async def parse_put_body(request: Request) -> dict:
     except json.JSONDecodeError as exc:
         raise BadRequest(f"Invalid JSON body: {exc}")
     if not isinstance(data, dict):
-        raise BadRequest(
-            "PUT body must be a JSON object representing the entity."
-        )
-    return data
+        raise BadRequest("Body must be a JSON object representing the entity.")
+    return {
+        key: value
+        for key, value in data.items()
+        if not key.endswith(READ_ONLY_SUFFIXES)
+    }
 
 
 def build_put_payload(payload: dict, required_keys, optional_keys) -> dict:
@@ -84,9 +85,7 @@ def build_put_payload(payload: dict, required_keys, optional_keys) -> dict:
 def request_body_openapi_example(example: dict) -> dict:
     """Build an ``openapi_extra`` dict documenting a JSON request-body example.
 
-    Both the PATCH handlers (body read via ``Depends(normalize_patch_body)`` so
-    an RFC 6902 array is accepted) and the PUT handlers (body read from the raw
-    ``Request``) parse the body manually, so FastAPI generates no requestBody /
+    The PATCH and PUT handlers parse the body manually (``parse_body``), so FastAPI generates no requestBody /
     example for them in the OpenAPI schema. This re-attaches the original Swagger
     example through ``openapi_extra`` without touching the parsing path.
     """
@@ -100,75 +99,3 @@ def request_body_openapi_example(example: dict) -> dict:
             }
         }
     }
-
-
-async def handle_put_replace(
-    *,
-    pool,
-    request: Request,
-    entity_db_name: str,
-    not_found_message: str,
-    entity_id: int,
-    commit_message,
-    current_user,
-    allowed_keys,
-    required_keys,
-    optional_keys,
-    update_entity_fn,
-    post_update=None,
-    phenomenon_time=None,
-):
-    """Shared PUT (full replacement) flow for a single STA core entity.
-
-    Mirrors the structure of the existing PATCH handlers (role, existence check,
-    commit, entity update) but applies PUT semantics via ``build_put_payload``.
-    ``post_update`` (when given) runs inside the same transaction after the
-    column write, receiving ``(connection, entity_id, payload, updated)`` so an
-    entity that maintains derived state on PATCH (e.g. Observation /
-    FeatureOfInterest) keeps doing so on PUT.
-    """
-    if not entity_id:
-        raise BadRequest(f"{entity_db_name} ID not provided")
-
-    payload = await parse_put_body(request)
-
-    async with pool.acquire() as connection:
-        async with connection.transaction():
-            if current_user is not None:
-                await set_role(connection, current_user)
-
-            if not await check_id_exists(
-                connection, entity_db_name, entity_id, phenomenon_time
-            ):
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-                return error_response(
-                    status.HTTP_404_NOT_FOUND, not_found_message
-                )
-
-            payload = build_put_payload(payload, required_keys, optional_keys)
-
-            validate_payload_keys(payload, allowed_keys)
-
-            commit_id = await set_commit(
-                connection,
-                commit_message,
-                current_user,
-            )
-            if commit_id is not None:
-                payload["commit_id"] = commit_id
-
-            if phenomenon_time is None:
-                updated = await update_entity_fn(connection, entity_id, payload)
-            else:
-                updated = await update_entity_fn(
-                    connection, entity_id, payload, phenomenon_time
-                )
-
-            if post_update is not None:
-                await post_update(connection, entity_id, payload, updated)
-
-            if current_user is not None:
-                await connection.execute("RESET ROLE;")
-
-    return Response(status_code=status.HTTP_200_OK)

@@ -450,8 +450,30 @@ async def update_feature_of_interest_entity(
         )
 
 
+async def get_observation_datastream_type(
+    connection, observation_id, phenomenon_time=None
+):
+    """Return the Observation's Datastream observationType, or None if the
+    Observation does not exist. One lookup serves as existence check too."""
+    row = await connection.fetchrow(
+        f"""
+            SELECT d."observationType"
+            FROM sensorthings."Observation" o
+            JOIN sensorthings."Datastream" d ON d.id = o.datastream_id
+            WHERE o.id = $1{phenomenon_time_filter(phenomenon_time, 2)}
+        """,
+        observation_id,
+        *([] if phenomenon_time is None else [phenomenon_time]),
+    )
+    return None if row is None else (row["observationType"],)
+
+
 async def update_observation_entity(
-    connection, observation_id, payload, phenomenon_time=None
+    connection,
+    observation_id,
+    payload,
+    phenomenon_time=None,
+    observation_type=None,
 ):
     handle_datetime_fields(payload)
 
@@ -462,17 +484,11 @@ async def update_observation_entity(
             observation_type = await get_observation_type(
                 connection, payload["datastream_id"]
             )
-        else:
-            observation_type = await connection.fetchval(
-                f"""
-                    SELECT d."observationType"
-                    FROM sensorthings."Observation" o
-                    JOIN sensorthings."Datastream" d ON d.id = o.datastream_id
-                    WHERE o.id = $1{phenomenon_time_filter(phenomenon_time, 2)}
-                """,
-                observation_id,
-                *([] if phenomenon_time is None else [phenomenon_time]),
+        elif observation_type is None:
+            found = await get_observation_datastream_type(
+                connection, observation_id, phenomenon_time
             )
+            observation_type = found and found[0]
         handle_result_field(payload, observation_type)
 
     if payload:

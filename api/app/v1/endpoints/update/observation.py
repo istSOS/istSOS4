@@ -28,9 +28,12 @@ from app.v1.endpoints.functions import (
 from fastapi import APIRouter, Depends, Header, Query, Request, status
 from fastapi.responses import Response
 
-from .functions import check_id_exists, set_commit, update_observation_entity
-from .json_patch import apply_json_patch_to_entity, normalize_patch_body
-from .put import handle_put_replace, request_body_openapi_example
+from .functions import (
+    get_observation_datastream_type,
+    set_commit,
+    update_observation_entity,
+)
+from .put import build_put_payload, parse_body, request_body_openapi_example
 
 v1 = APIRouter()
 
@@ -75,7 +78,9 @@ def parse_phenomenon_time(
         return None
     match = re.fullmatch(r"\s*phenomenonTime\s+eq\s+'?([^'\s]+)'?\s*", filter)
     if match is None:
-        raise BadRequest("Only $filter=phenomenonTime eq <datetime> is supported")
+        raise BadRequest(
+            "Only $filter=phenomenonTime eq <datetime> is supported"
+        )
     try:
         return datetime.fromisoformat(match.group(1).split("/")[0])
     except ValueError:
@@ -93,7 +98,7 @@ def parse_phenomenon_time(
 )
 async def update_observation(
     observation_id: int,
-    payload=Depends(normalize_patch_body),
+    payload=Depends(parse_body),
     phenomenon_time=Depends(parse_phenomenon_time),
     commit_message=message,
     current_user=user,
@@ -107,22 +112,15 @@ async def update_observation(
             if current_user is not None:
                 await set_role(connection, current_user)
 
-            if not await check_id_exists(
-                connection, "Observation", observation_id, phenomenon_time
-            ):
+            found = await get_observation_datastream_type(
+                connection, observation_id, phenomenon_time
+            )
+            if found is None:
                 if current_user is not None:
                     await connection.execute("RESET ROLE;")
                 return error_response(
                     status.HTTP_404_NOT_FOUND, "Observation not found."
                 )
-
-            payload = await apply_json_patch_to_entity(
-                connection,
-                "Observation",
-                observation_id,
-                payload,
-                phenomenon_time,
-            )
 
             if not payload:
                 if current_user is not None:
@@ -140,7 +138,11 @@ async def update_observation(
                 payload["commit_id"] = commit_id
 
             updated = await update_observation_entity(
-                connection, observation_id, payload, phenomenon_time
+                connection,
+                observation_id,
+                payload,
+                phenomenon_time,
+                observation_type=found[0],
             )
 
             await post_update_observation(
@@ -200,18 +202,14 @@ async def replace_observation(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    return await handle_put_replace(
-        pool=pool,
-        request=request,
-        entity_db_name="Observation",
-        not_found_message="Observation not found.",
-        entity_id=observation_id,
+    payload = build_put_payload(
+        await parse_body(request), REQUIRED_PUT_KEYS, OPTIONAL_PUT_KEYS
+    )
+    return await update_observation(
+        observation_id,
+        payload,
+        phenomenon_time,
         commit_message=commit_message,
         current_user=current_user,
-        allowed_keys=ALLOWED_KEYS,
-        required_keys=REQUIRED_PUT_KEYS,
-        optional_keys=OPTIONAL_PUT_KEYS,
-        update_entity_fn=update_observation_entity,
-        post_update=post_update_observation,
-        phenomenon_time=phenomenon_time,
+        pool=pool,
     )

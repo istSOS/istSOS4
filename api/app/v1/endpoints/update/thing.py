@@ -22,8 +22,11 @@ from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import Response
 
 from .functions import check_id_exists, set_commit, update_thing_entity
-from .json_patch import apply_json_patch_to_entity, normalize_patch_body
-from .put import handle_put_replace, request_body_openapi_example
+from .put import (
+    build_put_payload,
+    parse_body,
+    request_body_openapi_example,
+)
 
 v1 = APIRouter()
 
@@ -67,7 +70,7 @@ OPTIONAL_PUT_KEYS = ["properties"]
 )
 async def update_thing(
     thing_id: int,
-    payload=Depends(normalize_patch_body),
+    payload=Depends(parse_body),
     commit_message=message,
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
@@ -87,9 +90,6 @@ async def update_thing(
                     status.HTTP_404_NOT_FOUND, "Thing not found."
                 )
 
-            payload = await apply_json_patch_to_entity(
-                connection, "Thing", thing_id, payload
-            )
 
             if not payload:
                 if current_user is not None:
@@ -130,16 +130,13 @@ async def replace_thing(
     current_user=user,
     pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
 ):
-    return await handle_put_replace(
-        pool=pool,
-        request=request,
-        entity_db_name="Thing",
-        not_found_message="Thing not found.",
-        entity_id=thing_id,
+    payload = build_put_payload(
+        await parse_body(request), REQUIRED_PUT_KEYS, OPTIONAL_PUT_KEYS
+    )
+    return await update_thing(
+        thing_id,
+        payload,
         commit_message=commit_message,
         current_user=current_user,
-        allowed_keys=ALLOWED_KEYS,
-        required_keys=REQUIRED_PUT_KEYS,
-        optional_keys=OPTIONAL_PUT_KEYS,
-        update_entity_fn=update_thing_entity,
+        pool=pool,
     )
