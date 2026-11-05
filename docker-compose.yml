@@ -33,7 +33,7 @@ services:
       - istsos4-network
 
   api:
-    image: ghcr.io/istsos/istsos4/api:1.37
+    image: ghcr.io/istsos/istsos4/api:1.38
     restart: always
     container_name: istsos4-api
     depends_on:
@@ -96,6 +96,7 @@ services:
       POSTGRES_HOST: ${POSTGRES_HOST}
       DUMMY_DATA: ${DUMMY_DATA}
       CLEAR_DATA: ${CLEAR_DATA}
+      RESUME: ${RESUME:-0}
       N_THINGS: ${N_THINGS}
       N_OBSERVED_PROPERTIES: ${N_OBSERVED_PROPERTIES}
       CENTER_LAT: ${CENTER_LAT}

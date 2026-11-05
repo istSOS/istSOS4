@@ -57,6 +57,9 @@ CREATE_KEYS = [
     "bucketTimezone",
     "aggregation",
     "conversionFactor",
+    "minObservations",
+    "expectedObservationInterval",
+    "maxConsecutiveMissing",
     "bucketsToRecompute",
     "boundaryMode",
     "resultQualityKey",
@@ -188,6 +191,25 @@ def validate_create_payload(payload):
     values["conversionFactor"] = require_number(
         values["conversionFactor"], "conversionFactor"
     )
+    for field in ("minObservations", "maxConsecutiveMissing"):
+        if values.get(field) is not None:
+            values[field] = require_integer(
+                values[field], field, minimum=0, maximum=2147483647
+            )
+
+    expected_interval = values.get("expectedObservationInterval")
+    if expected_interval is not None:
+        values["expectedObservationInterval"] = require_string(
+            expected_interval, "expectedObservationInterval"
+        )
+    if (
+        values.get("maxConsecutiveMissing") is not None
+        and expected_interval is None
+    ):
+        raise BadRequest(
+            "'maxConsecutiveMissing' requires 'expectedObservationInterval'."
+        )
+
     values["bucketsToRecompute"] = require_integer(
         values["bucketsToRecompute"],
         "bucketsToRecompute",
@@ -376,12 +398,22 @@ async def validate_database_options(connection, values):
                     ELSE $3::text::interval > interval '0 seconds'
                 END AS availability_max_age_valid,
                 $4::text::interval >= interval '0 seconds'
-                    AS system_time_overlap_valid;
+                    AS system_time_overlap_valid,
+                CASE
+                    WHEN $5::text IS NULL THEN true
+                    ELSE $5::text::interval > interval '0 seconds'
+                END AS expected_observation_interval_valid,
+                CASE
+                    WHEN $5::text IS NULL THEN true
+                    ELSE $5::text::interval <= $6::text::interval
+                END AS expected_observation_interval_within_bucket;
             """,
             values["scheduleInterval"],
             values["scheduleDelay"],
             values.get("availabilityMaxAge"),
             values["systemTimeOverlap"],
+            values.get("expectedObservationInterval"),
+            values["bucketInterval"],
         )
     except DataError as error:
         raise BadRequest("One or more interval values are invalid.") from error
@@ -391,6 +423,12 @@ async def validate_database_options(connection, values):
         "schedule_delay_valid": "'scheduleDelay' must be non-negative.",
         "availability_max_age_valid": "'availabilityMaxAge' must be positive.",
         "system_time_overlap_valid": "'systemTimeOverlap' must be non-negative.",
+        "expected_observation_interval_valid": (
+            "'expectedObservationInterval' must be positive."
+        ),
+        "expected_observation_interval_within_bucket": (
+            "'expectedObservationInterval' cannot exceed 'bucketInterval'."
+        ),
     }
     for key, message in interval_messages.items():
         if not interval_validation[key]:
@@ -484,6 +522,9 @@ def build_database_config(values, datastreams):
     }
 
     optional_keys = {
+        "minObservations": "min_observations",
+        "expectedObservationInterval": "expected_observation_interval",
+        "maxConsecutiveMissing": "max_consecutive_missing",
         "resultQualityKey": "result_quality_key",
         "resultQualityAllowed": "result_quality_allowed",
         "resultQualityMin": "result_quality_min",
@@ -675,6 +716,9 @@ def serialize_job(row, config, by_id, by_name):
         "bucketTimezone": config.get("bucket_timezone", "Etc/GMT-1"),
         "aggregation": config.get("aggregation", "SUM"),
         "conversionFactor": config.get("conversion_factor", 1.0),
+        "minObservations": config.get("min_observations"),
+        "expectedObservationInterval": config.get("expected_observation_interval"),
+        "maxConsecutiveMissing": config.get("max_consecutive_missing"),
         "bucketsToRecompute": config.get("buckets_to_recompute", 3),
         "boundaryMode": config.get("boundary_mode", "right_closed"),
         "resultQualityKey": config.get("result_quality_key"),
