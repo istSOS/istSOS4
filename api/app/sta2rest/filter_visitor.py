@@ -403,6 +403,17 @@ class FilterVisitor(visitor.NodeVisitor):
         op = self.visit(node.op)
         return op(operand)
 
+    @staticmethod
+    def jsonb_literal(node: ast._Node, value: Any) -> functions.Function:
+        """Turn a literal compared with a JSON path (e.g. properties/key)
+        into JSONB of the same JSON type, so a number is compared with
+        JSON numbers instead of the JSON string "2"."""
+        if isinstance(node, (ast.Integer, ast.Float)):
+            return functions.func.to_jsonb(cast(value, Numeric))
+        if isinstance(node, ast.Boolean):
+            return functions.func.to_jsonb(cast(value, Boolean))
+        return functions.func.to_jsonb(cast(value, Text))
+
     def visit_Compare(self, node: ast.Compare) -> BinaryExpression:
         left = self.visit(node.left)
         right = self.visit(node.right)
@@ -469,13 +480,13 @@ class FilterVisitor(visitor.NodeVisitor):
             node.right, ast.Attribute
         ):
             if not isinstance(left, InstrumentedAttribute):
-                right = functions.func.to_jsonb(cast(right, Text))
+                right = self.jsonb_literal(node.right, right)
 
         if isinstance(node.right, ast.Attribute) and not isinstance(
             node.left, ast.Attribute
         ):
             if not isinstance(right, InstrumentedAttribute):
-                left = functions.func.to_jsonb(cast(left, Text))
+                left = self.jsonb_literal(node.left, left)
 
         if isinstance(node.left, ast.Identifier) and (
             left.name in {"phenomenonTime", "validTime"}
