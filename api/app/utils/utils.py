@@ -386,6 +386,63 @@ def validate_required_keys(payload, required_keys):
         raise ValueError(f"Missing required fields: {', '.join(missing)}")
 
 
+GEOJSON_COORDINATE_DEPTH = {
+    "Point": 1,
+    "MultiPoint": 2,
+    "LineString": 2,
+    "MultiLineString": 3,
+    "Polygon": 3,
+    "MultiPolygon": 4,
+}
+
+
+def _coordinates_valid(coordinates, depth):
+    """Check that coordinates are lists nested `depth` levels deep, with
+    each position made of at least two numbers."""
+    if not isinstance(coordinates, list):
+        return False
+    if depth == 1:
+        return len(coordinates) >= 2 and all(
+            isinstance(c, (int, float)) and not isinstance(c, bool)
+            for c in coordinates
+        )
+    return all(_coordinates_valid(c, depth - 1) for c in coordinates)
+
+
+def validate_geojson_geometry(value, key):
+    """
+    Validate a GeoJSON geometry before it is passed to ST_GeomFromGeoJSON.
+
+    Raises:
+        ValueError: if the geometry is not a GeoJSON geometry object, has an
+        unknown type, or has missing or malformed coordinates, so the
+        request is rejected with 400 instead of failing in the database.
+    """
+    if not isinstance(value, dict):
+        raise ValueError(f"Invalid {key}: expected a GeoJSON geometry object")
+    geometry_type = value.get("type")
+    if geometry_type == "GeometryCollection":
+        geometries = value.get("geometries")
+        if not isinstance(geometries, list):
+            raise ValueError(
+                f"Invalid {key}: GeometryCollection needs a 'geometries' list"
+            )
+        for geometry in geometries:
+            validate_geojson_geometry(geometry, key)
+        return
+    if geometry_type not in GEOJSON_COORDINATE_DEPTH:
+        raise ValueError(
+            f"Invalid {key}: unsupported GeoJSON type '{geometry_type}'"
+        )
+    if not _coordinates_valid(
+        value.get("coordinates"), GEOJSON_COORDINATE_DEPTH[geometry_type]
+    ):
+        raise ValueError(
+            f"Invalid {key}: missing or malformed coordinates "
+            f"for {geometry_type}"
+        )
+
+
 def validate_epsg(key):
     crs = key.get("crs")
     if crs is not None:

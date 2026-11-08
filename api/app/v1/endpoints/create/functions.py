@@ -23,6 +23,7 @@ from app.utils.utils import (
     handle_datetime_fields,
     handle_result_field,
     validate_epsg,
+    validate_geojson_geometry,
 )
 from app.v1.endpoints.exceptions import BadRequest, Forbidden
 from app.v1.endpoints.functions import (
@@ -123,6 +124,7 @@ async def insert_location_entity(connection, payload, commit_id):
             payload["location"] = normalize_geojson_geometry(
                 payload["location"]
             )
+            validate_geojson_geometry(payload["location"], "location")
             validate_epsg(payload["location"])
 
         for thing in payload.get("Things", []):
@@ -410,6 +412,7 @@ async def insert_feature_of_interest_entity(
         if feature:
             feature = normalize_geojson_geometry(feature)
             payload["feature"] = feature
+            validate_geojson_geometry(payload["feature"], "feature")
             validate_epsg(feature)
 
         if commit_id is not None:

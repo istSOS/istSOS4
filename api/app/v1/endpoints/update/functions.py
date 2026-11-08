@@ -20,6 +20,7 @@ from app.utils.utils import (
     handle_datetime_fields,
     handle_result_field,
     validate_epsg,
+    validate_geojson_geometry,
 )
 from app.v1.endpoints.exceptions import BadRequest, Forbidden
 from app.v1.endpoints.functions import get_observation_type, insert_commit
@@ -182,6 +183,7 @@ async def update_location_entity(
     payload,
 ):
     if payload.get("location"):
+        validate_geojson_geometry(payload["location"], "location")
         validate_epsg(payload["location"])
 
     if "Things" in payload:
@@ -433,6 +435,7 @@ async def update_feature_of_interest_entity(
     connection, feature_of_interest_id, payload
 ):
     if payload.get("feature"):
+        validate_geojson_geometry(payload["feature"], "feature")
         validate_epsg(payload["feature"])
 
     await handle_nested_entities(
