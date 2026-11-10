@@ -271,7 +271,8 @@ async def insertDataArrayObservation(
                     )
                 obs.pop("FeatureOfInterest", None)
                 obs["featuresofinterest_id"] = features_of_interest_id
-            else:
+            elif obs.get("featuresofinterest_id") is None:
+                # CreateObservations may already have resolved the Location's FoI.
                 await generate_feature_of_interest(
                     obs, conn, commit_id=commit_id
                 )
