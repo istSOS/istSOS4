@@ -1039,14 +1039,14 @@ def get_select_attr(attr, label, nested=False, as_of=None):
             return case(
                 (
                     attr.isnot(None),
-                    func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+                    func.to_char(lower_bound, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
                     + "/"
-                    + func.to_char(upper_bound, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+                    + func.to_char(upper_bound, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
                 ),
                 else_=None,
             ).label(label)
     elif isinstance(attr.type, TIMESTAMP):
-        return func.to_char(attr, 'YYYY-MM-DD"T"HH24:MI:SS"Z"').label(label)
+        return func.to_char(attr, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"').label(label)
     elif "Link" in label:
         link_url = (
             HOSTNAME

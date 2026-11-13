@@ -13,6 +13,8 @@ Coverage:
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 import sample_data
 from c02.conftest import create_datastream_tree
@@ -170,8 +172,10 @@ def test_patch_observation(client, unique_name, cleanup):
 
     after = client.nav(obs_url)
     assert after["result"] == 99.9, "result must be updated after PATCH"
-    assert (
-        after["phenomenonTime"] == obs_payload["phenomenonTime"]
+    assert datetime.fromisoformat(
+        after["phenomenonTime"]
+    ) == datetime.fromisoformat(
+        obs_payload["phenomenonTime"]
     ), "phenomenonTime must not change after PATCH"
 
 

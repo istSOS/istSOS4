@@ -14,6 +14,8 @@ Coverage:
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 import sample_data
 from c02.conftest import create_datastream_tree
@@ -216,7 +218,9 @@ class TestCreate1MinimalEntities:
         entity = client.nav(loc_hdr)
         assert "@iot.id" in entity
         assert "@iot.selfLink" in entity
-        assert entity["time"] == payload["time"]
+        assert datetime.fromisoformat(
+            entity["time"]
+        ) == datetime.fromisoformat(payload["time"])
         # Navigation links expected
         assert "Locations@iot.navigationLink" in entity
         assert "Thing@iot.navigationLink" in entity
