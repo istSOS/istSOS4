@@ -186,7 +186,6 @@ services:
 networks:
   istsos4-network:
     name: istsos4-network
-    external: true
 
 volumes:
   v-istsos4-database-data:
