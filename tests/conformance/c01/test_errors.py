@@ -81,23 +81,27 @@ class TestErrorHandling:
         ],
     )
     def test_disabled_collection_returns_404(
-        self, client, seed, collection, entity, parent
+        self, client, collection, entity, parent
     ):
         """req/resource-path — Commit/Network only exist when versioning /
-        authorization / network support is enabled. When disabled (entities
-        carry no <Entity>@iot.navigationLink), addressing them is an unknown
-        collection or property: 404, not 5xx.
+        authorization / network support is enabled. When disabled, addressing
+        them is an unknown collection or property: 404, not 5xx.
+
+        Does not use the `seed` fixture, so it skips cleanly on servers where
+        the entity is enabled (the seed cannot be created with NETWORK=1).
         """
-        parent_id = seed.thing_id if parent == "Things" else seed.ds1.id
-        parent_path = f"{parent}({format_id(parent_id)})"
-        if f"{entity}@iot.navigationLink" in client.get(parent_path).json():
+        if client.get(collection).status_code == 200:
             pytest.skip(f"{entity} is enabled on this server")
 
-        for path in (
-            collection,
-            f"{collection}(1)",
-            f"{parent_path}/{entity}",
-        ):
+        paths = [collection, f"{collection}(1)"]
+        parents = client.get(parent, params={"$top": 1}).json()["value"]
+        if parents:
+            if f"{entity}@iot.navigationLink" in parents[0]:
+                pytest.skip(f"{entity} is enabled on this server")
+            parent_id = format_id(parents[0]["@iot.id"])
+            paths.append(f"{parent}({parent_id})/{entity}")
+
+        for path in paths:
             resp = client.get(path)
             assert (
                 resp.status_code == 404
