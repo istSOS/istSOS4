@@ -1,0 +1,380 @@
+{
+  "image": "timescale/timescaledb-ha:pg18-ts2.25",
+  "results": [
+    {
+      "name": "seed actual versioned Observation hypertable",
+      "status": "pass",
+      "detail": "2588 observations, two Datastreams, multiple yearly chunks",
+      "seconds": 0.376
+    },
+    {
+      "name": "create direct_10min",
+      "status": "pass",
+      "detail": "created over sensorthings.\"Observation\"",
+      "seconds": 0.09
+    },
+    {
+      "name": "create direct_hour",
+      "status": "pass",
+      "detail": "created over sensorthings.\"Observation\"",
+      "seconds": 0.105
+    },
+    {
+      "name": "create direct_day",
+      "status": "pass",
+      "detail": "created over sensorthings.\"Observation\"",
+      "seconds": 0.122
+    },
+    {
+      "name": "create direct_week",
+      "status": "pass",
+      "detail": "created over sensorthings.\"Observation\"",
+      "seconds": 0.133
+    },
+    {
+      "name": "create direct_month",
+      "status": "pass",
+      "detail": "created over sensorthings.\"Observation\"",
+      "seconds": 0.131
+    },
+    {
+      "name": "create direct_year",
+      "status": "pass",
+      "detail": "created over sensorthings.\"Observation\"",
+      "seconds": 0.125
+    },
+    {
+      "name": "create hier_10min",
+      "status": "pass",
+      "detail": "created over sensorthings.\"Observation\"",
+      "seconds": 0.126
+    },
+    {
+      "name": "create hier_hour",
+      "status": "pass",
+      "detail": "created over cagg_probe.hier_10min",
+      "seconds": 0.127
+    },
+    {
+      "name": "create hier_day",
+      "status": "pass",
+      "detail": "created over cagg_probe.hier_hour",
+      "seconds": 0.124
+    },
+    {
+      "name": "create hier_week",
+      "status": "pass",
+      "detail": "created over cagg_probe.hier_day",
+      "seconds": 0.122
+    },
+    {
+      "name": "create hier_month",
+      "status": "pass",
+      "detail": "created over cagg_probe.hier_day",
+      "seconds": 0.124
+    },
+    {
+      "name": "create hier_year",
+      "status": "pass",
+      "detail": "created over cagg_probe.hier_month",
+      "seconds": 0.126
+    },
+    {
+      "name": "initial full refresh",
+      "status": "pass",
+      "detail": "refreshed 12 CAGGs, fine to coarse, force=false",
+      "seconds": 1.749
+    },
+    {
+      "name": "initial: direct_10min",
+      "status": "pass",
+      "detail": "2555 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.159
+    },
+    {
+      "name": "initial: direct_hour",
+      "status": "pass",
+      "detail": "2514 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.155
+    },
+    {
+      "name": "initial: direct_day",
+      "status": "pass",
+      "detail": "1715 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.142
+    },
+    {
+      "name": "initial: direct_week",
+      "status": "pass",
+      "detail": "420 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.143
+    },
+    {
+      "name": "initial: direct_month",
+      "status": "pass",
+      "detail": "99 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.134
+    },
+    {
+      "name": "initial: direct_year",
+      "status": "pass",
+      "detail": "11 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.122
+    },
+    {
+      "name": "initial: hier_10min",
+      "status": "pass",
+      "detail": "2555 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.146
+    },
+    {
+      "name": "initial: hier_hour",
+      "status": "pass",
+      "detail": "2514 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.146
+    },
+    {
+      "name": "initial: hier_day",
+      "status": "pass",
+      "detail": "1715 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.148
+    },
+    {
+      "name": "initial: hier_week",
+      "status": "pass",
+      "detail": "420 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.14
+    },
+    {
+      "name": "initial: hier_month",
+      "status": "pass",
+      "detail": "99 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.124
+    },
+    {
+      "name": "initial: hier_year",
+      "status": "pass",
+      "detail": "11 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.129
+    },
+    {
+      "name": "source mutations with actual history triggers",
+      "status": "pass",
+      "detail": "late insert, boundary-value update, eligibility changes, cross-chunk delete/reinsert, deletion to empty at all resolutions",
+      "seconds": 1.054
+    },
+    {
+      "name": "versioning keeps old values outside current source",
+      "status": "pass",
+      "detail": {
+        "current": 2589,
+        "history": 6,
+        "combined": 2595
+      },
+      "seconds": 0.13
+    },
+    {
+      "name": "recent policy versus historical correction",
+      "status": "pass",
+      "detail": "7-day policy leaves a 2024 correction stale; explicit historical refresh is necessary",
+      "seconds": 0.727
+    },
+    {
+      "name": "incremental historical refresh under Europe/Zurich session",
+      "status": "pass",
+      "detail": "refreshed 12 CAGGs, fine to coarse, force=false",
+      "seconds": 1.766
+    },
+    {
+      "name": "after mutations: direct_10min",
+      "status": "pass",
+      "detail": "2556 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.156
+    },
+    {
+      "name": "after mutations: direct_hour",
+      "status": "pass",
+      "detail": "2515 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.148
+    },
+    {
+      "name": "after mutations: direct_day",
+      "status": "pass",
+      "detail": "1714 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.149
+    },
+    {
+      "name": "after mutations: direct_week",
+      "status": "pass",
+      "detail": "419 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.137
+    },
+    {
+      "name": "after mutations: direct_month",
+      "status": "pass",
+      "detail": "98 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.13
+    },
+    {
+      "name": "after mutations: direct_year",
+      "status": "pass",
+      "detail": "10 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.129
+    },
+    {
+      "name": "after mutations: hier_10min",
+      "status": "pass",
+      "detail": "2556 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.152
+    },
+    {
+      "name": "after mutations: hier_hour",
+      "status": "pass",
+      "detail": "2515 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.149
+    },
+    {
+      "name": "after mutations: hier_day",
+      "status": "pass",
+      "detail": "1714 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.145
+    },
+    {
+      "name": "after mutations: hier_week",
+      "status": "pass",
+      "detail": "419 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.131
+    },
+    {
+      "name": "after mutations: hier_month",
+      "status": "pass",
+      "detail": "98 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.133
+    },
+    {
+      "name": "after mutations: hier_year",
+      "status": "pass",
+      "detail": "10 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.133
+    },
+    {
+      "name": "session timezone independence",
+      "status": "pass",
+      "detail": "all six time_bucket expressions match oracle under Zurich, New York and Kathmandu sessions",
+      "seconds": 2.471
+    },
+    {
+      "name": "interval labels use fixed-local calendar arithmetic",
+      "status": "pass",
+      "detail": {
+        "naive_UTC_March_end": "2024-03-29T23:00:00.000000+00:00",
+        "correct_fixed_UTC1_March_end": "2024-03-31T23:00:00.000000+00:00",
+        "verified": "all six interval labels under UTC, Zurich and New York sessions"
+      },
+      "seconds": 2.483
+    },
+    {
+      "name": "refresh boundary alignment regression",
+      "status": "pass",
+      "detail": {
+        "unshifted_window_error": "refresh window too small",
+        "unshifted_window_count": 0,
+        "shifted_window_count": 1,
+        "lesson": "refresh must use internal boundaries (logical boundaries +1us)"
+      },
+      "seconds": 0.593
+    },
+    {
+      "name": "final propagation through hierarchy",
+      "status": "pass",
+      "detail": "refreshed 12 CAGGs, fine to coarse, force=false",
+      "seconds": 1.435
+    },
+    {
+      "name": "final: direct_10min",
+      "status": "pass",
+      "detail": "2557 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.115
+    },
+    {
+      "name": "final: direct_hour",
+      "status": "pass",
+      "detail": "2516 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.127
+    },
+    {
+      "name": "final: direct_day",
+      "status": "pass",
+      "detail": "1714 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.144
+    },
+    {
+      "name": "final: direct_week",
+      "status": "pass",
+      "detail": "419 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.135
+    },
+    {
+      "name": "final: direct_month",
+      "status": "pass",
+      "detail": "98 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.132
+    },
+    {
+      "name": "final: direct_year",
+      "status": "pass",
+      "detail": "10 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.122
+    },
+    {
+      "name": "final: hier_10min",
+      "status": "pass",
+      "detail": "2557 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.152
+    },
+    {
+      "name": "final: hier_hour",
+      "status": "pass",
+      "detail": "2516 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.153
+    },
+    {
+      "name": "final: hier_day",
+      "status": "pass",
+      "detail": "1714 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.143
+    },
+    {
+      "name": "final: hier_week",
+      "status": "pass",
+      "detail": "419 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.15
+    },
+    {
+      "name": "final: hier_month",
+      "status": "pass",
+      "detail": "98 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.129
+    },
+    {
+      "name": "final: hier_year",
+      "status": "pass",
+      "detail": "10 buckets match independent right-closed UTC+1 oracle (counts/sum/min/max/avg)",
+      "seconds": 0.124
+    }
+  ],
+  "versions": {
+    "postgres": "PostgreSQL 18.3 (Ubuntu 18.3-1.pgdg22.04+1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0, 64-bit",
+    "timescaledb": "2.25.2"
+  },
+  "cross_chunk_update": {
+    "status": "rejected_by_timescaledb",
+    "error": "ERROR:  new row for relation \"_hyper_1_2_chunk\" violates check constraint \"constraint_2\"\nDETAIL:  Failing row contains (8, 2024-12-31 23:01:23+00, 2024-12-31 23:01:23+00, null, 0, null, 8, null, null, 3, null, null, 1, 1, 1, [\"2026-11-05 19:30:21.989758+00\",infinity)).",
+    "tested_alternative": "transactional DELETE followed by INSERT, preserving id"
+  },
+  "observation_count": 2590,
+  "summary": {
+    "pass": 58,
+    "fail": 0
+  }
+}

@@ -78,6 +78,36 @@ services:
     networks:
       - istsos4-network
 
+  aggregation:
+    build:
+      context: ./aggregation
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST:-database}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-istsos}
+      AGGREGATION_ENABLED: ${AGGREGATION_ENABLED:-false}
+      AGGREGATION_SCHEDULE: "${AGGREGATION_SCHEDULE:-*/10 * * * *}"
+      AGGREGATION_UTC_OFFSET_MINUTES: ${AGGREGATION_UTC_OFFSET_MINUTES:-60}
+      AGGREGATION_RUN_ON_STARTUP: ${AGGREGATION_RUN_ON_STARTUP:-false}
+      AGGREGATION_WRITE_BATCH_SIZE: ${AGGREGATION_WRITE_BATCH_SIZE:-1000}
+      AGGREGATION_REQUEST_TIMEOUT_SECONDS: ${AGGREGATION_REQUEST_TIMEOUT_SECONDS:-30}
+      AGGREGATION_API_URL: ${AGGREGATION_API_URL:-http://api:5000${SUBPATH:-/istsos4}${VERSION:-/v1.1}}
+      AUTHORIZATION: ${AUTHORIZATION:-0}
+      ISTSOS_ADMIN: ${ISTSOS_ADMIN:-admin}
+      ISTSOS_ADMIN_PASSWORD: ${ISTSOS_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./aggregation:/app/aggregation:ro
+    working_dir: /app
+    stop_grace_period: 100s
+    networks:
+      - istsos4-network
+
   redis:
     image: redis:8.8.0-alpine3.23
     restart: always
@@ -156,6 +186,7 @@ services:
 networks:
   istsos4-network:
     name: istsos4-network
+    external: true
 
 volumes:
   v-istsos4-database-data:

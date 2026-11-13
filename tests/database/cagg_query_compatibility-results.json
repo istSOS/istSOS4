@@ -1,0 +1,60 @@
+{
+  "image": "timescale/timescaledb-ha:pg18-ts2.25",
+  "results": [],
+  "versions": {
+    "postgres": "PostgreSQL 18.3 (Ubuntu 18.3-1.pgdg22.04+1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0, 64-bit",
+    "timescaledb": "2.25.2"
+  },
+  "compatibility": [
+    {
+      "name": "simple_hypertable_grouping",
+      "ordinary_select_rows": 2555,
+      "expected_cagg_supported": true,
+      "cagg_supported": true,
+      "expectation_matched": true
+    },
+    {
+      "name": "existing_calculation_ctes",
+      "ordinary_select_rows": 6,
+      "expected_cagg_supported": false,
+      "cagg_supported": false,
+      "error": "ERROR:  invalid continuous aggregate query\nDETAIL:  CTEs and subqueries are not supported by continuous aggregates.",
+      "expectation_matched": true
+    },
+    {
+      "name": "single_source_cte",
+      "ordinary_select_rows": 2555,
+      "expected_cagg_supported": false,
+      "cagg_supported": false,
+      "error": "ERROR:  invalid continuous aggregate query\nDETAIL:  CTEs and subqueries are not supported by continuous aggregates.",
+      "expectation_matched": true
+    },
+    {
+      "name": "generated_series_join",
+      "ordinary_select_rows": 2555,
+      "expected_cagg_supported": true,
+      "cagg_supported": true,
+      "expectation_matched": true
+    },
+    {
+      "name": "availability_exists_subquery",
+      "ordinary_select_rows": 2555,
+      "expected_cagg_supported": false,
+      "cagg_supported": false,
+      "error": "ERROR:  invalid continuous aggregate query\nDETAIL:  CTEs and subqueries are not supported by continuous aggregates.",
+      "expectation_matched": true
+    },
+    {
+      "name": "table_returning_function_wrapper",
+      "ordinary_select_rows": 6,
+      "expected_cagg_supported": false,
+      "cagg_supported": false,
+      "error": "ERROR:  invalid continuous aggregate view\nDETAIL:  At least one hypertable should be used in the view definition.",
+      "expectation_matched": true
+    }
+  ],
+  "summary": {
+    "pass": 6,
+    "fail": 0
+  }
+}

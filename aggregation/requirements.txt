@@ -1,0 +1,5 @@
+croniter==6.2.4
+istsos4-client==0.4.0
+psycopg[binary]==3.3.8
+pandas==2.3.3
+isodate==0.7.2

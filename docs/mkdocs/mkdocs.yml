@@ -35,6 +35,8 @@ nav:
           - Register Entities: tutorial/sta_entity.ipynb
           - Register Observations: tutorial/sta_observation.ipynb
       - Leveraging the TravelTime Extension for Reproducibility and Data Lineage: tutorial/traveltime.ipynb
+      - Managing Aggregation Configurations: aggregation-configurations.md
+      - Aggregation results: aggregation-results.md
       - Utilizing Python for Data Curation and Quality: tutorial/quality.ipynb
       - Applying Advanced Filtering Techniques for Data Retrieval: tutorial/filtering.ipynb
       - Applying Machine Learning and AI for Time Series Data Processing: tutorial/ai.ipynb
