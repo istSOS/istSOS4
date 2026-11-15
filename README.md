@@ -1,6 +1,6 @@
 # istSOS4
 
-## Clone the istSOS4repository
+## Clone the istSOS4 repository
 
 ```sh
 git clone https://github.com/istSOS/istSOS4.git
@@ -59,4 +59,4 @@ Access the SensorThings API at: http://127.0.0.1:8018/istsos4/v1.1
 
 ## Reference
 
-For more information about the database and how populate it with synthetic data, refer to the [Database Documentation](https://github.com/istSOS/istsos4/blob/traveltime/database/README.md)
+For more information about the database and how populate it with synthetic data, refer to the [Database Documentation](database/README.md)
