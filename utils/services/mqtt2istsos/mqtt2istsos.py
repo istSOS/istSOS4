@@ -402,12 +402,14 @@ class Processor:
                 )
                 continue
 
+            # A value may carry its own quality code: "55.08:201".
+            raw_value, _, raw_quality = raw_value.partition(":")
             if is_null_value(raw_value):
                 result = NULL_RESULT_VALUE
                 result_quality = NULL_RESULT_QUALITY
             else:
                 result = normalize_result(raw_value)
-                result_quality = DEFAULT_RESULT_QUALITY
+                result_quality = raw_quality.strip() or DEFAULT_RESULT_QUALITY
                 if result is None:
                     LOGGER.warning(
                         "Skipping %s: invalid numeric value %r",

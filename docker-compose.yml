@@ -121,6 +121,32 @@ services:
     networks:
       - istsos4-network
 
+  qc:
+    image: ghcr.io/istsos/istsos4/utils/qc:0.1
+    build:
+      context: ./utils
+      dockerfile: services/qc/Dockerfile
+    restart: always
+    init: true
+    container_name: istsos4-qc
+    depends_on:
+      - api
+    environment:
+      ISTSOS4_URL: http://api:5000${SUBPATH}${VERSION}
+      # @iot.nextLink start with this: qc sends them to ISTSOS4_URL instead
+      ISTSOS4_PUBLIC_URL: ${HOSTNAME}${SUBPATH}${VERSION}
+      ISTSOS4_USERNAME: ${QC_USERNAME:-}
+      ISTSOS4_PASSWORD: ${QC_PASSWORD:-}
+      COMMIT_MESSAGE: ${QC_COMMIT_MESSAGE:-}
+      INTERVAL_MINUTES: ${QC_INTERVAL_MINUTES:-10}
+      OVERLAP_SECONDS: ${QC_OVERLAP_SECONDS:-60}
+      DATASTREAMS: ${QC_DATASTREAMS:-}
+      EXCLUDE_DATASTREAMS: ${QC_EXCLUDE_DATASTREAMS:-}
+    volumes:
+      - v-istsos4-qc-data:/data
+    networks:
+      - istsos4-network
+
 networks:
   istsos4-network:
     name: istsos4-network
@@ -130,3 +156,5 @@ volumes:
     name: v-istsos4-database-data
   v-istsos4-redis-data:
     name: v-istsos4-redis-data
+  v-istsos4-qc-data:
+    name: v-istsos4-qc-data

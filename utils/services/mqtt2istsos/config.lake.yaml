@@ -1,0 +1,38 @@
+log_level: INFO
+dry_run: true
+
+mqtt:
+  host: geoservice2.ist.supsi.ch
+  port: 8883
+  client_id: mqtt2istsos-lake
+  username: simile
+  password: simile
+  tls: false
+  tls_insecure: false
+  keepalive: 60
+  qos: 0
+  payload_separator: ","
+  # Payload timestamp: 2026-11-03T11:50:00+0000
+  date_format: "%Y-%m-%dT%H:%M:%S%z"
+  tz: UTC
+  reconnect_delay_sec: 10
+  queue_maxsize: 1000
+  topics: []
+
+istsos:
+  url: http://localhost:8018/v4/v1.1
+  username:
+  password:
+  timeout_sec: 15
+  commit_message: mqtt2istsos lake import
+
+# Payload: timestamp,v1:201,v2:201,...,v7:201
+mapping:
+  istsos/lake/FIGINO_LUFFT/lufft/ws501:
+    - Skip  # v1 55.082222
+    - Skip  # v2 988.062222
+    - Skip  # v3 99.9
+    - Skip  # v4 440.021111
+    - Skip  # v5 12.953333
+    - Skip  # v6 0.197778
+    - Skip  # v7 0.75
