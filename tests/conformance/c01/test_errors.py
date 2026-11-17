@@ -207,6 +207,23 @@ class TestQueryStatusCode:
             resp, "$filter=bogus(name) (unknown function)"
         )
 
+    @pytest.mark.parametrize(
+        "path, flt",
+        [
+            ("Things", "@iot.id eq 'abc'"),
+            ("Datastreams", "Thing/@iot.id eq 'abc'"),
+            ("Observations", "phenomenonTime gt 'notadate'"),
+            ("Observations", "resultTime eq '2026-13-45T99:00:00Z'"),
+        ],
+    )
+    def test_filter_invalid_value_returns_400(self, client, seed, path, flt):
+        """req/request-data/query-status-code — a $filter literal the database
+        cannot convert to the property's type (non-numeric id, invalid date) is
+        a client error: 400 with a structured error body, not 500.
+        """
+        resp = client.get(path, params={"$filter": flt})
+        self.assert_400_with_error_body(resp, f"$filter={flt}")
+
     def test_400_body_is_not_stacktrace(self, client, seed):
         """req/request-data/query-status-code — the 400 error body must be a
         structured JSON error, not an HTML/text stacktrace.
