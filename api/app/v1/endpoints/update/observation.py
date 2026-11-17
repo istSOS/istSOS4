@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import re
 from datetime import datetime
 
@@ -26,7 +25,7 @@ from app.v1.endpoints.functions import (
     update_datastream_observedArea,
     update_datastream_time_ranges,
 )
-from fastapi import APIRouter, Body, Depends, Header, Query, Request, status
+from fastapi import APIRouter, Depends, Header, Query, Request, status
 from fastapi.responses import Response
 
 from .functions import (
@@ -148,103 +147,6 @@ async def update_observation(
 
             await post_update_observation(
                 connection, observation_id, payload, updated
-            )
-
-            if current_user is not None:
-                await connection.execute("RESET ROLE;")
-
-    return Response(status_code=status.HTTP_200_OK)
-
-
-BULK_PAYLOAD_EXAMPLE = [
-    {"@iot.id": 1, "resultQuality": "15"},
-    {"@iot.id": 2, "resultQuality": "11"},
-]
-
-
-@v1.api_route(
-    "/BulkObservations",
-    methods=["PATCH"],
-    tags=["Observations"],
-    summary="Update the resultQuality of multiple Observations",
-    description=(
-        "Set the resultQuality of many Observations in one request, as QC "
-        "does. One commit for the whole request, as for a single PATCH. "
-        "Observations that already have that resultQuality are left as they "
-        "are. If an @iot.id does not exist, nothing is updated."
-    ),
-    status_code=status.HTTP_200_OK,
-)
-async def bulk_update_observations(
-    payload: list = Body(examples=[BULK_PAYLOAD_EXAMPLE]),
-    commit_message=message,
-    current_user=user,
-    pool=Depends(get_pool_w) if POSTGRES_PORT_WRITE else Depends(get_pool),
-):
-    ids, qualities = [], []
-    for item in payload:
-        if (
-            not isinstance(item, dict)
-            or set(item) != {"@iot.id", "resultQuality"}
-            or type(item["@iot.id"]) is not int
-        ):
-            raise BadRequest(
-                'Each item needs an integer "@iot.id" and a "resultQuality", '
-                "nothing else."
-            )
-        quality = item["resultQuality"]
-        ids.append(item["@iot.id"])
-        # As a single PATCH stores it: a string is the JSON text itself.
-        qualities.append(
-            quality if isinstance(quality, str) else json.dumps(quality)
-        )
-    if len(set(ids)) != len(ids):
-        raise BadRequest("Each @iot.id may appear only once.")
-    if not ids:
-        return Response(status_code=status.HTTP_200_OK)
-
-    async with pool.acquire() as connection:
-        async with connection.transaction():
-            if current_user is not None:
-                await set_role(connection, current_user)
-
-            missing = await connection.fetchval(
-                """
-                    SELECT array_agg(v.id ORDER BY v.id)
-                    FROM unnest($1::bigint[]) AS v(id)
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM sensorthings."Observation" o
-                        WHERE o.id = v.id
-                    )
-                """,
-                ids,
-            )
-            if missing:
-                if current_user is not None:
-                    await connection.execute("RESET ROLE;")
-                return error_response(
-                    status.HTTP_404_NOT_FOUND,
-                    f"Observations not found: {missing[:20]}"
-                    + (" ..." if len(missing) > 20 else ""),
-                )
-
-            commit_id = await set_commit(
-                connection, commit_message, current_user
-            )
-            # Unchanged rows are skipped: no new version, and the versioning
-            # trigger rejects an UPDATE that only changes the commit.
-            await connection.execute(
-                f"""
-                    UPDATE sensorthings."Observation" o
-                    SET "resultQuality" = v.quality
-                        {', commit_id = $3' if commit_id is not None else ''}
-                    FROM unnest($1::bigint[], $2::jsonb[]) AS v(id, quality)
-                    WHERE o.id = v.id
-                      AND o."resultQuality" IS DISTINCT FROM v.quality
-                """,
-                ids,
-                qualities,
-                *([] if commit_id is None else [commit_id]),
             )
 
             if current_user is not None:
