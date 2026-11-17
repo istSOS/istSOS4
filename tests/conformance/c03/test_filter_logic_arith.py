@@ -11,8 +11,10 @@ scoped by a seed id (the DB is shared and xdist workers seed identical names).
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
-from client import format_id
+from client import format_id, id_from_self_link
 
 pytestmark = pytest.mark.c03
 
@@ -324,3 +326,69 @@ def test_relation_by_id(client, seed):
         },
     )
     assert nums(o["result"] for o in values(doc)) == nums(seed.ds2.results)
+
+
+# ===========================================================================
+# Comparisons on JSON properties  (properties/<key>)
+# ===========================================================================
+PROPERTY_THINGS = {
+    "a": {"level": 0, "height": 0.5, "active": False, "code": "07"},
+    "b": {"level": 1, "height": 1.5, "active": True, "code": "08"},
+    "c": {"level": 2, "height": 2.5, "active": True, "code": "09"},
+}
+
+
+@pytest.fixture(scope="module")
+def property_things(client):
+    """Three Things with numeric, boolean and string properties; returns the
+    shared name prefix used to scope every query to them."""
+    prefix = f"props-{uuid.uuid4().hex[:8]}"
+    created = []
+    for suffix, properties in PROPERTY_THINGS.items():
+        resp = client.post(
+            "Things",
+            json={
+                "name": f"{prefix}-{suffix}",
+                "description": "JSON property filter test",
+                "properties": properties,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        created.append(id_from_self_link(resp.headers["location"]))
+    yield prefix
+    for thing_id in created:
+        client.delete(f"Things({format_id(thing_id)})")
+
+
+def property_matches(client, prefix, pred) -> list:
+    doc = fetch(
+        client,
+        "Things",
+        {
+            "$filter": f"startswith(name, {lit(prefix)}) and ({pred})",
+            "$orderby": "name asc",
+        },
+    )
+    return [t["name"].rsplit("-", 1)[1] for t in values(doc)]
+
+
+@pytest.mark.parametrize(
+    "pred, expected",
+    [
+        ("properties/level eq 2", ["c"]),
+        ("properties/level ne 2", ["a", "b"]),
+        ("properties/level gt 0", ["b", "c"]),
+        ("properties/level lt 1", ["a"]),
+        ("properties/level ge 1", ["b", "c"]),
+        ("1 lt properties/level", ["c"]),
+        ("properties/height eq 1.5", ["b"]),
+        ("properties/height gt 1", ["b", "c"]),
+        ("properties/active eq true", ["b", "c"]),
+        ("properties/code eq '08'", ["b"]),
+    ],
+)
+def test_json_property_comparison(client, property_things, pred, expected):
+    """req/request-data/built-in-filter-operations -- comparing a JSON
+    property with a number, boolean or string compares JSON values of that
+    type (a number literal must not be compared as the string "2")."""
+    assert property_matches(client, property_things, pred) == expected
