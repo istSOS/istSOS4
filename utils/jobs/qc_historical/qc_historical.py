@@ -16,6 +16,7 @@ from itertools import islice
 import isodate
 import numpy as np
 import pandas as pd
+import requests
 from istsos4_client import Client, Datastream, Observation
 from istsos4_client.client import MAX_ROWS_PER_BULK
 from saqc import SaQC
@@ -196,6 +197,40 @@ def fill_missing(writer, datastream, before, period, start, end, sampling,
     return created
 
 
+def patch_quality(client, datastream_id, changed, commit_message=None):
+    """Write the resultQuality of each (observation, quality) of a
+    datastream: PATCH /BulkObservations, PAGE at a time, or one PATCH each on
+    an istSOS4 that has no bulk PATCH yet (405)."""
+    for start in range(0, len(changed), PAGE):
+        chunk = changed[start : start + PAGE]
+        try:
+            client.bulk_observations_patch(
+                [
+                    Observation(iot_id=o.iot_id, result_quality=str(q),
+                                datastream=datastream_id)
+                    for o, q in chunk
+                ],
+                commit_message=commit_message,
+            )
+        except requests.HTTPError as error:
+            if getattr(error.response, "status_code", None) != 405:
+                raise
+            break
+    else:
+        return
+    # Older istSOS4: one PATCH each, filtered on phenomenonTime (the
+    # TimescaleDB partition key), in UTC, single-quoted.
+    # ponytail: istSOS returns phenomenonTime to the second but matches it
+    # exactly, so one stored with sub-seconds gets 404 and its datastream
+    # fails; retry without $filter on 404 if such data shows up
+    for o, q in changed[start:]:
+        observation = Observation(iot_id=o.iot_id, result_quality=str(q))
+        utc = pd.to_datetime(o.phenomenon_time, utc=True).isoformat()
+        utc = utc.replace("+00:00", "Z")
+        client.patch(observation, filter=f"phenomenonTime eq '{utc}'",
+                     commit_message=commit_message)
+
+
 def check_datastream(client, datastream, start, end, writer=None,
                      fill_commit_message=None, commit_message=None,
                      set_flag=None):
@@ -276,20 +311,11 @@ def check_datastream(client, datastream, start, end, writer=None,
         )
 
     # PATCH only what changes. Admin/editor users require a commit message;
-    # qc users require none. Filter on phenomenonTime (the TimescaleDB
-    # partition key), in UTC, single-quoted.
-    # ponytail: istSOS returns phenomenonTime to the second but matches it
-    # exactly, so one stored with sub-seconds gets 404 and its datastream
-    # fails; retry without $filter on 404 if such data shows up
+    # qc users require none.
     changed = [
         (o, q) for o, q in zip(period, new) if str(o.result_quality) != str(q)
     ]
-    for o, q in changed:
-        observation = Observation(iot_id=o.iot_id, result_quality=str(q))
-        utc = pd.to_datetime(o.phenomenon_time, utc=True).isoformat()
-        utc = utc.replace("+00:00", "Z")
-        client.patch(observation, filter=f"phenomenonTime eq '{utc}'",
-                     commit_message=commit_message)
+    patch_quality(client, datastream.iot_id, changed, commit_message)
     print(
         f"{datastream.name}: {len(period)} observations checked, "
         f"{len(changed)} resultQuality updated."

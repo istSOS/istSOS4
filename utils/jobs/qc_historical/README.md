@@ -108,6 +108,12 @@ values (`"window": 6`) would see other buffers: a sample of buffers checked
 on their own catches this, and that constraint then runs one buffer at a
 time, as slow as Flink. Prefer time windows.
 
+The new `resultQuality` values are written with `PATCH /BulkObservations`,
+10,000 per request, in one database UPDATE each. Rewriting 2,030
+observations with versioning took 2.5 s for the whole run, against 25 s with
+one PATCH each. On an istSOS4 without that endpoint (405), it falls back to
+one PATCH per observation.
+
 ## Different from Flink
 
 - Flink's buffer holds the last N observations to arrive, here the checked
