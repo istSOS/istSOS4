@@ -29,7 +29,10 @@ docker run --rm --network host --env-file .env \
   ghcr.io/istsos/istsos4/utils/qc_historical:0.1
 ```
 
-One line per datastream: observations checked, `resultQuality` updated.
+Logs (coloured, as mqtt2istsos) the run settings, then per datastream its
+constraints and buffer N, observations read, passed/failed/not run per
+slot, observations checked and `resultQuality` updated, and a final summary.
+`LOG_LEVEL=DEBUG` adds skipped datastreams, PATCH pages and tracebacks.
 
 ## Set a fixed resultQuality
 
