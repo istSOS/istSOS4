@@ -8,14 +8,18 @@ observation (~10 ms). Here the buffers are laid end to end on a made-up time
 axis, far apart, so one SaQC call checks thousands of them.
 """
 
+import logging
 import math
 import os
 import re
+import sys
+import time
 from itertools import islice
 
 import isodate
 import numpy as np
 import pandas as pd
+import requests
 from istsos4_client import Client, Datastream, Observation
 from istsos4_client.client import MAX_ROWS_PER_BULK
 from saqc import SaQC
@@ -36,6 +40,31 @@ TWO_VALUES = (  # bad arguments fail on any data, e.g. these
     np.array([1.0, 2.0]),
 )
 
+# Log format and colours as in utils/services/mqtt2istsos.
+LOGGER = logging.getLogger("qc_historical")
+SUCCESS, NOTICE = 35, 60
+logging.addLevelName(SUCCESS, "SUCCESS")
+logging.addLevelName(NOTICE, "NOTICE")
+COLORS = {logging.WARNING: "\033[33m", logging.ERROR: "\033[31m",
+          logging.CRITICAL: "\033[31m", SUCCESS: "\033[32m"}
+
+
+class ColorFormatter(logging.Formatter):
+    def format(self, record):
+        color = COLORS.get(record.levelno, "\033[37m")
+        return f"{color}{super().format(record)}\033[0m"
+
+
+def configure_logging(level_name):
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        ColorFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    )
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.setLevel(getattr(logging, level_name.upper(), logging.INFO))
+    root.addHandler(handler)
+
 
 def run(c, times, values):
     """IstsosQC's SaQC call for constraint c: which values it flags BAD."""
@@ -55,7 +84,7 @@ def run(c, times, values):
     return qc.flags["result"].to_numpy() == BAD
 
 
-def newest_bad(c, times, values, targets, n):
+def newest_bad(name, c, times, values, targets, n):
     """For each target as the newest of its buffer (the n-1 values before it
     plus itself): whether SaQC flags it BAD, and whether the call ran. As in
     Flink, a call that fails leaves only that observation's slot 00.
@@ -99,7 +128,10 @@ def newest_bad(c, times, values, targets, n):
         newest = np.cumsum(inside.sum(axis=1)) - 1
         try:
             flags = run(c, axis, values[rows])
-        except Exception:  # some buffer breaks it
+        except Exception as error:  # some buffer breaks it
+            LOGGER.debug("%s: %s stacked call failed (%s), running its "
+                         "buffers one at a time", name, c["type"],
+                         str(error).partition("\n")[0])
             bad[part], ran[part] = each(range(start, start + len(newest)))
             continue
         bad[part] = flags[newest]
@@ -110,7 +142,9 @@ def newest_bad(c, times, values, targets, n):
             stacked = flags[end - len(own) : end]
             far = own >= own[0] + span  # past SaQC start-up effects
             if single is None or (single[far] != stacked[far]).any():
-                print(f"  {c['type']} runs one buffer at a time")
+                LOGGER.warning("%s: %s gives different results when stacked, "
+                               "running %d buffers one at a time (slow)",
+                               name, c["type"], len(targets))
                 return each(range(len(targets)))
     return bad, ran
 
@@ -138,13 +172,22 @@ def quality(name, constraints, times, values, targets, n, sampling):
                 valid = (count >= required) & (history >= w)
         except Exception as error:
             reason = str(error).partition("\n")[0]
-            print(f"WARNING {name}: slot {slot} {c} not run: {reason}")
+            LOGGER.warning("%s: slot %d %s not run: %s", name, slot, c, reason)
             continue
-        bad, ran = newest_bad(c, times, values, targets, n)
+        started = time.monotonic()
+        bad, ran = newest_bad(name, c, times, values, targets, n)
         valid &= ran
+        checked = valid & (q != 0)  # no data (0) stays 0
         shift = 2 * slot
         new = (q & ~(3 << shift)) | (np.where(bad, 2, 3) << shift)
-        q = np.where(valid & (q != 0), new, q)  # no data (0) stays 0
+        q = np.where(checked, new, q)
+        LOGGER.info(
+            "%s: slot %d %s: %d passed, %d failed, %d no data, "
+            "%d not run (window not full or SaQC error) (%.1fs)",
+            name, slot, c["type"], (checked & ~bad).sum(),
+            (checked & bad).sum(), (q == 0).sum(), (~valid & (q != 0)).sum(),
+            time.monotonic() - started,
+        )
     return q
 
 
@@ -157,8 +200,8 @@ def fill_missing(writer, datastream, before, period, start, end, sampling,
     Reject off-grid observations rather than adding neighbours to them.
     """
     if sampling is None:
-        print(f"WARNING {datastream.name}: filling skipped: invalid or missing "
-              "samplingFrequency")
+        LOGGER.warning("%s: filling skipped: invalid or missing "
+                       "samplingFrequency", datastream.name)
         return 0
     first = start if start is not None else (
         pd.to_datetime(period[0].phenomenon_time, utc=True) if period else None
@@ -167,6 +210,8 @@ def fill_missing(writer, datastream, before, period, start, end, sampling,
         pd.to_datetime(period[-1].phenomenon_time, utc=True) if period else None
     )
     if first is None or last is None:
+        LOGGER.info("%s: nothing to fill (empty period, no bounds)",
+                    datastream.name)
         return 0
     anchor = before[-1] if before else (period[0] if period else None)
     anchor = (pd.to_datetime(anchor.phenomenon_time, utc=True)
@@ -178,6 +223,8 @@ def fill_missing(writer, datastream, before, period, start, end, sampling,
     # Round up to the next grid instant, including one exactly at first.
     first += (anchor - first) % sampling
     missing = pd.date_range(first, last, freq=sampling).difference(existing)
+    LOGGER.info("%s: %d missing timestamps on the %s grid from %s to %s",
+                datastream.name, len(missing), sampling, first, last)
     created = 0
     for offset in range(0, len(missing), MAX_ROWS_PER_BULK):
         observations = [
@@ -194,6 +241,45 @@ def fill_missing(writer, datastream, before, period, start, end, sampling,
             observations, commit_message=commit_message, force=False
         )
     return created
+
+
+def patch_quality(client, datastream_id, changed, commit_message=None):
+    """Write the resultQuality of each (observation, quality) of a
+    datastream: PATCH /BulkObservations, PAGE at a time, or one PATCH each on
+    an istSOS4 that has no bulk PATCH yet (405)."""
+    for start in range(0, len(changed), PAGE):
+        chunk = changed[start : start + PAGE]
+        LOGGER.debug("Datastream %s: bulk PATCH %d-%d of %d", datastream_id,
+                     start + 1, start + len(chunk), len(changed))
+        try:
+            client.bulk_observations_patch(
+                [
+                    Observation(iot_id=o.iot_id, result_quality=str(q),
+                                datastream=datastream_id)
+                    for o, q in chunk
+                ],
+                commit_message=commit_message,
+            )
+        except requests.HTTPError as error:
+            if getattr(error.response, "status_code", None) != 405:
+                raise
+            LOGGER.warning("Datastream %s: no PATCH /BulkObservations (405), "
+                           "falling back to one PATCH per observation for %d",
+                           datastream_id, len(changed) - start)
+            break
+    else:
+        return
+    # Older istSOS4: one PATCH each, filtered on phenomenonTime (the
+    # TimescaleDB partition key), in UTC, single-quoted.
+    # ponytail: istSOS returns phenomenonTime to the second but matches it
+    # exactly, so one stored with sub-seconds gets 404 and its datastream
+    # fails; retry without $filter on 404 if such data shows up
+    for o, q in changed[start:]:
+        observation = Observation(iot_id=o.iot_id, result_quality=str(q))
+        utc = pd.to_datetime(o.phenomenon_time, utc=True).isoformat()
+        utc = utc.replace("+00:00", "Z")
+        client.patch(observation, filter=f"phenomenonTime eq '{utc}'",
+                     commit_message=commit_message)
 
 
 def check_datastream(client, datastream, start, end, writer=None,
@@ -219,6 +305,15 @@ def check_datastream(client, datastream, start, end, writer=None,
     n = 50
     if windows and sampling:
         n = max(1, math.ceil(max(windows) / sampling) + 3)
+    LOGGER.info(
+        "%s (id %s): %d constraints [%s], samplingFrequency %s, buffer N=%d",
+        datastream.name, datastream.iot_id, len(constraints),
+        ", ".join(str(c.get("type")) for c in constraints[:4]),
+        sampling or "invalid/missing", n,
+    )
+    if len(constraints) > 4:
+        LOGGER.warning("%s: %d constraints, only the first 4 are checked",
+                       datastream.name, len(constraints))
 
     # observations in PERIOD, after the n-1 before it that fill the buffers
     query = f"Datastream/id eq {datastream.iot_id}"
@@ -245,6 +340,8 @@ def check_datastream(client, datastream, start, end, writer=None,
             top=PAGE,
         )
     )
+    LOGGER.info("%s: %d observations in PERIOD, %d before it to fill buffers",
+                datastream.name, len(period), len(before))
     created = 0
     if writer is not None:
         created = fill_missing(
@@ -252,7 +349,8 @@ def check_datastream(client, datastream, start, end, writer=None,
             fill_commit_message,
         )
         if created:
-            print(f"{datastream.name}: {created} no-data observations created.")
+            LOGGER.log(SUCCESS, "%s: %d no-data observations created",
+                       datastream.name, created)
             # Read their IDs and include them in the following QC buffers.
             period = list(client.iter_list(
                 Observation, filter=query, orderby="phenomenonTime",
@@ -276,27 +374,26 @@ def check_datastream(client, datastream, start, end, writer=None,
         )
 
     # PATCH only what changes. Admin/editor users require a commit message;
-    # qc users require none. Filter on phenomenonTime (the TimescaleDB
-    # partition key), in UTC, single-quoted.
-    # ponytail: istSOS returns phenomenonTime to the second but matches it
-    # exactly, so one stored with sub-seconds gets 404 and its datastream
-    # fails; retry without $filter on 404 if such data shows up
+    # qc users require none.
     changed = [
         (o, q) for o, q in zip(period, new) if str(o.result_quality) != str(q)
     ]
-    for o, q in changed:
-        observation = Observation(iot_id=o.iot_id, result_quality=str(q))
-        utc = pd.to_datetime(o.phenomenon_time, utc=True).isoformat()
-        utc = utc.replace("+00:00", "Z")
-        client.patch(observation, filter=f"phenomenonTime eq '{utc}'",
-                     commit_message=commit_message)
-    print(
-        f"{datastream.name}: {len(period)} observations checked, "
-        f"{len(changed)} resultQuality updated."
+    patch_quality(client, datastream.iot_id, changed, commit_message)
+    LOGGER.log(
+        SUCCESS, "%s: %d observations checked, %d resultQuality updated",
+        datastream.name, len(period), len(changed),
     )
+    return len(period), len(changed), created
 
 
 def main():
+    configure_logging(os.getenv("LOG_LEVEL", "INFO"))
+    missing = [key for key in ("ISTSOS4_URL", "ISTSOS4_USERNAME",
+                               "ISTSOS4_PASSWORD") if not os.getenv(key)]
+    if missing:
+        LOGGER.critical("Missing environment variables: %s (wrong --env-file?)",
+                        ", ".join(missing))
+        sys.exit(1)
     client = Client(
         os.environ["ISTSOS4_URL"],
         os.environ["ISTSOS4_USERNAME"],
@@ -335,18 +432,55 @@ def main():
         for key in ("DATASTREAMS", "EXCLUDE_DATASTREAMS")
     ]
 
+    LOGGER.log(
+        NOTICE,
+        "Starting: %s, PERIOD %s to %s, datastreams %s, excluded %s, "
+        "mode %s, fill missing %s, commit message %r",
+        os.environ["ISTSOS4_URL"], start or "first", end or "last",
+        names or "all with constraints", excluded or "none",
+        f"SET_FLAG={set_flag}" if set_flag is not None else "QC",
+        fill_enabled, commit_message,
+    )
+
+    began = time.monotonic()
+    done = failed = skipped = checked = updated = created = 0
+    processed = set()
     for datastream in client.list(Datastream):
         if (
             not (datastream.properties or {}).get("constraints")
             or datastream.name in excluded
             or (names and datastream.name not in names)
         ):
+            skipped += 1
+            LOGGER.debug("%s: skipped (no constraints or filtered out)",
+                         datastream.name)
             continue
+        processed.add(datastream.name)
         try:  # like Flink, a datastream that fails is reported and skipped
-            check_datastream(client, datastream, start, end, writer,
-                             fill_commit_message, commit_message, set_flag)
+            counts = check_datastream(
+                client, datastream, start, end, writer,
+                fill_commit_message, commit_message, set_flag,
+            )
         except Exception as error:
-            print(f"ERROR {datastream.name}: {error!r}")
+            failed += 1
+            LOGGER.error("%s: %r", datastream.name, error,
+                         exc_info=LOGGER.isEnabledFor(logging.DEBUG))
+            continue
+        done += 1
+        checked, updated, created = (
+            a + b for a, b in zip((checked, updated, created), counts)
+        )
+    unseen = [n for n in names if n not in excluded and n not in processed]
+    if unseen:
+        LOGGER.warning("DATASTREAMS not found or without constraints: %s",
+                       ", ".join(unseen))
+    LOGGER.log(
+        NOTICE,
+        "Finished in %.1fs: %d datastreams done, %d failed, %d skipped; "
+        "%d observations checked, %d resultQuality updated, %d created",
+        time.monotonic() - began, done, failed, skipped,
+        checked, updated, created,
+    )
 
 
 if __name__ == "__main__":

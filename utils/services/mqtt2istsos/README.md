@@ -6,7 +6,7 @@ SensorThings Observations.
 The app is intentionally narrow:
 
 1. Subscribe to MQTT topics.
-2. Read comma-separated MQTT payloads.
+2. Read separated MQTT payloads (comma by default).
 3. Match each topic to an ordered list of istSOS datastream names.
 4. Resolve datastream names to `@iot.id`.
 5. Insert one Observation per valid value.
@@ -54,6 +54,13 @@ If a message has more values than configured datastreams, the extra values are
 ignored. Blank, `null`, `none`, `nan`, `na`, and `n/a` values are inserted as
 `result=-999` with `resultQuality="00"`. Non-numeric strings such as `error`
 are skipped with a warning, and the rest of the message continues.
+
+A value can carry its own quality code as `value:quality`; the code is stored
+as `resultQuality`:
+
+```text
+2026-11-03T11:50:00+0000,55.082222:201,988.062222:201
+```
 
 ## Configuration
 
@@ -130,7 +137,8 @@ Leave it empty for ISO timestamps such as `2026-06-18T14:35:04Z`. Example:
 is `UTC`. Use names such as `Europe/Rome`.
 
 `mapping`: topic-to-datastream mapping. The datastream order must match the
-order of values in the MQTT payload after the timestamp.
+order of values in the MQTT payload after the timestamp. Topic keys may use the
+MQTT wildcards `+` and `#`; an exact key wins over a wildcard.
 
 Use `skip` in `mapping` to consume and ignore a value without resolving or
 inserting a datastream. The keyword is case-insensitive.
@@ -156,8 +164,10 @@ result
 resultQuality
 ```
 
-`resultQuality` is set to `"11"` by default. Null-like values are inserted as
-`result=-999` with `resultQuality="00"`.
+`resultQuality` is set to `"11"` by default. A value written as
+`value:quality` (e.g. `55.08:201`) stores `quality` as its `resultQuality`.
+Null-like values are inserted as `result=-999` with `resultQuality="00"`, even
+when they carry a quality code.
 
 Datastream IDs are cached after the first successful lookup.
 
@@ -269,9 +279,10 @@ Messages arrive but are not processed:
 
 Payload parse errors:
 
-- The message must be comma-separated.
-- The first field must be an ISO timestamp like `2026-06-18T15:03:01Z`.
-- The rest of the fields are numeric values.
+- Fields must be split by `mqtt.payload_separator` (comma by default).
+- The first field must be an ISO timestamp like `2026-06-18T15:03:01Z`, or
+  match `mqtt.date_format`.
+- The rest of the fields are numeric values, optionally `value:quality`.
 
 istSOS4 insert problems:
 

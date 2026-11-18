@@ -29,7 +29,10 @@ docker run --rm --network host --env-file .env \
   ghcr.io/istsos/istsos4/utils/qc_historical:0.1
 ```
 
-One line per datastream: observations checked, `resultQuality` updated.
+Logs (coloured, as mqtt2istsos) the run settings, then per datastream its
+constraints and buffer N, observations read, passed/failed/not run per
+slot, observations checked and `resultQuality` updated, and a final summary.
+`LOG_LEVEL=DEBUG` adds skipped datastreams, PATCH pages and tracebacks.
 
 ## Set a fixed resultQuality
 
@@ -107,6 +110,12 @@ A check that looks at all the data (`flagZScore` without `window`) or counts
 values (`"window": 6`) would see other buffers: a sample of buffers checked
 on their own catches this, and that constraint then runs one buffer at a
 time, as slow as Flink. Prefer time windows.
+
+The new `resultQuality` values are written with `PATCH /BulkObservations`,
+10,000 per request, in one database UPDATE each. Rewriting 2,030
+observations with versioning took 2.5 s for the whole run, against 25 s with
+one PATCH each. On an istSOS4 without that endpoint (405), it falls back to
+one PATCH per observation.
 
 ## Different from Flink
 
