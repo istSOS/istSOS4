@@ -25,7 +25,7 @@ from app.utils.utils import (
     handle_datetime_fields,
     handle_result_field,
 )
-from app.v1.endpoints.error_response import error_response
+from app.v1.endpoints.exceptions import BadRequest, Forbidden, ServiceUnavailable
 from app.v1.endpoints.functions import (
     get_observation_type,
     set_role,
@@ -121,19 +121,15 @@ async def data_array_observation(
                 data_array = observation_set.get("dataArray", [])
 
                 if not datastream_id:
-                    return error_response(
-                        status.HTTP_400_BAD_REQUEST,
-                        "Missing 'datastream_id' in Datastream.",
-                    )
+                    raise BadRequest("Missing 'datastream_id' in Datastream.")
 
                 # Check that at least phenomenonTime and result are present
                 if (
                     "phenomenonTime" not in components
                     or "result" not in components
                 ):
-                    return error_response(
-                        status.HTTP_400_BAD_REQUEST,
-                        "Missing required properties 'phenomenonTime' or 'result' in components.",
+                    raise BadRequest(
+                        "Missing required properties 'phenomenonTime' or 'result' in components."
                     )
 
                 observation_type = await get_observation_type(
@@ -171,23 +167,15 @@ async def data_array_observation(
                             )
                         )
                         response_urls.append(observation_selfLink)
-                    except InsufficientPrivilegeError:
-                        return JSONResponse(
-                            status_code=status.HTTP_403_FORBIDDEN,
-                            content={
-                                "code": 403,
-                                "type": "error",
-                                "message": "Insufficient privileges.",
-                            },
-                        )
+                    except InsufficientPrivilegeError as exc:
+                        raise Forbidden() from exc
                     except (
                         asyncpg.PostgresConnectionError,
                         asyncpg.TooManyConnectionsError,
-                    ):
-                        return error_response(
-                            status.HTTP_503_SERVICE_UNAVAILABLE,
-                            "Database temporarily unavailable",
-                        )
+                    ) as exc:
+                        raise ServiceUnavailable(
+                            "Database temporarily unavailable"
+                        ) from exc
                     except Exception as e:
                         response_urls.append("error")
 
