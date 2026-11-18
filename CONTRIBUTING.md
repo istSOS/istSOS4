@@ -114,7 +114,7 @@ black --check .
 To check your code for issues:
 
 ```sh
-pylint app/
+pylint api/app/
 ```
 
 Please make sure your code passes both `black` and `pylint` checks before
