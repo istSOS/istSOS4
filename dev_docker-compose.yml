@@ -82,8 +82,8 @@ services:
     build:
       context: ./aggregation
       dockerfile: Dockerfile
-    restart: unless-stopped
-    init: true
+    restart: always
+    container_name: istsos4-aggregation
     depends_on:
       api:
         condition: service_started
@@ -166,13 +166,11 @@ services:
       context: ./utils
       dockerfile: services/qc/Dockerfile
     restart: always
-    init: true
     container_name: istsos4-qc
     depends_on:
       - api
     environment:
       ISTSOS4_URL: http://api:5000${SUBPATH}${VERSION}
-      # @iot.nextLink start with this: qc sends them to ISTSOS4_URL instead
       ISTSOS4_PUBLIC_URL: ${HOSTNAME}${SUBPATH}${VERSION}
       ISTSOS4_USERNAME: ${QC_USERNAME:-}
       ISTSOS4_PASSWORD: ${QC_PASSWORD:-}
