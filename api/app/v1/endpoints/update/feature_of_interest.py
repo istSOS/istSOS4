@@ -128,9 +128,7 @@ async def update_feature_of_interest(
             )
             for record in datastream_records:
                 ds_id = record["datastream_id"]
-                await update_datastream_observedArea(
-                    connection, ds_id, feature_of_interest_id
-                )
+                await update_datastream_observedArea(connection, ds_id)
 
             if current_user is not None:
                 await connection.execute("RESET ROLE;")
