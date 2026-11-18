@@ -69,7 +69,6 @@ from app.v1.endpoints.read import read
 from app.v1.endpoints.read import sensor as read_sensor
 from app.v1.endpoints.read import thing as read_thing
 from app.v1.endpoints.read import user as read_user
-from app.v1.endpoints.update import aggregation_job as update_aggregation_job
 from app.v1.endpoints.update import bulk_observation as update_bulk_observation
 from app.v1.endpoints.update import datastream as update_datastream
 from app.v1.endpoints.update import (
@@ -229,7 +228,6 @@ v1.include_router(update_datastream.v1)
 v1.include_router(update_feature_of_interest.v1)
 v1.include_router(update_observation.v1)
 v1.include_router(update_bulk_observation.v1)
-v1.include_router(update_aggregation_job.v1)
 
 # Register the delete endpoints
 v1.include_router(delete_location.v1)
