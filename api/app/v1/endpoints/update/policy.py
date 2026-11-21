@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
-
 from app import POSTGRES_PORT_WRITE
 from app.db.asyncpg_db import get_pool, get_pool_w
 from app.oauth import get_current_user
+from app.utils.policy_expression import render_policy_expression
 from app.utils.utils import pg_quote_ident, validate_payload_keys
 from app.v1.endpoints.exceptions import NotFound
 from app.v1.endpoints.functions import set_role
@@ -32,23 +31,6 @@ ALLOWED_KEYS = [
     "users",
     "policy",
 ]
-
-_UNSAFE_POLICY_TOKENS_RE = re.compile(r";|--|/\*|\*/|\x00")
-
-
-def validate_policy_expression(value: str) -> str:
-    if not isinstance(value, str):
-        raise ValueError("Policy expression must be a string")
-
-    expression = value.strip()
-    if expression == "":
-        raise ValueError("Policy expression must not be empty")
-
-    if _UNSAFE_POLICY_TOKENS_RE.search(expression):
-        raise ValueError("Unsafe policy expression")
-
-    return expression
-
 
 @v1.api_route(
     "/Policies",
@@ -99,7 +81,7 @@ async def update_policy(
                         tablename, cmd = row["tablename"], row["cmd"]
 
                     if payload.get("policy") is not None:
-                        policy_expression = validate_policy_expression(
+                        policy_expression = render_policy_expression(
                             payload["policy"]
                         )
                         policy_ident = pg_quote_ident(policy)
