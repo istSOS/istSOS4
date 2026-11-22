@@ -14,21 +14,6 @@
 
 import json
 
-from app import (
-    COUNT_ESTIMATE_THRESHOLD,
-    COUNT_MODE,
-    HOSTNAME,
-    REDIS,
-    SUBPATH,
-    TOP_VALUE,
-    VERSION,
-    VERSIONING,
-)
-from app.db.redis_db import redis
-from app.db.sqlalchemy_db import engine
-from app.models import *
-from app.sta2rest import sta2rest
-from app.utils.utils import build_expand
 from geoalchemy2 import Geometry
 from sqlalchemy import (
     asc,
@@ -46,9 +31,31 @@ from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.postgresql.ranges import TSTZRANGE
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.expression import cast
-from sqlalchemy.sql.sqltypes import Integer, String, Text
+from sqlalchemy.sql.sqltypes import String, Text
+
+from app import (
+    COUNT_ESTIMATE_THRESHOLD,
+    COUNT_MODE,
+    HOSTNAME,
+    REDIS,
+    SUBPATH,
+    TOP_VALUE,
+    VERSION,
+    VERSIONING,
+)
+from app.db.redis_db import redis
+from app.db.sqlalchemy_db import engine
+from app.models import *
+from app.sta2rest import sta2rest
+from app.utils.utils import build_expand
 
 from .filter_visitor import FilterVisitor, resolve_field
+from .expansion import (
+    ExpansionOptions,
+    ExpansionSpec,
+    PagedExpansionQuery,
+    get_expand_function,
+)
 from .odata_query.grammar import ODataLexer, ODataParser
 from .sta_parser.ast import *
 from .sta_parser.visitor import Visitor
@@ -390,10 +397,12 @@ class NodeVisitor(Visitor):
                             get_query_compiled(nested_expand_query[0]),
                             nested_expand_query,
                             label_name,
-                            select_node,
-                            filter_node,
-                            orderby_node,
-                            expand_node,
+                            ExpansionOptions(
+                                select_node,
+                                filter_node,
+                                orderby_node,
+                                expand_node,
+                            ),
                         )
                     )
 
@@ -584,6 +593,8 @@ class NodeVisitor(Visitor):
             )
             select_args.append(get_select_attr(attr, name, as_of=node.as_of))
 
+        expand_specs = []
+
         joins = []
         filters = []
         labels = {}
@@ -737,16 +748,18 @@ class NodeVisitor(Visitor):
                     if relationship.direction.name != "MANYTOONE":
                         labels[label_name] = expand_query[8]
 
-                    select_args.append(
-                        get_expand_function(
+                    expand_specs.append(
+                        ExpansionSpec(
                             relationship,
                             get_query_compiled(expand_query[0]),
                             expand_query,
                             label_name,
-                            select_node,
-                            filter_node,
-                            orderby_node,
-                            expand_node,
+                            ExpansionOptions(
+                                select_node,
+                                filter_node,
+                                orderby_node,
+                                expand_node,
+                            ),
                         )
                     )
 
@@ -871,12 +884,15 @@ class NodeVisitor(Visitor):
             if top_value > 1:
                 top_value -= 1
 
-        main_query = main_query.limit(top_value).offset(skip_value)
+        # PostgreSQL can evaluate VOLATILE select expressions before LIMIT
+        # when OFFSET is present, so root expansions are added after paging.
+        main_query = PagedExpansionQuery(
+            main_entity, ordering, expand_specs, len(select_args)
+        ).apply(main_query, top_value, skip_value)
 
         if result_format == "DataArray":
             top_value += 1
 
-        main_query = main_query.subquery()
         columns_to_select = []
         for column in main_query.columns:
             if column.name not in labels:
@@ -1084,116 +1100,3 @@ def get_query_compiled(query):
         dialect=engine.dialect,
         compile_kwargs={"literal_binds": True},
     )
-
-
-def get_expand_function(
-    relationship,
-    compiled_query,
-    sub_query,
-    label,
-    select_node,
-    filter_node,
-    orderby_node,
-    expand_node,
-):
-    if relationship.direction.name != "MANYTOMANY":
-        return expand_function(
-            compiled_query,
-            sub_query,
-            label,
-            select_node,
-            filter_node,
-            orderby_node,
-            expand_node,
-        )
-    return expand_many2many_function(
-        compiled_query,
-        sub_query,
-        label,
-        relationship,
-        select_node,
-        filter_node,
-        orderby_node,
-        expand_node,
-    )
-
-
-def expand_function(
-    compiled_query,
-    sub_query,
-    label_name,
-    select_node,
-    filter_node,
-    orderby_node,
-    expand_node,
-):
-    return func.sensorthings.expand(
-        str(compiled_query),
-        ("{}".format(sub_query[1].name) if sub_query[1] is not None else "id"),
-        (
-            text(
-                '"{}".id::integer'.format(
-                    globals()[sub_query[2]].__tablename__
-                )
-            )
-            if sub_query[1] is not None
-            else text(
-                '"{}".{}_id::integer'.format(
-                    globals()[sub_query[2]].__tablename__,
-                    sub_query[5].replace("TravelTime", ""),
-                )
-            )
-        ),
-        sub_query[4],
-        sub_query[3],
-        (True if sub_query[1] is not None else False),
-        sub_query[7],
-        label_name,
-        HOSTNAME
-        + SUBPATH
-        + VERSION
-        + getattr(globals()[sub_query[2]], "self_link")
-        + "/",
-        sub_query[8],
-        COUNT_MODE,
-        COUNT_ESTIMATE_THRESHOLD,
-        select_node,
-        filter_node,
-        orderby_node,
-        expand_node,
-    ).label(label_name)
-
-
-def expand_many2many_function(
-    compiled_query,
-    sub_query,
-    label_name,
-    relationship,
-    select_node,
-    filter_node,
-    orderby_node,
-    expand_node,
-):
-    return func.sensorthings.expand_many2many(
-        str(compiled_query),
-        f'{relationship.secondary.schema}."{relationship.secondary.name}"',
-        text('"{}".id::integer'.format(globals()[sub_query[2]].__tablename__)),
-        "{}_id".format(sub_query[5].replace("TravelTime", "")),
-        "{}_id".format(sub_query[2].replace("TravelTime", "")),
-        sub_query[4],
-        sub_query[3],
-        sub_query[7],
-        label_name,
-        HOSTNAME
-        + SUBPATH
-        + VERSION
-        + getattr(globals()[sub_query[2]], "self_link")
-        + "/",
-        sub_query[8],
-        COUNT_MODE,
-        COUNT_ESTIMATE_THRESHOLD,
-        select_node,
-        filter_node,
-        orderby_node,
-        expand_node,
-    ).label(label_name)
