@@ -507,6 +507,31 @@ def test_expand_multiple(client, seed):
     }
 
 
+def test_expand_collection_page_preserves_parent_and_expansion(client, seed):
+    """A paged collection query keeps the selected parent and expanded values."""
+    params = {
+        "$filter": f"id eq {format_id(seed.thing_id)}",
+        "$orderby": "id asc",
+        "$top": 1,
+    }
+    plain = fetch(client, "Things", params)
+    expanded = fetch(
+        client,
+        "Things",
+        {**params, "$expand": "Locations,Datastreams"},
+    )
+
+    assert ids_of(expanded) == ids_of(plain) == [seed.thing_id]
+    thing = values(expanded)[0]
+    assert not any(key.startswith("__sta_") for key in thing)
+    assert seed.location_id in [
+        location["@iot.id"] for location in thing["Locations"]
+    ]
+    assert set(seed.datastream_ids) <= {
+        datastream["@iot.id"] for datastream in thing["Datastreams"]
+    }
+
+
 def test_expand_nested_path(client, seed):
     """req/request-data/expand -- a multi-level relationship (Datastreams/Observations)."""
     doc = fetch(
