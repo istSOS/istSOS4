@@ -66,28 +66,39 @@ If you have questions, feel free to open an issue or reach out on the
 
 ## Running the Tests
 
-istSOS4 uses [pytest](https://docs.pytest.org/) for testing.
+istSOS4 uses [pytest](https://docs.pytest.org/) for testing. Tests are split
+into three suites, each with its own configuration:
 
-### Run all tests
+| Folder | What it covers | Needs the Docker services? |
+|---|---|---|
+| `tests/conformance/` | OGC SensorThings API v1.1 conformance (OGC 18-088) | Yes |
+| `tests/extensions/` | istSOS4 extensions (Data Array, Filtered Delete, Network) | Yes |
+| `tests/unit/` | Unit tests for API modules | No |
 
-```sh
-pytest
-```
-
-### Run a specific test file
-
-```sh
-pytest tests/test_auth.py
-```
-
-### Run tests with verbose output
+### Conformance tests
 
 ```sh
-pytest -v
+pip install -r tests/conformance/requirements.txt
+pytest tests/conformance
 ```
 
-Make sure the Docker services are running before executing tests that require
-a database connection.
+The tests target `http://localhost:8018/istsos4/v1.1` by default. Set the
+`STA_BASE_URL` environment variable to test another instance.
+
+### Unit tests
+
+```sh
+pip install -r api/requirements.txt pytest
+pytest tests/unit
+```
+
+### Extension tests
+
+The extension suites depend on feature flags. For example, the Network tests
+require the service to run with `NETWORK=1`. See
+`tests/extensions/network/README.md` for details.
+
+Add `-v` to any of the commands above for verbose output.
 
 ---
 
@@ -97,29 +108,33 @@ istSOS4 follows consistent Python code style using **black** and **pylint**.
 
 ### Formatting with black
 
-To automatically format your code:
+The codebase uses a line length of 79 characters. To format the files you
+changed:
 
 ```sh
-black .
+black -l 79 path/to/changed_file.py
 ```
 
 To check formatting without making changes:
 
 ```sh
-black --check .
+black -l 79 --check path/to/changed_file.py
 ```
+
+Formatting only the files you changed keeps pull requests focused.
 
 ### Linting with pylint
 
 To check your code for issues:
 
 ```sh
-pylint app/
+pylint api/app/
 ```
 
 Please make sure your code passes both `black` and `pylint` checks before
-submitting a pull request. These checks will also run automatically on your
-pull request via CI.
+submitting a pull request. CI currently runs the conformance suite on pushes
+to `main` and `dev`; formatting and linting are not checked automatically, so
+please run them locally.
 
 ---
 
