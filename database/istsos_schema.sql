@@ -210,7 +210,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "id" BIGSERIAL NOT NULL,
     "phenomenonTimeStart" TIMESTAMPTZ DEFAULT NOW(),
     "phenomenonTimeEnd" TIMESTAMPTZ DEFAULT NOW(),
-    "resultTime" TIMESTAMPTZ DEFAULT NOW(),
+    "resultTime" TIMESTAMPTZ DEFAULT NULL,
     "resultType" INT NOT NULL,
     "resultString" TEXT,
     "resultNumber" DOUBLE PRECISION,
