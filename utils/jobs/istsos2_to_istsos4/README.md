@@ -121,5 +121,8 @@ On Docker Desktop use `host.docker.internal` in the URLs instead of
 The script reads `.env` and `config/` from its own directory:
 
 ```bash
+set -a
+source .env
+set +a
 python3 istsos2_to_istsos4.py
 ```
