@@ -210,7 +210,7 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "id" BIGSERIAL NOT NULL,
     "phenomenonTimeStart" TIMESTAMPTZ DEFAULT NOW(),
     "phenomenonTimeEnd" TIMESTAMPTZ DEFAULT NOW(),
-    "resultTime" TIMESTAMPTZ DEFAULT NULL,
+    "resultTime" TIMESTAMPTZ DEFAULT NOW(),
     "resultType" INT NOT NULL,
     "resultString" TEXT,
     "resultNumber" DOUBLE PRECISION,
@@ -221,18 +221,13 @@ CREATE TABLE IF NOT EXISTS sensorthings."Observation" (
     "parameters" jsonb DEFAULT NULL,
     "datastream_id" BIGINT NOT NULL REFERENCES sensorthings."Datastream"(id) ON DELETE CASCADE,
     "featuresofinterest_id" BIGINT NOT NULL REFERENCES sensorthings."FeaturesOfInterest"(id) ON DELETE CASCADE,
-    PRIMARY KEY ("id", "phenomenonTimeStart")
+    PRIMARY KEY ("id")
 );
 
 CREATE INDEX IF NOT EXISTS "idx_observation_datastream_id" ON sensorthings."Observation" USING btree ("datastream_id" ASC NULLS LAST) TABLESPACE pg_default;
 CREATE INDEX IF NOT EXISTS "idx_observation_featuresofinterest_id" ON sensorthings."Observation" USING btree ("featuresofinterest_id" ASC NULLS LAST) TABLESPACE pg_default;
 CREATE INDEX IF NOT EXISTS "idx_observation_observation_id_datastream_id" ON sensorthings."Observation" USING btree ("datastream_id" ASC NULLS LAST, "id" ASC NULLS LAST) TABLESPACE pg_default;
 CREATE INDEX IF NOT EXISTS "idx_observation_datastream_id_phtime" ON sensorthings."Observation" USING btree ("datastream_id" ASC NULLS LAST, "phenomenonTimeStart" ASC NULLS LAST, "id" ASC NULLS LAST) TABLESPACE pg_default WHERE "datastream_id" IS NOT NULL;
-
-SELECT create_hypertable(
-    'sensorthings."Observation"',
-    by_range('phenomenonTimeStart', INTERVAL '1 year')
-);
 
 CREATE OR REPLACE FUNCTION "@iot.selfLink"(sensorthings."Observation") RETURNS text AS $$
     SELECT '/Observations(' || $1.id || ')';

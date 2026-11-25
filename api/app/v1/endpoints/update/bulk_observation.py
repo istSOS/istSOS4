@@ -48,9 +48,8 @@ if VERSIONING or AUTHORIZATION:
     message = Header(None, alias="commit-message")
 
 # Components a bulk PATCH may set, besides "@iot.id".
-# ponytail: phenomenonTime is rejected: it is the hypertable partition key, so
-# changing it means DELETE + re-INSERT (see relocate_observation).
 COMPONENTS = (
+    "phenomenonTime",
     "result",
     "resultTime",
     "resultQuality",
@@ -60,6 +59,8 @@ COMPONENTS = (
 
 # SQL type of each Observation column the components set, for unnest.
 COLUMN_TYPES = {
+    "phenomenonTimeStart": "timestamptz",
+    "phenomenonTimeEnd": "timestamptz",
     "resultType": "int",
     "resultNumber": "float8",
     "resultBoolean": "boolean",
@@ -89,7 +90,7 @@ PAYLOAD_EXAMPLE = [
         "Update many Observations in one request, in the dataArray style of "
         "POST /BulkObservations: one set per Datastream, components names "
         f"\"@iot.id\" and any of {', '.join(COMPONENTS)}, each dataArray row "
-        "gives their values. phenomenonTime cannot be updated here. One "
+        "gives their values. One "
         "commit and one transaction for the whole request: if an @iot.id is "
         "not an Observation of its Datastream, nothing is updated. Send only "
         "rows that change: with versioning, an unchanged row fails the "
@@ -141,14 +142,16 @@ async def bulk_update_observations(
                 )
 
                 result_times = [t for t in columns.get("resultTime", []) if t]
-                if result_times:
+                starts = columns.get("phenomenonTimeStart", [])
+                ends = columns.get("phenomenonTimeEnd", [])
+                if result_times or starts:
                     await update_datastream_time_ranges(
                         conn,
                         datastream_id,
-                        None,
-                        None,
-                        min(result_times),
-                        max(result_times),
+                        min(starts) if starts else None,
+                        max(ends) if ends else None,
+                        min(result_times) if result_times else None,
+                        max(result_times) if result_times else None,
                     )
 
             if current_user is not None:
@@ -186,11 +189,6 @@ def parse_payload(payload):
         if type(datastream_id) is not int:
             raise BadRequest('Datastream needs an integer "@iot.id".')
 
-        if isinstance(components, list) and "phenomenonTime" in components:
-            raise BadRequest(
-                "phenomenonTime update not supported, use "
-                "PATCH /Observations(id)."
-            )
         if (
             not isinstance(components, list)
             or not all(isinstance(c, str) for c in components)
@@ -249,6 +247,13 @@ def convert_values(values, observation_type):
                     result["resultJSON"] = json.dumps(result["resultJSON"])
                 for column, column_value in result.items():
                     columns.setdefault(column, []).append(column_value)
+        elif component == "phenomenonTime":
+            # As a single PATCH: an instant sets start = end, "start/end" an interval.
+            bounds = [
+                parse_phenomenon_time(value) for value in component_values
+            ]
+            columns["phenomenonTimeStart"] = [start for start, _ in bounds]
+            columns["phenomenonTimeEnd"] = [end for _, end in bounds]
         elif component in ("resultTime", "validTime"):
             columns[component] = [
                 parse_time(component, value) for value in component_values
@@ -265,6 +270,22 @@ def convert_values(values, observation_type):
                 for value in component_values
             ]
     return columns
+
+
+def parse_phenomenon_time(value):
+    """phenomenonTime is required: an instant or a "start/end" interval."""
+    start, separator, end = (
+        str(value).partition("/") if value is not None else ("", "", "")
+    )
+    start = safe_parse_datetime(start)
+    end = safe_parse_datetime(end) if separator else start
+    try:
+        invalid = start is None or end is None or end < start
+    except TypeError:  # one bound with a time zone, the other without
+        invalid = True
+    if invalid:
+        raise BadRequest(f"Invalid phenomenonTime: {value!r}")
+    return start, end
 
 
 def parse_time(component, value):

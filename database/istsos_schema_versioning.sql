@@ -26,17 +26,8 @@ DECLARE
     target_schema text;
     target_table text;
 BEGIN
-    SELECT n.nspname, c.relname
-    INTO target_schema, target_table
-    FROM pg_inherits i
-    JOIN pg_class c ON c.oid = i.inhparent
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE i.inhrelid = TG_RELID;
-
-    IF NOT FOUND THEN
-        target_schema := TG_TABLE_SCHEMA;
-        target_table := TG_TABLE_NAME;
-    END IF;
+    target_schema := TG_TABLE_SCHEMA;
+    target_table := TG_TABLE_NAME;
 
     IF (TG_OP = 'UPDATE') THEN
         -- Verify the id is not modified

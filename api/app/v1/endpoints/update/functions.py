@@ -80,52 +80,6 @@ async def set_commit(connection, commit_message, current_user):
     return await insert_commit(connection, commit, "UPDATE")
 
 
-async def relocate_observation(
-    connection, observation_id, payload, phenomenon_time=None
-):
-    """Re-create an Observation row to change its phenomenonTime.
-
-    phenomenonTimeStart is the TimescaleDB hypertable partition column, and an
-    UPDATE cannot move a row to a different chunk. So when phenomenonTime changes
-    we DELETE the row and re-INSERT it (same id) with the patched columns; the
-    untouched columns are carried over from the deleted row. The column list is
-    read from the catalog so this works identically with or without versioning
-    (the systemTimeValidity column is simply absent when versioning is off).
-    """
-    columns = [record["column_name"] for record in await connection.fetch("""
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = 'sensorthings'
-              AND table_name = 'Observation'
-            ORDER BY ordinal_position
-            """)]
-    params = [observation_id]
-    if phenomenon_time is not None:
-        params.append(phenomenon_time)
-    insert_cols = []
-    select_exprs = []
-    for col in columns:
-        insert_cols.append(f'"{col}"')
-        if col in payload:
-            params.append(payload[col])
-            select_exprs.append(f"${len(params)}")
-        else:
-            select_exprs.append(f'deleted."{col}"')
-
-    query = f"""
-        WITH deleted AS (
-            DELETE FROM sensorthings."Observation"
-            WHERE id = $1{phenomenon_time_filter(phenomenon_time, 2)}
-            RETURNING *
-        )
-        INSERT INTO sensorthings."Observation" ({", ".join(insert_cols)})
-        SELECT {", ".join(select_exprs)}
-        FROM deleted
-        RETURNING "phenomenonTimeStart", "phenomenonTimeEnd", "resultTime", "datastream_id";
-    """
-    return await connection.fetchrow(query, *params)
-
-
 async def update_entity(
     connection,
     entity_name,
@@ -138,11 +92,6 @@ async def update_entity(
         key: json.dumps(value) if isinstance(value, dict) else value
         for key, value in payload.items()
     }
-    if obs and "phenomenonTimeStart" in payload:
-        return await relocate_observation(
-            connection, entity_id, payload, phenomenon_time
-        )
-
     set_clause = ", ".join(
         [
             (
