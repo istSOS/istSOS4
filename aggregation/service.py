@@ -29,11 +29,9 @@ class ApiError(CalculationError):
 
 
 def boolean(value, name):
-    if value.lower() in {"true", "1"}:
-        return True
-    if value.lower() in {"false", "0"}:
-        return False
-    raise ValueError(f"{name} must be true/false or 1/0")
+    if value in {"0", "1"}:
+        return value == "1"
+    raise ValueError(f"{name} must be 0 or 1")
 
 
 def next_execution(schedule, after):
@@ -76,7 +74,7 @@ class Settings:
                 os.getenv("AGGREGATION_REQUEST_TIMEOUT_SECONDS", "30")
             ),
             run_on_startup=boolean(
-                os.getenv("AGGREGATION_RUN_ON_STARTUP", "false"),
+                os.getenv("AGGREGATION_RUN_ON_STARTUP", "0"),
                 "AGGREGATION_RUN_ON_STARTUP",
             ),
         )
@@ -528,10 +526,10 @@ def main():
         signal.signal(signum, lambda *_: stop.set())
     try:
         enabled = boolean(
-            os.getenv("AGGREGATION_ENABLED", "false"), "AGGREGATION_ENABLED"
+            os.getenv("AGGREGATION_ENABLED", "0"), "AGGREGATION_ENABLED"
         )
         if not enabled:
-            logger.info("Aggregation disabled (AGGREGATION_ENABLED=false)")
+            logger.info("Aggregation disabled (AGGREGATION_ENABLED=0)")
             if not args.once:
                 stop.wait()
             return 0

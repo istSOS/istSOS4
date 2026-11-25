@@ -15,10 +15,10 @@ visible through the processing-state API.
 Set these in the repository `.env`:
 
 ```dotenv
-AGGREGATION_ENABLED=true
+AGGREGATION_ENABLED=1
 AGGREGATION_SCHEDULE="*/10 * * * *"
 AGGREGATION_UTC_OFFSET_MINUTES=60
-AGGREGATION_RUN_ON_STARTUP=false
+AGGREGATION_RUN_ON_STARTUP=0
 ```
 
 Then run:
@@ -34,7 +34,7 @@ The Compose network must exist, as required by the existing development setup.
 Only one aggregation service instance should run: overlap prevention is local
 to the process. The production Compose file is unchanged.
 
-The service is disabled by default. With `AGGREGATION_ENABLED=false` it remains
+The service is disabled by default. With `AGGREGATION_ENABLED=0` it remains
 idle without contacting the API. After changing environment settings, recreate
 the service with `up -d aggregation`; after editing the bind-mounted Python
 source, use `restart aggregation`.
@@ -43,17 +43,17 @@ source, use `restart aggregation`.
 
 The five-field cron expression is interpreted in **UTC**. `*/10 * * * *`
 executes at minutes 00, 10, 20, 30, 40 and 50. There is no immediate run unless
-`AGGREGATION_RUN_ON_STARTUP=true`. The parser is
+`AGGREGATION_RUN_ON_STARTUP=1`. The parser is
 [croniter](https://github.com/pallets-eco/croniter), with normal cron Sunday
 numbering (0 or 7) and day-of-month/day-of-week OR semantics. Seconds/year fields
 and cron aliases are not accepted. Invalid settings fail at startup.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AGGREGATION_ENABLED` | `false` | Enable reads (`true`/`false` or `1`/`0`) |
+| `AGGREGATION_ENABLED` | `0` | Enable reads (`1`/`0`) |
 | `AGGREGATION_SCHEDULE` | `*/10 * * * *` | Five-field cron schedule in UTC |
 | `AGGREGATION_UTC_OFFSET_MINUTES` | `60` | Default bucket offset, from -840 to 840 minutes |
-| `AGGREGATION_RUN_ON_STARTUP` | `false` | Perform one aggregation cycle before waiting for cron |
+| `AGGREGATION_RUN_ON_STARTUP` | `0` | Perform one aggregation cycle before waiting for cron |
 | `AGGREGATION_WRITE_BATCH_SIZE` | `1000` | Calculated result rows per COPY/upsert batch (1–10000) |
 | `AGGREGATION_REQUEST_TIMEOUT_SECONDS` | `30` | Positive HTTP timeout |
 | `AGGREGATION_API_URL` | Internal API root from Compose `SUBPATH` and `VERSION` | Complete URL including the version path |
@@ -86,7 +86,7 @@ because a PostgreSQL session advisory lock permits only one state-writing servic
 ```bash
 docker compose -f dev_docker-compose.yml stop aggregation
 docker compose -f dev_docker-compose.yml run --rm --no-deps \
-  -e AGGREGATION_ENABLED=true aggregation python -m aggregation --once
+  -e AGGREGATION_ENABLED=1 aggregation python -m aggregation --once
 docker compose -f dev_docker-compose.yml up -d --no-deps aggregation
 ```
 

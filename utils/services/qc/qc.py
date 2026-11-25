@@ -71,6 +71,13 @@ def save(path, state):
 
 
 def main():
+    enabled = os.getenv("ENABLED", "0")
+    if enabled not in {"0", "1"}:
+        raise ValueError("ENABLED must be 0 or 1")
+    if enabled == "0":
+        print("qc: disabled (QC_ENABLED=0)")
+        while True:  # idle, so restart: always doesn't loop
+            time.sleep(3600)
     url = os.environ["ISTSOS4_URL"].rstrip("/")
     client = Client(
         url,

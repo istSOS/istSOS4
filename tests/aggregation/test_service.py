@@ -293,6 +293,7 @@ def test_cron_uses_fixed_utc_times_and_crontab_day_semantics(
         ("AGGREGATION_REQUEST_TIMEOUT_SECONDS", "nan"),
         ("AGGREGATION_REQUEST_TIMEOUT_SECONDS", "0"),
         ("AGGREGATION_RUN_ON_STARTUP", "yes"),
+        ("AGGREGATION_RUN_ON_STARTUP", "true"),
         ("AGGREGATION_WRITE_BATCH_SIZE", "0"),
         ("AGGREGATION_WRITE_BATCH_SIZE", "10001"),
         ("AGGREGATION_WRITE_BATCH_SIZE", "bad"),
@@ -345,7 +346,7 @@ def test_scheduler_skips_overlap_and_keeps_clock_alignment(caplog):
 
 def test_disabled_once_performs_no_api_requests(monkeypatch, transport):
     _, calls = transport
-    monkeypatch.setenv("AGGREGATION_ENABLED", "false")
+    monkeypatch.setenv("AGGREGATION_ENABLED", "0")
     monkeypatch.setattr("sys.argv", ["aggregation", "--once"])
     monkeypatch.setattr(signal, "signal", lambda *_: None)
     assert service.main() == 0

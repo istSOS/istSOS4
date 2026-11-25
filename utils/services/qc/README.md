@@ -68,6 +68,7 @@ rest.
 
 | `.env` | Default | |
 |---|---|---|
+| `QC_ENABLED` | `0` | `1` runs the checks; `0` idles |
 | `QC_USERNAME`, `QC_PASSWORD` | empty | istSOS user, `qc` role |
 | `QC_COMMIT_MESSAGE` | empty | see [Run](#run) |
 | `QC_INTERVAL_MINUTES` | `10` | between the start of two runs |
