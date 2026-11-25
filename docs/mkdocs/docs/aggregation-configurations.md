@@ -4,7 +4,7 @@ This administrator extension stores settings for the Python aggregation service.
 The API stores settings; the separately scheduled Python service retrieves
 observations, calculates statistics with pandas and writes results. Parquet
 export and `/Datastreams(id)/Aggregate` are not implemented yet. The database initialization also
-creates the six predefined [result hypertables](aggregation-results.md).
+creates the six predefined [result tables](aggregation-results.md).
 
 Paths below are relative to the SensorThings API root, normally
 `/istsos4/v1.1`. They are custom configuration resources, not standard STA
@@ -12,18 +12,11 @@ entities; the full SensorThings/OData query language does not apply to them.
 
 ## Database installation
 
-New database images install the table automatically. For an existing database,
-apply `database/aggregation_configuration.sql` using the database owner/superuser:
+New database images install the aggregation schema automatically: `database/Dockerfile`
+loads `aggregation_configuration.sql`, `aggregation_results.sql`,
+`aggregation_processing_state.sql` and `aggregation_engine.sql`, in this order.
+Existing databases are not migrated: rebuild them from the image.
 
-```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/aggregation_configuration.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/aggregation_results.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/aggregation_processing_state.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/aggregation_engine.sql
-```
-
-All scripts are idempotent. The configuration script removes the obsolete
-`intervals` column from initial installations, preserving the other settings.
 Intervals are fixed for all configured Datastreams: `PT10M`, `PT1H`, `P1D`, `P7D`,
 `P1M`, `P1Y`; POST/PATCH reject an `intervals` field. Installation requires the existing istSOS schema and
 `administrator` role, and works independently of versioning and duplicate-name
@@ -34,12 +27,12 @@ not perform schema changes.
 
 | Method | Path | Result |
 |---|---|---|
-| POST | `/AggregationConfigurations` | Create; `201`, body and `Location` header |
-| GET | `/AggregationConfigurations` | List; `200`, `value` array |
-| GET | `/AggregationConfigurations(id)` | Read one; `200` |
-| PATCH | `/AggregationConfigurations(id)` | Update editable settings; `200`, complete updated body |
-| DELETE | `/AggregationConfigurations(id)` | Delete configuration; `204`, no body |
-| GET | `/AggregationConfigurations(id)/ProcessingState` | Read latest service-managed run state |
+| POST | `/Aggregations` | Create; `201`, body and `Location` header |
+| GET | `/Aggregations` | List; `200`, `value` array |
+| GET | `/Aggregations(id)` | Read one; `200` |
+| PATCH | `/Aggregations(id)` | Update editable settings; `200`, complete updated body |
+| DELETE | `/Aggregations(id)` | Delete configuration; `204`, no body |
+| GET | `/Aggregations(id)/ProcessingState` | Read latest service-managed run state |
 
 When authorization is enabled, all operations require the `administrator` role.
 When authorization is disabled, they follow the server's unauthenticated mode.
@@ -78,6 +71,7 @@ its configured defaults. This API stores overrides, not resolved worker values.
 | `startTime` / `endTime` | Null, or ISO 8601 datetime with explicit timezone; stored in UTC | Yes |
 | `resultQualityKey` | Null, or nonblank JSON quality-object key, at most 255 characters | Yes |
 | `missingValues` | Null, or array of finite numeric input missing markers; `[]` explicitly selects none | Yes |
+| `referenceDatastreamId` | Null, or another existing Datastream; only with `mode: event`. Buckets after its last observation are not evaluated (a silent station is unknown, not zero) and are computed once it reports again | Yes |
 | `createdAt` / `updatedAt` | Server-managed timestamps | No |
 | `@iot.selfLink` | Server-generated configuration URL | No |
 | `Datastream@iot.navigationLink` | Server-generated source Datastream URL | No |
@@ -93,7 +87,7 @@ filtering. `minInputQuality` remains required and stored while quality is ignore
 so disabling the bypass restores the chosen threshold. For example:
 
 ```http
-PATCH /AggregationConfigurations(1)
+PATCH /Aggregations(1)
 Content-Type: application/json
 
 {"ignoreQuality": true}
@@ -129,7 +123,7 @@ virtual process; `conversionFactor` remains an optional explicit override.
 Create a sampled configuration:
 
 ```http
-POST /AggregationConfigurations
+POST /Aggregations
 Content-Type: application/json
 
 {
@@ -143,7 +137,7 @@ Content-Type: application/json
 Update several settings, preserving all omitted fields:
 
 ```http
-PATCH /AggregationConfigurations(1)
+PATCH /Aggregations(1)
 Content-Type: application/json
 
 {
@@ -183,9 +177,8 @@ recomputation. Use a separate manual recomputation when historical results must 
 recomputation endpoint; the service supports manual recomputation through its CLI.
 
 The previous `/AggregationJobs` routes and their OpenAPI entries are removed.
-The legacy SQL procedures and already registered TimescaleDB jobs are left
-untouched. Operators manage production job cleanup separately; this migration
-does not disable/delete jobs or delete previous aggregation Datastreams.
+The legacy SQL aggregation procedures and the hypertables have been removed; this
+migration does not delete previous aggregation Datastreams.
 
 ## Tests
 
@@ -204,10 +197,10 @@ DEBUG=0 AUTHORIZATION=0 VERSIONING=0 NETWORK=0 \
 ```
 
 Integration tests create/drop uniquely named databases and temporary login roles
-on a **disposable** PostgreSQL/TimescaleDB server. They load the real istSOS
+on a **disposable** PostgreSQL/PostGIS server. They load the real istSOS
 schema and run HTTP CRUD in both versioned and unversioned modes, including
 duplicate-name support, FK cascade, pagination, merged PATCH validation and
-administrator enforcement. They also verify the six result hypertables,
+administrator enforcement. They also verify the six result tables,
 upserts, statistics constraints, result retention, source deletion, and
 idempotent installation. The login needs database/role creation privileges.
 
@@ -221,20 +214,19 @@ DEBUG=0 AUTHORIZATION=0 VERSIONING=0 NETWORK=0 \
 
 `aggregation.processing_state` is a normal PostgreSQL table with one row per
 configuration, linked by a primary-key foreign key with `ON DELETE CASCADE`.
-Existing configurations are backfilled as `never_run`; new configurations get
-a state row through a database trigger. Reapplying installation preserves states.
+Each new configuration gets a `never_run` state row through a database trigger.
 Deleting configuration removes its state but keeps aggregate results.
 
 Each configuration response contains `ProcessingState@iot.navigationLink`.
 The GUI can fetch it using the same administrator credentials:
 
 ```http
-GET /istsos4/v1.1/AggregationConfigurations(1)/ProcessingState
+GET /istsos4/v1.1/Aggregations(1)/ProcessingState
 ```
 
 | Response field | Meaning |
 |---|---|
-| `configurationId` | Configuration foreign key |
+| `aggregationId` | Aggregation configuration foreign key |
 | `status` | `never_run`, `running`, `success`, `partial`, `failed`, `interrupted` |
 | `phase` | `aggregation` for pandas calculations; `discovery` for earlier metadata-only runs |
 | `runId` | Latest attempt UUID, null before first run |

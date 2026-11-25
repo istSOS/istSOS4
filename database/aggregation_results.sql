@@ -1,6 +1,6 @@
--- Stored aggregation results for the future Python worker. These are ordinary
--- rowstore hypertables, not continuous aggregates. No policies/jobs are created.
--- Apply after the istSOS schema, as the database owner/superuser. Re-applicable.
+-- Stored aggregation results for the Python worker. These are ordinary
+-- PostgreSQL tables. No policies/jobs are created.
+-- Apply after the istSOS schema, as the database owner/superuser.
 
 CREATE SCHEMA IF NOT EXISTS aggregation AUTHORIZATION administrator;
 
@@ -10,17 +10,15 @@ DO $results$
 DECLARE
     definition RECORD;
 BEGIN
-    -- Storage chunk widths are operational defaults, independent of bucket
-    -- durations. They can be tuned later with set_chunk_time_interval().
     FOR definition IN
         SELECT * FROM (VALUES
-            ('observations_10min', INTERVAL '7 days'),
-            ('observations_1hour', INTERVAL '30 days'),
-            ('observations_1day', INTERVAL '365 days'),
-            ('observations_7days', INTERVAL '365 days'),
-            ('observations_1month', INTERVAL '3650 days'),
-            ('observations_1year', INTERVAL '3650 days')
-        ) AS intervals(table_name, chunk_width)
+            ('observations_10min'),
+            ('observations_1hour'),
+            ('observations_1day'),
+            ('observations_7days'),
+            ('observations_1month'),
+            ('observations_1year')
+        ) AS intervals(table_name)
     LOOP
         EXECUTE format($ddl$
             CREATE TABLE IF NOT EXISTS aggregation.%I (
@@ -53,6 +51,9 @@ BEGIN
                     (count_numeric = 0 AND sum_value IS NULL AND min_value IS NULL
                         AND max_value IS NULL AND avg_value IS NULL)
                     OR
+                    (count_numeric = 0 AND sum_value = 0 AND min_value = 0
+                        AND max_value = 0 AND avg_value = 0)
+                    OR
                     (count_numeric > 0 AND sum_value IS NOT NULL AND min_value IS NOT NULL
                         AND max_value IS NOT NULL AND avg_value IS NOT NULL)
                 ),
@@ -71,12 +72,6 @@ BEGIN
                 CHECK (result_quality >> (2 * (constraint_count + 3)) = 0)
             )
         $ddl$, definition.table_name);
-
-        PERFORM create_hypertable(
-            format('aggregation.%I', definition.table_name)::regclass,
-            by_range('bucket_start', definition.chunk_width),
-            if_not_exists => true
-        );
 
         EXECUTE format(
             'COMMENT ON TABLE aggregation.%I IS %L',
@@ -100,3 +95,21 @@ $results$;
 RESET ROLE;
 
 GRANT USAGE ON SCHEMA aggregation TO administrator;
+
+DO $grants$
+DECLARE
+    role_name TEXT;
+BEGIN
+    FOREACH role_name IN ARRAY ARRAY['user', 'guest', 'sensor'] LOOP
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
+            EXECUTE format('GRANT USAGE ON SCHEMA aggregation TO %I', role_name);
+            EXECUTE format(
+                'GRANT SELECT ON aggregation.datastream_configuration, aggregation.observations_10min, '
+                'aggregation.observations_1hour, aggregation.observations_1day, aggregation.observations_7days, '
+                'aggregation.observations_1month, aggregation.observations_1year TO %I',
+                role_name
+            );
+        END IF;
+    END LOOP;
+END;
+$grants$;

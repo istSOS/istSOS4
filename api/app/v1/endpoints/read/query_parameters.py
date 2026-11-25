@@ -142,6 +142,68 @@ class ObservationQueryParams(CommonQueryParams):
         self.result_format = result_format
 
 
+class AggregateQueryParams:
+    """Query parameters of /Datastreams(id)/Aggregates.
+
+    No $expand, $as_of or $from_to: aggregation results are not versioned.
+    $func and $interval are required; aggregate.parse_request enforces it (400).
+    """
+
+    def __init__(
+        self,
+        function: str = Query(  # not "func": FastAPI passes func= to run_in_threadpool
+            None,
+            alias="$func",
+            description="Required. Statistic returned as result",
+            json_schema_extra={"enum": ["sum", "avg", "min", "max", "count"]},
+        ),
+        interval: str = Query(
+            None,
+            alias="$interval",
+            description="Required. Bucket length (ISO 8601 duration)",
+            json_schema_extra={
+                "enum": ["PT10M", "PT1H", "P1D", "P7D", "P1M", "P1Y"]
+            },
+        ),
+        skip: int = Query(
+            None,
+            alias="$skip",
+            description="The number of elements to skip from the collection",
+        ),
+        top: int = Query(
+            None, alias="$top", description="The number of elements to return"
+        ),
+        count: bool = Query(
+            None,
+            alias="$count",
+            description="Flag indicating if the total number of items in the collection should be returned.",
+        ),
+        order: str = Query(
+            None,
+            alias="$orderby",
+            description="The order in which the elements should be returned (phenomenonTime, resultTime, result, resultQuality)",
+        ),
+        select: str = Query(
+            None,
+            alias="$select",
+            description="The list of properties that need to be returned",
+        ),
+        filter: str = Query(
+            None,
+            alias="$filter",
+            description="A filter query on phenomenonTime (bucket end), resultTime, result, resultQuality",
+        ),
+    ):
+        self.function = function
+        self.interval = interval
+        self.skip = skip
+        self.top = top
+        self.count = count
+        self.order = order
+        self.select = select
+        self.filter = filter
+
+
 def get_common_query_params(
     params: CommonQueryParams = Depends(),
 ) -> CommonQueryParams:
@@ -151,4 +213,10 @@ def get_common_query_params(
 def get_observation_query_params(
     params: ObservationQueryParams = Depends(),
 ) -> ObservationQueryParams:
+    return params
+
+
+def get_aggregate_query_params(
+    params: AggregateQueryParams = Depends(),
+) -> AggregateQueryParams:
     return params

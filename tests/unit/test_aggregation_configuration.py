@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 import pytest
-from app.v1.endpoints import aggregation_configuration as configurations
+from app.v1.endpoints import aggregation_functions as configurations
 from app.v1.endpoints.exceptions import BadRequest, Forbidden
 
 
@@ -51,7 +51,9 @@ def test_intervals_are_fixed_and_not_configuration_overrides(intervals):
     with pytest.raises(BadRequest):
         create(intervals=intervals)
     with pytest.raises(BadRequest):
-        configurations.validate_patch_payload({"intervals": intervals}, create())
+        configurations.validate_patch_payload(
+            {"intervals": intervals}, create()
+        )
 
 
 @pytest.mark.parametrize(
@@ -124,7 +126,9 @@ def test_patch_null_resets_overrides_but_cannot_remove_required_qc():
     assert updated["minCoverage"] is None
     assert updated["conversionFactor"] is None
     with pytest.raises(BadRequest):
-        configurations.validate_patch_payload({"minInputQuality": None}, existing)
+        configurations.validate_patch_payload(
+            {"minInputQuality": None}, existing
+        )
 
 
 @pytest.mark.parametrize(
@@ -144,7 +148,9 @@ def test_patch_cannot_change_identity_or_old_job_settings(payload):
 
 
 def test_switching_to_event_mode_requires_clearing_existing_sample_rules():
-    existing = create(minCoverage=0.8, minObservations=4, maxConsecutiveMissing=1)
+    existing = create(
+        minCoverage=0.8, minObservations=4, maxConsecutiveMissing=1
+    )
     with pytest.raises(BadRequest, match="completeness"):
         configurations.validate_patch_payload({"mode": "event"}, existing)
     updated = configurations.validate_patch_payload(
@@ -170,12 +176,16 @@ def test_patch_checks_period_against_unchanged_bound():
         configurations.validate_patch_payload(
             {"startTime": "2026-03-01T00:00:00Z"}, existing
         )
-    updated = configurations.validate_patch_payload({"endTime": None}, existing)
+    updated = configurations.validate_patch_payload(
+        {"endTime": None}, existing
+    )
     assert updated["endTime"] is None
     assert updated["startTime"] == datetime(2025, 12, 31, 23, tzinfo=UTC)
 
 
-@pytest.mark.parametrize("value", ["2026-01-01", "2026-01-01T00:00:00", "bad", 123])
+@pytest.mark.parametrize(
+    "value", ["2026-01-01", "2026-01-01T00:00:00", "bad", 123]
+)
 def test_processing_dates_need_explicit_timezone(value):
     with pytest.raises(BadRequest):
         create(startTime=value)
@@ -185,7 +195,9 @@ def test_processing_dates_need_explicit_timezone(value):
 def test_non_administrators_cannot_manage_configurations(monkeypatch, role):
     monkeypatch.setattr(configurations, "AUTHORIZATION", 1)
     with pytest.raises(Forbidden):
-        configurations.require_administrator(None if role is None else {"role": role})
+        configurations.require_administrator(
+            None if role is None else {"role": role}
+        )
     configurations.require_administrator({"role": "administrator"})
 
 
@@ -193,8 +205,8 @@ def test_legacy_job_routes_are_not_registered():
     from app.v1.api import v1
 
     paths = v1.openapi()["paths"]
-    assert "/AggregationConfigurations" in paths
-    assert set(paths["/AggregationConfigurations({configuration_id})"]) == {
+    assert "/Aggregations" in paths
+    assert set(paths["/Aggregations({aggregation_id})"]) == {
         "get",
         "patch",
         "delete",
@@ -207,13 +219,43 @@ def test_ignore_quality_requires_a_boolean(value):
     with pytest.raises(BadRequest):
         create(ignoreQuality=value)
     with pytest.raises(BadRequest):
-        configurations.validate_patch_payload({"ignoreQuality": value}, create())
+        configurations.validate_patch_payload(
+            {"ignoreQuality": value}, create()
+        )
 
 
 def test_ignore_quality_can_be_toggled_without_losing_threshold():
     existing = create(minInputQuality=2, ignoreQuality=True)
     assert existing["ignoreQuality"] is True
     assert existing["minInputQuality"] == 2
-    updated = configurations.validate_patch_payload({"ignoreQuality": False}, existing)
+    updated = configurations.validate_patch_payload(
+        {"ignoreQuality": False}, existing
+    )
     assert updated["ignoreQuality"] is False
     assert updated["minInputQuality"] == 2
+
+
+def test_reference_datastream_is_optional_and_only_for_event_mode():
+    assert create()["referenceDatastreamId"] is None
+    assert (
+        create(mode="event", referenceDatastreamId=14)["referenceDatastreamId"]
+        == 14
+    )
+    for overrides in (
+        {"referenceDatastreamId": 14},  # sampled
+        {"mode": "event", "referenceDatastreamId": 13},  # itself
+        {"mode": "event", "referenceDatastreamId": 0},
+        {"mode": "event", "referenceDatastreamId": "14"},
+    ):
+        with pytest.raises(BadRequest):
+            create(**overrides)
+
+
+def test_switching_back_to_sampled_requires_clearing_the_reference():
+    existing = create(mode="event", referenceDatastreamId=14)
+    with pytest.raises(BadRequest):
+        configurations.validate_patch_payload({"mode": "sampled"}, existing)
+    patched = configurations.validate_patch_payload(
+        {"mode": "sampled", "referenceDatastreamId": None}, existing
+    )
+    assert patched["referenceDatastreamId"] is None

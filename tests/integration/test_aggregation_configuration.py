@@ -1,6 +1,6 @@
 """Real PostgreSQL + HTTP tests, using disposable databases only.
 
-Set AGGREGATION_TEST_DSN to a disposable PostgreSQL/TimescaleDB server whose
+Set AGGREGATION_TEST_DSN to a disposable PostgreSQL/PostGIS server whose
 login can create/drop databases and roles. No existing database is modified.
 Each mode gets a uniquely named database loaded from the actual schema files.
 """
@@ -13,7 +13,19 @@ from pathlib import Path
 
 import asyncpg
 import pytest
-from app.v1.endpoints import aggregation_configuration as configurations
+from app.db.asyncpg_db import get_pool, get_pool_w
+from app.v1.endpoints import aggregation_functions as configurations
+from app.v1.endpoints.create import aggregation as create_configuration
+from app.v1.endpoints.delete import aggregation as delete_configuration
+from app.v1.endpoints.read import aggregation as read_configuration
+from app.v1.endpoints.update import aggregation as update_configuration
+
+CONFIGURATION_ROUTERS = (
+    read_configuration.v1,
+    create_configuration.v1,
+    update_configuration.v1,
+    delete_configuration.v1,
+)
 from app.v1.endpoints.exception_handlers import register_exception_handlers
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -83,17 +95,14 @@ def store(request):
                 "aggregation_processing_state.sql",
                 "aggregation_engine.sql",
             ):
-                await connection.execute((ROOT / "database" / filename).read_text())
-            # Verify that the installation scripts are idempotent as documented.
-            await connection.execute(
-                (ROOT / "database/aggregation_results.sql").read_text()
-            )
-            await connection.execute(
-                (ROOT / "database/aggregation_configuration.sql").read_text()
-            )
+                await connection.execute(
+                    (ROOT / "database" / filename).read_text()
+                )
             if versioned:
-                await connection.execute("""INSERT INTO sensorthings."Commit" (id, author, message, "actionType")
-                    VALUES (1, 'test', 'Seed configurations', 'CREATE');""")
+                await connection.execute(
+                    """INSERT INTO sensorthings."Commit" (id, author, message, "actionType")
+                    VALUES (1, 'test', 'Seed configurations', 'CREATE');"""
+                )
             cols = ", commit_id" if versioned else ""
             vals = ", 1" if versioned else ""
             await connection.execute(f"""
@@ -109,7 +118,9 @@ def store(request):
     async def cleanup():
         connection = await asyncpg.connect(ADMIN_DSN)
         try:
-            await connection.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE);')
+            await connection.execute(
+                f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE);'
+            )
             await connection.execute(f'DROP ROLE IF EXISTS "{login}";')
         finally:
             await connection.close()
@@ -153,32 +164,28 @@ def client(store):
 
     application = FastAPI(lifespan=lifespan)
     register_exception_handlers(application)
-    application.include_router(configurations.v1)
+    for router in CONFIGURATION_ROUTERS:
+        application.include_router(router)
 
     async def get_test_pool():
         return application.state.pool
 
-    application.dependency_overrides[configurations.get_pool] = get_test_pool
-    application.dependency_overrides[configurations.get_pool_w] = get_test_pool
+    application.dependency_overrides[get_pool] = get_test_pool
+    application.dependency_overrides[get_pool_w] = get_test_pool
     with TestClient(application) as http:
         yield http
 
 
 def post(client, **overrides):
     return client.post(
-        "/AggregationConfigurations",
+        "/Aggregations",
         json={"datastreamId": 1, "minInputQuality": 3, **overrides},
     )
 
 
-def test_crud_preserves_overrides_and_deletes_only_configuration(client, store):
-    before_jobs = asyncio.run(
-        execute(
-            store[0],
-            "SELECT job_id FROM timescaledb_information.jobs ORDER BY job_id",
-            fetch=True,
-        )
-    )
+def test_crud_preserves_overrides_and_deletes_only_configuration(
+    client, store
+):
     created = post(
         client,
         minInputQuality=0,
@@ -190,9 +197,11 @@ def test_crud_preserves_overrides_and_deletes_only_configuration(client, store):
     )
     assert created.status_code == 201, created.text
     document = created.json()
-    path = f"/AggregationConfigurations({document['id']})"
+    path = f"/Aggregations({document['id']})"
     assert created.headers["location"] == document["@iot.selfLink"]
-    assert document["Datastream@iot.navigationLink"].endswith("/Datastreams(1)")
+    assert document["Datastream@iot.navigationLink"].endswith(
+        "/Datastreams(1)"
+    )
     assert document["startTime"].startswith("2025-12-31T23:00:00")
     assert client.get(path).json() == document
     updated = client.patch(
@@ -225,31 +234,23 @@ def test_crud_preserves_overrides_and_deletes_only_configuration(client, store):
             fetch=True,
         )
     )
-    after_jobs = asyncio.run(
-        execute(
-            store[0],
-            "SELECT job_id FROM timescaledb_information.jobs ORDER BY job_id",
-            fetch=True,
-        )
-    )
-    assert before_jobs == after_jobs
 
 
 def test_required_qc_reference_and_uniqueness(client):
     assert (
-        client.post("/AggregationConfigurations", json={"datastreamId": 1}).status_code
+        client.post("/Aggregations", json={"datastreamId": 1}).status_code
         == 400
     )
     assert post(client, minInputQuality=None).status_code == 400
     assert post(client, datastreamId=999999).status_code == 400
     assert post(client).status_code == 201
     assert post(client).status_code == 409
-    assert len(client.get("/AggregationConfigurations").json()["value"]) == 1
+    assert len(client.get("/Aggregations").json()["value"]) == 1
 
 
 def test_patch_round_trips_every_processing_override(client):
     created = post(client).json()
-    path = f"/AggregationConfigurations({created['id']})"
+    path = f"/Aggregations({created['id']})"
     settings = {
         "enabled": False,
         "mode": "sampled",
@@ -292,7 +293,7 @@ def test_patch_validates_merged_dates_and_mode_without_partial_writes(client):
         startTime="2026-01-01T00:00:00Z",
         endTime="2026-02-01T00:00:00Z",
     ).json()
-    path = f"/AggregationConfigurations({doc['id']})"
+    path = f"/Aggregations({doc['id']})"
     for patch in (
         {"startTime": "2026-03-01T00:00:00Z"},
         {"mode": "event"},
@@ -319,31 +320,31 @@ def test_patch_validates_merged_dates_and_mode_without_partial_writes(client):
 
 def test_list_filters_and_pagination_preserve_filters(client):
     for ds in (1, 2, 3):
-        assert post(client, datastreamId=ds, enabled=ds != 2).status_code == 201
+        assert (
+            post(client, datastreamId=ds, enabled=ds != 2).status_code == 201
+        )
     page = client.get(
-        "/AggregationConfigurations", params={"enabled": "true", "$top": 1}
+        "/Aggregations", params={"enabled": "true", "$top": 1}
     ).json()
     assert [row["datastreamId"] for row in page["value"]] == [1]
     # The app under test is not mounted under the deployment prefix.
     from urllib.parse import urlsplit
 
     next_url = urlsplit(page["@iot.nextLink"])
-    page2 = client.get("/AggregationConfigurations?" + next_url.query).json()
+    page2 = client.get("/Aggregations?" + next_url.query).json()
     assert [row["datastreamId"] for row in page2["value"]] == [3]
     assert "@iot.nextLink" not in page2
-    selected = client.get(
-        "/AggregationConfigurations", params={"datastreamId": 2}
-    ).json()
+    selected = client.get("/Aggregations", params={"datastreamId": 2}).json()
     assert [row["datastreamId"] for row in selected["value"]] == [2]
-    assert (
-        client.get("/AggregationConfigurations", params={"$top": 0}).status_code == 422
-    )
+    assert client.get("/Aggregations", params={"$top": 0}).status_code == 422
 
 
 def test_source_deletion_cascades_configuration(client, store):
     doc = post(client, datastreamId=2).json()
-    asyncio.run(execute(store[0], 'DELETE FROM sensorthings."Datastream" WHERE id=2;'))
-    assert client.get(f"/AggregationConfigurations({doc['id']})").status_code == 404
+    asyncio.run(
+        execute(store[0], 'DELETE FROM sensorthings."Datastream" WHERE id=2;')
+    )
+    assert client.get(f"/Aggregations({doc['id']})").status_code == 404
 
 
 def test_all_routes_enforce_administrator_when_authorization_enabled(
@@ -351,19 +352,19 @@ def test_all_routes_enforce_administrator_when_authorization_enabled(
 ):
     monkeypatch.setattr(configurations, "AUTHORIZATION", 1)
     for method, path, options in (
-        ("get", "/AggregationConfigurations", {}),
-        ("get", "/AggregationConfigurations(1)", {}),
+        ("get", "/Aggregations", {}),
+        ("get", "/Aggregations(1)", {}),
         (
             "post",
-            "/AggregationConfigurations",
+            "/Aggregations",
             {"json": {"datastreamId": 1, "minInputQuality": 3}},
         ),
         (
             "patch",
-            "/AggregationConfigurations(1)",
+            "/Aggregations(1)",
             {"json": {"enabled": False}},
         ),
-        ("delete", "/AggregationConfigurations(1)", {}),
+        ("delete", "/Aggregations(1)", {}),
     ):
         response = getattr(client, method)(path, **options)
         assert response.status_code == 403, response.text
@@ -377,7 +378,7 @@ def test_missing_storage_returns_actionable_503(client, store):
         )
     )
     try:
-        response = client.get("/AggregationConfigurations")
+        response = client.get("/Aggregations")
         assert response.status_code == 503, response.text
         assert "aggregation_configuration.sql" in response.text
     finally:
@@ -456,60 +457,23 @@ def test_fixed_interval_configuration_rejects_overrides(client):
     assert "intervals" not in created
     assert (
         client.patch(
-            f"/AggregationConfigurations({created['id']})",
+            f"/Aggregations({created['id']})",
             json={"intervals": None},
         ).status_code
         == 400
     )
 
 
-def test_configuration_upgrade_preserves_rows_and_removes_interval_override(
-    client, store
-):
-    created = post(client).json()
-    asyncio.run(
-        execute(
-            store[0],
-            """
-        ALTER TABLE aggregation.datastream_configuration ADD COLUMN intervals TEXT[];
-        UPDATE aggregation.datastream_configuration SET intervals=ARRAY['PT10M'];
-    """,
-        )
-    )
-    asyncio.run(
-        execute(store[0], (ROOT / "database/aggregation_configuration.sql").read_text())
-    )
-    assert client.get(f"/AggregationConfigurations({created['id']})").json() == created
-
-
-def test_six_shared_time_hypertables_have_no_refresh_jobs(client, store):
+def test_six_shared_result_tables(client, store):
     async def check():
         connection = await asyncpg.connect(ADMIN_DSN, database=store[0])
         try:
             names = await connection.fetch("""
-                SELECT hypertable_name FROM timescaledb_information.hypertables
-                WHERE hypertable_schema='aggregation' ORDER BY hypertable_name
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema='aggregation' AND table_type='BASE TABLE'
+                  AND table_name LIKE 'observations_%'
             """)
-            assert {row["hypertable_name"] for row in names} == set(RESULT_TABLES)
-            dimensions = await connection.fetch("""
-                SELECT hypertable_name, column_name, dimension_type
-                FROM timescaledb_information.dimensions WHERE hypertable_schema='aggregation'
-            """)
-            assert len(dimensions) == 6
-            assert all(
-                row["column_name"] == "bucket_start" and row["dimension_type"] == "Time"
-                for row in dimensions
-            )
-            assert (
-                await connection.fetchval("""
-                SELECT count(*) FROM timescaledb_information.continuous_aggregates
-                WHERE view_schema='aggregation'
-            """)
-                == 0
-            )
-            before = await connection.fetch(
-                "SELECT job_id FROM timescaledb_information.jobs ORDER BY job_id"
-            )
+            assert {row["table_name"] for row in names} == set(RESULT_TABLES)
             for table in RESULT_TABLES:
                 await insert_result(connection, table)
                 # Upsert replaces an open bucket without producing duplicates.
@@ -520,19 +484,15 @@ def test_six_shared_time_hypertables_have_no_refresh_jobs(client, store):
                     SET sum_value=8, max_value=6, avg_value=4,
                         evaluated_until=EXCLUDED.bucket_end
                 """)
-            await connection.execute(
-                (ROOT / "database/aggregation_results.sql").read_text()
-            )
             for table in RESULT_TABLES:
-                rows = await connection.fetch(f"SELECT * FROM aggregation.{table}")
+                rows = await connection.fetch(
+                    f"SELECT * FROM aggregation.{table}"
+                )
                 assert len(rows) == 1
                 row = rows[0]
                 assert row["sum_value"] == 8 and row["avg_value"] == 4
                 assert row["evaluated_until"] == row["bucket_end"]
                 assert len(row) == 17
-            assert before == await connection.fetch(
-                "SELECT job_id FROM timescaledb_information.jobs ORDER BY job_id"
-            )
         finally:
             await connection.close()
 
@@ -545,7 +505,7 @@ def test_result_retention_and_source_foreign_key(client, store):
     async def seed():
         connection = await asyncpg.connect(ADMIN_DSN, database=store[0])
         try:
-            # The application database role can write every result hypertable.
+            # The application database role can write every result table.
             await connection.execute("SET ROLE administrator")
             for table in RESULT_TABLES:
                 await insert_result(connection, table)
@@ -556,14 +516,16 @@ def test_result_retention_and_source_foreign_key(client, store):
             await connection.close()
 
     asyncio.run(seed())
-    assert (
-        client.delete(f"/AggregationConfigurations({created['id']})").status_code == 204
+    assert client.delete(f"/Aggregations({created['id']})").status_code == 204
+    asyncio.run(
+        execute(store[0], 'DELETE FROM sensorthings."Datastream" WHERE id=2')
     )
-    asyncio.run(execute(store[0], 'DELETE FROM sensorthings."Datastream" WHERE id=2'))
     for table in RESULT_TABLES:
         rows = asyncio.run(
             execute(
-                store[0], f"SELECT datastream_id FROM aggregation.{table}", fetch=True
+                store[0],
+                f"SELECT datastream_id FROM aggregation.{table}",
+                fetch=True,
             )
         )
         assert [row["datastream_id"] for row in rows] == [1]
@@ -598,7 +560,9 @@ def test_result_retention_and_source_foreign_key(client, store):
         {"configuration_snapshot": "null"},
     ],
 )
-def test_result_constraints_reject_invalid_statistics(client, store, overrides):
+def test_result_constraints_reject_invalid_statistics(
+    client, store, overrides
+):
     async def check():
         connection = await asyncpg.connect(ADMIN_DSN, database=store[0])
         try:
@@ -638,11 +602,21 @@ def test_empty_bucket_and_oversampling_storage(client, store):
                 constraint_count=28,
                 result_quality=(1 << 62) - 1,
             )
-            await connection.execute("DELETE FROM aggregation.observations_10min")
+            await connection.execute(
+                "DELETE FROM aggregation.observations_10min"
+            )
             for changes in (
                 {"bucket_end": result_values()["bucket_start"]},
-                {"evaluated_until": result_values()["bucket_end"].replace(hour=1)},
-                {"evaluated_until": result_values()["bucket_start"].replace(year=2025)},
+                {
+                    "evaluated_until": result_values()["bucket_end"].replace(
+                        hour=1
+                    )
+                },
+                {
+                    "evaluated_until": result_values()["bucket_start"].replace(
+                        year=2025
+                    )
+                },
             ):
                 with pytest.raises(asyncpg.CheckViolationError):
                     await insert_result(connection, **changes)
@@ -655,19 +629,28 @@ def test_empty_bucket_and_oversampling_storage(client, store):
 def test_ignore_quality_is_persisted_validated_and_reversible(client, store):
     created = post(client, minInputQuality=2).json()
     assert created["ignoreQuality"] is False
-    path = f"/AggregationConfigurations({created['id']})"
+    path = f"/Aggregations({created['id']})"
     changed = client.patch(path, json={"ignoreQuality": True})
     assert changed.status_code == 200
     assert client.get(path).json()["ignoreQuality"] is True
     assert changed.json()["minInputQuality"] == 2
     for invalid in (None, 0, "true"):
-        assert client.patch(path, json={"ignoreQuality": invalid}).status_code == 400
+        assert (
+            client.patch(path, json={"ignoreQuality": invalid}).status_code
+            == 400
+        )
         assert client.get(path).json()["ignoreQuality"] is True
     assert (
-        client.patch(path, json={"ignoreQuality": False}).json()["minInputQuality"] == 2
+        client.patch(path, json={"ignoreQuality": False}).json()[
+            "minInputQuality"
+        ]
+        == 2
     )
     explicit = post(client, datastreamId=2, ignoreQuality=True)
-    assert explicit.status_code == 201 and explicit.json()["ignoreQuality"] is True
+    assert (
+        explicit.status_code == 201
+        and explicit.json()["ignoreQuality"] is True
+    )
 
     async def rejects_null():
         connection = await asyncpg.connect(ADMIN_DSN, database=store[0])
@@ -682,29 +665,6 @@ def test_ignore_quality_is_persisted_validated_and_reversible(client, store):
     asyncio.run(rejects_null())
 
 
-def test_ignore_quality_upgrade_defaults_existing_rows_to_false(client, store):
-    created = post(client, minInputQuality=2).json()
-    asyncio.run(
-        execute(
-            store[0],
-            "ALTER TABLE aggregation.datastream_configuration DROP COLUMN ignore_quality",
-        )
-    )
-    script = (ROOT / "database/aggregation_configuration.sql").read_text()
-    asyncio.run(execute(store[0], script))
-    assert client.get(f"/AggregationConfigurations({created['id']})").json() == created
-    client.patch(
-        f"/AggregationConfigurations({created['id']})", json={"ignoreQuality": True}
-    )
-    asyncio.run(execute(store[0], script))
-    assert (
-        client.get(f"/AggregationConfigurations({created['id']})").json()[
-            "ignoreQuality"
-        ]
-        is True
-    )
-
-
 def state_writer(store):
     from aggregation.state import ProcessingState
 
@@ -716,25 +676,35 @@ def test_processing_state_lifecycle_is_read_only_and_preserves_checkpoint(
 ):
     created = post(client).json()
     identifier = created["id"]
-    path = f"/AggregationConfigurations({identifier})/ProcessingState"
+    path = f"/Aggregations({identifier})/ProcessingState"
     assert created["ProcessingState@iot.navigationLink"].endswith(path)
     initial = client.get(path).json()
     assert initial["status"] == "never_run" and initial["phase"] == "discovery"
     assert initial["checkpoint"] is None and initial["lastStartedAt"] is None
-    for payload in ({"status": "success"}, {"processingState": {}}, {"checkpoint": {}}):
+    for payload in (
+        {"status": "success"},
+        {"processingState": {}},
+        {"checkpoint": {}},
+    ):
         assert (
             client.patch(
-                f"/AggregationConfigurations({identifier})", json=payload
+                f"/Aggregations({identifier})", json=payload
             ).status_code
             == 400
         )
-    assert client.patch(path, json={"status": "success"}).status_code in (404, 405)
+    assert client.patch(path, json={"status": "success"}).status_code in (
+        404,
+        405,
+    )
     writer = state_writer(store)
     writer.open()
     try:
         token = writer.start(identifier)
         running = client.get(path).json()
-        assert running["status"] == "running" and running["lastFinishedAt"] is None
+        assert (
+            running["status"] == "running"
+            and running["lastFinishedAt"] is None
+        )
         writer.finish(identifier, token, "success")
         success = client.get(path).json()
         assert success["status"] == "success" and success["lastSuccessfulAt"]
@@ -742,7 +712,7 @@ def test_processing_state_lifecycle_is_read_only_and_preserves_checkpoint(
         asyncio.run(
             execute(
                 store[0],
-                "UPDATE aggregation.processing_state SET checkpoint='{}'::jsonb WHERE configuration_id=$1",
+                "UPDATE aggregation.processing_state SET checkpoint='{}'::jsonb WHERE aggregation_id=$1",
                 identifier,
             )
         )
@@ -752,11 +722,15 @@ def test_processing_state_lifecycle_is_read_only_and_preserves_checkpoint(
                 identifier,
                 token,
                 "failed",
-                {"step": "datastream_read", "message": "API returned HTTP 503"},
+                {
+                    "step": "datastream_read",
+                    "message": "API returned HTTP 503",
+                },
             )
             failed = client.get(path).json()
             assert (
-                failed["status"] == "failed" and failed["consecutiveFailures"] == count
+                failed["status"] == "failed"
+                and failed["consecutiveFailures"] == count
             )
             assert failed["lastError"]["step"] == "datastream_read"
             assert failed["lastSuccessfulAt"] == success["lastSuccessfulAt"]
@@ -768,12 +742,13 @@ def test_processing_state_lifecycle_is_read_only_and_preserves_checkpoint(
     finally:
         writer.close()
     assert (
-        client.get("/AggregationConfigurations(99999)/ProcessingState").status_code
-        == 404
+        client.get("/Aggregations(99999)/ProcessingState").status_code == 404
     )
-    assert client.delete(f"/AggregationConfigurations({identifier})").status_code == 204
+    assert client.delete(f"/Aggregations({identifier})").status_code == 204
     assert not asyncio.run(
-        execute(store[0], "SELECT * FROM aggregation.processing_state", fetch=True)
+        execute(
+            store[0], "SELECT * FROM aggregation.processing_state", fetch=True
+        )
     )
 
 
@@ -783,7 +758,7 @@ def test_state_ownership_crash_recovery_and_stale_finish(client, store):
     from aggregation.state import StateError
 
     identifier = post(client).json()["id"]
-    path = f"/AggregationConfigurations({identifier})/ProcessingState"
+    path = f"/Aggregations({identifier})/ProcessingState"
     first = state_writer(store)
     second = state_writer(store)
     first.open()
@@ -804,15 +779,13 @@ def test_state_ownership_crash_recovery_and_stale_finish(client, store):
         second.finish(identifier, token, "success")
         assert client.get(path).json()["status"] == "interrupted"
         assert second.start(999999) is None
-        client.patch(
-            f"/AggregationConfigurations({identifier})", json={"enabled": False}
-        )
+        client.patch(f"/Aggregations({identifier})", json={"enabled": False})
         assert second.start(identifier) is None
     finally:
         second.close()
 
 
-def test_state_discovery_failure_partial_and_idempotent_install(client, store):
+def test_state_discovery_failure_and_partial(client, store):
     first = post(client).json()["id"]
     second = post(client, datastreamId=2, enabled=False).json()["id"]
     writer = state_writer(store)
@@ -820,13 +793,13 @@ def test_state_discovery_failure_partial_and_idempotent_install(client, store):
     try:
         writer.discovery_failed("API request failed")
         assert (
-            client.get(f"/AggregationConfigurations({first})/ProcessingState").json()[
+            client.get(f"/Aggregations({first})/ProcessingState").json()[
                 "status"
             ]
             == "failed"
         )
         assert (
-            client.get(f"/AggregationConfigurations({second})/ProcessingState").json()[
+            client.get(f"/Aggregations({second})/ProcessingState").json()[
                 "status"
             ]
             == "never_run"
@@ -835,23 +808,17 @@ def test_state_discovery_failure_partial_and_idempotent_install(client, store):
             first,
             writer.start(first),
             "partial",
-            {"step": "metadata_validation", "message": "Missing sampling frequency"},
+            {
+                "step": "metadata_validation",
+                "message": "Missing sampling frequency",
+            },
         )
-        before = client.get(
-            f"/AggregationConfigurations({first})/ProcessingState"
-        ).json()
-        assert before["status"] == "partial" and before["lastSuccessfulAt"] is None
-        assert before["consecutiveFailures"] == 2
-        asyncio.run(
-            execute(
-                store[0],
-                (ROOT / "database/aggregation_processing_state.sql").read_text(),
-            )
-        )
+        before = client.get(f"/Aggregations({first})/ProcessingState").json()
         assert (
-            client.get(f"/AggregationConfigurations({first})/ProcessingState").json()
-            == before
+            before["status"] == "partial"
+            and before["lastSuccessfulAt"] is None
         )
+        assert before["consecutiveFailures"] == 2
     finally:
         writer.close()
 
@@ -860,7 +827,7 @@ def test_processing_state_endpoint_requires_admin_and_migration(
     client, store, monkeypatch
 ):
     identifier = post(client).json()["id"]
-    path = f"/AggregationConfigurations({identifier})/ProcessingState"
+    path = f"/Aggregations({identifier})/ProcessingState"
     monkeypatch.setattr(configurations, "AUTHORIZATION", 1)
     assert client.get(path).status_code == 403
     monkeypatch.setattr(configurations, "AUTHORIZATION", 0)
@@ -903,7 +870,11 @@ def test_result_transaction_rolls_back_checkpoint_and_guards_config_edits(
         bad = {**row, "count_numeric": -1}
         with pytest.raises(CalculationError):
             writer.save_buckets(
-                document["id"], token, "observations_10min", [bad], {"cursor": 2}
+                document["id"],
+                token,
+                "observations_10min",
+                [bad],
+                {"cursor": 2},
             )
         assert writer.checkpoint(document["id"]) == {"cursor": 1}
         saved = asyncio.run(
@@ -915,11 +886,15 @@ def test_result_transaction_rolls_back_checkpoint_and_guards_config_edits(
         )
         assert saved[0]["count_numeric"] == 2
         client.patch(
-            f"/AggregationConfigurations({document['id']})", json={"minInputQuality": 2}
+            f"/Aggregations({document['id']})", json={"minInputQuality": 2}
         )
         with pytest.raises(CalculationError, match="Configuration changed"):
             writer.save_buckets(
-                document["id"], token, "observations_10min", [row], {"cursor": 3}
+                document["id"],
+                token,
+                "observations_10min",
+                [row],
+                {"cursor": 3},
             )
         assert writer.checkpoint(document["id"]) == {"cursor": 1}
     finally:
@@ -935,7 +910,9 @@ def test_version_watermark_stays_behind_open_transactions(client, store):
     writer.open()
     blocker = psycopg.connect(ADMIN_DSN, dbname=store[0])
     try:
-        started = blocker.execute("SELECT transaction_timestamp()").fetchone()[0]
+        started = blocker.execute("SELECT transaction_timestamp()").fetchone()[
+            0
+        ]
         watermark = writer.execute(
             "SELECT aggregation.safe_change_watermark() AS value", ()
         ).fetchone()["value"]
@@ -964,7 +941,8 @@ def test_worker_through_real_sensorthings_queries_and_pandas(
     if bool(app.VERSIONING) != store[1]:
         pytest.skip("Run with VERSIONING matching the database fixture")
     source_app = FastAPI()
-    source_app.include_router(configurations.v1)
+    for router in CONFIGURATION_ROUTERS:
+        source_app.include_router(router)
     source_app.include_router(observation_routes)
     source_app.include_router(read_routes)
     source_app.dependency_overrides.update(client.app.dependency_overrides)
@@ -1024,9 +1002,9 @@ def test_worker_through_real_sensorthings_queries_and_pandas(
     settings = Settings("http://api" + app.SUBPATH + app.VERSION)
     api = SensorThings(settings, Event())
     try:
-        assert run_cycle(api, settings, api.stop, writer, aggregate=True), (
-            capsys.readouterr()
-        )
+        assert run_cycle(
+            api, settings, api.stop, writer, aggregate=True
+        ), capsys.readouterr()
         hourly = asyncio.run(
             execute(
                 store[0],
@@ -1036,7 +1014,7 @@ def test_worker_through_real_sensorthings_queries_and_pandas(
         )
         assert hourly[0]["sum_value"] == 12 and hourly[0]["avg_value"] == 4
         state = client.get(
-            f"/AggregationConfigurations({document['id']})/ProcessingState"
+            f"/Aggregations({document['id']})/ProcessingState"
         ).json()
         assert state["phase"] == "aggregation" and state["status"] == "success"
         assert state["checkpoint"]["frontiers"]
@@ -1070,7 +1048,10 @@ def test_worker_through_real_sensorthings_queries_and_pandas(
                     fetch=True,
                 )
             )
-            assert buckets[0]["count_numeric"] == 0 and buckets[0]["sum_value"] is None
+            assert (
+                buckets[0]["count_numeric"] == 0
+                and buckets[0]["sum_value"] is None
+            )
             assert buckets[1]["sum_value"] == 10
             pages = list(
                 api.observations(
@@ -1082,7 +1063,9 @@ def test_worker_through_real_sensorthings_queries_and_pandas(
                 )
             )
             assert any(
-                ".500000" in row["phenomenonTime"] for page in pages for row in page
+                ".500000" in row["phenomenonTime"]
+                for page in pages
+                for row in page
             )
     finally:
         api.close()
@@ -1093,7 +1076,7 @@ def test_phase_change_does_not_report_metadata_success_as_calculation_success(
     client, store
 ):
     identifier = post(client).json()["id"]
-    path = f"/AggregationConfigurations({identifier})/ProcessingState"
+    path = f"/Aggregations({identifier})/ProcessingState"
     writer = state_writer(store)
     writer.open()
     try:
@@ -1101,7 +1084,10 @@ def test_phase_change_does_not_report_metadata_success_as_calculation_success(
         assert client.get(path).json()["lastSuccessfulAt"]
         token = writer.start(identifier, phase="aggregation")
         running = client.get(path).json()
-        assert running["phase"] == "aggregation" and running["lastSuccessfulAt"] is None
+        assert (
+            running["phase"] == "aggregation"
+            and running["lastSuccessfulAt"] is None
+        )
         writer.finish(
             identifier,
             token,
@@ -1110,7 +1096,10 @@ def test_phase_change_does_not_report_metadata_success_as_calculation_success(
         )
         writer.discovery_failed("API unavailable", phase="aggregation")
         failed = client.get(path).json()
-        assert failed["phase"] == "aggregation" and failed["consecutiveFailures"] == 2
+        assert (
+            failed["phase"] == "aggregation"
+            and failed["consecutiveFailures"] == 2
+        )
         assert failed["lastSuccessfulAt"] is None
     finally:
         writer.close()
@@ -1144,7 +1133,8 @@ def test_copy_bulk_upsert_is_atomic_and_reuses_empty_staging(client, store):
         )
         assert (
             writer.execute(
-                "SELECT count(*) AS n FROM pg_temp.aggregation_result_buffer", ()
+                "SELECT count(*) AS n FROM pg_temp.aggregation_result_buffer",
+                (),
             ).fetchone()["n"]
             == 0
         )
@@ -1154,7 +1144,11 @@ def test_copy_bulk_upsert_is_atomic_and_reuses_empty_staging(client, store):
         for column in ("bucket_start", "bucket_end", "evaluated_until"):
             new[column] += timedelta(minutes=10)
         writer.save_buckets(
-            document["id"], token, "observations_10min", updates + [new], {"cursor": 26}
+            document["id"],
+            token,
+            "observations_10min",
+            updates + [new],
+            {"cursor": 26},
         )
         assert (
             writer.execute(
@@ -1170,10 +1164,17 @@ def test_copy_bulk_upsert_is_atomic_and_reuses_empty_staging(client, store):
             == 8
         )
         # One invalid row rolls back all updates, additions and checkpoint.
-        rejected = [{**updates[0], "sum_value": 10.0}, {**new, "count_numeric": -1}]
+        rejected = [
+            {**updates[0], "sum_value": 10.0},
+            {**new, "count_numeric": -1},
+        ]
         with pytest.raises(CalculationError):
             writer.save_buckets(
-                document["id"], token, "observations_10min", rejected, {"cursor": 999}
+                document["id"],
+                token,
+                "observations_10min",
+                rejected,
+                {"cursor": 999},
             )
         assert writer.checkpoint(document["id"]) == {"cursor": 26}
         assert (
@@ -1185,7 +1186,11 @@ def test_copy_bulk_upsert_is_atomic_and_reuses_empty_staging(client, store):
         )
         # Reuse the same staging table for another interval after failure.
         writer.save_buckets(
-            document["id"], token, "observations_1hour", rows[:2], {"cursor": 27}
+            document["id"],
+            token,
+            "observations_1hour",
+            rows[:2],
+            {"cursor": 27},
         )
         assert (
             writer.execute(
@@ -1197,7 +1202,9 @@ def test_copy_bulk_upsert_is_atomic_and_reuses_empty_staging(client, store):
         writer.close()
 
 
-@pytest.mark.parametrize("invalid", [{"count_numeric": -1}, {"count_total": None}])
+@pytest.mark.parametrize(
+    "invalid", [{"count_numeric": -1}, {"count_total": None}]
+)
 def test_failed_first_copy_batch_can_be_retried(client, store, invalid):
     from aggregation.calculation import CalculationError
 

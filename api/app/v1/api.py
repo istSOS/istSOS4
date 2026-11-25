@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from app import AUTHORIZATION, NETWORK, VERSIONING
-from app.v1.endpoints import aggregation_configuration
+from app.v1.endpoints.create import aggregation as create_aggregation
 from app.v1.endpoints.create import bulk_observation, data_array_observation
 from app.v1.endpoints.create import datastream as create_datastream
 from app.v1.endpoints.create import (
@@ -33,6 +33,7 @@ from app.v1.endpoints.create import policy as create_policy
 from app.v1.endpoints.create import sensor as create_sensor
 from app.v1.endpoints.create import thing as create_thing
 from app.v1.endpoints.create import user as create_user
+from app.v1.endpoints.delete import aggregation as delete_aggregation
 from app.v1.endpoints.delete import datastream as delete_datastream
 from app.v1.endpoints.delete import (
     feature_of_interest as delete_feature_of_interest,
@@ -52,6 +53,8 @@ from app.v1.endpoints.delete import sensor as delete_sensor
 from app.v1.endpoints.delete import thing as delete_thing
 from app.v1.endpoints.delete import user as delete_user
 from app.v1.endpoints.exception_handlers import register_exception_handlers
+from app.v1.endpoints.read import aggregate as read_aggregate
+from app.v1.endpoints.read import aggregation as read_aggregation
 from app.v1.endpoints.read import commit as read_commit
 from app.v1.endpoints.read import datastream as read_datastream
 from app.v1.endpoints.read import (
@@ -69,6 +72,7 @@ from app.v1.endpoints.read import read
 from app.v1.endpoints.read import sensor as read_sensor
 from app.v1.endpoints.read import thing as read_thing
 from app.v1.endpoints.read import user as read_user
+from app.v1.endpoints.update import aggregation as update_aggregation
 from app.v1.endpoints.update import bulk_observation as update_bulk_observation
 from app.v1.endpoints.update import datastream as update_datastream
 from app.v1.endpoints.update import (
@@ -121,8 +125,12 @@ if NETWORK:
 
 tags_metadata += [
     {
-        "name": "AggregationConfigurations",
+        "name": "Aggregations",
         "description": "Per-Datastream settings for the aggregation service. Configuration only; no database jobs are scheduled.",
+    },
+    {
+        "name": "Aggregates",
+        "description": "Values computed by the aggregation service, shaped like Observations.",
     },
     {
         "name": "Catch All",
@@ -203,7 +211,8 @@ v1.include_router(read_observed_property.v1)
 v1.include_router(read_datastream.v1)
 v1.include_router(read_feature_of_interest.v1)
 v1.include_router(read_observation.v1)
-v1.include_router(aggregation_configuration.v1)
+v1.include_router(read_aggregation.v1)
+v1.include_router(read_aggregate.v1)
 v1.include_router(read.v1)
 
 # Register the create endpoints
@@ -217,6 +226,7 @@ v1.include_router(create_observed_property.v1)
 v1.include_router(create_datastream.v1)
 v1.include_router(create_feature_of_interest.v1)
 v1.include_router(create_observation.v1)
+v1.include_router(create_aggregation.v1)
 
 # Register the update endpoints
 v1.include_router(update_location.v1)
@@ -228,6 +238,7 @@ v1.include_router(update_datastream.v1)
 v1.include_router(update_feature_of_interest.v1)
 v1.include_router(update_observation.v1)
 v1.include_router(update_bulk_observation.v1)
+v1.include_router(update_aggregation.v1)
 
 # Register the delete endpoints
 v1.include_router(delete_location.v1)
@@ -239,3 +250,4 @@ v1.include_router(delete_datastream.v1)
 v1.include_router(delete_feature_of_interest.v1)
 v1.include_router(delete_observation.v1)
 v1.include_router(filtered_delete_observation.v1)
+v1.include_router(delete_aggregation.v1)

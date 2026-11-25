@@ -1,31 +1,28 @@
 # Aggregation result storage
 
-`database/aggregation_results.sql` creates six ordinary TimescaleDB hypertables
-shared by all configured source Datastreams. It does not create continuous
-aggregates or background jobs. The Python service calculates and upserts results on its cron schedule. With
+`database/aggregation_results.sql` creates six ordinary PostgreSQL tables
+shared by all configured source Datastreams. It does not create background jobs. The Python service calculates and upserts results on its cron schedule. With
 versioning, historical inserts, updates and deletes trigger bucket recalculation
 through system-time change detection; without it, old changes require manual
 recomputation. See the worker guide in `aggregation/README.md`.
 
 ## Fixed intervals
 
-| Bucket interval | Table in schema `aggregation` | Initial chunk width |
-|---|---|---|
-| `PT10M` | `observations_10min` | 7 days |
-| `PT1H` | `observations_1hour` | 30 days |
-| `P1D` | `observations_1day` | 365 days |
-| `P7D` | `observations_7days` | 365 days |
-| `P1M` | `observations_1month` | 3650 days |
-| `P1Y` | `observations_1year` | 3650 days |
+| Bucket interval | Table in schema `aggregation` |
+|---|---|
+| `PT10M` | `observations_10min` |
+| `PT1H` | `observations_1hour` |
+| `P1D` | `observations_1day` |
+| `P7D` | `observations_7days` |
+| `P1M` | `observations_1month` |
+| `P1Y` | `observations_1year` |
 
 Intervals are predefined, not configuration overrides. A month and year are
-calendar intervals, not fixed 30/365-day buckets. Chunk widths control physical
-storage and are independent of bucket duration. These initial storage defaults
-can be tuned with `set_chunk_time_interval()` as data volume becomes known.
+calendar intervals, not fixed 30/365-day buckets.
 
 ## Common columns
 
-Each table is partitioned by `bucket_start` and has primary key
+Each table has primary key
 `(datastream_id, bucket_start)`. Recalculation replaces the current bucket row
 using `INSERT ... ON CONFLICT ... DO UPDATE`.
 
@@ -81,18 +78,44 @@ only the latest computed state, with no SensorThings system-time history,
 compression or retention policy. `configuration_snapshot` is a required object;
 the worker must populate effective settings rather than only overrides.
 
-## Installation
+## Reading results: `GET /Datastreams(id)/Aggregates`
 
-New database images install this schema automatically after configuration
-storage. For existing installations, apply as the database owner/superuser:
+Results are exposed per Datastream, shaped like Observations. Two parameters
+are required:
 
-```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/aggregation_configuration.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/aggregation_results.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/aggregation_processing_state.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/aggregation_engine.sql
+- `$func`: `sum`, `avg`, `min`, `max` or `count` (the value returned as `result`);
+- `$interval`: `PT10M`, `PT1H`, `P1D`, `P7D`, `P1M` or `P1Y` (the result table).
+
+```
+GET /Datastreams(10)/Aggregates?$func=sum&$interval=P1D&$filter=phenomenonTime ge 2026-11-16T00:00:00Z
 ```
 
-The scripts require the existing istSOS schema, TimescaleDB and `administrator`
-role. They can be reapplied without clearing result rows. They work with
-versioning enabled or disabled and do not modify legacy aggregation jobs.
+Each bucket is returned as:
+
+| Field | Value |
+|---|---|
+| `phenomenonTime` | `bucket_start/bucket_end` |
+| `result` | The `$func` statistic. A missing value is `-999.9`, or `0` for event series |
+| `resultTime` | `calculated_at` |
+| `resultQuality` | `result_quality` (validity of the bucket) |
+| `parameters` | `countTotal`, `countNumeric`, `expectedCount`, `coverage`, `evaluatedUntil`, `open` (bucket still being filled) |
+
+There is no `@iot.id`. Supported options: `$filter` on `phenomenonTime`
+(compared with the bucket end), `resultTime`, `result` and `resultQuality`,
+with `eq/ne/lt/le/gt/ge/in` joined by `and/or/not`; `$orderby` on the same
+fields; `$top`, `$skip`, `$count`, `$select` and `@iot.nextLink`. `$expand`,
+`$as_of` and `$from_to` are rejected: results are not versioned.
+
+The query runs with the caller's role: a Datastream the caller cannot read
+returns 404, and so does a Datastream without an aggregation configuration.
+With authorization enabled, `aggregation_results.sql` grants read access on the
+schema to the `user`, `guest` and `sensor` roles.
+
+## Installation
+
+New database images install the aggregation schema automatically: `database/Dockerfile`
+loads `aggregation_configuration.sql`, `aggregation_results.sql`,
+`aggregation_processing_state.sql` and `aggregation_engine.sql`, in this order.
+Existing databases are not migrated: rebuild them from the image.
+The scripts require the istSOS schema and `administrator` role, and work with
+versioning enabled or disabled.

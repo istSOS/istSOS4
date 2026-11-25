@@ -1,9 +1,9 @@
 -- Latest service-managed state, not run history or SensorThings versioning.
--- Apply after aggregation_configuration.sql. Re-applicable without resets.
+-- Apply after aggregation_configuration.sql.
 SET ROLE administrator;
 
 CREATE TABLE IF NOT EXISTS aggregation.processing_state (
-    configuration_id BIGINT PRIMARY KEY
+    aggregation_id BIGINT PRIMARY KEY
         REFERENCES aggregation.datastream_configuration(id) ON DELETE CASCADE,
     status TEXT NOT NULL DEFAULT 'never_run'
         CHECK (status IN ('never_run', 'running', 'success', 'partial', 'failed', 'interrupted')),
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS aggregation.processing_state (
 CREATE OR REPLACE FUNCTION aggregation.initialize_processing_state()
 RETURNS TRIGGER LANGUAGE plpgsql AS $function$
 BEGIN
-    INSERT INTO aggregation.processing_state(configuration_id) VALUES (NEW.id)
+    INSERT INTO aggregation.processing_state(aggregation_id) VALUES (NEW.id)
         ON CONFLICT DO NOTHING;
     RETURN NEW;
 END;
@@ -37,9 +37,6 @@ $function$;
 CREATE OR REPLACE TRIGGER initialize_processing_state
 AFTER INSERT ON aggregation.datastream_configuration
 FOR EACH ROW EXECUTE FUNCTION aggregation.initialize_processing_state();
-
-INSERT INTO aggregation.processing_state(configuration_id)
-SELECT id FROM aggregation.datastream_configuration ON CONFLICT DO NOTHING;
 
 COMMENT ON TABLE aggregation.processing_state IS
     'One latest state per configuration. Written by the service, exposed read-only through API. '
