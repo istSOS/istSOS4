@@ -61,9 +61,15 @@ class Settings:
                 "AGGREGATION_API_URL", "http://api:5000/istsos4/v1.1"
             ).rstrip("/"),
             schedule=os.getenv("AGGREGATION_SCHEDULE", "*/10 * * * *"),
-            write_batch_size=int(os.getenv("AGGREGATION_WRITE_BATCH_SIZE", "1000")),
-            utc_offset_minutes=int(os.getenv("AGGREGATION_UTC_OFFSET_MINUTES", "60")),
-            authorization=boolean(os.getenv("AUTHORIZATION", "0"), "AUTHORIZATION"),
+            write_batch_size=int(
+                os.getenv("AGGREGATION_WRITE_BATCH_SIZE", "1000")
+            ),
+            utc_offset_minutes=int(
+                os.getenv("AGGREGATION_UTC_OFFSET_MINUTES", "60")
+            ),
+            authorization=boolean(
+                os.getenv("AUTHORIZATION", "0"), "AUTHORIZATION"
+            ),
             username=os.getenv("ISTSOS_ADMIN", ""),
             password=os.getenv("ISTSOS_ADMIN_PASSWORD", ""),
             timeout_seconds=float(
@@ -90,16 +96,23 @@ class Settings:
             raise ValueError(
                 "AGGREGATION_UTC_OFFSET_MINUTES must be between -840 and 840"
             )
-        if not math.isfinite(settings.timeout_seconds) or settings.timeout_seconds <= 0:
+        if (
+            not math.isfinite(settings.timeout_seconds)
+            or settings.timeout_seconds <= 0
+        ):
             raise ValueError(
                 "AGGREGATION_REQUEST_TIMEOUT_SECONDS must be finite and positive"
             )
-        if settings.authorization and (not settings.username or not settings.password):
+        if settings.authorization and (
+            not settings.username or not settings.password
+        ):
             raise ValueError(
                 "ISTSOS_ADMIN and ISTSOS_ADMIN_PASSWORD are required when AUTHORIZATION is enabled"
             )
         if not 1 <= settings.write_batch_size <= 10000:
-            raise ValueError("AGGREGATION_WRITE_BATCH_SIZE must be between 1 and 10000")
+            raise ValueError(
+                "AGGREGATION_WRITE_BATCH_SIZE must be between 1 and 10000"
+            )
         next_execution(settings.schedule, datetime.now(UTC))
         return settings
 
@@ -107,7 +120,7 @@ class Settings:
 class SensorThings:
     """Use the project client, with a small adapter for the custom config API.
 
-    istsos4-client 0.4.0 has no AggregationConfigurations model/raw GET API.
+    istsos4-client 0.4.0 has no Aggregations model/raw GET API.
     Only get_document() uses its private transport/auth helpers; keep that
     dependency isolated here until the client supports this extension.
     """
@@ -121,8 +134,12 @@ class SensorThings:
         self.close()
         self.client = Client(
             self.settings.api_url,
-            username=self.settings.username if self.settings.authorization else None,
-            password=self.settings.password if self.settings.authorization else None,
+            username=(
+                self.settings.username if self.settings.authorization else None
+            ),
+            password=(
+                self.settings.password if self.settings.authorization else None
+            ),
             timeout=self.settings.timeout_seconds,
             max_retries=2,
             retry_delay=1,
@@ -136,18 +153,27 @@ class SensorThings:
     def url(self, link, current=None):
         # Public nextLinks may point to localhost/the reverse proxy. Retain only
         # the API path/query and always send credentials to the configured host.
-        target = urlsplit(urljoin(current or self.settings.api_url + "/", link))
+        target = urlsplit(
+            urljoin(current or self.settings.api_url + "/", link)
+        )
         base = urlsplit(self.settings.api_url)
         path = unquote(target.path)
         if not path.startswith(base.path + "/") or any(
             part in {".", ".."} for part in path.split("/")
         ):
-            raise ApiError("Pagination link is outside the configured API root")
-        return urlunsplit((base.scheme, base.netloc, target.path, target.query, ""))
+            raise ApiError(
+                "Pagination link is outside the configured API root"
+            )
+        return urlunsplit(
+            (base.scheme, base.netloc, target.path, target.query, "")
+        )
 
     @staticmethod
     def failure(error):
-        if isinstance(error, requests.HTTPError) and error.response is not None:
+        if (
+            isinstance(error, requests.HTTPError)
+            and error.response is not None
+        ):
             return ApiError(f"API returned HTTP {error.response.status_code}")
         return ApiError("API request failed or returned an invalid response")
 
@@ -180,7 +206,7 @@ class SensorThings:
         return datastream.serialize()
 
     def configurations(self):
-        url = self.url("AggregationConfigurations?enabled=true&$top=100")
+        url = self.url("Aggregations?enabled=true&$top=100")
         seen = set()
         configurations = []
         while url:
@@ -206,7 +232,9 @@ class SensorThings:
 
     def observation_pages(self, identifier, options):
         options = {"$top": 2000, "$count": "false", **options}
-        url = self.url(f"Datastreams({identifier})/Observations?" + urlencode(options))
+        url = self.url(
+            f"Datastreams({identifier})/Observations?" + urlencode(options)
+        )
         seen = set()
         while url:
             if url in seen:
@@ -244,6 +272,25 @@ class SensorThings:
             pages.close()
         return None
 
+    def last_observation(self, identifier, cutoff, as_of=None):
+        """End of the latest phenomenonTime at or before cutoff, or None."""
+        options = {
+            "$top": 1,
+            "$orderby": "phenomenonTime desc,id desc",
+            "$filter": f"phenomenonTime le {cutoff.isoformat()}",
+            "$select": "id,phenomenonTime",
+        }
+        if as_of is not None:
+            options["$as_of"] = as_of.isoformat()
+        pages = self.observation_pages(identifier, options)
+        try:
+            for page in pages:
+                if page:
+                    return page[0]["phenomenonTime"].split("/")[-1]
+        finally:
+            pages.close()
+        return None
+
     def observations(self, identifier, start, end, lower, upper, as_of=None):
         options = {
             "$orderby": "phenomenonTime asc,id asc",
@@ -253,15 +300,6 @@ class SensorThings:
         if as_of is not None:
             options["$as_of"] = as_of.isoformat()
         return self.observation_pages(identifier, options)
-
-    def changed_observations(self, identifier, since, until):
-        return self.observation_pages(
-            identifier,
-            {
-                "$from_to": since.isoformat() + "/" + until.isoformat(),
-                "$select": "id,phenomenonTime,systemTimeValidity",
-            },
-        )
 
 
 def describe(configuration, datastream, settings):
@@ -296,9 +334,11 @@ def describe(configuration, datastream, settings):
         "datastreamId": configuration["datastreamId"],
         "name": datastream.get("name"),
         "configuration": configuration,
-        "qualityFiltering": "disabled"
-        if configuration.get("ignoreQuality", False)
-        else "enabled",
+        "qualityFiltering": (
+            "disabled"
+            if configuration.get("ignoreQuality", False)
+            else "enabled"
+        ),
         "properties": properties,
         "samplingFrequency": sampling,
         "constraintCount": constraint_count,
@@ -309,7 +349,13 @@ def describe(configuration, datastream, settings):
 
 
 def run_cycle(
-    api, settings, stop, state=None, aggregate=False, manual=None, datastream_id=None
+    api,
+    settings,
+    stop,
+    state=None,
+    aggregate=False,
+    manual=None,
+    datastream_id=None,
 ):
     logger.info("Reading enabled aggregation configurations")
     try:
@@ -346,7 +392,9 @@ def run_cycle(
             continue  # Configuration was disabled/deleted since collection read.
         try:
             if type(identifier) is not int or identifier < 1:
-                raise ApiError("Configuration contains an invalid datastreamId")
+                raise ApiError(
+                    "Configuration contains an invalid datastreamId"
+                )
             datastream = api.datastream(identifier)
             result = describe(configuration, datastream, settings)
             print(json.dumps(result, ensure_ascii=False), flush=True)
@@ -362,7 +410,9 @@ def run_cycle(
                     manual,
                 )
                 logger.info(
-                    "Datastream %s: saved %s aggregate buckets", identifier, count
+                    "Datastream %s: saved %s aggregate buckets",
+                    identifier,
+                    count,
                 )
                 succeeded += 1
                 continue
@@ -387,7 +437,9 @@ def run_cycle(
                     run_id,
                     "interrupted" if stop.is_set() else "failed",
                     {
-                        "step": "aggregation" if aggregate else "datastream_read",
+                        "step": (
+                            "aggregation" if aggregate else "datastream_read"
+                        ),
                         "message": str(error),
                         **getattr(error, "context", {}),
                     },
@@ -422,7 +474,9 @@ def serve(settings, stop, task, now=lambda: datetime.now(UTC)):
         finished = now()
         following = next_execution(settings.schedule, due)
         if following <= finished:
-            logger.warning("Skipped overlapping/missed cron triggers while processing")
+            logger.warning(
+                "Skipped overlapping/missed cron triggers while processing"
+            )
         due = next_execution(settings.schedule, max(finished, due))
 
 
@@ -441,13 +495,17 @@ def main():
         "--recompute-to", help="Optional upper limit for manual recomputation"
     )
     parser.add_argument(
-        "--datastream-id", type=int, help="Process only this configured Datastream"
+        "--datastream-id",
+        type=int,
+        help="Process only this configured Datastream",
     )
     args = parser.parse_args()
     if (args.recompute_from and not args.once) or (
         args.recompute_to and not args.recompute_from
     ):
-        parser.error("Manual recomputation requires --once and --recompute-from")
+        parser.error(
+            "Manual recomputation requires --once and --recompute-from"
+        )
     manual = None
     if args.recompute_from:
         try:
@@ -456,11 +514,14 @@ def main():
                 timestamp(args.recompute_to) if args.recompute_to else None,
             )
             if manual[1] is not None and manual[0] > manual[1]:
-                raise CalculationError("Recomputation start must precede its end")
+                raise CalculationError(
+                    "Recomputation start must precede its end"
+                )
         except CalculationError as error:
             parser.error(str(error))
     logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     stop = Event()
     for signum in (signal.SIGTERM, signal.SIGINT):

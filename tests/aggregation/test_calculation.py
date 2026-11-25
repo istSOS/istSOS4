@@ -56,12 +56,21 @@ def test_pandas_streaming_statistics_conversion_and_missing_values():
     )
     result.add([observation(5, 3), observation(6, "4")])
     row = result.result()
-    assert (row["count_total"], row["count_accepted"], row["count_numeric"]) == (
+    assert (
+        row["count_total"],
+        row["count_accepted"],
+        row["count_numeric"],
+    ) == (
         6,
         6,
         2,
     )
-    assert (row["sum_value"], row["avg_value"], row["min_value"], row["max_value"]) == (
+    assert (
+        row["sum_value"],
+        row["avg_value"],
+        row["min_value"],
+        row["max_value"],
+    ) == (
         8,
         4,
         2,
@@ -91,16 +100,22 @@ def test_pandas_streaming_statistics_conversion_and_missing_values():
         ({"code": 3}, 0, 0, False),
     ],
 )
-def test_quality_threshold_and_human_override(value, count, threshold, accepted):
-    assert quality(value, config(minInputQuality=threshold), count)[0] is accepted
+def test_quality_threshold_and_human_override(
+    value, count, threshold, accepted
+):
+    assert (
+        quality(value, config(minInputQuality=threshold), count)[0] is accepted
+    )
 
 
 def test_quality_key_and_full_bypass():
-    assert quality({"code": 15}, config(minInputQuality=3, resultQualityKey="code"), 1)[
-        0
-    ]
+    assert quality(
+        {"code": 15}, config(minInputQuality=3, resultQualityKey="code"), 1
+    )[0]
     for value in (None, -1, "bad", True, 47):
-        assert quality(value, config(ignoreQuality=True, minInputQuality=3), 1)[0]
+        assert quality(
+            value, config(ignoreQuality=True, minInputQuality=3), 1
+        )[0]
     result = accumulator(ignoreQuality=True)
     result.add([observation(1, -999.9), observation(2, 2, "bad")])
     assert result.result()["count_numeric"] == 1
@@ -108,7 +123,10 @@ def test_quality_key_and_full_bypass():
 
 def test_empty_events_are_distinct_from_rejected_events():
     empty = accumulator(mode="event", minInputQuality=3).result()
-    assert empty["count_numeric"] == 0 and empty["sum_value"] is None
+    assert empty["count_numeric"] == 0
+    assert [
+        empty[k] for k in ("sum_value", "avg_value", "min_value", "max_value")
+    ] == [0, 0, 0, 0]
     assert empty["expected_count"] is None and empty["coverage"] is None
     assert empty["result_quality"] & 3 == 1
     assert empty["result_quality"] >> 4 == 3
@@ -116,6 +134,9 @@ def test_empty_events_are_distinct_from_rejected_events():
     rejected.add([observation(1, 1)])
     assert rejected.result()["result_quality"] & 3 == 0
     assert rejected.result()["result_quality"] >> 4 == 2
+    assert (
+        rejected.result()["sum_value"] == 0
+    )  # event: no accepted value is still 0, flagged invalid
 
 
 def test_completeness_failure_retains_real_statistics_without_marker_pollution():
@@ -153,7 +174,9 @@ def test_monday_alignment_and_right_closed_boundaries():
     monday = timestamp("2026-11-08T23:00:00Z")
     assert bucket_floor(timestamp("2026-11-12T12:00:00Z"), "P7D", 60) == monday
     edge = timestamp("2026-01-01T00:10:00Z")
-    assert containing(edge, "PT10M", 0, "right_closed") == edge - timedelta(minutes=10)
+    assert containing(edge, "PT10M", 0, "right_closed") == edge - timedelta(
+        minutes=10
+    )
     assert containing(edge, "PT10M", 0, "left_closed") == edge
 
 

@@ -54,7 +54,9 @@ def timestamp(value):
 def bucket_floor(value, interval, offset):
     local = value.astimezone(timezone(timedelta(minutes=offset)))
     if interval == "PT10M":
-        local = local.replace(minute=local.minute // 10 * 10, second=0, microsecond=0)
+        local = local.replace(
+            minute=local.minute // 10 * 10, second=0, microsecond=0
+        )
     elif interval == "PT1H":
         local = local.replace(minute=0, second=0, microsecond=0)
     else:
@@ -96,7 +98,9 @@ def next_bucket(start, interval, offset=0):
 def containing(value, interval, offset, closure):
     floor = bucket_floor(value, interval, offset)
     if closure == "right_closed" and floor == value:
-        floor = bucket_floor(value - timedelta(microseconds=1), interval, offset)
+        floor = bucket_floor(
+            value - timedelta(microseconds=1), interval, offset
+        )
     return floor
 
 
@@ -104,8 +108,13 @@ def sampling_seconds(properties, mode):
     if mode == "event":
         return None
     try:
-        duration = isodate.parse_duration(properties.get("samplingFrequency", ""))
-        if not isinstance(duration, timedelta) or duration.total_seconds() <= 0:
+        duration = isodate.parse_duration(
+            properties.get("samplingFrequency", "")
+        )
+        if (
+            not isinstance(duration, timedelta)
+            or duration.total_seconds() <= 0
+        ):
             raise ValueError
         return duration.total_seconds()
     except (ValueError, TypeError, isodate.ISO8601Error):
@@ -155,7 +164,9 @@ def quality(value, configuration, count):
 
 
 class Accumulator:
-    def __init__(self, configuration, properties, start, end, cutoff, domain_start):
+    def __init__(
+        self, configuration, properties, start, end, cutoff, domain_start
+    ):
         self.config = configuration
         self.start, self.end, self.cutoff = start, end, cutoff
         self.domain_start = domain_start
@@ -225,8 +236,12 @@ class Accumulator:
         self.sum += float(frame.value.sum())
         self.numeric += len(frame)
         minimum, maximum = float(frame.value.min()), float(frame.value.max())
-        self.minimum = minimum if self.minimum is None else min(self.minimum, minimum)
-        self.maximum = maximum if self.maximum is None else max(self.maximum, maximum)
+        self.minimum = (
+            minimum if self.minimum is None else min(self.minimum, minimum)
+        )
+        self.maximum = (
+            maximum if self.maximum is None else max(self.maximum, maximum)
+        )
         first, last = (
             frame.time.iloc[0].to_pydatetime(),
             frame.time.iloc[-1].to_pydatetime(),
@@ -251,10 +266,13 @@ class Accumulator:
             first_slot = max(
                 1 if closure == "right_closed" else 0,
                 math.ceil(
-                    (self.domain_start - self.start).total_seconds() / self.sampling
+                    (self.domain_start - self.start).total_seconds()
+                    / self.sampling
                 ),
             )
-            distance = (self.cutoff - self.start).total_seconds() / self.sampling
+            distance = (
+                self.cutoff - self.start
+            ).total_seconds() / self.sampling
             last_slot = (
                 math.floor(distance)
                 if closure == "right_closed"
@@ -267,14 +285,18 @@ class Accumulator:
             else:
                 head = max(
                     0,
-                    math.ceil((self.first - self.start).total_seconds() / self.sampling)
+                    math.ceil(
+                        (self.first - self.start).total_seconds()
+                        / self.sampling
+                    )
                     - first_slot,
                 )
                 tail = max(
                     0,
                     last_slot
                     - math.floor(
-                        (self.last - self.start).total_seconds() / self.sampling
+                        (self.last - self.start).total_seconds()
+                        / self.sampling
                     ),
                 )
                 self.max_gap = max(self.max_gap, head, tail)
@@ -285,7 +307,11 @@ class Accumulator:
             ("minObservations", self.numeric),
         ):
             threshold = self.config.get(name)
-            if threshold is not None and actual is not None and actual < threshold:
+            if (
+                threshold is not None
+                and actual is not None
+                and actual < threshold
+            ):
                 valid = False
         if (
             self.config.get("maxConsecutiveMissing") is not None
@@ -299,6 +325,11 @@ class Accumulator:
         for i, flags in enumerate(self.checks, start=1):
             pair = 2 if 2 in flags else (3 if flags == {3} else 0)
             mask |= pair << (2 * i)
+        zero = (
+            0.0
+            if self.config["mode"] == "event" and not self.numeric
+            else None
+        )
         # A human has not reviewed this newly computed result: human pair 00.
         return {
             "datastream_id": self.config["datastreamId"],
@@ -308,10 +339,10 @@ class Accumulator:
             "count_total": self.total,
             "count_accepted": self.accepted,
             "count_numeric": self.numeric,
-            "sum_value": self.sum if self.numeric else None,
-            "min_value": self.minimum,
-            "max_value": self.maximum,
-            "avg_value": self.sum / self.numeric if self.numeric else None,
+            "sum_value": self.sum if self.numeric else zero,
+            "min_value": self.minimum if self.numeric else zero,
+            "max_value": self.maximum if self.numeric else zero,
+            "avg_value": self.sum / self.numeric if self.numeric else zero,
             "expected_count": expected,
             "coverage": coverage,
             "result_quality": mask,

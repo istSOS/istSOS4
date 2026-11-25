@@ -26,3 +26,22 @@ REVOKE ALL ON FUNCTION aggregation.safe_change_watermark() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION aggregation.safe_change_watermark() TO administrator;
 COMMENT ON FUNCTION aggregation.safe_change_watermark() IS
     'Stable system-time cutoff before active source transactions; null while prepared transactions exist.';
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'sensorthings'
+          AND table_name = 'Observation'
+          AND column_name = 'systemTimeValidity'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS "idx_observation_datastream_system_time"
+        ON sensorthings."Observation" ("datastream_id", lower("systemTimeValidity"));
+    END IF;
+    -- Closed versions: the worker looks for versions closed after its last scan.
+    IF to_regclass('sensorthings_history."Observation"') IS NOT NULL THEN
+        CREATE INDEX IF NOT EXISTS "idx_observation_history_datastream_closed"
+        ON sensorthings_history."Observation" ("datastream_id", upper("systemTimeValidity"));
+    END IF;
+END;
+$$;

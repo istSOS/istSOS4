@@ -53,7 +53,8 @@ def bucket_groups(entries, interval, offset, limit):
         if group and (
             len(group) >= limit
             or start != next_bucket(group[-1][0], interval, offset)
-            or next_bucket(start, interval, offset) - group[0][0] > timedelta(days=7)
+            or next_bucket(start, interval, offset) - group[0][0]
+            > timedelta(days=7)
         ):
             yield group
             group = []
@@ -81,17 +82,28 @@ def read_bucket_group(
     for start, _ in group:
         end = next_bucket(start, interval, offset)
         accumulators[start] = Accumulator(
-            configuration, properties, start, end, min(end, cutoff), domain_start
+            configuration,
+            properties,
+            start,
+            end,
+            min(end, cutoff),
+            domain_start,
         )
     first = group[0][0]
     evaluated = min(next_bucket(group[-1][0], interval, offset), cutoff)
     window = max(first, domain_start)
-    while window < evaluated or (window == evaluated and closure == "right_closed"):
+    while window < evaluated or (
+        window == evaluated and closure == "right_closed"
+    ):
         if stop.is_set():
-            raise CalculationError("Service stopped during observation retrieval")
+            raise CalculationError(
+                "Service stopped during observation retrieval"
+            )
         upper = min(window + timedelta(days=7), evaluated)
         include_start = window == domain_start and window > first
-        lower_operator = "ge" if closure == "left_closed" or include_start else "gt"
+        lower_operator = (
+            "ge" if closure == "left_closed" or include_start else "gt"
+        )
         upper_operator = "lt" if closure == "left_closed" else "le"
         try:
             for page in api.observations(
@@ -168,11 +180,22 @@ def calculate(
         )
     if configuration.get("endTime"):
         cutoff = min(cutoff, timestamp(configuration["endTime"]))
+    reference = configuration.get("referenceDatastreamId")
+    if reference is not None:
+        reference_end = api.last_observation(
+            reference, cutoff, system_cutoff if versioned else None
+        )
+        if reference_end is None:
+            state.complete(identifier, run_id, checkpoint)
+            return 0
+        cutoff = min(cutoff, timestamp(reference_end))
     closure = configuration.get("boundaryMode") or "right_closed"
     offset = configuration.get("utcOffsetMinutes")
     if offset is None:
         offset = settings.utc_offset_minutes
-    domain_start = configuration.get("startTime") or checkpoint.get("domainStart")
+    domain_start = configuration.get("startTime") or checkpoint.get(
+        "domainStart"
+    )
     if domain_start is None:
         domain_start = api.first_observation(
             configuration["datastreamId"], cutoff, versioned, system_cutoff
@@ -192,23 +215,12 @@ def calculate(
     if versioned and since and manual is None:
         scan_start = timestamp(since) - timedelta(seconds=1)
         if scan_start < system_cutoff:
-            for page in api.changed_observations(
-                configuration["datastreamId"], scan_start, system_cutoff
-            ):
-                for observation in page:
-                    validity = observation.get("systemTimeValidity")
-                    if not isinstance(validity, str):
-                        raise CalculationError(
-                            "Historical API response has no systemTimeValidity"
-                        )
-                    boundaries = validity.split("/")
-                    changed = any(
-                        scan_start <= timestamp(edge) <= system_cutoff
-                        for edge in boundaries
-                        if edge != "infinity"
-                    )
-                    if changed:
-                        changes.add(timestamp(observation["phenomenonTime"]))
+            changes.update(
+                timestamp(value)
+                for value in state.changed_times(
+                    configuration["datastreamId"], scan_start, system_cutoff
+                )
+            )
     if configuration.get("startTime") is None and changes:
         earlier = min(changes)
         if earlier < domain_start:
@@ -225,12 +237,16 @@ def calculate(
         "properties": properties,
         "effectiveUtcOffsetMinutes": offset,
         "boundaryMode": closure,
-        "conversionFactor": configuration.get("conversionFactor")
-        if configuration.get("conversionFactor") is not None
-        else 1,
-        "missingValues": configuration.get("missingValues")
-        if configuration.get("missingValues") is not None
-        else [-999.9],
+        "conversionFactor": (
+            configuration.get("conversionFactor")
+            if configuration.get("conversionFactor") is not None
+            else 1
+        ),
+        "missingValues": (
+            configuration.get("missingValues")
+            if configuration.get("missingValues") is not None
+            else [-999.9]
+        ),
         "aggregationStatusPairs": {"notComputed": 0, "failed": 2, "passed": 3},
         "sourceVersioning": versioned,
     }
@@ -239,13 +255,17 @@ def calculate(
         pending = []
         last = containing(cutoff, interval, offset, closure)
         initial = containing(domain_start, interval, offset, closure)
-        frontier = timestamp(checkpoint["frontiers"].get(interval, initial.isoformat()))
+        frontier = timestamp(
+            checkpoint["frontiers"].get(interval, initial.isoformat())
+        )
         recent = set()
         point = last
         for _ in range(configuration.get("bucketsToRecompute") or 3):
             if point >= initial:
                 recent.add(point)
-            point = bucket_floor(point - timedelta(microseconds=1), interval, offset)
+            point = bucket_floor(
+                point - timedelta(microseconds=1), interval, offset
+            )
         recent.update(
             containing(point, interval, offset, closure)
             for point in changes
@@ -260,7 +280,9 @@ def calculate(
         else:
             sequence, limit = frontier, last
 
-        def work(sequence=sequence, limit=limit, interval=interval, recent=recent):
+        def work(
+            sequence=sequence, limit=limit, interval=interval, recent=recent
+        ):
             cursor = sequence
             while cursor <= limit:
                 yield cursor, True
@@ -270,7 +292,9 @@ def calculate(
                     if not sequence <= cursor <= limit:
                         yield cursor, False
 
-        for group in bucket_groups(work(), interval, offset, settings.write_batch_size):
+        for group in bucket_groups(
+            work(), interval, offset, settings.write_batch_size
+        ):
             if stop.is_set():
                 raise CalculationError(
                     "Service stopped; committed batches will resume next run"
@@ -297,15 +321,25 @@ def calculate(
                 if manual is None and advances:
                     checkpoint["frontiers"][interval] = end.isoformat()
                 valid = (
-                    (row["result_quality"] >> (2 * (row["constraint_count"] + 2))) & 3
+                    (
+                        row["result_quality"]
+                        >> (2 * (row["constraint_count"] + 2))
+                    )
+                    & 3
                 ) == 3
-                empty = configuration["mode"] == "event" and row["count_total"] == 0
+                empty = (
+                    configuration["mode"] == "event"
+                    and row["count_total"] == 0
+                )
                 display = {
-                    key: (0 if empty else -999.9)
-                    if not valid or value is None
-                    else value
+                    key: (
+                        (0 if empty else -999.9)
+                        if not valid or value is None
+                        else value
+                    )
                     for key, value in row.items()
-                    if key in ("sum_value", "avg_value", "min_value", "max_value")
+                    if key
+                    in ("sum_value", "avg_value", "min_value", "max_value")
                 }
                 record = {
                     "event": "aggregation_result",
@@ -327,7 +361,9 @@ def calculate(
                     written += flush_results(
                         state, identifier, run_id, table, pending, checkpoint
                     )
-        written += flush_results(state, identifier, run_id, table, pending, checkpoint)
+        written += flush_results(
+            state, identifier, run_id, table, pending, checkpoint
+        )
     if manual is None:
         checkpoint["changesThrough"] = system_cutoff.isoformat()
     # All bucket results are already durable; final checkpoint/status is atomic.

@@ -2,7 +2,7 @@
 
 The service reads enabled configurations and source observations through
 `istsos4-client==0.4.0`, calculates statistics with pandas, and upserts the six
-predefined result hypertables. It records per-Datastream status in PostgreSQL.
+predefined result tables. It records per-Datastream status in PostgreSQL.
 Source observations are not modified. Parquet export and concurrent Datastream
 processing are not implemented.
 
@@ -28,9 +28,8 @@ docker compose -f dev_docker-compose.yml up -d --build aggregation
 docker compose -f dev_docker-compose.yml logs -f aggregation
 ```
 
-This starts the normal API/database dependencies if needed. For an existing
-database, first install all aggregation schema scripts described in
-[the configuration contract](../docs/mkdocs/docs/aggregation-configurations.md).
+This starts the normal API/database dependencies if needed. The database image
+installs the aggregation schema; existing databases are not migrated.
 The Compose network must exist, as required by the existing development setup.
 Only one aggregation service instance should run: overlap prevention is local
 to the process. The production Compose file is unchanged.
@@ -103,15 +102,14 @@ python -m pytest tests/aggregation
 
 ## Latest run status
 
-Apply `database/aggregation_processing_state.sql` and
-`database/aggregation_engine.sql` after configuration and result storage
-on existing databases. New images install it automatically. The service uses
+New database images install `database/aggregation_processing_state.sql` and
+`database/aggregation_engine.sql`. The service uses
 `POSTGRES_HOST`, `POSTGRES_PORT` (default 5432), `POSTGRES_DB`, `ISTSOS_ADMIN` and
 `ISTSOS_ADMIN_PASSWORD` to write state directly to the same database. This is
 independent of whether the source API requires authentication.
 
 The GUI can follow `ProcessingState@iot.navigationLink` on a configuration, or
-request `/AggregationConfigurations(id)/ProcessingState`. State is read-only
+request `/Aggregations(id)/ProcessingState`. State is read-only
 through the API and follows the configuration API's administrator permissions.
 See [the state contract](../docs/mkdocs/docs/aggregation-configurations.md#processing-state).
 
@@ -151,6 +149,12 @@ On first run, history starts at `startTime` or the earliest source observation.
 Set `startTime` to generate empty event buckets before the first received tick;
 without either a configured start or any observations, there is no inferred
 historical domain.
+An event configuration may set `referenceDatastreamId` to a regularly
+reporting Datastream of the same station (e.g. battery voltage). Evaluation
+stops at the reference's last observation, so buckets after it are not filled
+with zero; they are computed in a later run once the reference reports again.
+Without reference observations nothing is evaluated. Only the end is checked:
+gaps inside the reference period are still treated as no events.
 Each interval has a durable bootstrap cursor. Adjacent buckets are read together in windows of at most seven days and pages
 of 2000 observations. Each page is partitioned into its target buckets and
 pandas reduces those groups into bounded accumulators. Empty buckets are
@@ -158,7 +162,7 @@ created without making separate API requests. Larger calendar buckets are
 read in successive seven-day windows. Calculated result rows are buffered per interval, up to
 `AGGREGATION_WRITE_BATCH_SIZE` rows. PostgreSQL `COPY FROM STDIN` transfers the
 whole batch to a reusable session-local temporary staging table; one
-`INSERT ... SELECT ... ON CONFLICT` merges all rows into the target hypertable.
+`INSERT ... SELECT ... ON CONFLICT` merges all rows into the target table.
 There are no individual target-row INSERT calls. The final smaller batch of
 each interval is flushed too.
 
@@ -194,10 +198,11 @@ null. Missing runs are estimated from accepted numeric timestamp gaps at that
 frequency; duplicate/oversampled observations count as received values, not
 additional expected slots. Conversion is applied after input missing markers.
 
-For event mode, genuinely empty buckets produce zero in printed results.
-Received but QC-rejected/invalid events produce missing output instead. Empty
-statistics remain SQL null with zero numeric count, preserving weighted-rollup
-semantics. Failed completeness also retains real SQL statistics but marks the
+For event mode, a bucket without accepted numeric values stores zero
+statistics (sum, avg, min, max = 0) with zero numeric count: no event means
+nothing happened. A genuinely empty bucket is valid (data pair 01); received
+but QC-rejected/invalid events also store zero but are marked invalid. In
+sampled mode such statistics remain SQL null (missing data). Failed completeness also retains real SQL statistics but marks the
 output QC as no data; printed values become -999.9. Original human review is
 not copied as a review of the new aggregate (human pair 00). Automatic check
 pairs are conservatively combined from contributing masks. The aggregation
@@ -209,9 +214,12 @@ for the additional aggregation pair before displaying these masks as legends.
 ## Historical changes with versioning
 
 The worker detects versioning from the source database schema. With versioning,
-`$from_to` reads historical validity intervals through the API, including old
-versions of deleted or moved observations. Both old and new phenomenon times
-identify buckets to recompute from source `$as_of` reads. A backdated insert can
+it finds changed observations with one indexed SQL query on the database
+connection: current rows whose system-time validity started in the scan window,
+and history versions with a validity edge in it (old versions of updated, moved
+or deleted observations). The scan reads only the changes, not the Datastream
+history. Both old and new phenomenon times identify buckets to recompute from
+source `$as_of` reads through the API. A backdated insert can
 extend an implicit history start. The phenomenon-time `endTime` limit remains
 separate from system-time visibility, so late inserts into a closed historical
 domain are still processed.
@@ -230,10 +238,9 @@ older edits/deletes need manual recomputation. Historical rows must be retained
 until processing has consumed them.
 
 This initial implementation favors correctness over query minimization. Large
-recent yearly/monthly buckets are reread from source, and `$from_to` can return
-long-lived versions whose validity overlaps the scan even when unchanged. Page
-reduction bounds numeric-frame memory, but large sources may require optimizing
-change queries and incremental sufficient statistics after measuring load.
+recent yearly/monthly buckets are reread from source. Page reduction bounds
+numeric-frame memory, but large sources may require incremental sufficient
+statistics after measuring load.
 First-run backfill may span several cron triggers; overlapping triggers are
 skipped while that run completes.
 

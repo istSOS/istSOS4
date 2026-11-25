@@ -15,12 +15,17 @@ class Source:
             {"phenomenonTime": "2026-01-01T00:10:00Z", "result": 4},
             {"phenomenonTime": "2026-01-01T00:15:00Z", "result": 6},
         ]
-        self.changes = []
         self.fail = False
         self.requests = []
+        self.reference_requests = []
+        self.reference_end = None
 
     def first_observation(self, *args):
         return self.rows[0]["phenomenonTime"] if self.rows else None
+
+    def last_observation(self, identifier, cutoff, as_of):
+        self.reference_requests.append(identifier)
+        return self.reference_end
 
     def observations(self, identifier, start, end, lower, upper, as_of):
         self.requests.append((start, end, as_of))
@@ -43,9 +48,6 @@ class Source:
             raise ApiError("Page retrieval failed")
         yield selected[1:]
 
-    def changed_observations(self, *args):
-        yield self.changes
-
 
 class Store:
     def __init__(self):
@@ -55,12 +57,16 @@ class Store:
         self.cutoff = timestamp("2026-01-01T00:20:00Z")
         self.completed = False
         self.batches = []
+        self.changes = []
 
     def checkpoint(self, _):
         return copy.deepcopy(self.cp)
 
     def source_context(self):
         return self.cutoff, self.versioned
+
+    def changed_times(self, datastream_id, since, until):
+        return list(self.changes)
 
     def save_buckets(self, identifier, token, table, rows, checkpoint):
         self.batches.append((table, copy.deepcopy(rows)))
@@ -99,7 +105,9 @@ def test_all_intervals_use_source_values_and_idempotent_upsert():
     run(source, store)
     assert {key[0] for key in store.rows} == set(TABLES.values())
     hourly = next(
-        row for (table, _), row in store.rows.items() if table == "observations_1hour"
+        row
+        for (table, _), row in store.rows.items()
+        if table == "observations_1hour"
     )
     assert hourly["sum_value"] == 12 and hourly["avg_value"] == 4
     before = copy.deepcopy(store.rows)
@@ -125,19 +133,11 @@ def test_historical_deletion_and_moved_time_recompute_old_and_new_buckets():
     run(source, store)
     source.rows.pop(0)
     source.rows[0]["phenomenonTime"] = "2026-01-01T00:17:00Z"
-    source.changes = [
-        {
-            "phenomenonTime": "2026-01-01T00:05:00Z",
-            "systemTimeValidity": "2025-01-01T00:00:00Z/2026-01-01T00:21:00Z",
-        },
-        {
-            "phenomenonTime": "2026-01-01T00:10:00Z",
-            "systemTimeValidity": "2025-01-01T00:00:00Z/2026-01-01T00:21:00Z",
-        },
-        {
-            "phenomenonTime": "2026-01-01T00:17:00Z",
-            "systemTimeValidity": "2026-01-01T00:21:00Z/infinity",
-        },
+    # Old times of the deleted and moved rows, plus the moved row's new time.
+    store.changes = [
+        timestamp("2026-01-01T00:05:00Z"),
+        timestamp("2026-01-01T00:10:00Z"),
+        timestamp("2026-01-01T00:17:00Z"),
     ]
     store.cutoff = timestamp("2026-02-01T00:20:00Z")
     # Avoid a month-long bootstrap in this focused test.
@@ -171,7 +171,10 @@ def test_manual_recompute_does_not_advance_bootstrap_or_change_scan_checkpoint()
         Settings("http://api/v1"),
         "token",
         Event(),
-        manual=(timestamp("2026-01-01T00:05:00Z"), timestamp("2026-01-01T00:15:00Z")),
+        manual=(
+            timestamp("2026-01-01T00:05:00Z"),
+            timestamp("2026-01-01T00:15:00Z"),
+        ),
     )
     assert store.cp["frontiers"] == before["frontiers"]
     assert store.cp["changesThrough"] == before["changesThrough"]
@@ -182,16 +185,15 @@ def test_backdated_insert_extends_implicit_domain_and_rewinds_bootstrap():
     run(source, store, startTime=None)
     store.versioned = True
     store.cutoff = timestamp("2026-01-01T00:30:00Z")
-    source.rows.insert(0, {"phenomenonTime": "2025-12-31T23:55:00Z", "result": 10})
-    source.changes = [
-        {
-            "phenomenonTime": "2025-12-31T23:55:00Z",
-            "systemTimeValidity": "2026-01-01T00:25:00Z/infinity",
-        }
-    ]
+    source.rows.insert(
+        0, {"phenomenonTime": "2025-12-31T23:55:00Z", "result": 10}
+    )
+    store.changes = [timestamp("2025-12-31T23:55:00Z")]
     run(source, store, startTime=None, bucketsToRecompute=1)
     assert store.cp["domainStart"] == "2025-12-31T23:55:00+00:00"
-    earlier = store.rows["observations_10min", timestamp("2025-12-31T23:50:00Z")]
+    earlier = store.rows[
+        "observations_10min", timestamp("2025-12-31T23:50:00Z")
+    ]
     assert earlier["sum_value"] == 10
 
 
@@ -203,7 +205,9 @@ def test_engine_flushes_full_batches_and_final_remainder():
         rows for table, rows in store.batches if table == "observations_10min"
     ]
     assert [len(rows) for rows in ten_minute] == [4, 2]
-    assert len(store.rows) == 11  # six 10-minute buckets plus five larger intervals
+    assert (
+        len(store.rows) == 11
+    )  # six 10-minute buckets plus five larger intervals
     assert all(len(rows) <= 4 for _, rows in store.batches)
 
 
@@ -266,4 +270,26 @@ def test_seven_days_of_empty_ten_minute_buckets_need_two_group_reads():
     assert (
         len(source.requests) == 8
     )  # two 10-minute groups, two Monday-aligned weeks, four other intervals
-    assert all(row["count_numeric"] == 0 for rows in ten_minute for row in rows)
+    assert all(
+        row["count_numeric"] == 0 for rows in ten_minute for row in rows
+    )
+
+
+def test_reference_datastream_limits_event_buckets_to_its_last_observation():
+    source, store = Source(), Store()
+    source.reference_end = "2026-01-01T00:12:00Z"
+    run(source, store, mode="event", referenceDatastreamId=7)
+    ten_minutes = sorted(
+        start for table, start in store.rows if table == "observations_10min"
+    )
+    # Station silent after 00:12: the bucket ending 00:20 is not filled with zero.
+    assert ten_minutes[-1] == timestamp("2026-01-01T00:10:00Z")
+    last = store.rows["observations_10min", ten_minutes[-1]]
+    assert last["evaluated_until"] == timestamp("2026-01-01T00:12:00Z")
+    assert source.reference_requests == [7]
+
+
+def test_reference_without_observations_evaluates_nothing():
+    source, store = Source(), Store()
+    run(source, store, mode="event", referenceDatastreamId=7)
+    assert store.rows == {} and store.completed

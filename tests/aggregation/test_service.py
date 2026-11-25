@@ -29,7 +29,11 @@ def datastream(identifier=1):
         "name": f"Temperature {identifier}",
         "description": "Test",
         "observationType": "OM_Measurement",
-        "unitOfMeasurement": {"name": "Celsius", "symbol": "C", "definition": "test"},
+        "unitOfMeasurement": {
+            "name": "Celsius",
+            "symbol": "C",
+            "definition": "test",
+        },
         "properties": {
             "samplingFrequency": "PT10M",
             "constraints": [{"name": "range"}],
@@ -64,18 +68,18 @@ def transport(monkeypatch):
     return routes, calls
 
 
-def test_client_reads_all_pages_and_datastreams_with_public_nextlink(transport, capsys):
+def test_client_reads_all_pages_and_datastreams_with_public_nextlink(
+    transport, capsys
+):
     routes, calls = transport
-    routes["GET", BASE + "/AggregationConfigurations?enabled=true&$top=100"] = (
+    routes["GET", BASE + "/Aggregations?enabled=true&$top=100"] = (
         200,
         {
             "value": [configuration()],
-            "@iot.nextLink": "https://public.example/istsos4/v1.1/AggregationConfigurations?enabled=true&$top=100&$skip=100",
+            "@iot.nextLink": "https://public.example/istsos4/v1.1/Aggregations?enabled=true&$top=100&$skip=100",
         },
     )
-    routes[
-        "GET", BASE + "/AggregationConfigurations?enabled=true&$top=100&$skip=100"
-    ] = (
+    routes["GET", BASE + "/Aggregations?enabled=true&$top=100&$skip=100"] = (
         200,
         {
             "value": [
@@ -95,9 +99,14 @@ def test_client_reads_all_pages_and_datastreams_with_public_nextlink(transport, 
         assert service.run_cycle(api, settings, api.stop)
     finally:
         api.close()
-    records = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    records = [
+        json.loads(line) for line in capsys.readouterr().out.splitlines()
+    ]
     assert [record["datastreamId"] for record in records] == [1, 2]
-    assert [record["effectiveUtcOffsetMinutes"] for record in records] == [60, 0]
+    assert [record["effectiveUtcOffsetMinutes"] for record in records] == [
+        60,
+        0,
+    ]
     assert records[0]["constraintCount"] == 1
     assert records[0]["samplingFrequency"] == "PT10M"
     assert records[0]["configuration"]["minInputQuality"] == 3
@@ -107,13 +116,15 @@ def test_client_reads_all_pages_and_datastreams_with_public_nextlink(transport, 
     assert all(kwargs["timeout"] == 30 for _, _, kwargs in calls)
 
 
-def test_project_client_handles_login_and_expiry_and_each_cycle(transport, capsys):
+def test_project_client_handles_login_and_expiry_and_each_cycle(
+    transport, capsys
+):
     routes, calls = transport
     routes["POST", BASE + "/Login"] = (
         200,
         {"access_token": "private-token", "expires_in": 3600},
     )
-    routes["GET", BASE + "/AggregationConfigurations?enabled=true&$top=100"] = (
+    routes["GET", BASE + "/Aggregations?enabled=true&$top=100"] = (
         200,
         {"value": [configuration()]},
     )
@@ -129,7 +140,9 @@ def test_project_client_handles_login_and_expiry_and_each_cycle(transport, capsy
         api.close()
     logins = [kwargs for method, _, kwargs in calls if method == "POST"]
     assert len(logins) == 2
-    assert all(item["data"]["password"] == "private-password" for item in logins)
+    assert all(
+        item["data"]["password"] == "private-password" for item in logins
+    )
     assert all(
         kwargs["headers"]["Authorization"] == "Bearer private-token"
         for method, _, kwargs in calls
@@ -141,7 +154,7 @@ def test_project_client_handles_login_and_expiry_and_each_cycle(transport, capsy
 
 def test_transient_api_failure_retried_by_client(transport):
     routes, calls = transport
-    routes["GET", BASE + "/AggregationConfigurations?enabled=true&$top=100"] = [
+    routes["GET", BASE + "/Aggregations?enabled=true&$top=100"] = [
         (503, {}),
         requests.Timeout("unavailable"),
         (200, {"value": []}),
@@ -159,7 +172,7 @@ def test_failed_datastream_does_not_block_others_or_leak_error_body(
     transport, capsys, caplog
 ):
     routes, _ = transport
-    routes["GET", BASE + "/AggregationConfigurations?enabled=true&$top=100"] = (
+    routes["GET", BASE + "/Aggregations?enabled=true&$top=100"] = (
         200,
         {"value": [configuration(), configuration(2)]},
     )
@@ -189,14 +202,14 @@ def test_failed_datastream_does_not_block_others_or_leak_error_body(
         {"value": [], "@iot.nextLink": 1},
         {
             "value": [],
-            "@iot.nextLink": BASE + "/AggregationConfigurations?enabled=true&$top=100",
+            "@iot.nextLink": BASE + "/Aggregations?enabled=true&$top=100",
         },
         {"value": [], "@iot.nextLink": "https://other.example/admin"},
     ],
 )
 def test_invalid_collections_fail_the_cycle(transport, body):
     routes, _ = transport
-    routes["GET", BASE + "/AggregationConfigurations?enabled=true&$top=100"] = (
+    routes["GET", BASE + "/Aggregations?enabled=true&$top=100"] = (
         200,
         body,
     )
@@ -213,11 +226,21 @@ def test_invalid_collections_fail_the_cycle(transport, body):
     [
         ({"properties": {}}, "samplingFrequency"),
         (
-            {"properties": {"samplingFrequency": "PT10M", "constraints": "invalid"}},
+            {
+                "properties": {
+                    "samplingFrequency": "PT10M",
+                    "constraints": "invalid",
+                }
+            },
             "constraints",
         ),
         (
-            {"properties": {"samplingFrequency": "PT10M", "constraints": [{}] * 29}},
+            {
+                "properties": {
+                    "samplingFrequency": "PT10M",
+                    "constraints": [{}] * 29,
+                }
+            },
             "capacity",
         ),
     ],
@@ -247,9 +270,13 @@ def test_event_metadata_needs_no_sampling_frequency():
         ("0 0 7 * 0", datetime(2026, 11, 7, tzinfo=UTC)),
     ],
 )
-def test_cron_uses_fixed_utc_times_and_crontab_day_semantics(schedule, expected):
+def test_cron_uses_fixed_utc_times_and_crontab_day_semantics(
+    schedule, expected
+):
     assert (
-        service.next_execution(schedule, datetime(2026, 11, 6, 12, 3, tzinfo=UTC))
+        service.next_execution(
+            schedule, datetime(2026, 11, 6, 12, 3, tzinfo=UTC)
+        )
         == expected
     )
 
@@ -325,7 +352,9 @@ def test_disabled_once_performs_no_api_requests(monkeypatch, transport):
     assert calls == []
 
 
-@pytest.mark.parametrize("ignore,expected", [(False, "enabled"), (True, "disabled")])
+@pytest.mark.parametrize(
+    "ignore,expected", [(False, "enabled"), (True, "disabled")]
+)
 def test_discovery_prints_quality_filtering_policy(ignore, expected):
     config = configuration(ignoreQuality=ignore)
     result = service.describe(config, datastream(), service.Settings(BASE))
@@ -351,13 +380,16 @@ class RecordingState:
 
 def test_service_records_success_failure_and_partial_state(transport, capsys):
     routes, _ = transport
-    routes["GET", BASE + "/AggregationConfigurations?enabled=true&$top=100"] = (
+    routes["GET", BASE + "/Aggregations?enabled=true&$top=100"] = (
         200,
         {"value": [configuration(), configuration(2), configuration(3)]},
     )
     routes["GET", BASE + "/Datastreams(1)"] = (200, datastream())
     routes["GET", BASE + "/Datastreams(2)"] = (404, {})
-    routes["GET", BASE + "/Datastreams(3)"] = (200, {**datastream(3), "properties": {}})
+    routes["GET", BASE + "/Datastreams(3)"] = (
+        200,
+        {**datastream(3), "properties": {}},
+    )
     settings = service.Settings(BASE)
     api = service.SensorThings(settings, Event())
     state = RecordingState()
@@ -373,7 +405,7 @@ def test_service_records_success_failure_and_partial_state(transport, capsys):
 
 def test_collection_failure_is_recorded(transport):
     routes, _ = transport
-    routes["GET", BASE + "/AggregationConfigurations?enabled=true&$top=100"] = (500, {})
+    routes["GET", BASE + "/Aggregations?enabled=true&$top=100"] = (500, {})
     settings = service.Settings(BASE)
     api = service.SensorThings(settings, Event())
     state = RecordingState()
