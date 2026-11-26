@@ -28,7 +28,7 @@ Fill in `.env`:
 
 ```dotenv
 ISTSOS2_URL=https://source.example/istsos2
-ISTSOS2_USER=source-user
+ISTSOS2_USER=source-user          # empty for an istSOS2 without login
 ISTSOS2_PASSWORD=source-password
 
 ISTSOS4_URL=http://localhost:8019/v4/v1.1

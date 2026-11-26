@@ -282,6 +282,25 @@ def observation_id(
     return matches[0].iot_id if matches else None
 
 
+def existing_times(
+    target: Client, ds_id: int, start: datetime, end: datetime
+) -> set[pd.Timestamp]:
+    """phenomenonTimes already in istSOS4 within (start, end]."""
+    utc = "%Y-%m-%dT%H:%M:%SZ"
+    return {
+        pd.Timestamp(getattr(o.phenomenon_time, "start", o.phenomenon_time))
+        for o in target.iter_list(
+            Observation,
+            filter=(
+                f"Datastream/@iot.id eq {ds_id} "
+                f"and phenomenonTime gt {start.astimezone(timezone.utc).strftime(utc)} "
+                f"and phenomenonTime le {end.astimezone(timezone.utc).strftime(utc)}"
+            ),
+            select="phenomenonTime",
+        )
+    }
+
+
 def post_data_array(
     target: Client, ds_id: int, data_array: list[list[Any]]
 ) -> int:
@@ -431,6 +450,13 @@ def import_procedure(
                 inserted += 1
             inserted_total += inserted
         else:
+            existing = existing_times(target, ds_id, window_start, window_end)
+            if existing:
+                data_array = [
+                    row
+                    for row in data_array
+                    if pd.Timestamp(row[1]) not in existing
+                ]
             inserted = post_data_array(target, ds_id, data_array)
             inserted_total += inserted
         logger.info(
@@ -514,8 +540,8 @@ def run_all_imports() -> None:
 
     source = IstSOS2Client(
         required_env("ISTSOS2_URL"),
-        required_env("ISTSOS2_USER"),
-        required_env("ISTSOS2_PASSWORD"),
+        os.getenv("ISTSOS2_USER") or None,  # none for an istSOS2 without login
+        os.getenv("ISTSOS2_PASSWORD") or None,
     )
     target = Client(
         required_env("ISTSOS4_URL"),

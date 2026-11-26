@@ -40,14 +40,15 @@ class IstSOS2Client:
     def __init__(
         self,
         base_url: str,
-        username: str,
-        password: str,
+        username: str | None,
+        password: str | None,
         timeout: int = DEFAULT_TIMEOUT,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = requests.Session()
-        self.session.auth = (username, password)
+        if username:
+            self.session.auth = (username, password)
         self.session.verify = False
         adapter = HTTPAdapter(max_retries=RETRY)
         self.session.mount("http://", adapter)
