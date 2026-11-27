@@ -21,6 +21,7 @@ from app.oauth import get_current_user
 from app.utils.utils import (
     coerce_result,
     get_result_type_and_column,
+    parse_datetime_interval,
     safe_parse_datetime,
 )
 from app.v1.endpoints.delete.filtered_delete_observation import (
@@ -216,13 +217,9 @@ async def insertBulkObservation(
                             max(rt_interval.upper, obs[result_time_idx]),
                             upper_inc=True,
                         )
-            if "/" in obs[ph_idx]:
-                ph_time = obs[ph_idx].split("/")
-                ph_start = safe_parse_datetime(ph_time[0])
-                ph_end = safe_parse_datetime(ph_time[1])
-            else:
-                ph_start = safe_parse_datetime(obs[ph_idx])
-                ph_end = ph_start
+            if obs[ph_idx] is None:
+                raise ValueError("Missing required 'phenomenonTime' value.")
+            ph_start, ph_end = parse_datetime_interval(obs[ph_idx])
             obs[ph_idx : ph_idx + 1] = [ph_start, ph_end]
 
             if ph_start is not None and (

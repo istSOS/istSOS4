@@ -484,3 +484,214 @@ def test_deep_insert_observation_valid_foi_returns_201(
     cleanup(
         f"{client.base_url}/FeaturesOfInterest({format_id(entity_id(foi))})"
     )
+
+
+# ===========================================================================
+# CREATE 9 – Strict ISO 8601 datetime / interval validation (issue #254)
+#   18-088 §8.3.2 / req/create-update-delete/create-entity
+# ===========================================================================
+
+_INVALID_ISO_INSTANTS = [
+    pytest.param("2020", id="year_only"),
+    pytest.param("May 5", id="month_name_day"),
+    pytest.param("5", id="single_integer_string"),
+    pytest.param("12:30", id="time_only"),
+    pytest.param("01/02/2020", id="slash_date"),
+    pytest.param("2020-01", id="year_month_only"),
+    pytest.param("20200101", id="compact_date"),
+    pytest.param("", id="empty_string"),
+    pytest.param("   ", id="whitespace_only"),
+    pytest.param(2020, id="non_string_int"),
+    pytest.param("2020-02-30T00:00:00Z", id="invalid_calendar_day"),
+    pytest.param("2020-01-01T00:00:00Z/", id="trailing_slash"),
+    pytest.param("/2020-01-01T00:00:00Z", id="leading_slash"),
+    pytest.param(
+        "2020-01-01T00:00:00Z/2020-01-02T00:00:00Z/2020-01-03T00:00:00Z",
+        id="multiple_slashes",
+    ),
+    pytest.param(
+        "2020-01-02T00:00:00Z/2020-01-01T00:00:00Z",
+        id="inverted_interval",
+    ),
+]
+
+
+def _assert_400_error_body(resp, label: str) -> None:
+    assert resp.status_code == 400, (
+        f"{label} must return 400, got {resp.status_code}: "
+        f"{resp.text[:300]}"
+    )
+    body = resp.json()
+    assert (
+        body.get("code") == 400
+        and body.get("type") == "error"
+        and "message" in body
+    ), f"Expected structured 400 error body for {label}; got {body}"
+
+
+@pytest.mark.c02
+@pytest.mark.parametrize("bad_time", _INVALID_ISO_INSTANTS)
+def test_invalid_observation_phenomenon_time_returns_400(
+    client, unique_name, cleanup, bad_time
+):
+    """18-088 §8.3.2 — partial or non-ISO Observation.phenomenonTime → 400."""
+    tree = create_datastream_tree(client, unique_name, cleanup)
+    resp = client.create(
+        "Observations",
+        {
+            "phenomenonTime": bad_time,
+            "result": 1,
+            "Datastream": {"@iot.id": tree["ds_id"]},
+        },
+    )
+    _assert_400_error_body(resp, f"phenomenonTime={bad_time!r}")
+
+
+@pytest.mark.c02
+@pytest.mark.parametrize(
+    "bad_result_time",
+    [
+        pytest.param("2020", id="year_only"),
+        pytest.param("May 5", id="month_name_day"),
+        pytest.param("5", id="single_integer_string"),
+        pytest.param("12:30", id="time_only"),
+        pytest.param("01/02/2020", id="slash_date"),
+        pytest.param("2020-01-01T00:00:00Z/", id="trailing_slash"),
+        pytest.param(
+            "2020-01-01T00:00:00Z/2020-01-02T00:00:00Z",
+            id="interval_not_allowed_for_result_time",
+        ),
+    ],
+)
+def test_invalid_observation_result_time_returns_400(
+    client, unique_name, cleanup, bad_result_time
+):
+    """18-088 §8.3.2 — partial, non-ISO, or interval Observation.resultTime → 400."""
+    tree = create_datastream_tree(client, unique_name, cleanup)
+    resp = client.create(
+        "Observations",
+        {
+            "phenomenonTime": "2020-01-01T00:00:00Z",
+            "resultTime": bad_result_time,
+            "result": 1,
+            "Datastream": {"@iot.id": tree["ds_id"]},
+        },
+    )
+    _assert_400_error_body(resp, f"resultTime={bad_result_time!r}")
+
+
+@pytest.mark.c02
+@pytest.mark.parametrize(
+    "bad_valid_time",
+    [
+        pytest.param("2020", id="year_only"),
+        pytest.param("May 5", id="month_name_day"),
+        pytest.param("01/02/2020", id="slash_date"),
+        pytest.param("2020-01-01T00:00:00Z/", id="trailing_slash"),
+        pytest.param("/2020-01-01T00:00:00Z", id="leading_slash"),
+        pytest.param(
+            "2020-01-02T00:00:00Z/2020-01-01T00:00:00Z",
+            id="inverted_interval",
+        ),
+    ],
+)
+def test_invalid_observation_valid_time_returns_400(
+    client, unique_name, cleanup, bad_valid_time
+):
+    """18-088 §8.3.2 — malformed Observation.validTime → 400."""
+    tree = create_datastream_tree(client, unique_name, cleanup)
+    resp = client.create(
+        "Observations",
+        {
+            "phenomenonTime": "2020-01-01T00:00:00Z",
+            "validTime": bad_valid_time,
+            "result": 1,
+            "Datastream": {"@iot.id": tree["ds_id"]},
+        },
+    )
+    _assert_400_error_body(resp, f"validTime={bad_valid_time!r}")
+
+
+@pytest.mark.c02
+@pytest.mark.parametrize(
+    "sent_time,expected_stored",
+    [
+        pytest.param("2020-01-01", "2020-01-01T00:00:00Z", id="iso_date"),
+        pytest.param(
+            "2020-01-01T00:00:00Z", "2020-01-01T00:00:00Z", id="iso_utc"
+        ),
+        pytest.param(
+            "2020-01-01T00:00:00.123+02:00",
+            "2019-12-31T22:00:00Z",
+            id="iso_fractional_offset",
+        ),
+        pytest.param(
+            "2020-01-01T00:00:00Z/2020-01-02T00:00:00Z",
+            "2020-01-01T00:00:00Z/2020-01-02T00:00:00Z",
+            id="iso_interval",
+        ),
+    ],
+)
+def test_valid_observation_iso_datetime_formats_accepted(
+    client, unique_name, cleanup, sent_time, expected_stored
+):
+    """18-088 §8.3.2 — valid ISO 8601 dates, datetimes, and intervals → 201."""
+    tree = create_datastream_tree(client, unique_name, cleanup)
+    resp = client.create(
+        "Observations",
+        {
+            "phenomenonTime": sent_time,
+            "result": 1,
+            "Datastream": {"@iot.id": tree["ds_id"]},
+        },
+    )
+    assert resp.status_code == 201, (
+        f"Valid phenomenonTime={sent_time!r} must return 201, "
+        f"got {resp.status_code}: {resp.text[:300]}"
+    )
+    obs_url = client.location_of(resp)
+    cleanup(obs_url)
+    obs_id = id_from_self_link(obs_url)
+    foi = client.nav(
+        f"{client.base_url}/Observations({format_id(obs_id)})/FeatureOfInterest"
+    )
+    cleanup(
+        f"{client.base_url}/FeaturesOfInterest({format_id(entity_id(foi))})"
+    )
+
+    obs = client.nav(obs_url)
+    assert obs["phenomenonTime"] == expected_stored
+
+
+@pytest.mark.c02
+def test_valid_observation_result_time_and_valid_time_accepted(
+    client, unique_name, cleanup
+):
+    """18-088 §8.3.2 — valid ISO 8601 resultTime and validTime interval → 201."""
+    tree = create_datastream_tree(client, unique_name, cleanup)
+    resp = client.create(
+        "Observations",
+        {
+            "phenomenonTime": "2020-01-01T00:00:00Z",
+            "resultTime": "2020-01-01T01:02:03.456+02:00",
+            "validTime": "2020-01-01T00:00:00Z/2020-01-02T00:00:00Z",
+            "result": 1,
+            "Datastream": {"@iot.id": tree["ds_id"]},
+        },
+    )
+    assert (
+        resp.status_code == 201
+    ), f"Expected 201, got {resp.status_code}: {resp.text[:300]}"
+    obs_url = client.location_of(resp)
+    cleanup(obs_url)
+    obs_id = id_from_self_link(obs_url)
+    foi = client.nav(
+        f"{client.base_url}/Observations({format_id(obs_id)})/FeatureOfInterest"
+    )
+    cleanup(
+        f"{client.base_url}/FeaturesOfInterest({format_id(entity_id(foi))})"
+    )
+
+    obs = client.nav(obs_url)
+    assert obs["resultTime"] == "2019-12-31T23:02:03Z"
+    assert obs["validTime"] == "2020-01-01T00:00:00Z/2020-01-02T00:00:00Z"

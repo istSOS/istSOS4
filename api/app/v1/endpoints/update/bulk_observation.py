@@ -20,6 +20,7 @@ from app.db.asyncpg_db import get_pool, get_pool_w
 from app.utils.utils import (
     coerce_result,
     get_result_type_and_column,
+    parse_datetime_interval,
     safe_parse_datetime,
 )
 from app.v1.endpoints.exceptions import BadRequest, NotFound
@@ -272,17 +273,15 @@ def parse_time(component, value):
     clears the column."""
     if value is None:
         return None
-    if component == "resultTime":
-        parsed = safe_parse_datetime(value)
-        valid = parsed is not None
-    else:
-        start, _, end = str(value).partition("/")
-        start, end = safe_parse_datetime(start), safe_parse_datetime(end)
-        parsed = Range(start, end, upper_inc=True)
-        valid = start is not None and end is not None
-    if not valid:
-        raise BadRequest(f"Invalid {component}: {value!r}")
-    return parsed
+    try:
+        if component == "resultTime":
+            return safe_parse_datetime(value)
+        if not isinstance(value, str) or "/" not in value:
+            raise ValueError("Invalid ISO 8601 time interval format")
+        start, end = parse_datetime_interval(value)
+        return Range(start, end, upper_inc=True)
+    except ValueError as exc:
+        raise BadRequest(f"Invalid {component}: {value!r}") from exc
 
 
 async def get_missing_observation_ids(conn, datastream_id, ids):
