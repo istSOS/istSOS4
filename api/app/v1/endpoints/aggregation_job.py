@@ -504,9 +504,13 @@ async def validate_features_of_interest(connection, features_of_interest_id):
 
 
 def build_database_config(values, datastreams):
+    source_name = values["sourceDatastream"]
+    target_name = values["targetDatastream"]
     config = {
-        "source_datastream_name": values["sourceDatastream"],
-        "target_datastream_name": values["targetDatastream"],
+        "source_datastream_id": datastreams[source_name]["id"],
+        "source_datastream_name": source_name,
+        "target_datastream_id": datastreams[target_name]["id"],
+        "target_datastream_name": target_name,
         "aggregation": values["aggregation"],
         "buckets_to_recompute": values["bucketsToRecompute"],
         "bucket_timezone": values["bucketTimezone"],
@@ -576,12 +580,18 @@ async def find_duplicate_job(
         WHERE proc_schema = 'sensorthings'
           AND proc_name = $1
           AND (
-              config->>'source_datastream_name' = $2
-              OR config->>'source_datastream_id' = $3::bigint::text
+              CASE
+                  WHEN NULLIF(config->>'source_datastream_id', '') IS NOT NULL
+                      THEN config->>'source_datastream_id' = $3::bigint::text
+                  ELSE config->>'source_datastream_name' = $2
+              END
           )
           AND (
-              config->>'target_datastream_name' = $4
-              OR config->>'target_datastream_id' = $5::bigint::text
+              CASE
+                  WHEN NULLIF(config->>'target_datastream_id', '') IS NOT NULL
+                      THEN config->>'target_datastream_id' = $5::bigint::text
+                  ELSE config->>'target_datastream_name' = $4
+              END
           )
         ORDER BY job_id
         LIMIT 1;
@@ -674,9 +684,12 @@ def datastream_reference(config, prefix, by_id, by_name):
     name = config.get(f"{prefix}_datastream_name")
     datastream_id = config_id(config, f"{prefix}_datastream_id")
 
-    datastream = by_name.get(name) if name is not None else None
-    if datastream is None and datastream_id is not None:
+    if datastream_id is not None:
         datastream = by_id.get(datastream_id)
+    elif name is not None:
+        datastream = by_name.get(name)
+    else:
+        datastream = None
 
     return {
         "id": datastream["id"] if datastream is not None else datastream_id,
@@ -717,7 +730,9 @@ def serialize_job(row, config, by_id, by_name):
         "aggregation": config.get("aggregation", "SUM"),
         "conversionFactor": config.get("conversion_factor", 1.0),
         "minObservations": config.get("min_observations"),
-        "expectedObservationInterval": config.get("expected_observation_interval"),
+        "expectedObservationInterval": config.get(
+            "expected_observation_interval"
+        ),
         "maxConsecutiveMissing": config.get("max_consecutive_missing"),
         "bucketsToRecompute": config.get("buckets_to_recompute", 3),
         "boundaryMode": config.get("boundary_mode", "right_closed"),
@@ -841,23 +856,55 @@ async def fetch_aggregation_job(connection, job_id):
     return jobs[0]
 
 
+async def _sync_job_datastream_config(connection, config):
+    updated = dict(config)
+    for prefix in ("source", "target"):
+        datastream_id = config_id(updated, f"{prefix}_datastream_id")
+        name = updated.get(f"{prefix}_datastream_name")
+        row = None
+        if datastream_id is not None:
+            row = await connection.fetchrow(
+                'SELECT "id", "name" FROM sensorthings."Datastream" WHERE "id" = $1;',
+                datastream_id,
+            )
+        elif name is not None:
+            row = await connection.fetchrow(
+                'SELECT "id", "name" FROM sensorthings."Datastream" WHERE "name" = $1;',
+                name,
+            )
+        if row is not None:
+            updated[f"{prefix}_datastream_id"] = row["id"]
+            updated[f"{prefix}_datastream_name"] = row["name"]
+    return updated
+
+
 async def set_job_enabled(connection, job_id, enabled):
-    exists = await connection.fetchval(
+    row = await connection.fetchrow(
         """
-        SELECT EXISTS (
-            SELECT 1
-            FROM timescaledb_information.jobs
-            WHERE job_id = $1
-              AND proc_schema = 'sensorthings'
-              AND proc_name = ANY($2::text[])
-        );
+        SELECT config::text AS config
+        FROM timescaledb_information.jobs
+        WHERE job_id = $1
+          AND proc_schema = 'sensorthings'
+          AND proc_name = ANY($2::text[]);
         """,
         job_id,
         list(PROCEDURE_INTERVALS),
     )
-    if not exists:
+    if row is None:
         raise NotFound(f"Aggregation job {job_id} not found.")
 
-    await connection.execute(
-        "SELECT alter_job($1, scheduled => $2);", job_id, enabled
+    original_config = decode_config(row["config"])
+    updated_config = await _sync_job_datastream_config(
+        connection, original_config
     )
+    if updated_config != original_config:
+        await connection.execute(
+            "SELECT alter_job($1, scheduled => $2, config => $3::text::jsonb);",
+            job_id,
+            enabled,
+            json.dumps(updated_config),
+        )
+    else:
+        await connection.execute(
+            "SELECT alter_job($1, scheduled => $2);", job_id, enabled
+        )
