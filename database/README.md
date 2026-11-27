@@ -16,12 +16,12 @@ The administrator `/Aggregations` API manages one configuration
 per source Datastream. It replaces `/AggregationJobs`; it does not create or
 modify derived Datastreams. PATCH supports all editable
 settings, and DELETE removes only the configuration. See the
-[API contract](../docs/mkdocs/docs/aggregation-configurations.md) for fields,
-examples and response codes.
+[aggregation schema](README_aggregation.md#table-datastream_configuration)
+for the fields.
 
 New database images install the aggregation schema automatically: `database/Dockerfile`
-loads `aggregation_configuration.sql`, `aggregation_results.sql`,
-`aggregation_processing_state.sql` and `aggregation_engine.sql`, in this order.
+loads `istsos_aggregation.sql` (tables, constraints and watermark are described in
+[README_aggregation.md](README_aggregation.md)).
 Existing databases are not migrated: rebuild them from the image. All six intervals are
 predefined. The configuration table is
 available with or without versioning and with duplicate names allowed.
@@ -38,9 +38,9 @@ including Observation, are plain PostgreSQL tables. Time bucketing uses the core
 (`functions.sql`) have been removed. The result
 schema creates six shared tables for 10 minutes, one hour,
 one day, seven days, one calendar month and one calendar year. See the
-[storage contract](../docs/mkdocs/docs/aggregation-results.md) for columns and
+[aggregation schema](README_aggregation.md#result-tables) for columns and
 constraints. Calculation and refresh are performed by the Python worker;
-there are no automatic aggregation jobs, retention policies or result API.
+there are no automatic aggregation jobs or retention policies; results are read through `GET /Datastreams(id)/Aggregates`.
     
 ### Database dummy data
 
@@ -67,10 +67,9 @@ including errors, timestamps, consecutive failures and a durable processing chec
 It is a normal table, managed by the Python service and exposed read-only via
 `/Aggregations(id)/ProcessingState`. A trigger creates the state row of each
 new configuration. Configuration deletion cascades to
-its state. See the [API contract](../docs/mkdocs/docs/aggregation-configurations.md#processing-state).
+its state. See the [aggregation schema](README_aggregation.md#table-processing_state).
 
-`aggregation_engine.sql` installs a privileged, read-only safe system-time
-watermark function for late-commit handling. Apply it after processing-state
-storage. The service performs pandas calculations, transactional bucket/cursor
+`istsos_aggregation.sql` also installs a privileged, read-only safe system-time
+watermark function for late-commit handling. The service performs pandas calculations, transactional bucket/cursor
 updates and versioned historical change detection; see the
 [worker guide](../aggregation/README.md).
