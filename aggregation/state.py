@@ -53,7 +53,7 @@ class ProcessingState:
         except psycopg.Error:
             self.close()
             raise StateError(
-                "Processing-state storage unavailable; check database settings and apply database/aggregation_processing_state.sql"
+                "Processing-state storage unavailable; check database settings and apply database/istsos_aggregation.sql"
             ) from None
         except StateError:
             self.close()
@@ -75,25 +75,23 @@ class ProcessingState:
                 f"{type(error).__name__}: {str(error).strip()}"
             ) from None
 
-    def start(self, aggregation_id, phase="discovery"):
+    def start(self, aggregation_id):
         run_id = uuid4()
         row = self.execute(
             """
-            UPDATE aggregation.processing_state s SET status='running', phase=%s,
-                last_successful_at=CASE WHEN phase<>%s THEN NULL ELSE last_successful_at END,
-                consecutive_failures=CASE WHEN phase<>%s THEN 0 ELSE consecutive_failures END,
+            UPDATE aggregation.processing_state s SET status='running',
                 run_id=%s, last_started_at=clock_timestamp(), last_finished_at=NULL,
                 last_error=NULL, updated_at=clock_timestamp()
             FROM aggregation.datastream_configuration c
             WHERE s.aggregation_id=%s AND c.id=s.aggregation_id AND c.enabled
             RETURNING s.aggregation_id
         """,
-            (phase, phase, phase, run_id, aggregation_id),
+            (run_id, aggregation_id),
         ).fetchone()
         return run_id if row else None
 
     def finish(self, aggregation_id, run_id, status, error=None):
-        if status not in {"success", "partial", "failed", "interrupted"}:
+        if status not in {"success", "failed", "interrupted"}:
             raise ValueError("Invalid terminal processing status")
         self.execute(
             """
@@ -114,23 +112,20 @@ class ProcessingState:
             ),
         )
 
-    def discovery_failed(self, message, phase="discovery"):
+    def discovery_failed(self, message):
+        """Mark every enabled configuration failed: the list could not be read."""
         self.execute(
             """
-            UPDATE aggregation.processing_state s SET status='failed', phase=%s, run_id=%s,
-                last_successful_at=CASE WHEN phase<>%s THEN NULL ELSE last_successful_at END,
+            UPDATE aggregation.processing_state s SET status='failed', run_id=%s,
                 last_started_at=clock_timestamp(), last_finished_at=clock_timestamp(),
-                last_error=%s, consecutive_failures=CASE WHEN phase<>%s THEN 1 ELSE consecutive_failures+1 END,
+                last_error=%s, consecutive_failures=consecutive_failures+1,
                 updated_at=clock_timestamp()
             FROM aggregation.datastream_configuration c
             WHERE c.id=s.aggregation_id AND c.enabled
         """,
             (
-                phase,
                 uuid4(),
-                phase,
                 Jsonb({"step": "configuration_read", "message": message}),
-                phase,
             ),
         )
 
@@ -140,6 +135,19 @@ class ProcessingState:
             (aggregation_id,),
         ).fetchone()
         return row["checkpoint"] if row else None
+
+    def daily_rows(self, datastream_id, start, end):
+        """Saved daily buckets starting in [start, end), for the rollup."""
+        return self.execute(
+            """
+            SELECT bucket_start, count_total, count_accepted, count_numeric,
+                sum_value, min_value, max_value, expected_count, result_quality
+            FROM aggregation.observations_1day
+            WHERE datastream_id=%s AND bucket_start >= %s AND bucket_start < %s
+            ORDER BY bucket_start
+        """,
+            (datastream_id, start, end),
+        ).fetchall()
 
     def source_context(self):
         versioned = self.execute(
@@ -160,31 +168,6 @@ class ProcessingState:
         ]
         return cutoff, versioned
 
-    def changed_times(self, datastream_id, since, until):
-        """Phenomenon times of versions with a system-time edge in [since, until].
-
-        Current rows contribute their start edge (insert/update); closed history
-        versions contribute either edge, which yields the old time of moved or
-        deleted observations. Reading only these rows keeps the scan proportional
-        to the changes, not to the Datastream history.
-        """
-        rows = self.execute(
-            """
-            SELECT "phenomenonTimeStart" AS time FROM sensorthings."Observation"
-            WHERE datastream_id=%(ds)s
-              AND lower("systemTimeValidity") BETWEEN %(since)s AND %(until)s
-            UNION
-            SELECT "phenomenonTimeStart" FROM sensorthings_history."Observation"
-            WHERE datastream_id=%(ds)s
-              AND upper("systemTimeValidity") >= %(since)s
-              AND lower("systemTimeValidity") <= %(until)s
-              AND (lower("systemTimeValidity") >= %(since)s
-                   OR upper("systemTimeValidity") <= %(until)s)
-            """,
-            {"ds": datastream_id, "since": since, "until": until},
-        ).fetchall()
-        return [row["time"] for row in rows]
-
     def save_buckets(self, aggregation_id, run_id, table, rows, checkpoint):
         """COPY a result batch, merge with one upsert, and commit its checkpoint."""
         from psycopg import sql
@@ -196,13 +179,10 @@ class ProcessingState:
         if not rows:
             return
         columns = list(rows[0])
-        revision = rows[0]["configuration_snapshot"]["configuration"][
-            "updatedAt"
-        ]
+        revision = rows[0]["configuration_updated_at"]
         if any(
             set(row) != set(columns)
-            or row["configuration_snapshot"]["configuration"]["updatedAt"]
-            != revision
+            or row["configuration_updated_at"] != revision
             for row in rows
         ):
             raise CalculationError(
@@ -250,14 +230,7 @@ class ProcessingState:
                 ):
                     for row in rows:
                         copy.write_row(
-                            tuple(
-                                (
-                                    Jsonb(row[column])
-                                    if column == "configuration_snapshot"
-                                    else row[column]
-                                )
-                                for column in columns
-                            )
+                            tuple(row[column] for column in columns)
                         )
                 assignments = sql.SQL(", ").join(
                     sql.SQL("{}=EXCLUDED.{}").format(

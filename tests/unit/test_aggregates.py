@@ -40,10 +40,8 @@ def test_interval_selects_table_and_func_selects_result():
     assert query["result"] == "count_numeric"
 
 
-def test_missing_values_become_zero_for_event_and_minus_999_for_sampled():
-    expression = parse(**{"$func": "avg"})["result"]
-    assert expression.startswith("COALESCE(avg_value,")
-    assert "'event' THEN 0 ELSE -999.9" in expression
+def test_missing_values_become_minus_999():
+    assert parse(**{"$func": "avg"})["result"] == "COALESCE(avg_value, -999.9)"
 
 
 def test_phenomenon_time_filter_compares_bucket_end():
@@ -168,7 +166,9 @@ def test_query_parameter_dependency_resolves_and_missing_func_is_400():
 
     api.v1.dependency_overrides[get_pool] = lambda: None
     try:
-        response = TestClient(api.v1).get("/Datastreams(1)/Aggregates?$interval=PT1H&$top=5")
+        response = TestClient(api.v1).get(
+            "/Datastreams(1)/Aggregates?$interval=PT1H&$top=5"
+        )
     finally:
         api.v1.dependency_overrides.pop(get_pool, None)
     assert response.status_code == 400

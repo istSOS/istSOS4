@@ -68,8 +68,36 @@ def transport(monkeypatch):
     return routes, calls
 
 
+class RecordingState:
+    def __init__(self):
+        self.events = []
+
+    def start(self, identifier):
+        self.events.append(("start", identifier))
+        return identifier
+
+    def finish(self, identifier, token, status, error=None):
+        self.events.append(("finish", identifier, status, error))
+
+    def discovery_failed(self, message):
+        self.events.append(("discovery_failed", message))
+
+
+@pytest.fixture
+def calculated(monkeypatch):
+    """Replace the engine: record which configurations reach the calculation."""
+    calls = []
+
+    def calculate(api, state, configuration, datastream, *args):
+        calls.append((configuration, datastream))
+        return 0
+
+    monkeypatch.setattr(service, "calculate", calculate)
+    return calls
+
+
 def test_client_reads_all_pages_and_datastreams_with_public_nextlink(
-    transport, capsys
+    transport, calculated
 ):
     routes, calls = transport
     routes["GET", BASE + "/Aggregations?enabled=true&$top=100"] = (
@@ -96,28 +124,19 @@ def test_client_reads_all_pages_and_datastreams_with_public_nextlink(
     settings = service.Settings(BASE)
     api = service.SensorThings(settings, Event())
     try:
-        assert service.run_cycle(api, settings, api.stop)
+        assert service.run_cycle(api, settings, api.stop, RecordingState())
     finally:
         api.close()
-    records = [
-        json.loads(line) for line in capsys.readouterr().out.splitlines()
-    ]
-    assert [record["datastreamId"] for record in records] == [1, 2]
-    assert [record["effectiveUtcOffsetMinutes"] for record in records] == [
-        60,
-        0,
-    ]
-    assert records[0]["constraintCount"] == 1
-    assert records[0]["samplingFrequency"] == "PT10M"
-    assert records[0]["configuration"]["minInputQuality"] == 3
-    assert not records[0]["warnings"]
+    assert [config["datastreamId"] for config, _ in calculated] == [1, 2]
+    assert calculated[1][0]["utcOffsetMinutes"] == 0
+    assert calculated[0][1]["properties"]["samplingFrequency"] == "PT10M"
     assert all(method == "GET" for method, _, _ in calls)
     assert all(url.startswith(BASE) for _, url, _ in calls)
     assert all(kwargs["timeout"] == 30 for _, _, kwargs in calls)
 
 
 def test_project_client_handles_login_and_expiry_and_each_cycle(
-    transport, capsys
+    transport, calculated, capsys
 ):
     routes, calls = transport
     routes["POST", BASE + "/Login"] = (
@@ -135,7 +154,7 @@ def test_project_client_handles_login_and_expiry_and_each_cycle(
     api = service.SensorThings(settings, Event())
     try:
         for _ in range(2):
-            assert service.run_cycle(api, settings, api.stop)
+            assert service.run_cycle(api, settings, api.stop, RecordingState())
     finally:
         api.close()
     logins = [kwargs for method, _, kwargs in calls if method == "POST"]
@@ -162,14 +181,14 @@ def test_transient_api_failure_retried_by_client(transport):
     settings = service.Settings(BASE)
     api = service.SensorThings(settings, Event())
     try:
-        assert service.run_cycle(api, settings, api.stop)
+        assert service.run_cycle(api, settings, api.stop, RecordingState())
     finally:
         api.close()
     assert len(calls) == 3
 
 
 def test_failed_datastream_does_not_block_others_or_leak_error_body(
-    transport, capsys, caplog
+    transport, calculated, caplog
 ):
     routes, _ = transport
     routes["GET", BASE + "/Aggregations?enabled=true&$top=100"] = (
@@ -183,11 +202,13 @@ def test_failed_datastream_does_not_block_others_or_leak_error_body(
     routes["GET", BASE + "/Datastreams(2)"] = (200, datastream(2))
     settings = service.Settings(BASE)
     api = service.SensorThings(settings, Event())
+    state = RecordingState()
     try:
-        assert not service.run_cycle(api, settings, api.stop)
+        assert not service.run_cycle(api, settings, api.stop, state)
     finally:
         api.close()
-    assert json.loads(capsys.readouterr().out)["datastreamId"] == 2
+    assert [config["datastreamId"] for config, _ in calculated] == [2]
+    assert state.events[1][:3] == ("finish", 1, "failed")
     assert "HTTP 500" in caplog.text
     assert "private server diagnostics" not in caplog.text
 
@@ -215,10 +236,12 @@ def test_invalid_collections_fail_the_cycle(transport, body):
     )
     settings = service.Settings(BASE)
     api = service.SensorThings(settings, Event())
+    state = RecordingState()
     try:
-        assert not service.run_cycle(api, settings, api.stop)
+        assert not service.run_cycle(api, settings, api.stop, state)
     finally:
         api.close()
+    assert state.events[0][0] == "discovery_failed"
 
 
 @pytest.mark.parametrize(
@@ -246,18 +269,16 @@ def test_invalid_collections_fail_the_cycle(transport, body):
     ],
 )
 def test_metadata_problems_are_reported(overrides, warning):
-    result = service.describe(
-        configuration(), {**datastream(), **overrides}, service.Settings(BASE)
+    warnings = service.metadata_warnings(
+        configuration(), {**datastream(), **overrides}
     )
-    assert any(warning in item for item in result["warnings"])
+    assert any(warning in item for item in warnings)
 
 
 def test_event_metadata_needs_no_sampling_frequency():
-    result = service.describe(
-        configuration(mode="event"), {"properties": {}}, service.Settings(BASE)
+    assert not service.metadata_warnings(
+        configuration(mode="event"), {"properties": {}}
     )
-    assert not result["warnings"]
-    assert result["constraintCount"] == 0
 
 
 @pytest.mark.parametrize(
@@ -353,33 +374,9 @@ def test_disabled_once_performs_no_api_requests(monkeypatch, transport):
     assert calls == []
 
 
-@pytest.mark.parametrize(
-    "ignore,expected", [(False, "enabled"), (True, "disabled")]
-)
-def test_discovery_prints_quality_filtering_policy(ignore, expected):
-    config = configuration(ignoreQuality=ignore)
-    result = service.describe(config, datastream(), service.Settings(BASE))
-    assert result["qualityFiltering"] == expected
-    assert result["configuration"]["ignoreQuality"] is ignore
-    assert result["configuration"]["minInputQuality"] == 3
-
-
-class RecordingState:
-    def __init__(self):
-        self.events = []
-
-    def start(self, identifier):
-        self.events.append(("start", identifier))
-        return identifier
-
-    def finish(self, identifier, token, status, error=None):
-        self.events.append(("finish", identifier, status, error))
-
-    def discovery_failed(self, message):
-        self.events.append(("discovery_failed", message))
-
-
-def test_service_records_success_failure_and_partial_state(transport, capsys):
+def test_service_records_failures_and_logs_metadata_warnings(
+    transport, calculated, caplog
+):
     routes, _ = transport
     routes["GET", BASE + "/Aggregations?enabled=true&$top=100"] = (
         200,
@@ -398,10 +395,15 @@ def test_service_records_success_failure_and_partial_state(transport, capsys):
         assert not service.run_cycle(api, settings, api.stop, state)
     finally:
         api.close()
+    # Successes are closed by the engine; run_cycle records only failures.
     finished = [event for event in state.events if event[0] == "finish"]
-    assert [event[2] for event in finished] == ["success", "failed", "partial"]
-    assert finished[1][3]["step"] == "datastream_read"
-    assert finished[2][3]["step"] == "metadata_validation"
+    assert [event[1:3] for event in finished] == [(2, "failed")]
+    assert finished[0][3]["step"] == "aggregation"
+    assert [config["datastreamId"] for config, _ in calculated] == [1, 3]
+    assert (
+        "Datastream 3: Sampled Datastream has no samplingFrequency"
+        in caplog.text
+    )
 
 
 def test_collection_failure_is_recorded(transport):
@@ -415,3 +417,30 @@ def test_collection_failure_is_recorded(transport):
     finally:
         api.close()
     assert state.events == [("discovery_failed", "API returned HTTP 500")]
+
+
+def test_changed_times_asks_current_versions_opened_in_the_window(
+    monkeypatch,
+):
+    api = service.SensorThings(service.Settings("http://api/v1"), Event())
+    requested = {}
+
+    def pages(identifier, options):
+        requested.update(options, identifier=identifier)
+        yield [
+            {"phenomenonTime": "2026-01-01T00:10:00Z"},
+            {"phenomenonTime": "2026-01-01T00:10:00Z"},
+            {"phenomenonTime": "2026-01-01T00:20:00Z/2026-01-01T00:20:00Z"},
+        ]
+
+    monkeypatch.setattr(api, "observation_pages", pages)
+    since = datetime(2026, 1, 2, tzinfo=UTC)
+    until = since + timedelta(minutes=10)
+    times = api.changed_times(7, since, until)
+    assert times == {"2026-01-01T00:10:00Z", "2026-01-01T00:20:00Z"}
+    assert requested["identifier"] == 7
+    assert "$from_to" not in requested and "$as_of" not in requested
+    assert requested["$filter"] == (
+        f"lower(systemTimeValidity) ge {since.isoformat()} and "
+        f"lower(systemTimeValidity) le {until.isoformat()}"
+    )

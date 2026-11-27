@@ -1,27 +1,100 @@
-"""Sequential source-to-bucket calculations with durable bootstrap cursors."""
+"""Source-to-bucket calculations with durable cursors and daily rollup.
 
+10 minutes, hours and days are calculated from source observations; weeks,
+months and years are combined from the saved days.
+"""
+
+import bisect
 import hashlib
+import heapq
 import json
 import logging
 import time
 from collections import defaultdict
 from datetime import timedelta
 
-from aggregation.calculation import (
-    TABLES,
-    Accumulator,
-    CalculationError,
-    bucket_floor,
-    containing,
-    next_bucket,
-    sampling_seconds,
-    timestamp,
-)
+import isodate
+
+from aggregation.calculation import (TABLES, Accumulator, CalculationError,
+                                     bucket_floor, containing, next_bucket,
+                                     rollup, sampling_seconds, timestamp)
 
 logger = logging.getLogger("aggregation")
 
 
-def flush_results(state, identifier, run_id, table, pending, checkpoint):
+READ_WINDOW = timedelta(days=30)
+# Calculated from observations; the others are rolled up from the days.
+SOURCE_INTERVALS = ("PT10M", "PT1H", "P1D")
+ROLLUP_INTERVALS = ("P7D", "P1M", "P1Y")
+DEFAULT_RECOMPUTE_WINDOW = timedelta(hours=24)
+DEFAULT_REFERENCE_MAX_AGE = timedelta(hours=1)
+
+
+def recompute_window(configuration, properties):
+    """Look-back for late data without versioning: configuration, then the
+    Datastream acquisitionFrequency, then 24 hours."""
+    for value in (
+        configuration.get("recomputeWindow"),
+        properties.get("acquisitionFrequency"),
+    ):
+        if not value:
+            continue
+        try:
+            duration = isodate.parse_duration(value)
+        except (isodate.ISO8601Error, TypeError, ValueError):
+            continue
+        if isinstance(duration, timedelta) and duration > timedelta(0):
+            return duration
+    return DEFAULT_RECOMPUTE_WINDOW
+
+
+def reference_max_age(configuration):
+    """How long a reference observation proves the station active."""
+    value = configuration.get("referenceMaxAge")
+    if value:
+        try:
+            duration = isodate.parse_duration(value)
+        except (isodate.ISO8601Error, TypeError, ValueError):
+            duration = None
+        if isinstance(duration, timedelta) and duration > timedelta(0):
+            return duration
+    return DEFAULT_REFERENCE_MAX_AGE
+
+
+def proven(times, cutoff, max_age):
+    """A reference observation in [cutoff - max_age, cutoff] (times sorted)."""
+    index = bisect.bisect_left(times, cutoff - max_age)
+    return index < len(times) and times[index] <= cutoff
+
+
+def result_record(configuration, interval, row):
+    """aggregation_result log line with the values the API would show."""
+    valid = (
+        (row["result_quality"] >> (2 * (row["constraint_count"] + 2))) & 3
+    ) == 3
+    return {
+        "event": "aggregation_result",
+        "datastreamId": configuration["datastreamId"],
+        "interval": interval,
+        "bucketStart": row["bucket_start"].isoformat(),
+        "bucketEnd": row["bucket_end"].isoformat(),
+        "evaluatedUntil": row["evaluated_until"].isoformat(),
+        "countTotal": row["count_total"],
+        "countAccepted": row["count_accepted"],
+        "expectedCount": row["expected_count"],
+        "coverage": row["coverage"],
+        "countNumeric": row["count_numeric"],
+        "resultQuality": row["result_quality"],
+        "result": {
+            key: -999.9 if not valid or row[key] is None else row[key]
+            for key in ("sum_value", "avg_value", "min_value", "max_value")
+        },
+    }
+
+
+def flush_results(
+    state, identifier, run_id, table, pending, checkpoint, log_results=False
+):
     if not pending:
         return 0
     started = time.perf_counter()
@@ -36,125 +109,47 @@ def flush_results(state, identifier, run_id, table, pending, checkpoint):
     )
     # Only report committed results. Failed COPY/merge batches produce no
     # success records and do not advance their checkpoint.
-    print("\n".join(json.dumps(record) for _, record in pending), flush=True)
+    if log_results:
+        print(
+            "\n".join(json.dumps(record) for _, record in pending), flush=True
+        )
     count = len(pending)
     pending.clear()
     return count
 
 
-def bucket_groups(entries, interval, offset, limit):
-    """Group adjacent buckets for one window read instead of one read per bucket.
-
-    Keep at most seven days or `limit` accumulators, except a single calendar
-    bucket can span longer and is itself read in seven-day windows.
-    """
-    group = []
-    for start, advances in entries:
-        if group and (
-            len(group) >= limit
-            or start != next_bucket(group[-1][0], interval, offset)
-            or next_bucket(start, interval, offset) - group[0][0]
-            > timedelta(days=7)
-        ):
-            yield group
-            group = []
-        group.append((start, advances))
-    if group:
-        yield group
-
-
-def read_bucket_group(
-    api,
-    configuration,
-    properties,
-    group,
-    interval,
-    offset,
-    closure,
-    domain_start,
-    cutoff,
-    as_of,
-    stop,
+def read_window(
+    api, configuration, lower_bound, upper_bound, lower, upper, as_of, stop
 ):
-    started = time.perf_counter()
-    pages_read = observations_read = 0
-    accumulators = {}
-    for start, _ in group:
-        end = next_bucket(start, interval, offset)
-        accumulators[start] = Accumulator(
-            configuration,
-            properties,
-            start,
-            end,
-            min(end, cutoff),
-            domain_start,
-        )
-    first = group[0][0]
-    evaluated = min(next_bucket(group[-1][0], interval, offset), cutoff)
-    window = max(first, domain_start)
-    while window < evaluated or (
-        window == evaluated and closure == "right_closed"
+    """Yield the observation pages of one source window, checking stop."""
+    for page in api.observations(
+        configuration["datastreamId"],
+        lower_bound,
+        upper_bound,
+        lower,
+        upper,
+        as_of,
     ):
         if stop.is_set():
             raise CalculationError(
                 "Service stopped during observation retrieval"
             )
-        upper = min(window + timedelta(days=7), evaluated)
-        include_start = window == domain_start and window > first
-        lower_operator = (
-            "ge" if closure == "left_closed" or include_start else "gt"
-        )
-        upper_operator = "lt" if closure == "left_closed" else "le"
-        try:
-            for page in api.observations(
-                configuration["datastreamId"],
-                window,
-                upper,
-                lower_operator,
-                upper_operator,
-                as_of,
-            ):
-                if stop.is_set():
-                    raise CalculationError(
-                        "Service stopped during observation retrieval"
-                    )
-                pages_read += 1
-                observations_read += len(page)
-                partitioned = defaultdict(list)
-                for observation in page:
-                    key = containing(
-                        timestamp(observation.get("phenomenonTime")),
-                        interval,
-                        offset,
-                        closure,
-                    )
-                    if key not in accumulators:
-                        raise CalculationError(
-                            "Source API returned an observation outside the requested bucket group"
-                        )
-                    partitioned[key].append(observation)
-                for key, values in partitioned.items():
-                    accumulators[key].add(values)
-        except CalculationError as error:
-            error.context.update(
-                step="observation_window",
-                interval=interval,
-                windowStart=window.isoformat(),
-                windowEnd=upper.isoformat(),
+        yield page
+
+
+def reference_times(api, reference, start, end, as_of, stop):
+    """Sorted reference phenomenon times in [start, end]."""
+    times = []
+    for page in api.observations(reference, start, end, "ge", "le", as_of):
+        if stop.is_set():
+            raise CalculationError(
+                "Service stopped during reference retrieval"
             )
-            raise
-        if upper == evaluated:
-            break
-        window = upper
-    logger.info(
-        "Window read: interval=%s buckets=%s pages=%s observations=%s duration=%.3fs",
-        interval,
-        len(group),
-        pages_read,
-        observations_read,
-        time.perf_counter() - started,
-    )
-    return accumulators
+        # The end of the phenomenon time, as in last_observation().
+        times.extend(
+            timestamp(item["phenomenonTime"].split("/")[-1]) for item in page
+        )
+    return sorted(times)
 
 
 def calculate(
@@ -180,15 +175,25 @@ def calculate(
         )
     if configuration.get("endTime"):
         cutoff = min(cutoff, timestamp(configuration["endTime"]))
+    as_of = system_cutoff if versioned else None
     reference = configuration.get("referenceDatastreamId")
+    max_age = reference_max_age(configuration)
     if reference is not None:
-        reference_end = api.last_observation(
-            reference, cutoff, system_cutoff if versioned else None
-        )
-        if reference_end is None:
+        # Stop at the latest activity (source or reference) plus max age: an
+        # empty event bucket is zero only with a reference observation in the
+        # max age before its end, otherwise missing.
+        ends = [
+            timestamp(end)
+            for end in (
+                api.last_observation(source, cutoff, as_of)
+                for source in (reference, configuration["datastreamId"])
+            )
+            if end is not None
+        ]
+        if not ends:
             state.complete(identifier, run_id, checkpoint)
             return 0
-        cutoff = min(cutoff, timestamp(reference_end))
+        cutoff = min(cutoff, max(ends) + max_age)
     closure = configuration.get("boundaryMode") or "right_closed"
     offset = configuration.get("utcOffsetMinutes")
     if offset is None:
@@ -217,10 +222,21 @@ def calculate(
         if scan_start < system_cutoff:
             changes.update(
                 timestamp(value)
-                for value in state.changed_times(
+                for value in api.changed_times(
                     configuration["datastreamId"], scan_start, system_cutoff
                 )
             )
+    # A late reference observation proves the buckets ending within max age.
+    proofs = []
+    if reference is not None and versioned and since and manual is None:
+        scan_start = timestamp(since) - timedelta(seconds=1)
+        if scan_start < system_cutoff:
+            proofs = [
+                timestamp(value)
+                for value in api.changed_times(
+                    reference, scan_start, system_cutoff
+                )
+            ]
     if configuration.get("startTime") is None and changes:
         earlier = min(changes)
         if earlier < domain_start:
@@ -228,144 +244,329 @@ def calculate(
             checkpoint["domainStart"] = domain_start.isoformat()
             # Backdated inserts can extend an implicit history domain. Rewind
             # bootstrap cursors rather than silently ignoring those old buckets.
-            for interval in TABLES:
+            for interval in SOURCE_INTERVALS:
                 checkpoint["frontiers"][interval] = containing(
                     domain_start, interval, offset, closure
                 ).isoformat()
-    snapshot = {
-        "configuration": configuration,
-        "properties": properties,
-        "effectiveUtcOffsetMinutes": offset,
-        "boundaryMode": closure,
-        "conversionFactor": (
-            configuration.get("conversionFactor")
-            if configuration.get("conversionFactor") is not None
-            else 1
-        ),
-        "missingValues": (
-            configuration.get("missingValues")
-            if configuration.get("missingValues") is not None
-            else [-999.9]
-        ),
-        "aggregationStatusPairs": {"notComputed": 0, "failed": 2, "passed": 3},
-        "sourceVersioning": versioned,
-    }
-    written = 0
-    for interval, table in TABLES.items():
-        pending = []
+    # Late data: with versioning the changed times are known exactly;
+    # without it, recompute the buckets inside the look-back window.
+    window_start = None
+    if not versioned and manual is None:
+        window_start = max(
+            domain_start, cutoff - recompute_window(configuration, properties)
+        )
+    plans = []
+    for interval in SOURCE_INTERVALS:
+        table = TABLES[interval]
         last = containing(cutoff, interval, offset, closure)
         initial = containing(domain_start, interval, offset, closure)
         frontier = timestamp(
             checkpoint["frontiers"].get(interval, initial.isoformat())
         )
-        recent = set()
-        point = last
-        for _ in range(configuration.get("bucketsToRecompute") or 3):
-            if point >= initial:
-                recent.add(point)
-            point = bucket_floor(
-                point - timedelta(microseconds=1), interval, offset
-            )
-        recent.update(
+        recent = {
             containing(point, interval, offset, closure)
             for point in changes
             if domain_start <= point <= cutoff
-        )
+        }
+        for when in proofs:
+            if when > cutoff or when + max_age < domain_start:
+                continue
+            point = containing(max(when, domain_start), interval, offset, closure)
+            final = containing(
+                min(when + max_age, cutoff), interval, offset, closure
+            )
+            while point <= final and point < frontier:
+                recent.add(point)
+                point = next_bucket(point, interval, offset)
+        if window_start is not None:
+            point = containing(window_start, interval, offset, closure)
+            while point < frontier:
+                recent.add(point)
+                point = next_bucket(point, interval, offset)
         if manual is not None:
             begin, finish = manual
             begin = max(domain_start, begin)
             finish = min(cutoff, finish or cutoff)
             sequence = containing(begin, interval, offset, closure)
             limit = containing(finish, interval, offset, closure)
+            behind = []
         else:
             sequence, limit = frontier, last
+            behind = sorted(point for point in recent if point < sequence)
 
         def work(
-            sequence=sequence, limit=limit, interval=interval, recent=recent
+            sequence=sequence, limit=limit, interval=interval, behind=behind
         ):
+            for cursor in behind:
+                yield cursor, False
             cursor = sequence
             while cursor <= limit:
                 yield cursor, True
                 cursor = next_bucket(cursor, interval, offset)
-            if manual is None:
-                for cursor in sorted(recent):
-                    if not sequence <= cursor <= limit:
-                        yield cursor, False
 
-        for group in bucket_groups(
-            work(), interval, offset, settings.write_batch_size
+        plans.append((interval, table, work()))
+
+    committed = {
+        interval: value
+        for interval, value in checkpoint["frontiers"].items()
+        if interval in SOURCE_INTERVALS
+    }
+    updated_at = configuration.get("updatedAt")
+    touched_days = set()
+    pending = {table: [] for _, table, _ in plans}
+    frontier_of = {}
+    opened = {}  # (interval, bucket start) -> (accumulator, advances, table)
+
+    def flush(interval, table):
+        if frontier_of.get(interval) is not None:
+            committed[interval] = frontier_of[interval]
+        return flush_results(
+            state,
+            identifier,
+            run_id,
+            table,
+            pending[table],
+            {**checkpoint, "frontiers": dict(committed)},
+            settings.log_results,
+        )
+
+    def finish(interval, table, start, accumulator, advances, times):
+        row = accumulator.result(
+            reference is None
+            or proven(times, accumulator.cutoff, max_age)
+        )
+        row["configuration_updated_at"] = updated_at
+        if interval == "P1D":
+            touched_days.add(start)
+        if manual is None and advances:
+            # An open bucket (cutoff inside it) is recalculated on the next run.
+            closed = accumulator.cutoff >= accumulator.end
+            frontier_of[interval] = (
+                accumulator.end if closed else start
+            ).isoformat()
+        pending[table].append(
+            (row, result_record(configuration, interval, row))
+        )
+        if len(pending[table]) >= settings.write_batch_size:
+            return flush(interval, table)
+        return 0
+
+    def tagged(index, work):
+        for start, advances in work:
+            yield start, index, advances
+
+    entries = heapq.merge(
+        *(tagged(index, work) for index, (_, _, work) in enumerate(plans))
+    )
+    upcoming = next(entries, None)
+    written = 0
+    position = lower = None
+    while upcoming is not None or opened:
+        if stop.is_set():
+            raise CalculationError(
+                "Service stopped; committed batches will resume next run"
+            )
+        if not opened:
+            position = max(upcoming[0], domain_start)
+            lower = (
+                "ge"
+                if closure == "left_closed"
+                or (position == domain_start and domain_start > upcoming[0])
+                else "gt"
+            )
+        reach = position + READ_WINDOW
+        horizon = max(
+            (accumulator.cutoff for accumulator, _, _ in opened.values()),
+            default=position,
+        )
+        # A bucket starting exactly at the horizon continues the same span.
+        while upcoming is not None and (
+            not opened or (upcoming[0] <= horizon and upcoming[0] < reach)
         ):
-            if stop.is_set():
-                raise CalculationError(
-                    "Service stopped; committed batches will resume next run"
-                )
-            accumulators = read_bucket_group(
-                api,
+            start, index, advances = upcoming
+            interval, table, _ = plans[index]
+            end = next_bucket(start, interval, offset)
+            accumulator = Accumulator(
                 configuration,
                 properties,
-                group,
-                interval,
-                offset,
-                closure,
+                start,
+                end,
+                min(end, cutoff),
                 domain_start,
-                cutoff,
-                system_cutoff if versioned else None,
-                stop,
             )
-            for start, advances in group:
-                accumulator = accumulators[start]
-                end = accumulator.end
-                evaluated = accumulator.cutoff
-                row = accumulator.result()
-                row["configuration_snapshot"] = snapshot
-                if manual is None and advances:
-                    checkpoint["frontiers"][interval] = end.isoformat()
-                valid = (
-                    (
-                        row["result_quality"]
-                        >> (2 * (row["constraint_count"] + 2))
-                    )
-                    & 3
-                ) == 3
-                empty = (
-                    configuration["mode"] == "event"
-                    and row["count_total"] == 0
+            opened[interval, start] = (accumulator, advances, table)
+            horizon = max(horizon, accumulator.cutoff)
+            upcoming = next(entries, None)
+        upper_bound = min(horizon, reach)
+        upper = "lt" if closure == "left_closed" else "le"
+        if upper_bound > position or closure == "right_closed":
+            started = time.perf_counter()
+            pages_read = observations_read = 0
+            try:
+                for page in read_window(
+                    api,
+                    configuration,
+                    position,
+                    upper_bound,
+                    lower,
+                    upper,
+                    as_of,
+                    stop,
+                ):
+                    pages_read += 1
+                    observations_read += len(page)
+                    partitioned = defaultdict(list)
+                    for observation in page:
+                        when = timestamp(observation.get("phenomenonTime"))
+                        if when < position or when > upper_bound:
+                            raise CalculationError(
+                                "Source API returned an observation outside the requested window"
+                            )
+                        for interval in SOURCE_INTERVALS:
+                            key = (
+                                interval,
+                                containing(when, interval, offset, closure),
+                            )
+                            if key in opened:
+                                partitioned[key].append(observation)
+                    for key, values in partitioned.items():
+                        opened[key][0].add(values)
+            except CalculationError as error:
+                error.context.update(
+                    step="observation_window",
+                    windowStart=position.isoformat(),
+                    windowEnd=upper_bound.isoformat(),
                 )
-                display = {
-                    key: (
-                        (0 if empty else -999.9)
-                        if not valid or value is None
-                        else value
-                    )
-                    for key, value in row.items()
-                    if key
-                    in ("sum_value", "avg_value", "min_value", "max_value")
-                }
-                record = {
-                    "event": "aggregation_result",
-                    "datastreamId": configuration["datastreamId"],
-                    "interval": interval,
-                    "bucketStart": start.isoformat(),
-                    "bucketEnd": end.isoformat(),
-                    "evaluatedUntil": evaluated.isoformat(),
-                    "countTotal": row["count_total"],
-                    "countAccepted": row["count_accepted"],
-                    "expectedCount": row["expected_count"],
-                    "coverage": row["coverage"],
-                    "countNumeric": row["count_numeric"],
-                    "resultQuality": row["result_quality"],
-                    "result": display,
-                }
-                pending.append((row, record))
-                if len(pending) >= settings.write_batch_size:
-                    written += flush_results(
-                        state, identifier, run_id, table, pending, checkpoint
-                    )
-        written += flush_results(
-            state, identifier, run_id, table, pending, checkpoint
+                raise
+            logger.info(
+                "Window read: buckets=%s pages=%s observations=%s duration=%.3fs",
+                len(opened),
+                pages_read,
+                observations_read,
+                time.perf_counter() - started,
+            )
+        # Buckets evaluated up to this window are complete, in time order.
+        ready = sorted(
+            (
+                key
+                for key, item in opened.items()
+                if item[0].cutoff <= upper_bound
+            ),
+            key=lambda key: (key[1], SOURCE_INTERVALS.index(key[0])),
         )
+        times = []
+        if reference is not None and any(
+            opened[key][0].total == 0 for key in ready
+        ):
+            times = reference_times(
+                api, reference, position - max_age, upper_bound, as_of, stop
+            )
+        for key in ready:
+            accumulator, advances, table = opened.pop(key)
+            written += finish(
+                key[0], table, key[1], accumulator, advances, times
+            )
+        position = upper_bound
+        lower = "ge" if closure == "left_closed" else "gt"
+    for interval, table, _ in plans:
+        written += flush(interval, table)
+    checkpoint["frontiers"] = committed
+    written += roll_up(
+        state,
+        configuration,
+        properties,
+        identifier,
+        run_id,
+        checkpoint,
+        settings,
+        touched_days,
+        offset,
+        cutoff,
+        lambda end: reference is None
+        or proven(
+            reference_times(api, reference, end - max_age, end, as_of, stop),
+            end,
+            max_age,
+        ),
+    )
     if manual is None:
         checkpoint["changesThrough"] = system_cutoff.isoformat()
     # All bucket results are already durable; final checkpoint/status is atomic.
     state.complete(identifier, run_id, checkpoint)
+    return written
+
+
+def roll_up(
+    state,
+    configuration,
+    properties,
+    identifier,
+    run_id,
+    checkpoint,
+    settings,
+    days,
+    offset,
+    cutoff,
+    active=lambda end: True,
+):
+    """Rebuild the weeks, months and years containing the recalculated days.
+
+    active(end) tells whether an empty event bucket ending at end is zero.
+    """
+    if not days:
+        return 0
+    constraint_count = len(properties.get("constraints") or [])
+    buckets = {
+        (interval, bucket_floor(day, interval, offset))
+        for day in days
+        for interval in ROLLUP_INTERVALS
+    }
+    lowest = min(start for _, start in buckets)
+    highest = max(
+        next_bucket(start, interval, offset) for interval, start in buckets
+    )
+    saved = state.daily_rows(configuration["datastreamId"], lowest, highest)
+    written = 0
+    for interval in ROLLUP_INTERVALS:
+        table = TABLES[interval]
+        pending = []
+        for _, start in sorted(
+            item for item in buckets if item[0] == interval
+        ):
+            end = next_bucket(start, interval, offset)
+            evaluated = min(end, cutoff)
+            parts = [d for d in saved if start <= d["bucket_start"] < evaluated]
+            empty = not any(d["count_total"] for d in parts)
+            row = rollup(
+                configuration,
+                constraint_count,
+                start,
+                end,
+                evaluated,
+                parts,
+                configuration["mode"] != "event"
+                or not empty
+                or active(evaluated),
+            )
+            row["configuration_updated_at"] = configuration.get("updatedAt")
+            pending.append((row, result_record(configuration, interval, row)))
+            if len(pending) >= settings.write_batch_size:
+                written += flush_results(
+                    state,
+                    identifier,
+                    run_id,
+                    table,
+                    pending,
+                    checkpoint,
+                    settings.log_results,
+                )
+        written += flush_results(
+            state,
+            identifier,
+            run_id,
+            table,
+            pending,
+            checkpoint,
+            settings.log_results,
+        )
     return written

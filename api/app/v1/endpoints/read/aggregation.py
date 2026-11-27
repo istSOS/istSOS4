@@ -90,7 +90,7 @@ async def get_processing_state(
             "SELECT to_regclass('aggregation.processing_state') IS NOT NULL"
         ):
             raise ServiceUnavailable(
-                "Processing-state storage is not installed. Apply database/aggregation_processing_state.sql."
+                "Processing-state storage is not installed. Apply database/istsos_aggregation.sql."
             )
         row = await connection.fetchrow(
             "SELECT * FROM aggregation.processing_state WHERE aggregation_id=$1",
@@ -98,12 +98,11 @@ async def get_processing_state(
         )
         if row is None:
             raise ServiceUnavailable(
-                "Processing state is missing. Reapply database/aggregation_processing_state.sql."
+                "Processing state is missing. Reapply database/istsos_aggregation.sql."
             )
     fields = {
         "aggregationId": "aggregation_id",
         "status": "status",
-        "phase": "phase",
         "runId": "run_id",
         "lastStartedAt": "last_started_at",
         "lastFinishedAt": "last_finished_at",

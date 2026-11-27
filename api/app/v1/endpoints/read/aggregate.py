@@ -2,8 +2,9 @@
 
 Reads the six aggregation.observations_* tables directly. $func picks the
 statistic returned as "result", $interval the table. Filters on phenomenonTime
-compare the bucket end. A NULL statistic becomes -999.9 (sampled gap) or 0
-(event bucket without events); validity is in resultQuality.
+compare the bucket end. A NULL statistic (missing bucket) becomes -999.9; an
+event bucket without events, proven active, is stored as 0. Validity is in
+resultQuality.
 """
 
 from datetime import UTC
@@ -87,11 +88,8 @@ TIME_FIELDS = {"phenomenonTime", "resultTime"}
 def result_expression(function):
     if function == "count":
         return "count_numeric"
-    # Rows written before the worker stored 0 for empty event buckets are NULL too.
-    return (
-        f"COALESCE({FUNCTIONS[function]}, CASE WHEN "
-        "configuration_snapshot->'configuration'->>'mode' = 'event' THEN 0 ELSE -999.9 END)"
-    )
+    # NULL statistic: missing bucket (valid empty event buckets are stored as 0).
+    return f"COALESCE({FUNCTIONS[function]}, -999.9)"
 
 
 def field_expressions(function):
@@ -306,7 +304,7 @@ def serialize(row, datastream_id, select):
         "$func (sum, avg, min, max, count) and $interval (PT10M, PT1H, P1D, P7D, "
         "P1M, P1Y). Supports $filter (phenomenonTime = bucket end, resultTime, "
         "result, resultQuality), $orderby, $top, $skip, $count, $select. "
-        "A missing value is -999.9 (0 for event series); check resultQuality "
+        "A missing value is -999.9 (an event bucket without events is 0); check resultQuality "
         "for validity and parameters.open for buckets still being filled."
     ),
 )

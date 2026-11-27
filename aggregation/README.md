@@ -1,14 +1,46 @@
 # Aggregation service
 
-The service reads enabled configurations and source observations through
-`istsos4-client==0.4.0`, calculates statistics with pandas, and upserts the six
-predefined result tables. It records per-Datastream status in PostgreSQL.
-Source observations are not modified. Parquet export and concurrent Datastream
-processing are not implemented.
+The aggregation service calculates, for each configured Datastream, statistics over six
+fixed intervals: 10 minutes, 1 hour, 1 day, 7 days (from Monday), 1 month and 1 year.
+For each bucket it stores count, sum, minimum, maximum, mean, coverage and a quality
+bitmask in the `aggregation` schema, readable through `GET /Datastreams(id)/Aggregates`.
 
-Metadata records and individual `aggregation_result` records go to stdout;
-diagnostic logs go to stderr. Invalid Datastreams fail independently and remain
-visible through the processing-state API.
+- 10-minute, hourly and daily buckets are calculated from the source observations.
+- Weekly, monthly and yearly buckets are rolled up from the saved daily buckets.
+- Source observations are never modified.
+
+The database schema (configuration, result tables, run state, watermark) is described in
+[database/README_aggregation.md](../database/README_aggregation.md). Configurations are
+managed through the `/Aggregations` API.
+
+## How it works
+
+The service runs on a cron schedule. Each cycle:
+
+1. reads the enabled configurations from `/Aggregations` (API);
+2. for each configuration, one at a time:
+   1. marks it `running` in `aggregation.processing_state` (database);
+   2. reads the source Datastream (`samplingFrequency`, QC `constraints`) and logs any
+      metadata warnings;
+   3. computes the **cutoff**: the safe system-time watermark with versioning, else the
+      current second; capped by `endTime` and, in event mode with a reference, by the latest
+      observation of the source or the reference plus `referenceMaxAge`;
+   4. finds the **buckets to calculate** for 10 minutes, hours and days:
+      - the bootstrap run from the stored cursor up to the bucket containing the cutoff;
+      - with versioning, every bucket containing an observation inserted or updated
+        since the last scan;
+      - without versioning, every bucket overlapping the look-back window before the
+        cutoff (`recomputeWindow`, else the Datastream `acquisitionFrequency`, else 24 hours);
+   5. reads the source observations **once** for those buckets, in windows of at most
+      30 days, and adds each observation to the open bucket of every interval;
+   6. writes the results in batches (COPY + upsert) together with the checkpoint;
+   7. rolls up the weeks, months and years containing a recalculated day from the saved
+      daily rows;
+   8. marks the run `success` (or `failed` / `interrupted`).
+
+The service uses two channels: the **API** for configurations, Datastreams, observations
+and change detection, and the **database** for run state, ownership lock, watermark and
+result writes.
 
 ## Start in development
 
@@ -28,60 +60,52 @@ docker compose -f dev_docker-compose.yml up -d --build aggregation
 docker compose -f dev_docker-compose.yml logs -f aggregation
 ```
 
-This starts the normal API/database dependencies if needed. The database image
-installs the aggregation schema; existing databases are not migrated.
-The Compose network must exist, as required by the existing development setup.
-Only one aggregation service instance should run: overlap prevention is local
-to the process. The production Compose file is unchanged.
+This also starts the API and database if needed. The database image installs the
+aggregation schema; existing databases are not migrated. Only one aggregation service may
+run at a time (see [Run state](#run-state)).
 
-The service is disabled by default. With `AGGREGATION_ENABLED=0` it remains
-idle without contacting the API. After changing environment settings, recreate
-the service with `up -d aggregation`; after editing the bind-mounted Python
-source, use `restart aggregation`.
+With `AGGREGATION_ENABLED=0` (the default) the service stays idle without contacting the
+API or the database. After changing environment settings recreate the service with
+`up -d aggregation`; after editing the bind-mounted Python source use `restart aggregation`.
 
-## Timing and settings
-
-The five-field cron expression is interpreted in **UTC**. `*/10 * * * *`
-executes at minutes 00, 10, 20, 30, 40 and 50. There is no immediate run unless
-`AGGREGATION_RUN_ON_STARTUP=1`. The parser is
-[croniter](https://github.com/pallets-eco/croniter), with normal cron Sunday
-numbering (0 or 7) and day-of-month/day-of-week OR semantics. Seconds/year fields
-and cron aliases are not accepted. Invalid settings fail at startup.
+## Settings
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AGGREGATION_ENABLED` | `0` | Enable reads (`1`/`0`) |
-| `AGGREGATION_SCHEDULE` | `*/10 * * * *` | Five-field cron schedule in UTC |
+| `AGGREGATION_ENABLED` | `0` | Enable the service (`1`/`0`) |
+| `AGGREGATION_SCHEDULE` | `*/10 * * * *` | Five-field cron schedule, in UTC |
 | `AGGREGATION_UTC_OFFSET_MINUTES` | `60` | Default bucket offset, from -840 to 840 minutes |
-| `AGGREGATION_RUN_ON_STARTUP` | `0` | Perform one aggregation cycle before waiting for cron |
-| `AGGREGATION_WRITE_BATCH_SIZE` | `1000` | Calculated result rows per COPY/upsert batch (1–10000) |
+| `AGGREGATION_RUN_ON_STARTUP` | `0` | Run one cycle before waiting for the cron (`1`/`0`) |
+| `AGGREGATION_WRITE_BATCH_SIZE` | `2000` | Result rows per COPY/upsert batch (1–10000) |
+| `AGGREGATION_LOG_RESULTS` | `0` | Print every committed bucket as an `aggregation_result` JSON line (`1`/`0`) |
 | `AGGREGATION_REQUEST_TIMEOUT_SECONDS` | `30` | Positive HTTP timeout |
-| `AGGREGATION_API_URL` | Internal API root from Compose `SUBPATH` and `VERSION` | Complete URL including the version path |
+| `AGGREGATION_API_URL` | Internal API root from Compose `SUBPATH` and `VERSION` | Complete API URL including the version path |
 | `AUTHORIZATION` | Compose setting | Enable API login |
-| `ISTSOS_ADMIN` / `ISTSOS_ADMIN_PASSWORD` | Compose settings | Administrator credentials for `/Login` |
+| `ISTSOS_ADMIN` / `ISTSOS_ADMIN_PASSWORD` | Compose settings | Administrator credentials for `/Login` and the database |
+| `POSTGRES_HOST` / `POSTGRES_PORT` / `POSTGRES_DB` | `database` / `5432` / `istsos` | Database for run state and results |
 
-A Datastream's non-null `utcOffsetMinutes` overrides the service default,
-including zero. This offset is reported for later calculations and does not
-change cron timing. No daylight-saving timezone is used.
+Invalid settings stop the service at startup.
 
-Runs are sequential. Triggers that occur while a run is still executing are
-skipped and logged; there is no catch-up queue after downtime. Each cycle reads
-configurations afresh and, when authorization is enabled, obtains a fresh API
-token through the client. Temporary network errors and HTTP
-408/429/502/503/504 receive up to three attempts, one second apart. HTTP 500
-and authentication failures are logged and retried on the next cycle. A failed
-Datastream is logged and the remaining Datastreams continue. Failure to read the
-configuration collection aborts that cycle; the next scheduled cycle retries.
-Pagination links generated with a public hostname are routed to the configured
-API host. SIGTERM/SIGINT stop waiting immediately, or finish the current client
-request (including its bounded retries) before shutdown. The Compose shutdown
-grace period is 100 seconds for the default 30-second HTTP timeout; increase it
-if you configure a longer timeout.
+**Schedule.** The cron expression is interpreted in UTC by
+[croniter](https://github.com/pallets-eco/croniter): `*/10 * * * *` runs at minutes 00,
+10, 20, 30, 40, 50. Cycles are synchronous: a trigger that occurs while a cycle is still
+running is skipped and logged, and the next cycle starts at the first trigger after the
+end. There is no catch-up after downtime.
+
+**Network.** Each cycle creates a new API client (and token when authorization is
+enabled). Temporary network errors and HTTP 408/429/502/503/504 get up to three attempts,
+one second apart. Pagination links generated with a public hostname are routed to the
+configured API host, and links outside the API root are rejected. A failed Datastream is
+logged and the others continue; failure to read the configuration list aborts the cycle.
+
+**Shutdown.** SIGTERM/SIGINT stop waiting immediately, or finish the current request
+before exiting; the run in progress is marked `interrupted`. The Compose stop grace period
+is 100 seconds for the default 30-second HTTP timeout.
 
 ## One cycle and tests
 
-Run a single cycle against the existing API. Stop the scheduled instance first
-because a PostgreSQL session advisory lock permits only one state-writing service:
+Run a single cycle against the existing API. Stop the scheduled instance first, because
+the database lock allows only one service:
 
 ```bash
 docker compose -f dev_docker-compose.yml stop aggregation
@@ -90,167 +114,20 @@ docker compose -f dev_docker-compose.yml run --rm --no-deps \
 docker compose -f dev_docker-compose.yml up -d --no-deps aggregation
 ```
 
-Exit codes are 0 for success (including an empty configuration list), 1 for a
-failed cycle, and 2 for invalid settings. Disabled `--once` exits without reads.
+Add `--datastream-id N` to process only one configured Datastream. Exit codes: 0 success
+(including an empty configuration list), 1 failed cycle or state error, 2 invalid settings.
 
-For local tests:
+Local tests:
 
 ```bash
 python -m pip install -r aggregation/requirements.txt pytest
 python -m pytest tests/aggregation
 ```
 
-## Latest run status
-
-New database images install `database/aggregation_processing_state.sql` and
-`database/aggregation_engine.sql`. The service uses
-`POSTGRES_HOST`, `POSTGRES_PORT` (default 5432), `POSTGRES_DB`, `ISTSOS_ADMIN` and
-`ISTSOS_ADMIN_PASSWORD` to write state directly to the same database. This is
-independent of whether the source API requires authentication.
-
-The GUI can follow `ProcessingState@iot.navigationLink` on a configuration, or
-request `/Aggregations(id)/ProcessingState`. State is read-only
-through the API and follows the configuration API's administrator permissions.
-See [the state contract](../docs/mkdocs/docs/aggregation-configurations.md#processing-state).
-
-The worker records `running`, then `success` when calculation completes,
-or `failed` on source, metadata or calculation errors. A failed collection read records a discovery failure
-for all currently enabled configurations. `phase: aggregation` identifies calculation runs. Checkpoints track durable
-bootstrap cursors and the last completed system-time change scan.
-Non-successful attempts increment the failure counter; a fully successful
-attempt clears the error, resets the counter and updates `lastSuccessfulAt`.
-
-After acquiring exclusive ownership at startup, the service marks abandoned
-`running` rows `interrupted`. Another active instance cannot do this because it
-cannot acquire the lock. Stale run IDs cannot finish a newer run. Losing the
-state database connection stops the service so Docker can restart it and recover;
-it does not continue processing without reliable state. This table stores only
-the latest attempt, not history. No worker heartbeat or live stale-state expiry
-is implemented: an interrupted status becomes visible when the service restarts.
-
-## Calculation rules and recovery
-
-All six intervals are calculated directly from source observations. Statistics
-are numeric count, sum, minimum, maximum and mean. Only finite JSON numbers
-contribute; booleans, numeric strings, nulls and configured missing markers do
-not. A null `missingValues` uses `[-999.9]`; an explicit empty array uses none.
-A null conversion factor is 1. Missing results are never summed as sentinels.
-
-The default boundary mode is right-closed `(start, end]`. Left-closed
-`[start, end)` is supported. Alignment uses the fixed UTC offset, default +60
-minutes. Seven-day buckets start Monday; months and years follow the calendar.
-Current buckets are calculated up to `evaluated_until`, keeping their full end.
-`startTime` is an inclusive lower processing bound; `endTime` caps the upper
-bound using the selected closure. The first bucket may therefore be partial.
-Point observations are supported; nonzero-duration phenomenonTime intervals
-fail explicitly until an allocation rule is defined.
-
-On first run, history starts at `startTime` or the earliest source observation.
-Set `startTime` to generate empty event buckets before the first received tick;
-without either a configured start or any observations, there is no inferred
-historical domain.
-An event configuration may set `referenceDatastreamId` to a regularly
-reporting Datastream of the same station (e.g. battery voltage). Evaluation
-stops at the reference's last observation, so buckets after it are not filled
-with zero; they are computed in a later run once the reference reports again.
-Without reference observations nothing is evaluated. Only the end is checked:
-gaps inside the reference period are still treated as no events.
-Each interval has a durable bootstrap cursor. Adjacent buckets are read together in windows of at most seven days and pages
-of 2000 observations. Each page is partitioned into its target buckets and
-pandas reduces those groups into bounded accumulators. Empty buckets are
-created without making separate API requests. Larger calendar buckets are
-read in successive seven-day windows. Calculated result rows are buffered per interval, up to
-`AGGREGATION_WRITE_BATCH_SIZE` rows. PostgreSQL `COPY FROM STDIN` transfers the
-whole batch to a reusable session-local temporary staging table; one
-`INSERT ... SELECT ... ON CONFLICT` merges all rows into the target table.
-There are no individual target-row INSERT calls. The final smaller batch of
-each interval is flushed too.
-
-The merge and its checkpoint commit in the same transaction. Any COPY/merge
-failure rolls back the entire batch. If observation retrieval fails before a
-pending batch is written, that pending batch is discarded and its cursor is
-not saved. Previously committed batches survive, and the next run resumes from
-the last committed checkpoint. Result log records are printed after commit.
-The PostgreSQL login needs temporary-table privileges (normally granted by
-default). Staging is emptied automatically on commit and disappears on disconnect.
-
-Every scheduled run also recalculates the current plus two previous buckets
-per interval, or `bucketsToRecompute` buckets if set. Buckets are upserted by
-source Datastream and bucket start, so repeated processing replaces results.
-A configuration change/disable/delete during processing prevents subsequent
-writes from the stale configuration. Changing settings does not automatically
-recompute older results; use manual recomputation for them.
-
-When `ignoreQuality=true`, all QC is bypassed, including human rejection and
-malformed/missing quality. Numeric and missing-marker checks still apply.
-Otherwise missing QC is level 0, malformed/reserved QC is rejected, human
-acceptance/rejection takes priority, and unreviewed automatic level must be
-`>= minInputQuality`. `resultQualityKey` selects a key inside object-valued QC;
-null expects scalar QC. Human position follows the number of constraints.
-Changing the source QC layout requires source QC remapping and explicit manual
-recomputation before ordinary processing continues.
-
-Sampled mode requires positive, fixed `properties.samplingFrequency`. Expected
-sample slots are anchored at bucket start and clipped to processing bounds and
-the current cutoff. Coverage is numeric count / expected count, uncapped;
-`minCoverage`, `minObservations` and `maxConsecutiveMissing` are disabled when
-null. Missing runs are estimated from accepted numeric timestamp gaps at that
-frequency; duplicate/oversampled observations count as received values, not
-additional expected slots. Conversion is applied after input missing markers.
-
-For event mode, a bucket without accepted numeric values stores zero
-statistics (sum, avg, min, max = 0) with zero numeric count: no event means
-nothing happened. A genuinely empty bucket is valid (data pair 01); received
-but QC-rejected/invalid events also store zero but are marked invalid. In
-sampled mode such statistics remain SQL null (missing data). Failed completeness also retains real SQL statistics but marks the
-output QC as no data; printed values become -999.9. Original human review is
-not copied as a review of the new aggregate (human pair 00). Automatic check
-pairs are conservatively combined from contributing masks. The aggregation
-pair after human review is 11 passed, 10 failed, 00 not computed, 01 reserved;
-empty event zero uses the digital data pair 01. These definitions are stored in
-the configuration snapshot; the separate client/GUI decoder still needs support
-for the additional aggregation pair before displaying these masks as legends.
-
-## Historical changes with versioning
-
-The worker detects versioning from the source database schema. With versioning,
-it finds changed observations with one indexed SQL query on the database
-connection: current rows whose system-time validity started in the scan window,
-and history versions with a validity edge in it (old versions of updated, moved
-or deleted observations). The scan reads only the changes, not the Datastream
-history. Both old and new phenomenon times identify buckets to recompute from
-source `$as_of` reads through the API. A backdated insert can
-extend an implicit history start. The phenomenon-time `endTime` limit remains
-separate from system-time visibility, so late inserts into a closed historical
-domain are still processed.
-
-`aggregation.safe_change_watermark()` keeps the system-time cutoff strictly
-behind active database transactions; scans additionally overlap by one second.
-The function owner needs superuser or `pg_read_all_stats` privileges. Prepared
-transactions pause versioned runs until resolved. This avoids assuming that a
-fixed overlap alone protects against arbitrarily late commits. The source API
-must use the same database/versioning mode as the configured SQL connection.
-
-The change watermark advances only after all affected intervals are durable.
-A crash repeats the change scan and safely upserts any already written buckets.
-Without versioning, only bootstrap and recent buckets update automatically;
-older edits/deletes need manual recomputation. Historical rows must be retained
-until processing has consumed them.
-
-This initial implementation favors correctness over query minimization. Large
-recent yearly/monthly buckets are reread from source. Page reduction bounds
-numeric-frame memory, but large sources may require incremental sufficient
-statistics after measuring load.
-First-run backfill may span several cron triggers; overlapping triggers are
-skipped while that run completes.
-
 ## Manual recomputation
 
-Stop the scheduled instance to release its ownership lock, then recompute all
-buckets intersecting a range for a configured Datastream. This recalculates full
-buckets within the configuration's processing domain, not statistics truncated
-to the manual range. Bootstrap cursors and the automatic change watermark do
-not advance during manual recomputation.
+Changing a configuration does not recompute existing results. To recompute a period,
+stop the scheduled instance and run:
 
 ```bash
 docker compose -f dev_docker-compose.yml stop aggregation
@@ -260,7 +137,173 @@ docker compose -f dev_docker-compose.yml run --rm --no-deps aggregation \
 docker compose -f dev_docker-compose.yml up -d --no-deps aggregation
 ```
 
-Window-read logs report interval, buckets covered, pages, observation count and
-elapsed time. Bulk-write logs report row count and elapsed time separately.
-Adjacent bucket reads are grouped (up to seven days and the configured write
-batch size), so empty periods do not produce one API request per missing bucket.
+All buckets intersecting the range are recalculated in full (then rolled up). Cursors and
+the change watermark do not move during a manual recomputation.
+
+## Calculation rules
+
+**Modes.**
+- `sampled`: requires a positive fixed `samplingFrequency` in the Datastream properties.
+  Expected samples are counted from the bucket start (or the history start) up to the
+  evaluated point; coverage = numeric count / expected count, not capped.
+- `event`: each observation is an event; a `null` result (a tick) counts as 1. A bucket
+  without events is valid and worth 0; a bucket whose events were all rejected is
+  invalid. With a `referenceDatastreamId`, an empty bucket is 0 only if the reference has
+  an observation within `referenceMaxAge` (default `PT1H`) before the bucket end
+  (evaluated point for an open bucket); otherwise it is missing, so a silent station is
+  not filled with zeros. Weeks, months and years apply the same rule at their end. A late
+  reference observation recomputes the buckets it proves (changed times with versioning,
+  the recompute window without). This is the old `zero_when_available` job rule.
+
+**Values.** Only finite JSON numbers contribute (plus event ticks); booleans, strings, nulls and the
+`missingValues` markers (default `[-999.9]`) do not. `conversionFactor` (default 1)
+multiplies the values after the marker check.
+
+**Input QC.** With `ignoreQuality=true` every observation counts. Otherwise human
+acceptance/rejection wins, and the automatic level (3 all checks passed, 2 mixed, 1 all
+failed, 0 not run) must be `>= minInputQuality`; missing QC is level 0, malformed QC is
+rejected. `resultQualityKey` selects a key inside object-valued QC. If the Datastream QC
+`constraints` change, the service stops that configuration until a manual recomputation.
+
+**Validity.** A bucket is valid when it has values (or is an empty event bucket) and meets
+`minCoverage`, `minObservations` and, for 10 minutes, hours and days only,
+`maxConsecutiveMissing`. Invalid buckets keep their real statistics, but the API shows
+`-999.9`. Buckets without values store `NULL` statistics (`-999.9` in the API), except
+valid empty event buckets, which store 0.
+
+**Output QC.** `result_quality` packs 2-bit pairs: data (`11` valid, `01` valid empty
+event, `00` invalid), one pair per automatic check (`10` if a contributing value failed
+it, `11` if all passed, else `00`), human (`00`, not reviewed) and aggregation (`11`
+valid, `10` invalid).
+
+**Alignment.** Buckets are right-closed `(start, end]` by default (`left_closed` is
+supported) and aligned in a fixed UTC offset (`utcOffsetMinutes`, default 60), without
+daylight saving. `startTime` is an inclusive lower bound; `endTime` caps the upper bound.
+Only point observations are supported.
+
+**Rollup.** Weeks, months and years are combined from the saved daily rows: counts, sums,
+minima, maxima and expected counts add up exactly; mean, coverage and validity are
+recomputed from the sums; check pairs are `10` if any day failed, `11` if all days with
+values passed. Coverage matches the direct calculation when `samplingFrequency` divides
+one day.
+
+**Open buckets.** A bucket whose cutoff falls inside it is stored with
+`evaluated_until < bucket_end` and recalculated on the next run.
+
+## Versioning and late data
+
+The service detects versioning from the database schema. With versioning it finds the
+changed observations with one API request per Datastream on the current observations:
+`$filter=lower(systemTimeValidity) ge <last scan> and lower(systemTimeValidity) le <cutoff>`.
+Inserts and updates open a new version, so this returns exactly the changed observations
+(index `datastream_id, lower(systemTimeValidity)`). The `phenomenonTime` of an observation
+is assumed never to change; deleted observations are not detected, so after a deletion run
+a manual recomputation of that period. The changed buckets are read with `$as_of=<cutoff>`. Without `startTime`, a backdated
+insert moves the history start back.
+
+The cutoff comes from `aggregation.safe_change_watermark()`, which stays behind the oldest
+open transaction so late commits are not missed; scans overlap by one second. A session
+left idle in a transaction freezes the watermark until it is closed. Prepared transactions
+pause versioned runs.
+
+Without versioning, only the bootstrap run and the look-back window are recalculated
+automatically; older edits or deletions need a manual recomputation.
+
+## Run state
+
+`aggregation.processing_state` keeps the latest run of each configuration, readable at
+`/Aggregations(id)/ProcessingState` (administrator only). The service records `running`,
+then `success`, or `failed` on source, metadata or calculation errors; a failed read of the
+configuration list marks all enabled configurations `failed`. Failures increment
+`consecutiveFailures`; a success clears the error, resets the counter and updates
+`lastSuccessfulAt`.
+
+At startup the service takes a PostgreSQL session advisory lock: a second instance fails.
+It then marks rows left `running` by a previous instance as `interrupted`. Every state
+update is fenced by the run UUID. Losing the database connection stops the service, so
+Docker restarts it and it recovers the lock; it never continues without reliable state.
+
+Results and checkpoint of each batch commit in one transaction; a failed batch rolls back
+both, and the next run resumes from the last committed checkpoint. A configuration edit,
+disable or delete during a run makes the following batches fail instead of writing results
+with stale settings.
+
+## Logs
+
+Diagnostic logs go to stderr: configuration reads, metadata warnings, per-Datastream
+results and failures. `Window read` lines report buckets, pages, observations and elapsed
+time; `Bulk write` lines report table, rows and elapsed time. With
+`AGGREGATION_LOG_RESULTS=1` every committed bucket is also printed on stdout as an
+`aggregation_result` JSON line.
+
+## Code structure
+
+| Module | Role |
+|---|---|
+| `service.py` | settings, API client, one cycle over all configurations, cron scheduler, entry point |
+| `state.py` | database connection: ownership lock, run state, watermark, daily rows, result writes |
+| `engine.py` | per configuration: cutoff, changes, buckets to calculate, source windows, checkpoints, rollup |
+| `calculation.py` | bucket alignment, input QC filter, accumulator, validity, output bitmask, rollup of daily rows |
+
+### `service.py`
+
+- **`Settings.from_env()`** reads and validates the environment variables.
+- **`SensorThings`** wraps `istsos4-client` (login, timeout, retries) and adds raw GET
+  requests for the custom `/Aggregations` endpoint: `configurations()`, `datastream()`,
+  `observation_pages()` (pages of 5000, repeated links rejected), `first_observation()`,
+  `last_observation()` (reference Datastream), `changed_times()` (filter on
+  `lower(systemTimeValidity)`) and `observations()` (one source window, with `$as_of`
+  when versioned). `url()` keeps pagination on the configured host.
+- **`metadata_warnings()`** lists problems in the Datastream metadata (missing
+  `samplingFrequency` in sampled mode, invalid or too many `constraints`).
+- **`run_cycle()`** runs one cycle as described above; errors mark that configuration
+  `failed` (or `interrupted` while stopping) and the others continue.
+- **`serve()`** waits for the next cron trigger and runs cycles synchronously.
+- **`main()`** parses `--once`, `--recompute-from/--recompute-to` and `--datastream-id`,
+  installs the signal handlers and runs `--once` or `serve()`.
+
+### `state.py`
+
+`ProcessingState` holds one autocommit connection with `statement_timeout=10s`.
+
+- **`open()`** takes the advisory lock and marks leftover `running` rows `interrupted`.
+- **`execute()`** turns any database error into `StateError`, which stops the service.
+- **`start()`** / **`finish()`** open and close a run, fenced by `run_id`.
+- **`discovery_failed()`** marks all enabled configurations `failed` when the
+  configuration list cannot be read.
+- **`checkpoint()`** reads the stored checkpoint; **`daily_rows()`** reads saved daily
+  buckets for the rollup.
+- **`source_context()`** detects versioning and returns the cutoff.
+- **`save_buckets()`** writes one batch in one transaction: checks that all rows share
+  `configuration_updated_at`, locks state and configuration rows (`FOR UPDATE`) and checks
+  that the run still owns the state and the configuration is enabled and unchanged, COPYs
+  into a session temporary table, upserts into the result table and saves the checkpoint.
+  Connection errors become `StateError` (restart); other database errors become
+  `CalculationError` (that configuration fails, the cycle continues).
+- **`complete()`** saves the final checkpoint and marks the run `success`.
+
+### `engine.py`
+
+- **`calculate()`** processes one configuration: QC layout check, cutoff, history start,
+  change scan, plans per source interval (changed or look-back buckets behind the cursor,
+  then the bootstrap run), one read per source window for all three intervals, batch
+  writes with per-interval cursors (a cursor advances only with its own committed rows;
+  an open bucket keeps it at its start), rollup, final checkpoint.
+- **`recompute_window()`** returns the look-back window without versioning.
+- **`roll_up()`** reads the saved days of every touched week, month and year and writes
+  them through `calculation.rollup()`.
+- **`result_record()`** builds the `aggregation_result` log line.
+
+### `calculation.py`
+
+- **`bucket_floor()`**, **`next_bucket()`**, **`containing()`**: bucket alignment in the
+  fixed UTC offset and closure.
+- **`timestamp()`**: ISO datetime with timezone to UTC; point observations only.
+- **`sampling_seconds()`**: `samplingFrequency` in seconds (sampled mode).
+- **`quality()`**: input QC filter.
+- **`Accumulator`**: one bucket; `add()` updates counts, sum, min, max, gaps and QC flags
+  one observation at a time; `result()` computes expected count, coverage, validity and
+  the output bitmask.
+- **`rollup()`**: combines saved daily rows into one week, month or year row.
+- **`is_valid()`**, **`output_mask()`**, **`result_row()`**: shared by `Accumulator` and
+  `rollup()`.

@@ -1,7 +1,6 @@
 """Scheduled pandas aggregation with persistent run state; scheduling uses UTC."""
 
 import argparse
-import json
 import logging
 import math
 import os
@@ -21,7 +20,6 @@ from aggregation.engine import calculate
 from aggregation.state import ProcessingState, StateError
 
 logger = logging.getLogger("aggregation")
-INTERVALS = ("PT10M", "PT1H", "P1D", "P7D", "P1M", "P1Y")
 
 
 class ApiError(CalculationError):
@@ -50,7 +48,8 @@ class Settings:
     password: str = field(default="", repr=False)
     timeout_seconds: float = 30
     run_on_startup: bool = False
-    write_batch_size: int = 1000
+    write_batch_size: int = 2000
+    log_results: bool = False
 
     @classmethod
     def from_env(cls):
@@ -60,7 +59,7 @@ class Settings:
             ).rstrip("/"),
             schedule=os.getenv("AGGREGATION_SCHEDULE", "*/10 * * * *"),
             write_batch_size=int(
-                os.getenv("AGGREGATION_WRITE_BATCH_SIZE", "1000")
+                os.getenv("AGGREGATION_WRITE_BATCH_SIZE", "2000")
             ),
             utc_offset_minutes=int(
                 os.getenv("AGGREGATION_UTC_OFFSET_MINUTES", "60")
@@ -76,6 +75,10 @@ class Settings:
             run_on_startup=boolean(
                 os.getenv("AGGREGATION_RUN_ON_STARTUP", "0"),
                 "AGGREGATION_RUN_ON_STARTUP",
+            ),
+            log_results=boolean(
+                os.getenv("AGGREGATION_LOG_RESULTS", "0"),
+                "AGGREGATION_LOG_RESULTS",
             ),
         )
         url = urlsplit(settings.api_url)
@@ -229,7 +232,7 @@ class SensorThings:
         return configurations
 
     def observation_pages(self, identifier, options):
-        options = {"$top": 2000, "$count": "false", **options}
+        options = {"$top": 5000, "$count": "false", **options}
         url = self.url(
             f"Datastreams({identifier})/Observations?" + urlencode(options)
         )
@@ -289,6 +292,26 @@ class SensorThings:
             pages.close()
         return None
 
+    def changed_times(self, identifier, since, until):
+        """Phenomenon times of current versions opened in [since, until].
+
+        Inserts and updates open a new current version, so the current table
+        is enough (index on datastream_id, lower(systemTimeValidity)). The
+        phenomenonTime of an observation is assumed never to change; deleted
+        observations are not detected (their old version is only in history).
+        """
+        low, high = since.isoformat(), until.isoformat()
+        options = {
+            "$filter": f"lower(systemTimeValidity) ge {low} and lower(systemTimeValidity) le {high}",
+            "$orderby": "phenomenonTime asc,id asc",
+            "$select": "id,phenomenonTime",
+        }
+        return {
+            item["phenomenonTime"].split("/")[0]
+            for page in self.observation_pages(identifier, options)
+            for item in page
+        }
+
     def observations(self, identifier, start, end, lower, upper, as_of=None):
         options = {
             "$orderby": "phenomenonTime asc,id asc",
@@ -300,7 +323,8 @@ class SensorThings:
         return self.observation_pages(identifier, options)
 
 
-def describe(configuration, datastream, settings):
+def metadata_warnings(configuration, datastream):
+    """Problems in the source Datastream metadata, written to the log."""
     warnings = []
     properties = datastream.get("properties")
     if properties is None:
@@ -317,55 +341,20 @@ def describe(configuration, datastream, settings):
     if not isinstance(constraints, list) or not all(
         isinstance(item, dict) for item in constraints
     ):
-        constraint_count = None
         warnings.append("Datastream constraints must be an array of objects")
-    else:
-        constraint_count = len(constraints)
-        if constraint_count > 28:
-            warnings.append("QC layout exceeds the result bitmask capacity")
-    offset = configuration.get("utcOffsetMinutes")
-    if offset is None:
-        offset = settings.utc_offset_minutes
-    return {
-        "event": "datastream_metadata",
-        "readAt": datetime.now(UTC).isoformat(),
-        "datastreamId": configuration["datastreamId"],
-        "name": datastream.get("name"),
-        "configuration": configuration,
-        "qualityFiltering": (
-            "disabled"
-            if configuration.get("ignoreQuality", False)
-            else "enabled"
-        ),
-        "properties": properties,
-        "samplingFrequency": sampling,
-        "constraintCount": constraint_count,
-        "effectiveUtcOffsetMinutes": offset,
-        "intervals": INTERVALS,
-        "warnings": warnings,
-    }
+    elif len(constraints) > 28:
+        warnings.append("QC layout exceeds the result bitmask capacity")
+    return warnings
 
 
-def run_cycle(
-    api,
-    settings,
-    stop,
-    state=None,
-    aggregate=False,
-    manual=None,
-    datastream_id=None,
-):
+def run_cycle(api, settings, stop, state, manual=None, datastream_id=None):
     logger.info("Reading enabled aggregation configurations")
     try:
         api.begin_cycle()
         configurations = api.configurations()
     except ApiError as error:
-        logger.error("Discovery failed: %s", error)
-        if state is not None:
-            if aggregate:
-                state.discovery_failed(str(error), phase="aggregation")
-            else:
-                state.discovery_failed(str(error))
+        logger.error("Configuration read failed: %s", error)
+        state.discovery_failed(str(error))
         return False
     succeeded = failed = 0
     for configuration in configurations:
@@ -377,16 +366,8 @@ def run_cycle(
         if stop.is_set():
             return False
         identifier = configuration.get("datastreamId")
-        run_id = (
-            (
-                state.start(configuration["id"], phase="aggregation")
-                if aggregate
-                else state.start(configuration["id"])
-            )
-            if state is not None
-            else None
-        )
-        if state is not None and run_id is None:
+        run_id = state.start(configuration["id"])
+        if run_id is None:
             continue  # Configuration was disabled/deleted since collection read.
         try:
             if type(identifier) is not int or identifier < 1:
@@ -394,59 +375,37 @@ def run_cycle(
                     "Configuration contains an invalid datastreamId"
                 )
             datastream = api.datastream(identifier)
-            result = describe(configuration, datastream, settings)
-            print(json.dumps(result, ensure_ascii=False), flush=True)
-            if aggregate:
-                count = calculate(
-                    api,
-                    state,
-                    configuration,
-                    datastream,
-                    settings,
-                    run_id,
-                    stop,
-                    manual,
-                )
-                logger.info(
-                    "Datastream %s: saved %s aggregate buckets",
-                    identifier,
-                    count,
-                )
-                succeeded += 1
-                continue
-            status = "partial" if result["warnings"] else "success"
-            if state is not None:
-                error = (
-                    {
-                        "step": "metadata_validation",
-                        "message": "; ".join(result["warnings"]),
-                    }
-                    if result["warnings"]
-                    else None
-                )
-                state.finish(configuration["id"], run_id, status, error)
+            for warning in metadata_warnings(configuration, datastream):
+                logger.warning("Datastream %s: %s", identifier, warning)
+            count = calculate(
+                api,
+                state,
+                configuration,
+                datastream,
+                settings,
+                run_id,
+                stop,
+                manual,
+            )
+            logger.info(
+                "Datastream %s: saved %s aggregate buckets", identifier, count
+            )
             succeeded += 1
         except (ApiError, CalculationError) as error:
             failed += 1
-            logger.error("Cannot read Datastream %s: %s", identifier, error)
-            if state is not None:
-                state.finish(
-                    configuration["id"],
-                    run_id,
-                    "interrupted" if stop.is_set() else "failed",
-                    {
-                        "step": (
-                            "aggregation" if aggregate else "datastream_read"
-                        ),
-                        "message": str(error),
-                        **getattr(error, "context", {}),
-                    },
-                )
+            logger.error("Datastream %s failed: %s", identifier, error)
+            state.finish(
+                configuration["id"],
+                run_id,
+                "interrupted" if stop.is_set() else "failed",
+                {
+                    "step": "aggregation",
+                    "message": str(error),
+                    **getattr(error, "context", {}),
+                },
+            )
     logger.info(
-        "%s finished: %s processed, %s failed",
-        "Aggregation" if aggregate else "Discovery",
-        succeeded,
-        failed,
+        "Aggregation finished: %s processed, %s failed", succeeded, failed
     )
     return failed == 0
 
@@ -555,7 +514,6 @@ def main():
                     settings,
                     stop,
                     state,
-                    aggregate=True,
                     manual=manual,
                     datastream_id=args.datastream_id,
                 )
@@ -565,12 +523,7 @@ def main():
             settings,
             stop,
             lambda: run_cycle(
-                api,
-                settings,
-                stop,
-                state,
-                aggregate=True,
-                datastream_id=args.datastream_id,
+                api, settings, stop, state, datastream_id=args.datastream_id
             ),
         )
     except StateError as error:

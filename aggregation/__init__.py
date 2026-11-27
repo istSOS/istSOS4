@@ -1,1 +1,1 @@
-"""Scheduled discovery of configured istSOS Datastreams."""
+"""Scheduled aggregation of configured istSOS Datastreams."""

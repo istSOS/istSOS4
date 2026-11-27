@@ -1,6 +1,6 @@
 """Business rules for the configuration contract, independent of a database."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from app.v1.endpoints import aggregation_functions as configurations
@@ -74,7 +74,12 @@ def test_coverage_is_a_finite_fraction(coverage):
         ("minObservations", -1),
         ("minObservations", True),
         ("maxConsecutiveMissing", -1),
-        ("bucketsToRecompute", 0),
+        ("recomputeWindow", "PT0S"),
+        ("recomputeWindow", "-PT1H"),
+        ("recomputeWindow", "tomorrow"),
+        ("recomputeWindow", 3600),
+        ("referenceMaxAge", "PT0S"),
+        ("referenceMaxAge", "1 hour"),
         ("utcOffsetMinutes", 841),
         ("boundaryMode", "closed"),
         ("conversionFactor", float("inf")),
@@ -108,12 +113,12 @@ def test_valid_zero_values_and_empty_missing_marker_list_are_preserved():
 def test_patch_changes_multiple_settings_and_preserves_omitted_values():
     existing = create(minCoverage=0.8, maxConsecutiveMissing=2)
     updated = configurations.validate_patch_payload(
-        {"enabled": False, "minInputQuality": 2, "bucketsToRecompute": 5},
+        {"enabled": False, "minInputQuality": 2, "recomputeWindow": "PT6H"},
         existing,
     )
     assert updated["enabled"] is False
     assert updated["minInputQuality"] == 2
-    assert updated["bucketsToRecompute"] == 5
+    assert updated["recomputeWindow"] == timedelta(hours=6)
     assert updated["minCoverage"] == 0.8
     assert updated["maxConsecutiveMissing"] == 2
 

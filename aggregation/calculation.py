@@ -1,4 +1,4 @@
-"""Calendar buckets, QC selection and bounded pandas accumulators."""
+"""Calendar buckets, QC selection, bucket accumulators and daily rollup."""
 
 import math
 from datetime import UTC, datetime, timedelta, timezone
@@ -197,7 +197,7 @@ class Accumulator:
             self.markers = [-999.9]
 
     def add(self, observations):
-        values, times = [], []
+        """Add observations in phenomenonTime order (one page at a time)."""
         for observation in observations:
             when = timestamp(observation.get("phenomenonTime"))
             self.total += 1
@@ -208,6 +208,8 @@ class Accumulator:
                 continue
             self.accepted += 1
             value = observation.get("result")
+            if value is None and self.config["mode"] == "event":
+                value = 1.0  # A tick without a value counts as one event.
             if isinstance(value, bool) or not isinstance(value, Real):
                 continue
             try:
@@ -219,45 +221,28 @@ class Accumulator:
             value *= self.factor
             if not math.isfinite(value):
                 raise CalculationError("Numeric conversion overflowed")
-            values.append(value)
-            times.append(when)
             for i, flags in enumerate(self.checks, start=1):
                 flags.add((mask >> (2 * i)) & 3 if mask is not None else 0)
-        if not values:
-            return
-        try:
-            frame = pd.DataFrame(
-                {"value": values, "time": pd.to_datetime(times, utc=True)}
-            )
-        except (ValueError, OverflowError):
-            raise CalculationError(
-                "Observation time is outside the supported pandas range"
-            ) from None
-        self.sum += float(frame.value.sum())
-        self.numeric += len(frame)
-        minimum, maximum = float(frame.value.min()), float(frame.value.max())
-        self.minimum = (
-            minimum if self.minimum is None else min(self.minimum, minimum)
-        )
-        self.maximum = (
-            maximum if self.maximum is None else max(self.maximum, maximum)
-        )
-        first, last = (
-            frame.time.iloc[0].to_pydatetime(),
-            frame.time.iloc[-1].to_pydatetime(),
-        )
-        if self.sampling:
-            gaps = frame.time.diff().dt.total_seconds().dropna()
-            largest = float(gaps.max()) if len(gaps) else 0
-            if self.last is not None:
-                largest = max(largest, (first - self.last).total_seconds())
-            self.max_gap = max(
-                self.max_gap, max(0, math.ceil(largest / self.sampling) - 1)
-            )
-        self.first = self.first or first
-        self.last = last
+            self.numeric += 1
+            self.sum += value
+            if self.minimum is None or value < self.minimum:
+                self.minimum = value
+            if self.maximum is None or value > self.maximum:
+                self.maximum = value
+            if self.sampling and self.last is not None:
+                missing = (
+                    math.ceil(
+                        (when - self.last).total_seconds() / self.sampling
+                    )
+                    - 1
+                )
+                self.max_gap = max(self.max_gap, missing)
+            if self.first is None:
+                self.first = when
+            self.last = when
 
-    def result(self):
+    def result(self, proven=True):
+        """proven: False when an empty event bucket has no reference proof."""
         expected = coverage = None
         closure = self.config.get("boundaryMode") or "right_closed"
         if self.sampling:
@@ -301,50 +286,130 @@ class Accumulator:
                 )
                 self.max_gap = max(self.max_gap, head, tail)
         empty_event = self.config["mode"] == "event" and self.total == 0
-        valid = self.numeric > 0 or empty_event
-        for name, actual in (
-            ("minCoverage", coverage),
-            ("minObservations", self.numeric),
-        ):
-            threshold = self.config.get(name)
-            if (
-                threshold is not None
-                and actual is not None
-                and actual < threshold
-            ):
-                valid = False
+        valid = is_valid(
+            self.config, self.numeric, coverage, empty_event and proven
+        )
         if (
             self.config.get("maxConsecutiveMissing") is not None
             and self.max_gap > self.config["maxConsecutiveMissing"]
         ):
             valid = False
-        if self.numeric and not math.isfinite(self.sum):
-            raise CalculationError("Aggregation sum overflowed")
-        data_pair = (1 if empty_event else 3) if valid else 0
-        mask = data_pair | ((3 if valid else 2) << (2 * (self.n + 2)))
-        for i, flags in enumerate(self.checks, start=1):
-            pair = 2 if 2 in flags else (3 if flags == {3} else 0)
-            mask |= pair << (2 * i)
-        zero = (
-            0.0
-            if self.config["mode"] == "event" and not self.numeric
-            else None
+        pairs = [
+            2 if 2 in flags else (3 if flags == {3} else 0)
+            for flags in self.checks
+        ]
+        return result_row(
+            self.config,
+            self.start,
+            self.end,
+            self.cutoff,
+            (self.total, self.accepted, self.numeric),
+            (self.sum, self.minimum, self.maximum),
+            expected,
+            coverage,
+            output_mask(valid, empty_event, self.n, pairs),
+            self.n,
         )
-        # A human has not reviewed this newly computed result: human pair 00.
-        return {
-            "datastream_id": self.config["datastreamId"],
-            "bucket_start": self.start,
-            "bucket_end": self.end,
-            "evaluated_until": self.cutoff,
-            "count_total": self.total,
-            "count_accepted": self.accepted,
-            "count_numeric": self.numeric,
-            "sum_value": self.sum if self.numeric else zero,
-            "min_value": self.minimum if self.numeric else zero,
-            "max_value": self.maximum if self.numeric else zero,
-            "avg_value": self.sum / self.numeric if self.numeric else zero,
-            "expected_count": expected,
-            "coverage": coverage,
-            "result_quality": mask,
-            "constraint_count": self.n,
-        }
+
+
+def is_valid(configuration, numeric, coverage, empty_event):
+    """Data present (or an empty event bucket) and completeness thresholds met."""
+    valid = numeric > 0 or empty_event
+    for name, actual in (
+        ("minCoverage", coverage),
+        ("minObservations", numeric),
+    ):
+        threshold = configuration.get(name)
+        if threshold is not None and actual is not None and actual < threshold:
+            valid = False
+    return valid
+
+
+def output_mask(valid, empty_event, constraint_count, pairs):
+    """Pairs: data, one per automatic check, human (00: not reviewed), aggregation."""
+    data_pair = (1 if empty_event else 3) if valid else 0
+    mask = data_pair | ((3 if valid else 2) << (2 * (constraint_count + 2)))
+    for i, pair in enumerate(pairs, start=1):
+        mask |= pair << (2 * i)
+    return mask
+
+
+def result_row(
+    configuration,
+    start,
+    end,
+    cutoff,
+    counts,
+    statistics,
+    expected,
+    coverage,
+    mask,
+    constraint_count,
+):
+    total, accepted, numeric = counts
+    total_sum, minimum, maximum = statistics
+    if numeric and not math.isfinite(total_sum):
+        raise CalculationError("Aggregation sum overflowed")
+    # Only a valid empty event bucket is worth zero; anything else without
+    # values (sampled gap, rejected or unproven events) stays missing.
+    zero = 0.0 if (mask & 3) == 1 else None
+    return {
+        "datastream_id": configuration["datastreamId"],
+        "bucket_start": start,
+        "bucket_end": end,
+        "evaluated_until": cutoff,
+        "count_total": total,
+        "count_accepted": accepted,
+        "count_numeric": numeric,
+        "sum_value": total_sum if numeric else zero,
+        "min_value": minimum if numeric else zero,
+        "max_value": maximum if numeric else zero,
+        "avg_value": total_sum / numeric if numeric else zero,
+        "expected_count": expected,
+        "coverage": coverage,
+        "result_quality": mask,
+        "constraint_count": constraint_count,
+    }
+
+
+def rollup(
+    configuration, constraint_count, start, end, cutoff, days, proven=True
+):
+    """Combine saved daily rows into one week, month or year bucket.
+
+    Counts, sums, min and max combine exactly; coverage and validity are
+    recomputed from the summed counts. maxConsecutiveMissing is not applied:
+    gaps across day edges cannot be rebuilt from daily rows.
+    """
+    total = sum(day["count_total"] for day in days)
+    accepted = sum(day["count_accepted"] for day in days)
+    numeric = sum(day["count_numeric"] for day in days)
+    filled = [day for day in days if day["count_numeric"]]
+    statistics = (
+        sum(day["sum_value"] for day in filled),
+        min((day["min_value"] for day in filled), default=None),
+        max((day["max_value"] for day in filled), default=None),
+    )
+    expected = coverage = None
+    if configuration["mode"] == "sampled":
+        expected = sum(day["expected_count"] or 0 for day in days)
+        coverage = numeric / expected if expected else None
+    empty_event = configuration["mode"] == "event" and total == 0
+    valid = is_valid(configuration, numeric, coverage, empty_event and proven)
+    # Same rule as for observations: failed anywhere, passed everywhere, else 00.
+    pairs = []
+    for i in range(1, constraint_count + 1):
+        flags = {(day["result_quality"] >> (2 * i)) & 3 for day in filled}
+        pairs.append(2 if 2 in flags else (3 if flags == {3} else 0))
+    return result_row(
+        configuration,
+        start,
+        end,
+        cutoff,
+        (total, accepted, numeric),
+        statistics,
+        expected,
+        coverage,
+        output_mask(valid, empty_event, constraint_count, pairs),
+        constraint_count,
+    )

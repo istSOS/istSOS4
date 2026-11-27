@@ -19,19 +19,35 @@ class Source:
         self.requests = []
         self.reference_requests = []
         self.reference_end = None
+        self.reference_rows = []
+        self.reference_changes = []
+        self.changes = []
+        self.change_requests = []
 
     def first_observation(self, *args):
         return self.rows[0]["phenomenonTime"] if self.rows else None
 
+    def changed_times(self, identifier, since, until):
+        self.change_requests.append((identifier, since, until))
+        if identifier == 7:
+            return list(self.reference_changes)
+        return list(self.changes)
+
     def last_observation(self, identifier, cutoff, as_of):
         self.reference_requests.append(identifier)
-        return self.reference_end
+        if identifier == 7:
+            return self.reference_end
+        return self.rows[-1]["phenomenonTime"] if self.rows else None
 
     def observations(self, identifier, start, end, lower, upper, as_of):
-        self.requests.append((start, end, as_of))
+        rows = self.rows
+        if identifier == 7:
+            rows = self.reference_rows
+        else:
+            self.requests.append((start, end, as_of))
         selected = [
             row
-            for row in self.rows
+            for row in rows
             if (
                 timestamp(row["phenomenonTime"]) >= start
                 if lower == "ge"
@@ -57,7 +73,6 @@ class Store:
         self.cutoff = timestamp("2026-01-01T00:20:00Z")
         self.completed = False
         self.batches = []
-        self.changes = []
 
     def checkpoint(self, _):
         return copy.deepcopy(self.cp)
@@ -65,21 +80,25 @@ class Store:
     def source_context(self):
         return self.cutoff, self.versioned
 
-    def changed_times(self, datastream_id, since, until):
-        return list(self.changes)
-
     def save_buckets(self, identifier, token, table, rows, checkpoint):
         self.batches.append((table, copy.deepcopy(rows)))
         for row in rows:
             self.rows[table, row["bucket_start"]] = copy.deepcopy(row)
         self.cp = copy.deepcopy(checkpoint)
 
+    def daily_rows(self, datastream_id, start, end):
+        return [
+            row
+            for (table, bucket), row in sorted(self.rows.items())
+            if table == "observations_1day" and start <= bucket < end
+        ]
+
     def complete(self, identifier, token, checkpoint):
         self.cp = copy.deepcopy(checkpoint)
         self.completed = True
 
 
-def run(source, store, batch_size=1000, **extra):
+def run(source, store, batch_size=1000, log_results=False, **extra):
     config = {
         "id": 1,
         "datastreamId": 1,
@@ -94,7 +113,11 @@ def run(source, store, batch_size=1000, **extra):
         store,
         config,
         {"properties": {"samplingFrequency": "PT5M"}},
-        Settings("http://api/v1", write_batch_size=batch_size),
+        Settings(
+            "http://api/v1",
+            write_batch_size=batch_size,
+            log_results=log_results,
+        ),
         "token",
         Event(),
     )
@@ -113,7 +136,7 @@ def test_all_intervals_use_source_values_and_idempotent_upsert():
     before = copy.deepcopy(store.rows)
     run(source, store)
     assert store.rows == before and store.completed
-    assert all((end - start).days <= 7 for start, end, _ in source.requests)
+    assert all((end - start).days <= 30 for start, end, _ in source.requests)
 
 
 def test_failed_pagination_does_not_write_incomplete_bucket_or_checkpoint():
@@ -134,7 +157,7 @@ def test_historical_deletion_and_moved_time_recompute_old_and_new_buckets():
     source.rows.pop(0)
     source.rows[0]["phenomenonTime"] = "2026-01-01T00:17:00Z"
     # Old times of the deleted and moved rows, plus the moved row's new time.
-    store.changes = [
+    source.changes = [
         timestamp("2026-01-01T00:05:00Z"),
         timestamp("2026-01-01T00:10:00Z"),
         timestamp("2026-01-01T00:17:00Z"),
@@ -143,7 +166,7 @@ def test_historical_deletion_and_moved_time_recompute_old_and_new_buckets():
     # Avoid a month-long bootstrap in this focused test.
     for interval in TABLES:
         store.cp["frontiers"][interval] = "2026-02-02T00:00:00+00:00"
-    run(source, store, bucketsToRecompute=1)
+    run(source, store)
     old = store.rows["observations_10min", timestamp("2026-01-01T00:00:00Z")]
     new = store.rows["observations_10min", timestamp("2026-01-01T00:10:00Z")]
     assert old["count_numeric"] == 0 and old["sum_value"] is None
@@ -188,8 +211,8 @@ def test_backdated_insert_extends_implicit_domain_and_rewinds_bootstrap():
     source.rows.insert(
         0, {"phenomenonTime": "2025-12-31T23:55:00Z", "result": 10}
     )
-    store.changes = [timestamp("2025-12-31T23:55:00Z")]
-    run(source, store, startTime=None, bucketsToRecompute=1)
+    source.changes = [timestamp("2025-12-31T23:55:00Z")]
+    run(source, store, startTime=None)
     assert store.cp["domainStart"] == "2025-12-31T23:55:00+00:00"
     earlier = store.rows[
         "observations_10min", timestamp("2025-12-31T23:50:00Z")
@@ -227,10 +250,11 @@ def test_failed_batch_resumes_at_last_committed_cursor_and_does_not_log_unsaved_
     source, store = Source(), FailingStore()
     store.cutoff = timestamp("2026-01-01T01:00:00Z")
     with pytest.raises(CalculationError):
-        run(source, store, batch_size=2)
+        run(source, store, batch_size=2, log_results=True)
     assert len(store.rows) == 2 and not store.completed
     assert len(capsys.readouterr().out.splitlines()) == 2
-    assert store.cp["frontiers"]["PT10M"] == "2026-01-01T00:20:00+00:00"
+    # Only the committed interval advances: the others restart from scratch.
+    assert store.cp["frontiers"] == {"PT10M": "2026-01-01T00:20:00+00:00"}
     store.fail = False
     run(source, store, batch_size=2)
     assert store.completed and len(store.rows) == 11
@@ -248,17 +272,17 @@ def test_grouped_reads_match_per_bucket_results_and_reduce_requests(closure):
     reference = Store()
     reference.cutoff = timestamp("2026-01-01T06:00:00Z")
     run(source, reference, batch_size=1, boundaryMode=closure)
-    individual_requests = len(source.requests)
+    assert len(source.requests) == 1  # one read feeds all six intervals
     source.requests.clear()
     grouped = Store()
     grouped.cutoff = reference.cutoff
     run(source, grouped, batch_size=1000, boundaryMode=closure)
     assert grouped.rows == reference.rows
-    assert len(source.requests) < individual_requests / 4
+    assert len(source.requests) == 1
     assert grouped.cp == reference.cp
 
 
-def test_seven_days_of_empty_ten_minute_buckets_need_two_group_reads():
+def test_seven_days_of_empty_ten_minute_buckets_need_one_read():
     source, store = Source(), Store()
     source.rows = []
     store.cutoff = timestamp("2026-01-08T00:00:00Z")
@@ -267,29 +291,232 @@ def test_seven_days_of_empty_ten_minute_buckets_need_two_group_reads():
         rows for table, rows in store.batches if table == "observations_10min"
     ]
     assert sum(map(len, ten_minute)) == 1008
-    assert (
-        len(source.requests) == 8
-    )  # two 10-minute groups, two Monday-aligned weeks, four other intervals
+    assert len(source.requests) == 1  # one window feeds every interval
     assert all(
         row["count_numeric"] == 0 for rows in ten_minute for row in rows
     )
 
 
-def test_reference_datastream_limits_event_buckets_to_its_last_observation():
+def test_empty_event_bucket_is_zero_only_with_recent_reference_observation():
     source, store = Source(), Store()
-    source.reference_end = "2026-01-01T00:12:00Z"
-    run(source, store, mode="event", referenceDatastreamId=7)
-    ten_minutes = sorted(
-        start for table, start in store.rows if table == "observations_10min"
+    source.rows = [{"phenomenonTime": "2026-01-01T00:05:00Z", "result": 0.2}]
+    source.reference_rows = [
+        {"phenomenonTime": f"2026-01-01T00:{minute}:00Z"}
+        for minute in ("10", "20", "40")
+    ]
+    source.reference_end = "2026-01-01T00:40:00Z"
+    store.cutoff = timestamp("2026-01-01T03:00:00Z")
+    run(
+        source,
+        store,
+        mode="event",
+        referenceDatastreamId=7,
+        referenceMaxAge="PT5M",
     )
-    # Station silent after 00:12: the bucket ending 00:20 is not filled with zero.
-    assert ten_minutes[-1] == timestamp("2026-01-01T00:10:00Z")
-    last = store.rows["observations_10min", ten_minutes[-1]]
-    assert last["evaluated_until"] == timestamp("2026-01-01T00:12:00Z")
-    assert source.reference_requests == [7]
+    sums = {
+        start.strftime("%H:%M"): row["sum_value"]
+        for (table, start), row in sorted(store.rows.items())
+        if table == "observations_10min"
+    }
+    # Activity ends at 00:40 + 5 minutes; 00:20-00:30 has no reference
+    # observation in its last 5 minutes, so it is missing, not dry.
+    assert sums == {
+        "00:00": 0.2,
+        "00:10": 0.0,
+        "00:20": None,
+        "00:30": 0.0,
+        "00:40": 0.0,
+    }
+    assert sorted(set(source.reference_requests)) == [1, 7]
 
 
-def test_reference_without_observations_evaluates_nothing():
+def test_late_reference_observation_recomputes_missing_event_bucket():
     source, store = Source(), Store()
+    store.versioned = True
+    source.rows = [{"phenomenonTime": "2026-01-01T00:05:00Z", "result": 0.2}]
+    source.reference_rows = [
+        {"phenomenonTime": f"2026-01-01T00:{minute}:00Z"}
+        for minute in ("10", "20", "40")
+    ]
+    source.reference_end = "2026-01-01T00:40:00Z"
+    store.cutoff = timestamp("2026-01-01T03:00:00Z")
+    extra = {
+        "mode": "event",
+        "referenceDatastreamId": 7,
+        "referenceMaxAge": "PT5M",
+    }
+    run(source, store, **extra)
+    bucket = ("observations_10min", timestamp("2026-01-01T00:20:00Z"))
+    assert store.rows[bucket]["sum_value"] is None
+    source.reference_rows.append({"phenomenonTime": "2026-01-01T00:28:00Z"})
+    source.reference_rows.sort(key=lambda row: row["phenomenonTime"])
+    source.reference_changes = ["2026-01-01T00:28:00Z"]
+    store.cutoff = timestamp("2026-01-01T03:10:00Z")
+    run(source, store, **extra)
+    assert store.rows[bucket]["sum_value"] == 0.0
+
+
+def test_reference_and_source_without_observations_evaluate_nothing():
+    source, store = Source(), Store()
+    source.rows = []
     run(source, store, mode="event", referenceDatastreamId=7)
     assert store.rows == {} and store.completed
+
+
+def test_long_bootstrap_reads_each_source_window_once_for_all_intervals():
+    source, store = Source(), Store()
+    store.cutoff = timestamp("2026-03-15T00:00:00Z")
+    run(source, store)
+    spans = [(start, end) for start, end, _ in source.requests]
+    # 73 days in 30-day windows, each read once and contiguous.
+    assert len(spans) == 3
+    assert all(a[1] == b[0] for a, b in zip(spans, spans[1:]))
+    assert all((end - start).days <= 30 for start, end in spans)
+    assert (
+        store.rows["observations_1month", timestamp("2026-01-01T00:00:00Z")][
+            "sum_value"
+        ]
+        == 12
+    )
+
+
+def test_open_bucket_is_recalculated_when_more_data_arrives():
+    source, store = Source(), Store()
+    store.cutoff = timestamp("2026-01-01T00:12:00Z")
+    run(source, store)
+    open_bucket = timestamp("2026-01-01T00:10:00Z")
+    first = store.rows["observations_10min", open_bucket]
+    assert (
+        first["evaluated_until"] == store.cutoff and first["sum_value"] is None
+    )
+    source.rows.append(
+        {"phenomenonTime": "2026-01-01T00:18:00Z", "result": 10}
+    )
+    store.cutoff = timestamp("2026-01-01T00:30:00Z")
+    run(source, store)
+    bucket = store.rows["observations_10min", open_bucket]
+    assert bucket["sum_value"] == 16
+    assert bucket["evaluated_until"] == bucket["bucket_end"]
+
+
+def test_late_data_without_versioning_follows_the_recompute_window():
+    source, store = Source(), Store()
+    store.cutoff = timestamp("2026-01-02T00:00:00Z")
+    run(source, store, recomputeWindow="PT1H")
+    source.rows += [
+        {"phenomenonTime": "2026-01-01T00:25:00Z", "result": 100},  # outside
+        {"phenomenonTime": "2026-01-01T23:55:00Z", "result": 7},  # inside
+    ]
+    source.rows.sort(key=lambda row: row["phenomenonTime"])
+    store.cutoff = timestamp("2026-01-02T00:10:00Z")
+    run(source, store, recomputeWindow="PT1H")
+    late = store.rows["observations_10min", timestamp("2026-01-01T23:50:00Z")]
+    old = store.rows["observations_10min", timestamp("2026-01-01T00:20:00Z")]
+    assert late["sum_value"] == 7
+    # Its 10-minute bucket is outside the window: left for manual recomputation.
+    assert old["sum_value"] is None
+    # Buckets overlapping the window are recalculated in full: the whole day
+    # (with both late values), then its week, month and year by rollup.
+    day = store.rows["observations_1day", timestamp("2026-01-01T00:00:00Z")]
+    year = store.rows["observations_1year", timestamp("2026-01-01T00:00:00Z")]
+    assert day["sum_value"] == year["sum_value"] == 2 + 4 + 6 + 100 + 7
+
+
+def test_recompute_window_order():
+    from datetime import timedelta
+
+    from aggregation.engine import recompute_window
+
+    assert recompute_window({"recomputeWindow": "PT2H"}, {}) == timedelta(
+        hours=2
+    )
+    assert recompute_window(
+        {}, {"acquisitionFrequency": "PT12H"}
+    ) == timedelta(hours=12)
+    assert recompute_window({"recomputeWindow": "bad"}, {}) == timedelta(
+        days=1
+    )
+    assert recompute_window({}, {}) == timedelta(days=1)
+
+
+@pytest.mark.parametrize("mode", ["sampled", "event"])
+def test_rollup_matches_direct_calculation_from_observations(mode):
+    from datetime import timedelta
+
+    from aggregation.calculation import Accumulator, containing, next_bucket
+
+    source, store = Source(), Store()
+    start = timestamp("2026-01-01T00:00:00Z")
+    rows = []
+    for step in range(9 * 144):  # nine days at 10 minutes, across a Monday
+        when = start + timedelta(minutes=10 * (step + 1))
+        if step % 37 == 0:
+            continue  # missing sample
+        value = -999.9 if step % 53 == 0 else (step % 7) * 0.5
+        quality = 2 | (2 << 2) if step % 11 == 0 else 3 | (3 << 2)
+        rows.append(
+            {
+                "phenomenonTime": when.isoformat(),
+                "result": value,
+                "resultQuality": quality,
+            }
+        )
+    source.rows = rows
+    store.cutoff = timestamp("2026-01-09T13:00:00Z")
+    config = {
+        "id": 1,
+        "datastreamId": 1,
+        "mode": mode,
+        "minInputQuality": 0,
+        "utcOffsetMinutes": 60,
+        "startTime": "2026-01-01T00:00:00Z",
+        **({"minCoverage": 0.9} if mode == "sampled" else {}),
+    }
+    properties = {"samplingFrequency": "PT10M", "constraints": [{}]}
+    calculate(
+        source,
+        store,
+        config,
+        {"properties": properties},
+        Settings("http://api/v1"),
+        "token",
+        Event(),
+    )
+    domain_start = timestamp(config["startTime"])
+    for interval, table in (
+        ("P7D", "observations_7days"),
+        ("P1M", "observations_1month"),
+        ("P1Y", "observations_1year"),
+    ):
+        saved = [row for (name, _), row in store.rows.items() if name == table]
+        assert saved
+        for row in saved:
+            begin = row["bucket_start"]
+            end = next_bucket(begin, interval, 60)
+            direct = Accumulator(
+                config,
+                properties,
+                begin,
+                end,
+                min(end, store.cutoff),
+                domain_start,
+            )
+            direct.add(
+                [
+                    item
+                    for item in rows
+                    if containing(
+                        timestamp(item["phenomenonTime"]),
+                        interval,
+                        60,
+                        "right_closed",
+                    )
+                    == begin
+                    and timestamp(item["phenomenonTime"]) <= store.cutoff
+                ]
+            )
+            expected = direct.result()
+            for key, value in expected.items():
+                if isinstance(value, float):
+                    value = pytest.approx(value)
+                assert row[key] == value, (interval, begin, key)

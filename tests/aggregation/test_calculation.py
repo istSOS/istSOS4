@@ -134,9 +134,22 @@ def test_empty_events_are_distinct_from_rejected_events():
     rejected.add([observation(1, 1)])
     assert rejected.result()["result_quality"] & 3 == 0
     assert rejected.result()["result_quality"] >> 4 == 2
-    assert (
-        rejected.result()["sum_value"] == 0
-    )  # event: no accepted value is still 0, flagged invalid
+    # As in the old jobs: rejected events are missing, never zero.
+    assert rejected.result()["sum_value"] is None
+    unproven = accumulator(mode="event").result(proven=False)
+    assert unproven["sum_value"] is None
+    assert unproven["result_quality"] & 3 == 0
+
+
+def test_event_tick_without_value_counts_as_one():
+    result = accumulator(mode="event", conversionFactor=0.2)
+    result.add([observation(1, None), observation(2, 3)])
+    row = result.result()
+    assert row["count_numeric"] == 2
+    assert row["sum_value"] == pytest.approx(0.8)
+    sampled = accumulator()
+    sampled.add([observation(1, None)])
+    assert sampled.result()["count_numeric"] == 0
 
 
 def test_completeness_failure_retains_real_statistics_without_marker_pollution():

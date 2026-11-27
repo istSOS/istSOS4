@@ -1,7 +1,7 @@
 """Shared helpers for the aggregation configuration endpoints."""
 
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app import AUTHORIZATION, HOSTNAME, POSTGRES_PORT_WRITE, SUBPATH, VERSION
 from app.db.asyncpg_db import get_pool, get_pool_w
@@ -13,10 +13,12 @@ from app.v1.endpoints.exceptions import (
 )
 from fastapi import Depends, Header
 from fastapi.encoders import jsonable_encoder
+from pydantic import TypeAdapter, ValidationError
 
 TABLE = "aggregation.datastream_configuration"
 MAX_ID = 9223372036854775807
 MAX_INT = 2147483647
+DURATION = TypeAdapter(timedelta)
 
 # Identifiers interpolated into SQL come only from this constant mapping.
 COLUMNS = {
@@ -31,12 +33,13 @@ COLUMNS = {
     "conversionFactor": "conversion_factor",
     "boundaryMode": "boundary_mode",
     "utcOffsetMinutes": "utc_offset_minutes",
-    "bucketsToRecompute": "buckets_to_recompute",
+    "recomputeWindow": "recompute_window",
     "startTime": "start_time",
     "endTime": "end_time",
     "resultQualityKey": "result_quality_key",
     "missingValues": "missing_values",
     "referenceDatastreamId": "reference_datastream_id",
+    "referenceMaxAge": "reference_max_age",
 }
 DEFAULTS = {name: None for name in COLUMNS}
 DEFAULTS.update(enabled=True, mode="sampled", ignoreQuality=False)
@@ -103,6 +106,23 @@ def parse_datetime(value, name):
         ) from None
 
 
+def parse_duration(value, name):
+    """ISO 8601 duration (e.g. 'PT24H'), positive."""
+    try:
+        if not isinstance(value, str):
+            raise ValueError
+        result = DURATION.validate_python(value)
+    except (ValidationError, ValueError):
+        raise BadRequest(
+            f"'{name}' must be a positive ISO 8601 duration, e.g. 'PT24H'."
+        ) from None
+    if result <= timedelta(0):
+        raise BadRequest(
+            f"'{name}' must be a positive ISO 8601 duration, e.g. 'PT24H'."
+        )
+    return result
+
+
 def validate_create_payload(payload):
     validate_allowed_keys(payload, COLUMNS.keys())
     for key in ("datastreamId", "minInputQuality"):
@@ -123,15 +143,16 @@ def validate_create_payload(payload):
     for key in (
         "minObservations",
         "maxConsecutiveMissing",
-        "bucketsToRecompute",
         "utcOffsetMinutes",
     ):
         if values[key] is not None:
-            minimum, maximum = {
-                "bucketsToRecompute": (1, MAX_INT),
-                "utcOffsetMinutes": (-840, 840),
-            }.get(key, (0, MAX_INT))
+            minimum, maximum = {"utcOffsetMinutes": (-840, 840)}.get(
+                key, (0, MAX_INT)
+            )
             values[key] = parse_integer(values[key], key, minimum, maximum)
+    for key in ("recomputeWindow", "referenceMaxAge"):
+        if values[key] is not None:
+            values[key] = parse_duration(values[key], key)
     for key in ("minCoverage", "conversionFactor"):
         if values[key] is not None:
             values[key] = parse_number(values[key], key)
@@ -206,6 +227,9 @@ def stored_values(row):
     for key in ("startTime", "endTime"):
         if values[key] is not None:
             values[key] = values[key].isoformat()
+    for key in ("recomputeWindow", "referenceMaxAge"):
+        if values[key] is not None:
+            values[key] = DURATION.dump_python(values[key], mode="json")
     return values
 
 
@@ -232,7 +256,7 @@ async def ensure_configuration_available(connection):
         "SELECT to_regclass($1) IS NOT NULL;", TABLE
     ):
         raise ServiceUnavailable(
-            "Aggregation configuration storage is not installed. Apply database/aggregation_configuration.sql."
+            "Aggregation configuration storage is not installed. Apply database/istsos_aggregation.sql."
         )
 
 

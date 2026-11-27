@@ -90,10 +90,7 @@ def store(request):
             for filename in (
                 "istsos_auth.sql",
                 "istsos_schema_versioning.sql",
-                "aggregation_configuration.sql",
-                "aggregation_results.sql",
-                "aggregation_processing_state.sql",
-                "aggregation_engine.sql",
+                "istsos_aggregation.sql",
             ):
                 await connection.execute(
                     (ROOT / "database" / filename).read_text()
@@ -262,7 +259,8 @@ def test_patch_round_trips_every_processing_override(client):
         "conversionFactor": 0.2,
         "boundaryMode": "left_closed",
         "utcOffsetMinutes": 0,
-        "bucketsToRecompute": 5,
+        "recomputeWindow": "PT6H",
+        "referenceMaxAge": "PT30M",
         "startTime": "2026-01-01T00:00:00+00:00",
         "endTime": "2026-12-01T00:00:00+00:00",
         "resultQualityKey": "code",
@@ -380,7 +378,7 @@ def test_missing_storage_returns_actionable_503(client, store):
     try:
         response = client.get("/Aggregations")
         assert response.status_code == 503, response.text
-        assert "aggregation_configuration.sql" in response.text
+        assert "istsos_aggregation.sql" in response.text
     finally:
         asyncio.run(
             execute(
@@ -435,7 +433,7 @@ def result_values(**overrides):
         "coverage": 2 / 3,
         "result_quality": 63,
         "constraint_count": 0,
-        "configuration_snapshot": '{"mode":"sampled","minInputQuality":3}',
+        "configuration_updated_at": start,
         **overrides,
     }
 
@@ -556,8 +554,6 @@ def test_result_retention_and_source_foreign_key(client, store):
         {"result_quality": 64},
         {"constraint_count": -1},
         {"constraint_count": 29},
-        {"configuration_snapshot": "[]"},
-        {"configuration_snapshot": "null"},
     ],
 )
 def test_result_constraints_reject_invalid_statistics(
@@ -679,7 +675,7 @@ def test_processing_state_lifecycle_is_read_only_and_preserves_checkpoint(
     path = f"/Aggregations({identifier})/ProcessingState"
     assert created["ProcessingState@iot.navigationLink"].endswith(path)
     initial = client.get(path).json()
-    assert initial["status"] == "never_run" and initial["phase"] == "discovery"
+    assert initial["status"] == "never_run" and "phase" not in initial
     assert initial["checkpoint"] is None and initial["lastStartedAt"] is None
     for payload in (
         {"status": "success"},
@@ -785,7 +781,7 @@ def test_state_ownership_crash_recovery_and_stale_finish(client, store):
         second.close()
 
 
-def test_state_discovery_failure_and_partial(client, store):
+def test_state_configuration_read_failure(client, store):
     first = post(client).json()["id"]
     second = post(client, datastreamId=2, enabled=False).json()["id"]
     writer = state_writer(store)
@@ -807,16 +803,12 @@ def test_state_discovery_failure_and_partial(client, store):
         writer.finish(
             first,
             writer.start(first),
-            "partial",
-            {
-                "step": "metadata_validation",
-                "message": "Missing sampling frequency",
-            },
+            "failed",
+            {"step": "aggregation", "message": "Missing sampling frequency"},
         )
         before = client.get(f"/Aggregations({first})/ProcessingState").json()
         assert (
-            before["status"] == "partial"
-            and before["lastSuccessfulAt"] is None
+            before["status"] == "failed" and before["lastSuccessfulAt"] is None
         )
         assert before["consecutiveFailures"] == 2
     finally:
@@ -841,7 +833,7 @@ def test_processing_state_endpoint_requires_admin_and_migration(
         response = client.get(path)
         assert (
             response.status_code == 503
-            and "aggregation_processing_state.sql" in response.text
+            and "istsos_aggregation.sql" in response.text
         )
     finally:
         asyncio.run(
@@ -861,9 +853,9 @@ def test_result_transaction_rolls_back_checkpoint_and_guards_config_edits(
     writer = state_writer(store)
     writer.open()
     try:
-        token = writer.start(document["id"], phase="aggregation")
+        token = writer.start(document["id"])
         row = result_values()
-        row["configuration_snapshot"] = {"configuration": document}
+        row["configuration_updated_at"] = document["updatedAt"]
         writer.save_buckets(
             document["id"], token, "observations_10min", [row], {"cursor": 1}
         )
@@ -973,7 +965,6 @@ def test_worker_through_real_sensorthings_queries_and_pandas(
     document = post(
         client,
         minInputQuality=0,
-        bucketsToRecompute=1,
         utcOffsetMinutes=0,
         startTime="2026-01-01T00:01:00Z",
         endTime="2026-01-01T00:20:00Z",
@@ -1002,9 +993,7 @@ def test_worker_through_real_sensorthings_queries_and_pandas(
     settings = Settings("http://api" + app.SUBPATH + app.VERSION)
     api = SensorThings(settings, Event())
     try:
-        assert run_cycle(
-            api, settings, api.stop, writer, aggregate=True
-        ), capsys.readouterr()
+        assert run_cycle(api, settings, api.stop, writer), capsys.readouterr()
         hourly = asyncio.run(
             execute(
                 store[0],
@@ -1016,10 +1005,10 @@ def test_worker_through_real_sensorthings_queries_and_pandas(
         state = client.get(
             f"/Aggregations({document['id']})/ProcessingState"
         ).json()
-        assert state["phase"] == "aggregation" and state["status"] == "success"
+        assert state["status"] == "success"
         assert state["checkpoint"]["frontiers"]
         # Re-reading the same interval upserts rather than accumulating again.
-        assert run_cycle(api, settings, api.stop, writer, aggregate=True)
+        assert run_cycle(api, settings, api.stop, writer)
         hourly = asyncio.run(
             execute(
                 store[0],
@@ -1040,7 +1029,7 @@ def test_worker_through_real_sensorthings_queries_and_pandas(
                 )
             )
             time.sleep(2.1)
-            assert run_cycle(api, settings, api.stop, writer, aggregate=True)
+            assert run_cycle(api, settings, api.stop, writer)
             buckets = asyncio.run(
                 execute(
                     store[0],
@@ -1072,39 +1061,6 @@ def test_worker_through_real_sensorthings_queries_and_pandas(
         writer.close()
 
 
-def test_phase_change_does_not_report_metadata_success_as_calculation_success(
-    client, store
-):
-    identifier = post(client).json()["id"]
-    path = f"/Aggregations({identifier})/ProcessingState"
-    writer = state_writer(store)
-    writer.open()
-    try:
-        writer.finish(identifier, writer.start(identifier), "success")
-        assert client.get(path).json()["lastSuccessfulAt"]
-        token = writer.start(identifier, phase="aggregation")
-        running = client.get(path).json()
-        assert (
-            running["phase"] == "aggregation"
-            and running["lastSuccessfulAt"] is None
-        )
-        writer.finish(
-            identifier,
-            token,
-            "failed",
-            {"step": "aggregation", "message": "Missing sampling frequency"},
-        )
-        writer.discovery_failed("API unavailable", phase="aggregation")
-        failed = client.get(path).json()
-        assert (
-            failed["phase"] == "aggregation"
-            and failed["consecutiveFailures"] == 2
-        )
-        assert failed["lastSuccessfulAt"] is None
-    finally:
-        writer.close()
-
-
 def test_copy_bulk_upsert_is_atomic_and_reuses_empty_staging(client, store):
     from datetime import timedelta
 
@@ -1114,13 +1070,13 @@ def test_copy_bulk_upsert_is_atomic_and_reuses_empty_staging(client, store):
     writer = state_writer(store)
     writer.open()
     try:
-        token = writer.start(document["id"], phase="aggregation")
+        token = writer.start(document["id"])
         rows = []
         for i in range(25):
             row = result_values()
             for column in ("bucket_start", "bucket_end", "evaluated_until"):
                 row[column] += timedelta(minutes=10 * i)
-            row["configuration_snapshot"] = {"configuration": document}
+            row["configuration_updated_at"] = document["updatedAt"]
             rows.append(row)
         writer.save_buckets(
             document["id"], token, "observations_10min", rows, {"cursor": 25}
@@ -1212,9 +1168,9 @@ def test_failed_first_copy_batch_can_be_retried(client, store, invalid):
     writer = state_writer(store)
     writer.open()
     try:
-        token = writer.start(document["id"], phase="aggregation")
+        token = writer.start(document["id"])
         row = result_values()
-        row["configuration_snapshot"] = {"configuration": document}
+        row["configuration_updated_at"] = document["updatedAt"]
         with pytest.raises(CalculationError):
             writer.save_buckets(
                 document["id"],
