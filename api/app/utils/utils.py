@@ -20,9 +20,14 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 from app import EPSG, HOSTNAME, SUBPATH, TOP_VALUE, VERSION
 from app.v1.endpoints.exceptions import BadRequest
 from asyncpg.types import Range
-from dateutil import parser
+from dateutil.parser import isoparse
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,63}$")
+_ISO_8601_DATETIME_RE = re.compile(
+    r"\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])"
+    r"(?:[Tt ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?"
+    r"(?:[Zz]|[+-]\d{2}(?::?\d{2})?)?)?"
+)
 
 # Entity name mapping to match the existing convention in create_entity
 ENTITY_URL_NAMES = {
@@ -59,22 +64,69 @@ def require_json_content_type(request):
 
 def safe_parse_datetime(value):
     """
-    Safely parse a datetime string using dateutil.parser.
-    Returns a datetime object or None if parsing fails.
+    Strictly parse an ISO 8601 date or datetime string using isoparse.
+    Returns None when value is None, and raises ValueError for invalid,
+    partial, or non-ISO inputs.
 
     Args:
         value (Any): Input value to parse.
 
     Returns:
-        Optional[datetime]: Parsed datetime or None if invalid.
+        Optional[datetime]: Parsed datetime or None if value is None.
+
+    Raises:
+        ValueError: If value is not a valid ISO 8601 date or datetime string.
     """
 
     if value is None:
         return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Invalid ISO 8601 datetime format")
+    if not _ISO_8601_DATETIME_RE.fullmatch(value):
+        raise ValueError(f"Invalid ISO 8601 datetime format: {value!r}")
     try:
-        return parser.parse(value)
-    except (ValueError, TypeError, OverflowError):
-        return None
+        return isoparse(value)
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise ValueError(
+            f"Invalid ISO 8601 datetime format: {value!r}"
+        ) from exc
+
+
+def parse_datetime_interval(value):
+    """
+    Parse an ISO 8601 instant or ``start/end`` time interval string.
+
+    Args:
+        value (Any): ISO 8601 instant or ``start/end`` interval string, or None.
+
+    Returns:
+        tuple[Optional[datetime], Optional[datetime]]: ``(start, end)`` pair.
+
+    Raises:
+        ValueError: If value is not a valid ISO 8601 instant or interval.
+    """
+
+    if value is None:
+        return None, None
+    if not isinstance(value, str):
+        raise ValueError("Invalid ISO 8601 datetime format")
+    if "/" in value:
+        parts = value.split("/")
+        if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
+            raise ValueError(
+                f"Invalid ISO 8601 time interval format: {value!r}"
+            )
+        start_time = safe_parse_datetime(parts[0])
+        end_time = safe_parse_datetime(parts[1])
+        if (start_time.tzinfo is None) == (
+            end_time.tzinfo is None
+        ) and start_time > end_time:
+            raise ValueError(
+                f"Invalid ISO 8601 time interval (start > end): {value!r}"
+            )
+        return start_time, end_time
+    parsed_time = safe_parse_datetime(value)
+    return parsed_time, parsed_time
 
 
 def extract_iot_id(data):
@@ -120,32 +172,34 @@ def handle_datetime_fields(payload, datastream=False):
     """
     for key in list(payload.keys()):
         if "time" in key.lower():
-            if payload[key] is None:
+            raw_value = payload[key]
+            if raw_value is None:
                 continue
             is_observation_phenomenon = (
                 key == "phenomenonTime" and not datastream
             )
-            if "/" in payload[key]:
-                start_str, end_str = payload[key].split("/", 1)
-                start_time = safe_parse_datetime(start_str)
-                end_time = safe_parse_datetime(end_str)
+            is_interval_field = key in (
+                "phenomenonTime",
+                "validTime",
+            ) or (datastream and key == "resultTime")
+            if (
+                is_interval_field
+                and isinstance(raw_value, str)
+                and "/" in raw_value
+            ):
+                start_time, end_time = parse_datetime_interval(raw_value)
                 if is_observation_phenomenon:
                     payload.pop("phenomenonTime")
-                    valid = bool(start_time and end_time)
-                    payload["phenomenonTimeStart"] = (
-                        start_time if valid else None
-                    )
-                    payload["phenomenonTimeEnd"] = end_time if valid else None
-                elif start_time and end_time:
+                    payload["phenomenonTimeStart"] = start_time
+                    payload["phenomenonTimeEnd"] = end_time
+                else:
                     payload[key] = Range(
                         start_time,
                         end_time,
                         upper_inc=True,
                     )
-                else:
-                    payload[key] = None
             else:
-                parsed_time = safe_parse_datetime(payload[key])
+                parsed_time = safe_parse_datetime(raw_value)
                 if is_observation_phenomenon:
                     payload.pop("phenomenonTime")
                     payload["phenomenonTimeStart"] = parsed_time
@@ -153,14 +207,11 @@ def handle_datetime_fields(payload, datastream=False):
                 elif key == "phenomenonTime" or (
                     datastream and key == "resultTime"
                 ):
-                    if parsed_time:
-                        payload[key] = Range(
-                            parsed_time,
-                            parsed_time,
-                            upper_inc=True,
-                        )
-                    else:
-                        payload[key] = None
+                    payload[key] = Range(
+                        parsed_time,
+                        parsed_time,
+                        upper_inc=True,
+                    )
                 else:
                     payload[key] = parsed_time
 
